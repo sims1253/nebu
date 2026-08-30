@@ -1,0 +1,93 @@
+{
+  "$schema": "https://janus.example/schemas/comparison-specification.v1.json",
+  "schema_version": "1",
+  "name": "Invoice check",
+  "sections": [
+    {
+      "key": "header",
+      "label": "Header",
+      "fields": [
+        {
+          "key": "invoice_number",
+          "label": "Invoice number",
+          "reference": { "pointer": "/rows/0/value" },
+          "value": { "type": "text" },
+          "locate": {
+            "strategy": "table_label",
+            "labels": ["Invoice number", "Invoice no."]
+          },
+          "compare": { "operator": "exact", "normalizers": ["trim"] }
+        },
+        {
+          "key": "invoice_date",
+          "label": "Invoice date",
+          "reference": { "pointer": "/rows/1/value" },
+          "value": { "type": "date" },
+          "locate": { "strategy": "table_label", "labels": ["Invoice date"] },
+          "compare": { "operator": "date" }
+        },
+        {
+          "key": "due_date",
+          "label": "Due date",
+          "reference": { "pointer": "/rows/2/value" },
+          "value": { "type": "date" },
+          "locate": { "strategy": "table_label", "labels": ["Due date"] },
+          "compare": { "operator": "date" }
+        }
+      ]
+    },
+    {
+      "key": "totals",
+      "label": "Totals",
+      "fields": [
+        {
+          "key": "net_total",
+          "label": "Net total",
+          "reference": { "pointer": "/rows/3/value" },
+          "value": { "type": "decimal" },
+          "locate": { "strategy": "table_label", "labels": ["Net total"] },
+          "compare": {
+            "operator": "numeric",
+            "normalizers": ["numeric_punctuation"],
+            "absolute_tolerance": 0.01
+          }
+        },
+        {
+          "key": "vat_rate",
+          "label": "VAT rate",
+          "reference": { "pointer": "/rows/4/value" },
+          "value": { "type": "percentage" },
+          "locate": { "strategy": "table_label", "labels": ["VAT rate"] },
+          "compare": {
+            "operator": "numeric",
+            "normalizers": ["percent_symbol"],
+            "absolute_tolerance": 0
+          }
+        },
+        {
+          "key": "grand_total",
+          "label": "Grand total",
+          "reference": { "pointer": "/rows/5/value" },
+          "value": { "type": "decimal" },
+          "locate": {
+            "strategy": "table_label",
+            "labels": ["Grand total", "Total due"]
+          },
+          "compare": {
+            "operator": "numeric",
+            "normalizers": ["numeric_punctuation"],
+            "absolute_tolerance": 0.01
+          }
+        },
+        {
+          "key": "paid",
+          "label": "Paid",
+          "reference": { "pointer": "/rows/6/value" },
+          "value": { "type": "boolean" },
+          "locate": { "strategy": "table_label", "labels": ["Paid"] },
+          "compare": { "operator": "boolean" }
+        }
+      ]
+    }
+  ]
+}

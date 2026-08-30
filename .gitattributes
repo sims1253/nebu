@@ -1,0 +1,9 @@
+# Normalize line endings; git stores LF and handles platform conversion.
+* text=auto eol=lf
+
+# Binaries — never touch.
+*.pdf binary
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary

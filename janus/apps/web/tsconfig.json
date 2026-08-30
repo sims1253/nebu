@@ -1,0 +1,17 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "outDir": "dist",
+    "noEmit": true,
+    "paths": {
+      "~/*": ["./src/*"],
+      "@janus/contracts": ["../../packages/contracts/src"]
+    }
+  },
+  "include": ["src/**/*", "e2e/**/*", "*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

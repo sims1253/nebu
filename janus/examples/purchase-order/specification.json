@@ -1,0 +1,42 @@
+{
+  "$schema": "https://janus.example/schemas/comparison-specification.v1.json",
+  "schema_version": "1",
+  "name": "Purchase order check",
+  "sections": [
+    {
+      "key": "summary",
+      "label": "Summary",
+      "fields": [
+        {
+          "key": "order_number",
+          "label": "Order number",
+          "reference": { "pointer": "/order/id" },
+          "value": { "type": "text" },
+          "locate": {
+            "strategy": "table_label",
+            "labels": ["Order number", "Order no."]
+          },
+          "compare": {
+            "operator": "exact",
+            "normalizers": ["trim", "casefold"]
+          }
+        },
+        {
+          "key": "grand_total",
+          "label": "Grand total",
+          "reference": { "pointer": "/totals/grand_total" },
+          "value": { "type": "decimal" },
+          "locate": {
+            "strategy": "table_label",
+            "labels": ["Grand total", "Total due"]
+          },
+          "compare": {
+            "operator": "numeric",
+            "normalizers": ["numeric_punctuation"],
+            "absolute_tolerance": 0.01
+          }
+        }
+      ]
+    }
+  ]
+}

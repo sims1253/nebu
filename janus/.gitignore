@@ -1,0 +1,64 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# Turborepo
+.turbo/
+
+# Python
+__pycache__/
+*.py[cod]
+.Python
+.venv/
+venv/
+.uv/
+*.egg-info/
+
+# Tooling caches
+.ruff_cache/
+.pytest_cache/
+.playwright-mcp/
+.tanstack/
+coverage/
+.nyc_output/
+.coverage
+
+# Test outputs
+playwright-report/
+test-results/
+
+# AI assistant working directories (not product code)
+.claude/
+.codex/
+.design/
+.factory/
+.agents/
+.desloppify/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+
+# Fetched on demand from its public source (see apps/server/scripts/fetch_cohort_example.py)
+examples/cohort-report/document.pdf
+
+# Local-only directories.
+benchmarks/
+challenges/

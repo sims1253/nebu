@@ -1,0 +1,40 @@
+{
+  "name": "janus",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Janus - specification-driven PDF comparison and review",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo dev",
+    "dev:logged": "mkdir -p /tmp && turbo dev 2>&1 | tee /tmp/janus_dev.log",
+    "dev:server": "turbo dev --filter=@janus/server",
+    "dev:web": "turbo dev --filter=@janus/web",
+    "dev:web:all": "turbo dev --filter=@janus/server --filter=@janus/web",
+    "dev:server:logged": "mkdir -p /tmp && turbo dev --filter=@janus/server 2>&1 | tee /tmp/janus_server.log",
+    "dev:web:logged": "mkdir -p /tmp && turbo dev --filter=@janus/web 2>&1 | tee /tmp/janus_web.log",
+    "build": "turbo build",
+    "test": "turbo test",
+    "test:e2e": "bun --cwd apps/web run test:e2e",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "check": "turbo lint typecheck test build",
+    "clean": "turbo clean && rm -rf node_modules",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml,css}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml,css}\""
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "oxlint": "^1.80.0",
+    "prettier": "^3.9.6",
+    "turbo": "^2.10.12",
+    "typescript": "^7.0.2"
+  },
+  "packageManager": "bun@1.4.0",
+  "engines": {
+    "node": ">=20.19.0"
+  }
+}

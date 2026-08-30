@@ -1,0 +1,11 @@
+#!/bin/sh
+# Format staged files and re-stage them. Formatter only — CI runs the full
+# check suite (lint, types, tests); a commit hook stays fast and never blocks
+# on type errors. Activate once per clone:
+#   git config core.hooksPath .githooks
+staged=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(ts|tsx|js|jsx|json|md)$' | grep -vE '(\.generated\.ts|routeTree\.gen\.ts)$')
+[ -z "$staged" ] && exit 0
+echo "pre-commit: formatting staged files"
+printf '%s\n' "$staged" | tr '\n' '\0' | xargs -0 bunx prettier --write --no-error-on-unmatched-pattern
+printf '%s\n' "$staged" | tr '\n' '\0' | xargs -0 git add --
+exit 0

@@ -1,0 +1,231 @@
+{
+  "$schema": "https://janus.example/schemas/comparison-specification.v1.json",
+  "schema_version": "1",
+  "name": "Study report table comparison",
+  "sections": [
+    {
+      "key": "baseline",
+      "label": "Baseline characteristics",
+      "fields": [
+        {
+          "key": "age_mean",
+          "label": "Age mean",
+          "reference": {
+            "pointer": "/baseline/age/mean"
+          },
+          "value": {
+            "type": "decimal",
+            "source_shape": "mean_standard_deviation",
+            "component": "mean"
+          },
+          "locate": {
+            "strategy": "table_label",
+            "labels": ["Mean (SD)"],
+            "section_labels": ["Age (Years)"]
+          },
+          "compare": {
+            "operator": "numeric",
+            "absolute_tolerance": 0
+          }
+        },
+        {
+          "key": "sex_female",
+          "label": "Female",
+          "reference": {
+            "pointer": "/baseline/sex/female"
+          },
+          "value": {
+            "type": "integer",
+            "source_shape": "count_percentage",
+            "component": "count"
+          },
+          "locate": {
+            "strategy": "table_label",
+            "labels": ["Female"],
+            "section_labels": ["Sex"]
+          },
+          "compare": {
+            "operator": "numeric",
+            "absolute_tolerance": 0
+          }
+        },
+        {
+          "key": "sex_male",
+          "label": "Male",
+          "reference": {
+            "pointer": "/baseline/sex/male"
+          },
+          "value": {
+            "type": "integer",
+            "source_shape": "count_percentage",
+            "component": "count"
+          },
+          "locate": {
+            "strategy": "table_label",
+            "labels": ["Male"],
+            "section_labels": ["Sex"]
+          },
+          "compare": {
+            "operator": "numeric",
+            "absolute_tolerance": 0
+          }
+        },
+        {
+          "key": "age_18_34",
+          "label": "Age 18\u201334",
+          "reference": {
+            "pointer": "/baseline/age_groups/18_34"
+          },
+          "value": {
+            "type": "integer",
+            "source_shape": "count_percentage",
+            "component": "count"
+          },
+          "locate": {
+            "strategy": "table_label",
+            "labels": ["18-34", "18\u201334"],
+            "section_labels": ["Age Group (Years)"]
+          },
+          "compare": {
+            "operator": "numeric",
+            "absolute_tolerance": 0
+          }
+        },
+        {
+          "key": "age_50_64",
+          "label": "Age 50\u201364",
+          "reference": {
+            "pointer": "/baseline/age_groups/50_64"
+          },
+          "value": {
+            "type": "integer",
+            "source_shape": "count_percentage",
+            "component": "count"
+          },
+          "locate": {
+            "strategy": "table_label",
+            "labels": ["50-64", "50\u201364"],
+            "section_labels": ["Age Group (Years)"]
+          },
+          "compare": {
+            "operator": "numeric",
+            "absolute_tolerance": 0
+          }
+        },
+        {
+          "key": "race_white",
+          "label": "White",
+          "reference": {
+            "pointer": "/baseline/race/white"
+          },
+          "value": {
+            "type": "integer",
+            "source_shape": "count_percentage",
+            "component": "count"
+          },
+          "locate": {
+            "strategy": "table_label",
+            "labels": ["White"],
+            "section_labels": ["Race"]
+          },
+          "compare": {
+            "operator": "numeric",
+            "absolute_tolerance": 0
+          }
+        }
+      ]
+    },
+    {
+      "key": "reported_conditions",
+      "label": "Reported conditions",
+      "fields": [
+        {
+          "key": "participants_reported",
+          "label": "Participants with a reported condition",
+          "reference": {
+            "pointer": "/reported_conditions/participants_reported"
+          },
+          "value": {
+            "type": "integer",
+            "source_shape": "count_percentage",
+            "component": "count"
+          },
+          "locate": {
+            "strategy": "table_label",
+            "labels": ["Participants with IC reported"]
+          },
+          "compare": {
+            "operator": "numeric",
+            "absolute_tolerance": 0
+          }
+        },
+        {
+          "key": "imid",
+          "label": "IMID",
+          "reference": {
+            "pointer": "/reported_conditions/imid"
+          },
+          "value": {
+            "type": "integer",
+            "source_shape": "count_percentage",
+            "component": "count"
+          },
+          "locate": {
+            "strategy": "table_label",
+            "labels": ["IMID"]
+          },
+          "compare": {
+            "operator": "numeric",
+            "absolute_tolerance": 0
+          }
+        }
+      ]
+    },
+    {
+      "key": "concomitant_medications",
+      "label": "Concomitant medications",
+      "fields": [
+        {
+          "key": "participants_any",
+          "label": "Participants with any concomitant medication",
+          "reference": {
+            "pointer": "/concomitant_medications/participants_any"
+          },
+          "value": {
+            "type": "integer",
+            "source_shape": "count_percentage",
+            "component": "count"
+          },
+          "locate": {
+            "strategy": "table_label",
+            "labels": ["Participants with any concomitant medication"]
+          },
+          "compare": {
+            "operator": "numeric",
+            "absolute_tolerance": 0
+          }
+        },
+        {
+          "key": "cardiovascular_system",
+          "label": "Cardiovascular system",
+          "reference": {
+            "pointer": "/concomitant_medications/cardiovascular_system"
+          },
+          "value": {
+            "type": "integer",
+            "source_shape": "count_percentage",
+            "component": "count"
+          },
+          "locate": {
+            "strategy": "table_label",
+            "labels": ["Cardiovascular system"]
+          },
+          "compare": {
+            "operator": "numeric",
+            "absolute_tolerance": 0
+          }
+        }
+      ]
+    }
+  ]
+}

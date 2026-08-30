@@ -1,0 +1,27 @@
+{
+  "case_id": "218407",
+  "baseline": {
+    "age": {
+      "mean": 56.5
+    },
+    "sex": {
+      "female": 123,
+      "male": 94
+    },
+    "age_groups": {
+      "18_34": 21,
+      "50_64": 68
+    },
+    "race": {
+      "white": 189
+    }
+  },
+  "reported_conditions": {
+    "participants_reported": 209,
+    "imid": 66
+  },
+  "concomitant_medications": {
+    "participants_any": 175,
+    "cardiovascular_system": 132
+  }
+}

@@ -1,0 +1,8 @@
+field,value
+invoice_number,INV-2026-0812
+invoice_date,2026-08-12
+due_date,2026-09-11
+net_total,1840.00
+vat_rate,19%
+grand_total,2189.60
+paid,false

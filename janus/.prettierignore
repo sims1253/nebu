@@ -1,0 +1,19 @@
+# Generated or machine-maintained files — never reformat.
+bun.lock
+**/routeTree.gen.ts
+**/*.generated.ts
+
+# Local corpora.
+benchmarks/
+challenges/
+
+# Build output and caches.
+dist/
+out/
+build/
+coverage/
+.turbo/
+.tanstack/
+playwright-report/
+test-results/
+**/.venv/

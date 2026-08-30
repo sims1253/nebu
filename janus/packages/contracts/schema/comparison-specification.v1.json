@@ -1,0 +1,464 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://janus.example/schemas/comparison-specification.v1.json",
+  "title": "Janus comparison specification v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "name", "sections"],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "sections": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/section"
+      }
+    }
+  },
+  "$defs": {
+    "key": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$",
+      "maxLength": 128
+    },
+    "section": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "label", "fields"],
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/key"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "fields": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/field"
+          }
+        }
+      },
+      "title": "SpecificationSection"
+    },
+    "field": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "label", "reference", "value", "locate", "compare"],
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/key"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "reference": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["pointer"],
+          "properties": {
+            "pointer": {
+              "type": "string",
+              "maxLength": 2048,
+              "pattern": "^(/([^/~]|~[01])*)*$",
+              "description": "RFC 6901 JSON Pointer into the reference dataset."
+            },
+            "required": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        },
+        "value": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "enum": [
+                "text",
+                "integer",
+                "decimal",
+                "percentage",
+                "date",
+                "boolean"
+              ]
+            },
+            "source_shape": {
+              "enum": [
+                "count_percentage",
+                "mean_standard_deviation",
+                "range",
+                "estimate_interval"
+              ]
+            },
+            "component": {
+              "type": "string"
+            }
+          },
+          "dependentRequired": {
+            "source_shape": ["component"],
+            "component": ["source_shape"]
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "source_shape": {
+                    "const": "count_percentage"
+                  }
+                },
+                "required": ["source_shape"]
+              },
+              "then": {
+                "properties": {
+                  "component": {
+                    "enum": ["count", "percentage"]
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "source_shape": {
+                    "const": "mean_standard_deviation"
+                  }
+                },
+                "required": ["source_shape"]
+              },
+              "then": {
+                "properties": {
+                  "component": {
+                    "enum": [
+                      "mean",
+                      "standard_deviation",
+                      "p_value",
+                      "bayes_factor"
+                    ]
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "source_shape": {
+                    "const": "range"
+                  }
+                },
+                "required": ["source_shape"]
+              },
+              "then": {
+                "properties": {
+                  "component": {
+                    "enum": ["minimum", "maximum"]
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "source_shape": {
+                    "const": "estimate_interval"
+                  }
+                },
+                "required": ["source_shape"]
+              },
+              "then": {
+                "properties": {
+                  "component": {
+                    "enum": [
+                      "estimate",
+                      "standard_error",
+                      "lower",
+                      "upper",
+                      "p_value",
+                      "bayes_factor"
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "locate": {
+          "$ref": "#/$defs/locate"
+        },
+        "compare": {
+          "$ref": "#/$defs/comparison"
+        },
+        "rows": {
+          "$ref": "#/$defs/rowGenerator"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "not": {
+              "required": ["rows"]
+            }
+          },
+          "then": {
+            "properties": {
+              "locate": {
+                "required": ["labels"]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["rows"]
+          },
+          "then": {
+            "properties": {
+              "locate": {
+                "properties": {
+                  "labels": false
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "locate": {
+                "properties": {
+                  "strategy": {
+                    "const": "text_span"
+                  }
+                },
+                "required": ["strategy"]
+              }
+            },
+            "required": ["locate"]
+          },
+          "then": {
+            "properties": {
+              "rows": false
+            }
+          }
+        }
+      ],
+      "title": "SpecificationField"
+    },
+    "rowGenerator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label_pattern", "max_rows"],
+      "properties": {
+        "label_pattern": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "Regular expression (searched, not anchored) that a candidate row label must match; a rows field declares no locate.labels. The capture group named by row_key_from (or the first group) supplies each row's key fragment."
+        },
+        "max_rows": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "description": "Cap on generated rows; more matching labels produce a loud extraction diagnostic (rows beyond the cap are not generated or compared)."
+        },
+        "row_key_from": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Capture group supplying the row key: a named group (?P<name>...) or a 1-based group index as a string. Defaults to the first capture group."
+        }
+      },
+      "title": "FieldRowGenerator"
+    },
+    "locate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy"],
+      "properties": {
+        "strategy": {
+          "enum": ["table_label", "text_label", "text_span"]
+        },
+        "labels": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "end_labels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "default": [],
+          "description": "text_span only: aliases of the end anchor; the span ends before the first line matching one. When absent, the span ends before the next heading of the same or higher level."
+        },
+        "exclude_tables": {
+          "type": "boolean",
+          "default": true,
+          "description": "text_span only: keep lines that fall inside a geometrically ruled table out of the span's prose. Only tables whose rules were detected geometrically are excluded; borderless inferences over prose never are, and a table with no locatable rectangle keeps its lines with a note in the explanation. Set false to keep every line, tables included, as spans behaved before this flag existed."
+        },
+        "section_labels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "default": []
+        },
+        "column_labels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "default": []
+        },
+        "minimum_confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.6
+        },
+        "value_pattern": {
+          "type": "string",
+          "maxLength": 256,
+          "description": "Regular expression the candidate value must match (searched, not anchored) for the field to extract; a non-matching best candidate is reported as not_extracted."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "strategy": {
+                "const": "table_label"
+              }
+            },
+            "required": ["strategy"]
+          },
+          "then": {
+            "properties": {
+              "end_labels": false,
+              "exclude_tables": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "strategy": {
+                "const": "text_label"
+              }
+            },
+            "required": ["strategy"]
+          },
+          "then": {
+            "properties": {
+              "column_labels": false,
+              "end_labels": false,
+              "exclude_tables": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "strategy": {
+                "const": "text_span"
+              }
+            },
+            "required": ["strategy"]
+          },
+          "then": {
+            "properties": {
+              "column_labels": false,
+              "value_pattern": false
+            }
+          }
+        }
+      ],
+      "title": "FieldLocator"
+    },
+    "comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operator"],
+      "properties": {
+        "operator": {
+          "enum": ["exact", "numeric", "date", "boolean"]
+        },
+        "normalizers": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "trim",
+              "whitespace_collapse",
+              "casefold",
+              "numeric_punctuation",
+              "percent_symbol",
+              "currency_symbol"
+            ]
+          },
+          "default": []
+        },
+        "absolute_tolerance": {
+          "type": "number",
+          "minimum": 0
+        },
+        "relative_tolerance": {
+          "type": "number",
+          "minimum": 0
+        },
+        "severity": {
+          "enum": ["error", "warning", "info"],
+          "default": "error"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "operator": {
+                "not": {
+                  "const": "numeric"
+                }
+              }
+            },
+            "required": ["operator"]
+          },
+          "then": {
+            "properties": {
+              "absolute_tolerance": false,
+              "relative_tolerance": false
+            }
+          }
+        }
+      ],
+      "title": "FieldComparisonPolicy"
+    }
+  }
+}
