@@ -391,9 +391,7 @@ def test_caption_anchored_span_excludes_the_ruled_table() -> None:
     )
     caption = extracted["caption"]
     assert caption.status.value == "extracted", caption.explanation
-    assert caption.raw_document_value == (
-        "The paragraph after the table reports the outcome."
-    )
+    assert caption.raw_document_value == ("The paragraph after the table reports the outcome.")
     # The table's numbers and headers are gone; the exclusion is noted.
     assert "0.26" not in caption.raw_document_value
     assert "Metric" not in caption.raw_document_value
@@ -407,7 +405,10 @@ def test_exclude_tables_false_keeps_the_table_lines() -> None:
         ruled_table_between_caption_and_prose(),
         [
             span_field(
-                "caption", ["Table 1. Measured gains"], end_labels=["2. Closing"], exclude_tables=False
+                "caption",
+                ["Table 1. Measured gains"],
+                end_labels=["2. Closing"],
+                exclude_tables=False,
             )
         ],
     )
@@ -450,13 +451,12 @@ def test_span_emptied_by_exclusion_is_not_extracted() -> None:
     assert "excluded" in caption.explanation and "no prose remains" in caption.explanation
 
 
-def evidence_with_table_zone(
-    *, bordered: bool | None, bbox: Any
-) -> DocumentEvidence:
+def evidence_with_table_zone(*, bordered: bool | None, bbox: Any) -> DocumentEvidence:
     """Synthetic single-page evidence: three prose lines, the middle one
     inside a table's rectangle, plus one label:value line the text strategy
     can pair. The table's provenance and rectangle are exactly what the
     caller passes, so exclusion is tested against the zone machinery alone."""
+
     def line(text: str, y: float) -> Any:
         from janus.comparison.content import BoundingBox, TextElement
 
@@ -476,7 +476,11 @@ def evidence_with_table_zone(
         page_number=0,
         width=612,
         height=792,
-        text_elements=[line("1. Section", 100), line("Inside the zone.", 200), line("After it.", 300)],
+        text_elements=[
+            line("1. Section", 100),
+            line("Inside the zone.", 200),
+            line("After it.", 300),
+        ],
         tables=[table],
     )
     return DocumentEvidence(
@@ -503,9 +507,9 @@ def test_only_geometrically_ruled_tables_exclude_span_lines() -> None:
     assert ruled.raw_document_value == "After it."
     assert "Excluded 1 ruled-table line(s)." in ruled.explanation
 
-    inferred = extractor.extract(
-        plan, evidence_with_table_zone(bordered=False, bbox=zone)
-    ).fields[0]
+    inferred = extractor.extract(plan, evidence_with_table_zone(bordered=False, bbox=zone)).fields[
+        0
+    ]
     assert inferred.status.value == "extracted", inferred.explanation
     assert "Inside the zone." in inferred.raw_document_value
     assert "no reliably ruled borders" in inferred.explanation
@@ -523,9 +527,11 @@ def test_table_without_any_rectangle_keeps_its_lines_with_a_note() -> None:
         specification([span_field("section", ["1. Section"])]),
         ReferenceSource(b'{"fields": {}}', "reference.json"),
     )
-    extraction = SchemaExtractor().extract(
-        plan, evidence_with_table_zone(bordered=False, bbox=None)
-    ).fields[0]
+    extraction = (
+        SchemaExtractor()
+        .extract(plan, evidence_with_table_zone(bordered=False, bbox=None))
+        .fields[0]
+    )
     assert extraction.status.value == "extracted", extraction.explanation
     assert extraction.raw_document_value == "Inside the zone. After it."
     assert "no reliably ruled borders" in extraction.explanation

@@ -179,9 +179,13 @@ def ruled_table_pdf(grid: list[list[str]], *, width: float = 560.0) -> bytes:
     bottom = TOP + ROW_HEIGHT * len(grid)
     for index in range(len(grid) + 1):
         y = TOP + index * ROW_HEIGHT
-        page.draw_line(pymupdf.Point(X0, y), pymupdf.Point(xs[-1], y), color=(0.6, 0.6, 0.6), width=0.7)
+        page.draw_line(
+            pymupdf.Point(X0, y), pymupdf.Point(xs[-1], y), color=(0.6, 0.6, 0.6), width=0.7
+        )
     for x in xs:
-        page.draw_line(pymupdf.Point(x, TOP), pymupdf.Point(x, bottom), color=(0.6, 0.6, 0.6), width=0.7)
+        page.draw_line(
+            pymupdf.Point(x, TOP), pymupdf.Point(x, bottom), color=(0.6, 0.6, 0.6), width=0.7
+        )
     for row_index, row in enumerate(grid):
         for column_index, text in enumerate(row):
             x = X0 + 8 if column_index == 0 else xs[column_index] + 8
@@ -211,9 +215,7 @@ def test_rows_field_generates_one_row_per_label_not_per_value_column() -> None:
     the cold-run trap where a reproducibility field silently received the
     neighbouring column's value."""
     reference = json.dumps({"usage_by_region": {"A": 120.5, "B": 98.0, "C": 45.2}}).encode()
-    _, extraction, comparisons = run(
-        rows_spec(), ruled_table_pdf(MULTI_COLUMN_GRID), reference
-    )
+    _, extraction, comparisons = run(rows_spec(), ruled_table_pdf(MULTI_COLUMN_GRID), reference)
     assert [item.field_key for item in extraction.fields] == [
         "region.A",
         "region.B",
@@ -280,9 +282,7 @@ def test_explanations_carry_the_score_breakdown() -> None:
     carries the same numbers as optional fields, so tuning a threshold reads
     the run instead of bisecting blind."""
     reference = json.dumps({"usage_by_region": {"A": 120.5}}).encode()
-    _, extraction, _ = run(
-        rows_spec(max_rows=1), ruled_table_pdf(MULTI_COLUMN_GRID), reference
-    )
+    _, extraction, _ = run(rows_spec(max_rows=1), ruled_table_pdf(MULTI_COLUMN_GRID), reference)
     row = extraction.fields[0]
     assert row.status is ExtractionStatus.EXTRACTED
     assert "score: pattern x section 1.00 x column 1.00" in row.explanation

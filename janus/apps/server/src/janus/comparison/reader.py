@@ -279,8 +279,7 @@ class TextLayerDocumentReader:
                 rebuilt_tables = rebuild_fragmented_tables(found_tables, page)
                 if rebuilt_tables is not None:
                     tables.extend(
-                        table.model_copy(update={"bordered": False})
-                        for table in rebuilt_tables
+                        table.model_copy(update={"bordered": False}) for table in rebuilt_tables
                     )
                     found_tables = []
                 for found in found_tables:

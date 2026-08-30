@@ -1095,7 +1095,11 @@ class SchemaExtractor:
                             f"The best {noun} candidate's value {best.value!r} does not "
                             f"match locate.value_pattern {field.locate.value_pattern!r}; "
                             f"{best_breakdown.sentence(field.locate.minimum_confidence)}"
-                            + (f", runner-up {rival.clause()} at {rival.breakdown.final:.2f}." if rival else ".")
+                            + (
+                                f", runner-up {rival.clause()} at {rival.breakdown.final:.2f}."
+                                if rival
+                                else "."
+                            )
                         ),
                         **self._score_fields(best_breakdown, field, rival),
                     )
@@ -1262,9 +1266,7 @@ class SchemaExtractor:
             # the note shows the best survivor's score against the floor (and
             # the value shape it broke, when it broke one) instead of claiming
             # no label matched.
-            best_candidate, _, best_breakdown = max(
-                pattern_matched, key=lambda item: item[2].final
-            )
+            best_candidate, _, best_breakdown = max(pattern_matched, key=lambda item: item[2].final)
             broke_shape = shape_pattern is not None and (
                 shape_pattern.search(best_candidate.value) is None
             )
@@ -1457,11 +1459,7 @@ class SchemaExtractor:
                         else "."
                     )
                 ),
-                **(
-                    self._score_fields(best_breakdown, field)
-                    if best_breakdown is not None
-                    else {}
-                ),
+                **(self._score_fields(best_breakdown, field) if best_breakdown is not None else {}),
             )
         best_breakdown, best_index, best_line = ranked[0]
         best_score = best_breakdown.final
