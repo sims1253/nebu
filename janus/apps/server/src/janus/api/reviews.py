@@ -379,7 +379,7 @@ async def annotate_review(review_id: str, request: AnnotationRequest) -> Annotat
             review_id=review_id,
             comparison_id=request.comparison_id,
             resolution=request.resolution,
-            notes=request.notes,
+            notes=request.notes if "notes" in request.model_fields_set else ...,
             document_value=request.document_value,
         )
     except FileNotFoundError:
