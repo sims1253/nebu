@@ -93,3 +93,23 @@ def test_creation_uses_three_inputs_and_reaches_ready() -> None:
         result = client.get(f"/api/reviews/{review_id}/result")
         assert result.status_code == 200
         assert result.json()["comparisons"][0]["status"] == "not_compared"
+
+        comparison_id = result.json()["comparisons"][0]["id"]
+        annotation_url = f"/api/reviews/{review_id}/annotations"
+        for patch, expected_notes in [
+            ({"notes": "Checked against the signed copy."}, "Checked against the signed copy."),
+            ({}, "Checked against the signed copy."),
+            ({"notes": None}, None),
+        ]:
+            response = client.post(
+                annotation_url,
+                json={
+                    "comparison_id": comparison_id,
+                    "resolution": "accepted",
+                    **patch,
+                },
+            )
+            assert response.status_code == 200
+            assert response.json()["notes"] == expected_notes
+            saved = client.get(f"/api/reviews/{review_id}/result").json()
+            assert saved["comparisons"][0]["notes"] == expected_notes

@@ -8,7 +8,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 from pydantic import BaseModel
 
@@ -25,6 +25,9 @@ from janus.comparison.models import (
 )
 from janus.config import artifact_root
 from janus.schemas.review import ReviewProgress
+
+if TYPE_CHECKING:
+    from types import EllipsisType
 
 T = TypeVar("T", bound=BaseModel)
 ARTIFACT_SCHEMA_VERSION = "2"
@@ -143,11 +146,11 @@ class ReviewArtifactStore:
         review_id: str,
         comparison_id: str,
         resolution: Resolution,
-        notes: str | None,
+        notes: str | EllipsisType | None,
         document_value: str | None,
     ) -> FieldComparison | None:
         """Record a reviewer's decision on one comparison and persist the
-        updated result.
+        updated result. Omitted notes (...) stay unchanged; None clears them.
 
         A corrected document_value stores the original value, amends the
         review's own extraction (never the shared cache), and recomputes that
@@ -159,7 +162,8 @@ class ReviewArtifactStore:
             if comparison.id != comparison_id:
                 continue
             comparison.resolution = resolution
-            comparison.notes = notes
+            if notes is not ...:
+                comparison.notes = notes
             if document_value is not None and (
                 document_value != comparison.document_value
                 or comparison.extraction_status is not ExtractionStatus.EXTRACTED
