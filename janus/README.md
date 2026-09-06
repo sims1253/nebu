@@ -11,7 +11,7 @@ Install Bun and uv, then run from this directory:
 ```bash
 bun install --frozen-lockfile
 cp apps/server/.env.example apps/server/.env
-bun run dev:web:all
+bun run dev
 ```
 
 Open [localhost:3002](http://localhost:3002). Try the three files in

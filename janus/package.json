@@ -10,12 +10,8 @@
   ],
   "scripts": {
     "dev": "turbo dev",
-    "dev:logged": "mkdir -p /tmp && turbo dev 2>&1 | tee /tmp/janus_dev.log",
     "dev:server": "turbo dev --filter=@janus/server",
     "dev:web": "turbo dev --filter=@janus/web",
-    "dev:web:all": "turbo dev --filter=@janus/server --filter=@janus/web",
-    "dev:server:logged": "mkdir -p /tmp && turbo dev --filter=@janus/server 2>&1 | tee /tmp/janus_server.log",
-    "dev:web:logged": "mkdir -p /tmp && turbo dev --filter=@janus/web 2>&1 | tee /tmp/janus_web.log",
     "build": "turbo build",
     "test": "turbo test",
     "test:e2e": "bun run --cwd apps/web test:e2e",
