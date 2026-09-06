@@ -1,22 +1,8 @@
-"""Optimize schema writers on the benchmark with DSPy/GEPA.
+"""Optimize a schema writer against local benchmark cases with DSPy/GEPA.
 
-CLI::
-
-    python -m janus.authoring.optimize --round opt1 --cases invoice,purchase-order \
-        --writer predict --max-metric-calls 24
-
-Builds a trainset from the benchmark cases (each example carries the task,
-grammar docs, document text, reference text, and document path the writers
-expect), scores candidates with the deterministic pipeline metric, and runs
-``dspy.GEPA`` with a reflection LM. The optimized program and a summary JSON
-land in ``benchmarks/schema-authoring/runs/<round>-opt/``.
-
-The LM is the harness's OpenAI-compatible endpoint (JANUS_LM_API_KEY,
-JANUS_LM_BASE_URL, JANUS_LM_MODEL; the same defaults). JANUS_LM_THINKING=off
-disables reasoning for every dspy LM call here too — the openai adapter
-rejects a literal ``thinking`` kwarg, so it is sent as ``extra_body``, which
-reaches the request body verbatim.
-"""
+Run: python -m janus.authoring.optimize --round opt1 --cases invoice --writer predict
+Outputs go to benchmarks/schema-authoring/runs/<round>-opt/. Model settings
+use JANUS_LM_API_KEY, JANUS_LM_BASE_URL, JANUS_LM_MODEL, and JANUS_LM_THINKING."""
 
 from __future__ import annotations
 
@@ -49,13 +35,7 @@ _THINKING_DISABLED = os.environ.get("JANUS_LM_THINKING", "").lower() in {
 
 
 def _parallel_support() -> tuple[bool, dict | None]:
-    """Whether the installed gepa exposes parallel-proposal configuration.
-
-    gepa 0.1.4 ships PxNSampling/AllImprovements, which dspy.GEPA forwards to
-    ``gepa.optimize`` via ``gepa_kwargs`` (the standalone
-    ``gepa.optimize_anything`` API of the same release targets text artifacts,
-    not dspy modules, so the strategies are used through the dspy path).
-    """
+    """Use parallel-proposal strategies when the installed GEPA exposes them."""
     try:
         from gepa.strategies.proposal_sampling import PxNSampling
         from gepa.strategies.proposal_selection import AllImprovements
@@ -94,6 +74,8 @@ def _grammar_docs(harness) -> str:
     grammar_paths = [
         harness.JANUS_ROOT / "skills" / "schema-authoring" / "SKILL.md",
         harness.JANUS_ROOT / "docs" / "comparison-specification-v1.md",
+        harness.JANUS_ROOT / "docs" / "locators.md",
+        harness.JANUS_ROOT / "docs" / "repeated-rows.md",
     ]
     docs = "\n\n".join(path.read_text() for path in grammar_paths if path.exists())
     schema_text = (
@@ -118,13 +100,9 @@ def _reference_text(path: Path | None) -> str:
 def _build_targets(
     names: list[str], *, strict: bool
 ) -> tuple[list[BenchmarkTarget], list[str], list[str]]:
-    """Targets + trainset examples for case slugs and family names.
+    """Build targets, reporting problems and skipped cases.
 
-    Returns (targets, problems, skipped). With strict=False (the default
-    all-cases expansion), cases whose document the harness cannot resolve are
-    skipped with a notice — the harness's `write` skips them the same way;
-    with strict=True (names the user typed), they are reported as problems.
-    """
+    Explicitly requested missing documents are problems; default discovery skips them."""
     harness = _harness()
     grammar_docs = _grammar_docs(harness)
     families = harness._families()

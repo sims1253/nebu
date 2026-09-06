@@ -4,6 +4,7 @@ import json
 import time
 
 import fitz
+import pytest
 from fastapi.testclient import TestClient
 
 from janus.main import app
@@ -46,9 +47,17 @@ def pdf() -> bytes:
     return content
 
 
-def test_validate_only_returns_compiled_identity(tmp_path) -> None:
+@pytest.fixture(autouse=True)
+def isolated_stores(tmp_path, monkeypatch):
+    monkeypatch.setenv("JANUS_UPLOAD_DIR", str(tmp_path / "uploads"))
     set_review_store(InMemoryReviewStore())
     set_artifact_store(ReviewArtifactStore(results_dir=tmp_path / "artifacts"))
+    yield
+    set_review_store(None)
+    set_artifact_store(None)
+
+
+def test_validate_only_returns_compiled_identity() -> None:
     specification, reference = inputs()
     with TestClient(app) as client:
         response = client.post(
@@ -62,9 +71,7 @@ def test_validate_only_returns_compiled_identity(tmp_path) -> None:
     assert response.json()["field_count"] == 1
 
 
-def test_creation_uses_three_inputs_and_reaches_ready(tmp_path) -> None:
-    set_review_store(InMemoryReviewStore())
-    set_artifact_store(ReviewArtifactStore(results_dir=tmp_path / "artifacts"))
+def test_creation_uses_three_inputs_and_reaches_ready() -> None:
     specification, reference = inputs()
     with TestClient(app) as client:
         response = client.post(

@@ -24,11 +24,7 @@ export function useTheme() {
   useEffect(() => {
     const root = document.documentElement;
 
-    if (theme === "dark") {
-      root.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
-    }
+    root.classList.toggle("dark", theme === "dark");
 
     localStorage.setItem(STORAGE_KEY, theme);
   }, [theme]);
@@ -37,13 +33,5 @@ export function useTheme() {
     setTheme((prev) => (prev === "light" ? "dark" : "light"));
   }, []);
 
-  const setLight = useCallback(() => setTheme("light"), []);
-  const setDark = useCallback(() => setTheme("dark"), []);
-
-  return {
-    theme,
-    toggleTheme,
-    setLight,
-    setDark,
-  };
+  return { theme, toggleTheme };
 }

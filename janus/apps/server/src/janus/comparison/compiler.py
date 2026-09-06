@@ -1,4 +1,4 @@
-"""Compilation of user inputs into an immutable comparison plan."""
+"""Compile user inputs into a comparison plan."""
 
 from __future__ import annotations
 
@@ -49,7 +49,7 @@ def _hash(value: object) -> str:
 
 
 class SpecificationCompiler:
-    """Turns a specification plus reference data into an immutable ComparisonPlan:
+    """Turns a specification plus reference data into a ComparisonPlan:
     schema validation, JSON Pointer binding against the reference tree, applied
     defaults, and stable per-field ids."""
 
@@ -184,13 +184,8 @@ class SpecificationCompiler:
         if diagnostics:
             raise CompilationError(diagnostics)
 
-        # Two hashes over different projections. extraction_hash covers what
-        # the extractor reads (field ids, value rules, locate rules, row
-        # generators); comparison_hash covers expected values and compare
-        # rules. Caches key on these hashes, so changing compare rules must
-        # not invalidate extraction caches, and changing locate rules must.
-        # The rows key joins only when declared, so specifications without
-        # row generators keep their hashes.
+        # Field IDs include the whole specification hash, so specification
+        # edits invalidate extraction reuse even if only comparison rules change.
         extraction_projection = [
             {
                 "id": field.id,

@@ -21,17 +21,7 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "outputs": [],
-      "inputs": [
-        "src/**",
-        "e2e/**",
-        "schema/**",
-        "scripts/**",
-        "public/**",
-        "*.ts",
-        "*.tsx",
-        "*.json"
-      ]
+      "outputs": []
     },
     "clean": {
       "cache": false

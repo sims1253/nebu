@@ -1,7 +1,7 @@
-import { useCallback, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Braces, FileText, Table2, X } from "lucide-react";
-import type { CompilationDiagnostic } from "@janus/contracts";
+import { useMutation } from "@tanstack/react-query";
 import { ApiClientError, api } from "~/lib/api";
 import { useCreateReview } from "~/lib/queries";
 import { Button } from "~/components/ui/button";
@@ -75,62 +75,57 @@ export function UploadView() {
     specification: null,
     reference: null,
   });
-  const [diagnostics, setDiagnostics] = useState<CompilationDiagnostic[]>([]);
-  const [validated, setValidated] = useState<string | null>(null);
+  const validation = useMutation({
+    mutationFn: ({
+      specification,
+      reference,
+    }: {
+      specification: File;
+      reference: File;
+    }) => api.validateInputs(specification, reference),
+    meta: { errorTitle: "Could not validate the inputs" },
+  });
+  const error = create.error ?? validation.error;
+  const diagnostics =
+    error instanceof ApiClientError ? (error.apiError?.diagnostics ?? []) : [];
+  const validated = validation.data;
+  const busy = validation.isPending || create.isPending;
 
-  const update = useCallback((slot: Slot, file: File | null) => {
+  function update(slot: Slot, file: File | null) {
     setFiles((current) => ({ ...current, [slot]: file }));
-    setDiagnostics([]);
-    setValidated(null);
-  }, []);
+    validation.reset();
+    create.reset();
+  }
 
-  const validate = useCallback(async () => {
-    if (!files.specification || !files.reference) return false;
-    try {
-      const response = await api.validateInputs(
-        files.specification,
-        files.reference,
-      );
-      setValidated(
-        `${response.field_count} fields · specification v${response.specification_version}`,
-      );
-      setDiagnostics([]);
-      return true;
-    } catch (error) {
-      setDiagnostics(
-        error instanceof ApiClientError
-          ? (error.apiError?.diagnostics ?? [])
-          : [],
-      );
-      setValidated(null);
-      return false;
-    }
-  }, [files.reference, files.specification]);
-
-  const submit = useCallback(async () => {
-    if (!files.document || !files.specification || !files.reference) return;
-    if (!(await validate())) return;
-    try {
-      const review = await create.mutateAsync({
-        document: files.document,
+  function validate() {
+    if (files.specification && files.reference) {
+      create.reset();
+      validation.mutate({
         specification: files.specification,
         reference: files.reference,
       });
-      void navigate({
-        to: "/reviews/$reviewId",
-        params: { reviewId: review.id },
-      });
-    } catch (error) {
-      // Compilation failures carry diagnostics for the panel below; anything
-      // else is surfaced by the global mutation error toast.
-      setDiagnostics(
-        error instanceof ApiClientError
-          ? (error.apiError?.diagnostics ?? [])
-          : [],
-      );
-      setValidated(null);
     }
-  }, [create, files, navigate, validate]);
+  }
+
+  function submit() {
+    if (!files.document || !files.specification || !files.reference) return;
+    validation.reset();
+    create.mutate(
+      {
+        document: files.document,
+        specification: files.specification,
+        reference: files.reference,
+      },
+      {
+        onSuccess: (review) => {
+          void navigate({
+            to: "/reviews/$reviewId",
+            params: { reviewId: review.id },
+          });
+        },
+      },
+    );
+  }
 
   return (
     <div className="flex justify-center p-8">
@@ -143,40 +138,47 @@ export function UploadView() {
             Upload a PDF, a v1 comparison specification, and reference data.
           </p>
         </header>
-        <FileSlot
-          label="Source document (PDF)"
-          accept=".pdf"
-          file={files.document}
-          inputRef={documentInput}
-          icon={<FileText className="size-4" />}
-          onFile={(file) => update("document", file)}
-          onClear={() => update("document", null)}
-        />
-        <FileSlot
-          label="Comparison specification (JSON)"
-          accept=".json"
-          file={files.specification}
-          inputRef={specificationInput}
-          icon={<Braces className="size-4" />}
-          onFile={(file) => update("specification", file)}
-          onClear={() => update("specification", null)}
-        />
-        <FileSlot
-          label="Reference dataset (JSON, CSV, or XLSX)"
-          accept=".json,.csv,.xlsx"
-          file={files.reference}
-          inputRef={referenceInput}
-          icon={<Table2 className="size-4" />}
-          onFile={(file) => update("reference", file)}
-          onClear={() => update("reference", null)}
-        />
-
+        <fieldset disabled={busy} className="space-y-3">
+          <FileSlot
+            label="Source document (PDF)"
+            accept=".pdf"
+            file={files.document}
+            inputRef={documentInput}
+            icon={<FileText className="size-4" />}
+            onFile={(file) => update("document", file)}
+            onClear={() => update("document", null)}
+          />
+          <FileSlot
+            label="Comparison specification (JSON)"
+            accept=".json"
+            file={files.specification}
+            inputRef={specificationInput}
+            icon={<Braces className="size-4" />}
+            onFile={(file) => update("specification", file)}
+            onClear={() => update("specification", null)}
+          />
+          <FileSlot
+            label="Reference dataset (JSON, CSV, or XLSX)"
+            accept=".json,.csv,.xlsx"
+            file={files.reference}
+            inputRef={referenceInput}
+            icon={<Table2 className="size-4" />}
+            onFile={(file) => update("reference", file)}
+            onClear={() => update("reference", null)}
+          />
+        </fieldset>
+        {error && diagnostics.length === 0 && (
+          <p role="alert" className="text-xs text-destructive">
+            {error.message}
+          </p>
+        )}
         {validated && (
           <p
             role="status"
             className="rounded border border-success/30 bg-success/5 p-2 text-xs text-success"
           >
-            Valid: {validated}
+            Valid: {validated.field_count} fields · specification v
+            {validated.specification_version}
           </p>
         )}
         {diagnostics.length > 0 && (
@@ -206,16 +208,14 @@ export function UploadView() {
           <Button
             variant="outline"
             className="flex-1"
-            disabled={!files.specification || !files.reference}
+            disabled={busy || !files.specification || !files.reference}
             onClick={validate}
           >
             Validate inputs
           </Button>
           <Button
             className="flex-1"
-            disabled={
-              create.isPending || Object.values(files).some((file) => !file)
-            }
+            disabled={busy || Object.values(files).some((file) => !file)}
             onClick={submit}
           >
             {create.isPending ? "Starting…" : "Start Review"}

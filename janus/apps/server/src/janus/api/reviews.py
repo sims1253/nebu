@@ -165,12 +165,7 @@ async def _read_upload(
 
 
 async def _store_document(upload: UploadFile, destination: Path) -> tuple[int, str]:
-    """Stream the uploaded PDF to disk under the size cap.
-
-    Returns (size, sha256). Buffering the whole document in memory is exactly
-    what the size cap is meant to prevent, so the file is streamed and hashed
-    chunk by chunk instead.
-    """
+    """Stream a PDF to disk under the size limit; return its size and SHA-256."""
     digest = hashlib.sha256()
     total = 0
     header = b""

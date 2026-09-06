@@ -8,7 +8,12 @@ from janus.comparison.compiler import SpecificationCompiler
 from janus.comparison.content import PageContent, TableCell, TableStructure
 from janus.comparison.engine import ComparisonEngine
 from janus.comparison.extractor import SchemaExtractor
-from janus.comparison.models import ComparisonStatus, CompilationError, DocumentEvidence
+from janus.comparison.models import (
+    ComparisonStatus,
+    CompilationError,
+    DocumentEvidence,
+    ExtractionStatus,
+)
 from janus.comparison.reference import ReferenceSource
 
 
@@ -137,7 +142,11 @@ def test_agreement_rate_is_null_when_nothing_was_compared() -> None:
     assert summary.total_fields == 0
 
 
-def test_reviewer_correction_persists_extraction_and_keeps_cache_pristine(tmp_path) -> None:
+@pytest.mark.parametrize("original_value", ["PO-1", "PO-2"])
+@pytest.mark.parametrize("status", list(ExtractionStatus))
+def test_reviewer_correction_persists_extraction_and_keeps_cache_pristine(
+    tmp_path, status, original_value
+) -> None:
     from janus.comparison.models import Resolution, ReviewResult
     from janus.store.artifact_store import ReviewArtifactStore
 
@@ -177,7 +186,7 @@ def test_reviewer_correction_persists_extraction_and_keeps_cache_pristine(tmp_pa
                     TableCell(text="Label", row=0, column=0),
                     TableCell(text="Value", row=0, column=1),
                     TableCell(text="Order number", row=1, column=0),
-                    TableCell(text="PO-2", row=1, column=1),
+                    TableCell(text=original_value, row=1, column=1),
                 ],
             )
         ],
@@ -186,6 +195,7 @@ def test_reviewer_correction_persists_extraction_and_keeps_cache_pristine(tmp_pa
         document_id="d", document_hash="dochash", reader_name="test", pages=[page]
     )
     extraction = SchemaExtractor().extract(plan, evidence)
+    extraction.fields[0].status = status
     comparisons = ComparisonEngine().compare(plan, extraction)
     result = ReviewResult(
         review_id="r1",
@@ -216,6 +226,29 @@ def test_reviewer_correction_persists_extraction_and_keeps_cache_pristine(tmp_pa
 
     persisted_extraction = store.load_extraction("r1")
     assert persisted_extraction.fields[0].raw_document_value == "PO-1"
+    assert persisted_extraction.fields[0].status is ExtractionStatus.EXTRACTED
     # The shared cache still holds the machine extraction, not the correction.
     cached = store.load_cached_extraction("dochash", extraction.extraction_hash)
-    assert cached.fields[0].raw_document_value == "PO-2"
+    assert cached.fields[0].raw_document_value == original_value
+    assert cached.fields[0].status is status
+
+
+@pytest.mark.parametrize("value", ["NaN", "sNaN", "Infinity", "-Infinity", "1e999999999"])
+@pytest.mark.parametrize("reference_side", [False, True])
+def test_non_finite_or_out_of_range_number_is_a_mismatch(value, reference_side) -> None:
+    specification = json.loads(spec_with_pointer("/value"))
+    field = specification["sections"][0]["fields"][0]
+    field["compare"] = {"operator": "numeric", "absolute_tolerance": 0.01}
+    reference_value, document_value = (value, "1") if reference_side else ("1", value)
+    plan = SpecificationCompiler().compile(
+        json.dumps(specification).encode(),
+        ReferenceSource(json.dumps({"value": reference_value}).encode(), "r.json"),
+    )
+    evidence = DocumentEvidence(document_id="d", document_hash="h", reader_name="test", pages=[])
+    extraction = SchemaExtractor().extract(plan, evidence)
+    extraction.fields[0].status = ExtractionStatus.EXTRACTED
+    extraction.fields[0].raw_document_value = document_value
+    extraction.fields[0].normalized_document_value = document_value
+    result = ComparisonEngine().compare(plan, extraction)[0]
+    assert result.status is ComparisonStatus.MISMATCH
+    assert "numeric" in result.explanation.lower()
