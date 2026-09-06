@@ -28,6 +28,9 @@ from janus.schemas.review import ReviewProgress
 
 T = TypeVar("T", bound=BaseModel)
 ARTIFACT_SCHEMA_VERSION = "2"
+# Bump when reader/extractor behavior or their dependency configuration changes.
+# One revision invalidates both stages because extraction depends on evidence.
+MACHINE_CACHE_REVISION = "1"
 
 
 class ArtifactVersionError(ValueError):
@@ -49,7 +52,7 @@ class ReviewArtifactStore:
         return self._review_dir(review_id) / f"{name}.v2.json"
 
     def _cache_path(self, kind: str, key: str) -> Path:
-        return self._results_dir / "cache" / kind / f"{key}.v2.json"
+        return self._results_dir / "cache" / MACHINE_CACHE_REVISION / kind / f"{key}.v2.json"
 
     @staticmethod
     def _atomic_write(path: Path, text: str) -> None:

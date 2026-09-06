@@ -6,6 +6,7 @@ import json
 from janus.comparison.models import DocumentEvidence
 from janus.pipeline.review_pipeline import ReviewPipeline
 from janus.schemas.review import ReviewMetadata
+from janus.store import artifact_store
 from janus.store.artifact_store import ReviewArtifactStore
 from janus.store.review_store import InMemoryReviewStore
 
@@ -36,7 +37,9 @@ class CountingExtractor:
         return self.delegate.extract(plan, evidence)
 
 
-async def test_reference_only_revision_reuses_evidence_and_extraction(tmp_path) -> None:
+async def test_cache_revision_recomputes_both_stages_but_reference_changes_reuse_them(
+    tmp_path, monkeypatch
+) -> None:
     specification = json.dumps(
         {
             "schema_version": "1",
@@ -71,7 +74,9 @@ async def test_reference_only_revision_reuses_evidence_and_extraction(tmp_path) 
     extractor = CountingExtractor(pipeline.extractor)
     pipeline.extractor = extractor
 
-    for index, value in enumerate(("A", "B"), start=1):
+    revisions = [("first", "A", 1), ("first", "B", 1), ("next", "B", 2), ("next", "C", 2)]
+    for index, (revision, value, expected_calls) in enumerate(revisions, start=1):
+        monkeypatch.setattr(artifact_store, "MACHINE_CACHE_REVISION", revision)
         reference_path = tmp_path / f"reference-{index}.json"
         reference_content = json.dumps({"id": value}).encode()
         reference_path.write_bytes(reference_content)
@@ -96,5 +101,13 @@ async def test_reference_only_revision_reuses_evidence_and_extraction(tmp_path) 
         )
         await pipeline.process(f"review-{index}")
 
-    assert reader.calls == 1
-    assert extractor.calls == 1
+        assert reader.calls == expected_calls
+        assert extractor.calls == expected_calls
+
+    # Changing the machine cache leaves saved review artifacts readable.
+    assert (
+        artifacts.load_result("review-1").reference_hash
+        != artifacts.load_result("review-4").reference_hash
+    )
+    assert artifacts.load_evidence("review-1").document_hash == "document-hash"
+    assert artifacts.load_extraction("review-1").document_hash == "document-hash"
