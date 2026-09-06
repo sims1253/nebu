@@ -216,6 +216,8 @@ def cmd_write(round_name: str, slug: str | None) -> None:
     grammar_paths = [
         JANUS_ROOT / "skills" / "schema-authoring" / "SKILL.md",
         JANUS_ROOT / "docs" / "comparison-specification-v1.md",
+        JANUS_ROOT / "docs" / "locators.md",
+        JANUS_ROOT / "docs" / "repeated-rows.md",
     ]
     grammar_docs = "\n\n".join(path.read_text() for path in grammar_paths if path.exists())
     schema_text = (JANUS_ROOT / "packages" / "contracts" / "schema" /

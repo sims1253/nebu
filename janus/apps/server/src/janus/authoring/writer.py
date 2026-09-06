@@ -1,23 +1,6 @@
-"""DSPy writer modules for the schema-authoring benchmark.
+"""DSPy schema writers: Predict generates once; Flex can validate drafts.
 
-Two writers share one signature concept (task, grammar documentation, document
-text, and reference text in; specification JSON and optional reference JSON
-out):
-
-- ``PredictSchemaWriter`` — a single typed ``dspy.Predict``. Stable baseline;
-  GEPA tunes its instructions.
-- ``FlexSchemaWriter`` — ``dspy.Flex`` with the host-side
-  ``validate_specification`` tool. The tool compiles a draft through the REAL
-  comparison pipeline (compiler with the case reference, then reader +
-  extractor + engine on the case document) and reports compact JSON, so the
-  Flex-authored code can discover the draft -> validate -> fix loop itself.
-  ``dspy.Flex`` executes optimizer-authored code inside a Deno sandbox, so
-  this writer requires a ``deno`` executable; without one, importing still
-  works but construction raises a clear RuntimeError.
-
-``dspy.Flex`` is experimental API-wise (as dspy itself labels it); expect the
-Flex path to move between dspy releases.
-"""
+Flex requires Deno and uses an experimental DSPy API."""
 
 from __future__ import annotations
 
@@ -112,13 +95,9 @@ def deno_available() -> bool:
 def validate_specification(
     specification_json: str, reference_json: str = "", document_path: str = ""
 ) -> str:
-    """Validate a draft specification against the real pipeline (host-side).
+    """Compile, extract, and compare a draft against document_path.
 
-    Runs the same compile/extract/compare stages as scoring, against the
-    document named by ``document_path`` (a repo-relative path or a case slug),
-    and returns compact JSON: compiles, diagnostics, fields, extracted,
-    ambiguous, not_extracted, match, mismatch, sample_problems.
-    """
+    Return compact status counts and sample problems for the writer."""
     document = _resolve_document(document_path)
     if document is None:
         return (
@@ -156,17 +135,9 @@ class PredictSchemaWriter(dspy.Module):
 
 
 class FlexSchemaWriter(dspy.Module):
-    """dspy.Flex writer whose code may call validate_specification itself.
+    """Let GEPA edit a Flex program that can call validate_specification.
 
-    GEPA rewrites the Flex module's source code (not just instructions), so
-    the optimizer can invent its own draft -> validate -> fix loop around the
-    real pipeline. Requires Deno: dspy.Flex runs the optimizer-authored code
-    inside a Deno sandbox. Importing this class always works; constructing it
-    without Deno raises RuntimeError.
-
-    Experimental: dspy.Flex is marked experimental upstream, so this writer's
-    behaviour may change between dspy releases.
-    """
+    Construction requires Deno; importing the class does not."""
 
     def __init__(self) -> None:
         super().__init__()

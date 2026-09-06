@@ -89,11 +89,7 @@ COMPOUND_COMPONENTS: dict[CompoundShape, frozenset[str]] = {
 
 
 def _check_value_pattern(pattern: str | None) -> None:
-    """A value_pattern must be a compilable regular expression.
-
-    Rejecting it here (at validation time, inside compilation) turns a broken
-    pattern into a compilation diagnostic instead of an extraction-time crash.
-    """
+    """Reject invalid value patterns during compilation."""
     if pattern is not None:
         try:
             re.compile(pattern)
@@ -118,11 +114,7 @@ class TableLabelLocator(StrictModel):
 
 
 class TextLabelLocator(StrictModel):
-    """Label and value printed on one text line outside any table.
-
-    Running text has no columns, so `column_labels` does not exist here; the
-    schema rejects it for this strategy.
-    """
+    """A same-baseline label/value pair; column_labels is unsupported."""
 
     strategy: Literal["text_label"]
     # Empty only for a rows field; see TableLabelLocator.labels.
@@ -138,15 +130,7 @@ class TextLabelLocator(StrictModel):
 
 
 class TextSpanLocator(StrictModel):
-    """A contiguous run of prose that starts at a matched anchor line.
-
-    The span runs from just after the start anchor to just before the end
-    anchor — the first line matching an `end_labels` alias, or, when none are
-    given, the next heading of the same or higher level. Deliberately minimal:
-    a span is prose with provenance, not a single value, so `column_labels`
-    and `value_pattern` do not exist here; the schema rejects both for this
-    strategy.
-    """
+    """Prose between a start anchor and an explicit end or the next peer heading."""
 
     strategy: Literal["text_span"]
     labels: list[str] = Field(min_length=1)

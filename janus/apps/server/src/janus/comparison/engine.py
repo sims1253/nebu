@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import hashlib
 from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, DecimalException
 from typing import Any
 
 from janus.comparison.models import (
@@ -35,13 +35,8 @@ def _normalize(value: Any, normalizers: list[Normalizer]) -> str:
         elif normalizer is Normalizer.CASEFOLD:
             result = result.casefold()
         elif normalizer is Normalizer.NUMERIC_PUNCTUATION:
-            # Canonicalize decimal and thousands separators to ".". When both
-            # separators appear, the later one is the decimal point ("1.234,56"
-            # and "1,234.56" both become "1234.56"). A separator that appears
-            # more than once is a thousands separator. A lone separator is
-            # read as a decimal point, so "1,234" becomes "1.234" — wrong for
-            # US thousands, right for European decimals. Apply this normalizer
-            # to both sides of a comparison so the convention cancels out.
+            # A lone separator is decimal: "1,234" becomes "1.234".
+            # Matching conventions on both sides cannot resolve locale ambiguity.
             compact = result.replace(" ", "").replace("\u00a0", "")
             last_comma = compact.rfind(",")
             last_dot = compact.rfind(".")
@@ -59,8 +54,7 @@ def _normalize(value: Any, normalizers: list[Normalizer]) -> str:
                 compact = compact.replace(".", "")
             result = compact
         elif normalizer is Normalizer.CURRENCY_SYMBOL:
-            # Leading currency symbols only; ISO-style prefixes (USD, EUR)
-            # are left to numeric_punctuation's separator rules.
+            # Currency codes such as USD and EUR remain unsupported.
             result = result.strip().lstrip("$€£¥").strip()
         elif normalizer is Normalizer.PERCENT_SYMBOL:
             result = result.replace("%", "").strip()
@@ -113,21 +107,23 @@ def _compare(
     try:
         expected_number = Decimal(expected)
         actual_number = Decimal(actual)
-    except InvalidOperation:
-        return False, "One value is not numeric after normalization."
-    difference = abs(expected_number - actual_number)
-    absolute_ok = absolute_tolerance is not None and difference <= Decimal(str(absolute_tolerance))
-    relative_ok = False
-    if relative_tolerance is not None:
-        if expected_number == 0:
-            relative_ok = difference == 0
-        else:
-            relative_ok = difference / abs(expected_number) <= Decimal(str(relative_tolerance))
-    exact = difference == 0
-    return exact or absolute_ok or relative_ok, (
-        f"Numeric difference {difference}; absolute tolerance={absolute_tolerance}; "
-        f"relative tolerance={relative_tolerance}."
-    )
+        if not expected_number.is_finite() or not actual_number.is_finite():
+            return False, "One value is not finite numeric data."
+        difference = abs(expected_number - actual_number)
+        absolute_ok = absolute_tolerance is not None and difference <= Decimal(
+            str(absolute_tolerance)
+        )
+        relative_ok = relative_tolerance is not None and (
+            difference == 0
+            if expected_number == 0
+            else difference / abs(expected_number) <= Decimal(str(relative_tolerance))
+        )
+        return difference == 0 or absolute_ok or relative_ok, (
+            f"Numeric difference {difference}; absolute tolerance={absolute_tolerance}; "
+            f"relative tolerance={relative_tolerance}."
+        )
+    except DecimalException:
+        return False, "One value is invalid or outside the supported numeric range."
 
 
 def _comparison_id(field_id: str) -> str:

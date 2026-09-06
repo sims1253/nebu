@@ -202,13 +202,6 @@ def get_review_store() -> ReviewStore:
     return _store
 
 
-# Test hooks: reset drops back to the environment-selected backend; set
-# installs a specific store (both clear the process-wide singleton).
-def reset_review_store() -> None:
-    global _store
-    _store = None
-
-
 def set_review_store(store: ReviewStore | None) -> None:
     global _store
     _store = store

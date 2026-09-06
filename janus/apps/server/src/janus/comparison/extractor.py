@@ -622,16 +622,9 @@ def _is_complete_match(field: PlannedField, candidate: _Candidate) -> bool:
 
 
 def _is_complete_column_match(field: PlannedField, candidate: _Candidate) -> bool:
-    """Whether the candidate carries the requested column context as a
-    complete token set. A rows field has no aliases — the label pattern
-    selected the row — so the column context is its only completeness
-    signal when near-identical headers tie inside the ambiguity gap. A field
-    whose strategy has no `column_labels` at all (`text_label`, `text_span`)
-    has no column context to check, so the label's completeness is the whole
-    signal — returning False here would make their ties unresolvable by
-    token sets, which is exactly how a wrapped column header
-    ("Computational" / "Reproducibility") could tie a section heading at
-    1.0 with no way out."""
+    """Check column-token containment when column labels are specified.
+
+    Text locators have no columns, so only their label completeness matters."""
     columns = _column_labels(field)
     if not columns:
         return True
@@ -640,11 +633,7 @@ def _is_complete_column_match(field: PlannedField, candidate: _Candidate) -> boo
 
 @dataclass(frozen=True)
 class _ScoreBreakdown:
-    """How one candidate's final score was built: the fuzzy label term (None
-    when a rows label pattern, not aliases, selected the candidate), the
-    multiplicative section and column factors, the reader confidence, and the
-    product of them all. Extraction explanations print it so threshold tuning
-    reads the run instead of bisecting blind."""
+    """Candidate score factors. Label is None for pattern-generated rows."""
 
     label: float | None
     section_factor: float
@@ -653,8 +642,7 @@ class _ScoreBreakdown:
     final: float
 
     def sentence(self, minimum_confidence: float | None = None) -> str:
-        """The breakdown as one compact fragment, floor included, that drops
-        into any explanation."""
+        """Format the score factors and optional confidence threshold."""
         label = "pattern" if self.label is None else f"label {self.label:.2f}"
         floor = f", floor {minimum_confidence:.2f}" if minimum_confidence is not None else ""
         return (
@@ -792,10 +780,7 @@ _COMPOUND_PATTERNS: dict[CompoundShape, tuple[tuple[re.Pattern[str], tuple[str, 
 
 @cache
 def _compiled_value_pattern(pattern: str) -> re.Pattern[str]:
-    """Compile a locate.value_pattern once per pattern string.
-
-    Compilation already validated the pattern when the specification compiled;
-    this cache keeps the per-candidate acceptance check from recompiling it."""
+    """Cache compiled value patterns across candidate checks."""
     return re.compile(pattern)
 
 

@@ -1,11 +1,6 @@
-"""Persistence for review artifacts.
+"""Versioned JSON artifacts and shared evidence/extraction caches.
 
-Each review gets a directory holding its plan, evidence, extraction, result,
-and progress as versioned JSON files. Two shared caches live beside them:
-evidence keyed by document hash, extractions keyed by document hash plus
-extraction hash. Writes are atomic (temp file, fsync, rename), so a crash
-never leaves a half-written artifact.
-"""
+Writes use a temporary file, fsync, and atomic rename."""
 
 from __future__ import annotations
 
@@ -23,6 +18,7 @@ from janus.comparison.models import (
     DocumentEvidence,
     EvidenceLocation,
     ExtractionResult,
+    ExtractionStatus,
     FieldComparison,
     Resolution,
     ReviewResult,
@@ -116,11 +112,7 @@ class ReviewArtifactStore:
         return self._load(review_id, "extraction", ExtractionResult)
 
     def save_review_extraction(self, review_id: str, value: ExtractionResult) -> None:
-        """Persist a per-review extraction without touching the shared cache.
-
-        Reviewer corrections amend the review's own extraction artifact; the
-        document-hash-keyed cache must keep holding the machine extraction.
-        """
+        """Save reviewer corrections without changing the shared machine-extraction cache."""
         self._save(review_id, "extraction", value)
 
     def load_cached_extraction(self, document_hash: str, extraction_hash: str) -> ExtractionResult:
@@ -165,7 +157,10 @@ class ReviewArtifactStore:
                 continue
             comparison.resolution = resolution
             comparison.notes = notes
-            if document_value is not None and document_value != comparison.document_value:
+            if document_value is not None and (
+                document_value != comparison.document_value
+                or comparison.extraction_status is not ExtractionStatus.EXTRACTED
+            ):
                 if comparison.original_document_value is None:
                     comparison.original_document_value = comparison.document_value
                 plan = self.load_plan(review_id)
@@ -177,6 +172,7 @@ class ReviewArtifactStore:
                 if extracted is not None:
                     extracted.raw_document_value = document_value
                     extracted.normalized_document_value = document_value
+                    extracted.status = ExtractionStatus.EXTRACTED
                     extracted.confidence = 1.0
                     refreshed = ComparisonEngine().compare(plan, extraction)
                     updated = next(item for item in refreshed if item.id == comparison.id)
@@ -238,15 +234,8 @@ _artifact_store: ReviewArtifactStore | None = None
 def get_artifact_store() -> ReviewArtifactStore:
     global _artifact_store
     if _artifact_store is None:
-        root = os.getenv("JANUS_ARTIFACT_DIR")
-        _artifact_store = ReviewArtifactStore(results_dir=Path(root) if root else None)
+        _artifact_store = ReviewArtifactStore()
     return _artifact_store
-
-
-# Test hooks, same pattern as review_store.
-def reset_artifact_store() -> None:
-    global _artifact_store
-    _artifact_store = None
 
 
 def set_artifact_store(store: ReviewArtifactStore | None) -> None:

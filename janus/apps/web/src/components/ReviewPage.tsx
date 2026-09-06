@@ -66,7 +66,10 @@ function ComparisonRow({
       aria-selected={selected}
       onClick={onSelect}
       onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
+        if (
+          event.target === event.currentTarget &&
+          (event.key === "Enter" || event.key === " ")
+        ) {
           event.preventDefault();
           onSelect();
         }
@@ -97,6 +100,7 @@ function ComparisonRow({
       </td>
       <td className="px-2 py-1.5" onClick={(event) => event.stopPropagation()}>
         <select
+          aria-label={`Resolution for ${item.field_label}`}
           className="h-7 max-w-44 rounded border bg-background px-1 text-xs"
           value={item.resolution}
           onChange={(event) => onResolve(event.target.value as Resolution)}
@@ -131,14 +135,14 @@ export function ReviewPage() {
   const selected =
     comparisons.find((item) => item.id === selectedId) ?? comparisons[0];
 
-  if (review.isError) {
+  if (review.isError || result.isError) {
     return (
       <div role="alert" className="p-8">
         <h1 className="font-medium text-destructive">
           Could not load the review
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          {review.error.message}
+          {(review.error ?? result.error)?.message}
         </p>
       </div>
     );
@@ -246,8 +250,7 @@ export function ReviewPage() {
         </table>
       </section>
       <section className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto]">
-        {/* The browser PDF viewer requires same-origin scripting; the document
-            comes from our own API, so a sandbox would break rendering for no gain. */}
+        {/* The browser PDF viewer does not render inside a sandboxed iframe. */}
         {/* oxlint-disable-next-line react/iframe-missing-sandbox */}
         <iframe
           className="h-full w-full bg-muted"

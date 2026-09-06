@@ -7,7 +7,6 @@ import {
   QueryClientProvider,
 } from "@tanstack/react-query";
 import { router } from "./router";
-import { ApiClientError } from "./lib/api";
 import { toast } from "./components/ui/toast";
 
 import "./index.css";
@@ -28,10 +27,7 @@ const queryClient = new QueryClient({
           ? mutation.meta["errorTitle"]
           : "Request failed";
       toast.error(fallbackTitle, {
-        description:
-          error instanceof ApiClientError
-            ? (error.apiError?.message ?? error.message)
-            : error.message,
+        description: error.message,
       });
     },
   }),

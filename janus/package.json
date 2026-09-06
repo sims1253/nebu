@@ -18,7 +18,7 @@
     "dev:web:logged": "mkdir -p /tmp && turbo dev --filter=@janus/web 2>&1 | tee /tmp/janus_web.log",
     "build": "turbo build",
     "test": "turbo test",
-    "test:e2e": "bun --cwd apps/web run test:e2e",
+    "test:e2e": "bun run --cwd apps/web test:e2e",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
     "check": "turbo lint typecheck test build",

@@ -1,17 +1,7 @@
-"""Deterministic GEPA metric for the schema-authoring benchmark.
+"""Score schema-writer output through the comparison pipeline.
 
-``build_metric(target)`` returns the function ``dspy.GEPA`` calls after every
-rollout: it feeds the writer's specification through the REAL pipeline — the
-same ``janus.comparison`` compiler/reader/extractor/engine the harness scores
-with — and turns the deterministic result into a numeric score plus
-natural-language feedback for GEPA's reflection step. No LM is involved in
-scoring, so a candidate's score is exactly reproducible.
-
-The harness (``apps/server/scripts/schema_authoring_bench.py``) stays the
-single source of truth for benchmark data: this module imports it as a module
-via importlib from its path (never modified) and reuses its case discovery,
-document resolution, and document-text extraction.
-"""
+The benchmark harness supplies local case and document discovery. Scores
+measure extraction and agreement, not completeness against the requested task."""
 
 from __future__ import annotations
 
@@ -37,11 +27,7 @@ _harness_module: Any = None
 
 
 def _harness() -> Any:
-    """Load the benchmark harness script as a module (cached).
-
-    The harness is script-shaped, not package-shaped; importing it this way
-    reuses its case/family discovery and document helpers without touching it.
-    """
+    """Load and cache the benchmark harness from its source-tree path."""
     global _harness_module
     if _harness_module is None:
         spec = importlib.util.spec_from_file_location("janus_schema_authoring_bench", HARNESS_PATH)
@@ -79,13 +65,8 @@ def evaluate_specification(
     reference_json: str = "",
     provided_reference: Path | None = None,
 ) -> dict:
-    """Run the real pipeline on a candidate specification, in memory.
-
-    Same stages and same precedence as the harness's ``_score_case`` /
-    ``_score_family``: a writer-authored reference (``reference_json``) wins
-    over the provided one, which wins over nothing. Returns a dict shaped for
-    both scoring and reflection feedback.
-    """
+    """Evaluate a candidate with writer-authored reference data when supplied,
+    otherwise the provided reference. Return extraction and comparison counts."""
     result: dict[str, Any] = {
         "document": document.name,
         "compiles": False,
@@ -280,12 +261,7 @@ class BenchmarkTarget:
 
 
 def build_metric(target: BenchmarkTarget):
-    """Return a dspy.GEPA metric for one case or family.
-
-    The metric never runs an LM: it evaluates the prediction's specification
-    through the real pipeline and returns ``dspy.Prediction(score, feedback)``
-    with feedback text suitable for GEPA's reflection LM.
-    """
+    """Return a DSPy score and diagnostic feedback for one case or family."""
 
     def metric(
         gold: dspy.Example,  # noqa: ARG001 (protocol slot; the target is closed over)

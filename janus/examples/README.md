@@ -1,18 +1,21 @@
 # Examples
 
-Each directory is a complete run: upload `document.pdf`, `specification.json`, and the reference file to the web app (or the three-file `POST /api/reviews`). Every example verifies end-to-end: all fields extract and match.
+Upload `document.pdf`, `specification.json`, and the reference file from one directory.
+The two bundled PDFs are generated fixtures. All their fields should extract and match.
 
-| Example          | Reference format | Demonstrates                                                                                                                             |
-| ---------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `purchase-order` | JSON             | text `exact` comparison, `numeric` with tolerance, alias labels                                                                          |
-| `invoice`        | CSV              | `date` and `boolean` operators, `percentage` values with the `percent_symbol` normalizer, thousands separators via `numeric_punctuation` |
+| Example                          | Reference | Covers                                                |
+| -------------------------------- | --------- | ----------------------------------------------------- |
+| [purchase-order](purchase-order) | JSON      | Exact text, numeric tolerance, label aliases.         |
+| [invoice](invoice)               | CSV       | Dates, booleans, percentages, and numeric separators. |
 
-The `purchase-order` and `invoice` documents are generated fixtures (see the reader tests in `apps/server` for similar generators), so they carry no third-party licensing.
+## Downloaded cohort report
 
-`cohort-report` downloads its document on demand from the EU post-authorisation studies catalogue (a finalised cohort study's public report; direct link, no login):
+[cohort-report](cohort-report) includes a specification and reference data. Download its PDF
+from the EU post-authorisation studies catalogue before using it. From the Janus directory:
 
 ```bash
-cd apps/server && uv run --no-sync python scripts/fetch_cohort_example.py
+cd apps/server && uv run python scripts/fetch_cohort_example.py
 ```
 
-The fetch verifies exact size and sha256 before writing a three-page excerpt. CI runs the same download and test.
+The script checks the full report's size and SHA-256 before saving a three-page excerpt.
+CI downloads and tests the same example. Without the PDF, the local test skips it.
