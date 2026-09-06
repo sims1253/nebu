@@ -5,15 +5,9 @@
   "description": "Janus generic PDF comparison backend",
   "scripts": {
     "dev": "uv run uvicorn janus.main:app --reload --port 3001",
-    "build": "echo 'Python project - no build step'",
     "test": "uv run --no-sync pytest",
     "lint": "uv run --no-sync ruff check src",
     "format": "uv run --no-sync ruff format src",
     "typecheck": "uv run --no-sync ty check src"
-  },
-  "turbo": {
-    "build": {
-      "outputs": []
-    }
   }
 }
