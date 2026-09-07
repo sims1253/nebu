@@ -43,7 +43,7 @@ def _fold(text: str) -> str:
 
 def extract(document: Path, specification: ExtractionSpecification) -> StructuredExtraction:
     """Read a PDF and extract data. Does not create a review or write files."""
-    evidence = TextLayerDocumentReader().read(document, document.name)
+    evidence = TextLayerDocumentReader().read(document, document.name, normalize_rotation=True)
     return extract_evidence(evidence, specification)
 
 

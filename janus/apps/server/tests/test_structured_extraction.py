@@ -304,3 +304,47 @@ def test_cli_reports_unreadable_pdf_without_traceback(tmp_path):
     assert cli.stderr.startswith("janus:")
     assert "Traceback" not in cli.stderr
     assert cli.stdout == ""
+
+
+@pytest.mark.parametrize("rotation", [0, 90, 180, 270])
+def test_rotation_does_not_change_values_or_source_coordinates(tmp_path, rotation):
+    from pathlib import Path
+
+    example = Path(__file__).parents[3] / "examples" / "purchase-order"
+    pdf = tmp_path / "rotated.pdf"
+    with pymupdf.open(example / "document.pdf") as document:
+        document[0].set_rotation(rotation)
+        document.save(pdf)
+    spec = ExtractionSpecification.model_validate_json((example / "extraction.json").read_bytes())
+    result = extract(pdf, spec)
+    original = extract(example / "document.pdf", spec)
+    assert result.data == original.data
+    assert result.fields == original.fields
+    assert result.pages == original.pages
+    with pymupdf.open(pdf) as document:
+        assert document[0].rotation == rotation
+
+
+def test_cli_exit_two_for_unresolved_data_and_mismatches(tmp_path):
+    pdf = tmp_path / "empty.pdf"
+    with pymupdf.open() as document:
+        document.new_page()
+        document.save(pdf)
+    spec = tmp_path / "spec.json"
+    spec.write_text(record_spec().model_dump_json())
+    extracted = subprocess.run(
+        ["janus", "extract", str(pdf), str(spec)], capture_output=True, text=True
+    )
+    assert extracted.returncode == 2
+    assert json.loads(extracted.stdout)["fields"][0]["status"] == "missing"
+    saved = tmp_path / "extraction.json"
+    saved.write_text(result_with("A", "text").model_dump_json())
+    reference = tmp_path / "reference.json"
+    reference.write_text('{"value":"B"}')
+    rules = tmp_path / "rules.json"
+    rules.write_text('[{"path":"/value","reference_pointer":"/value"}]')
+    checked = subprocess.run(
+        ["janus", "compare", str(saved), str(reference), str(rules)], capture_output=True, text=True
+    )
+    assert checked.returncode == 2
+    assert json.loads(checked.stdout)[0]["status"] == "mismatch"
