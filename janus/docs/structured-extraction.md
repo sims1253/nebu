@@ -90,7 +90,8 @@ repair arbitrary merged cells or perform OCR.
 `data` contains nested values. `fields` describes each scalar by JSON Pointer, type, status,
 source location, and message. Status is `extracted`, `missing`, `ambiguous`, `invalid`, or `error`.
 Record-level issues use the record array's pointer. Locations use zero-based pages and PDF
-points; user interfaces display page numbers starting at one. An extracted field's score is
+points with PDF page rotation set to zero; user interfaces display page numbers starting at one.
+Extraction normalizes page rotation in memory without changing the original file. An extracted field's score is
 not presented as a probability of correctness.
 
 Comparison rules explicitly pair an output `path` with a `reference_pointer`. JSON, CSV, and
