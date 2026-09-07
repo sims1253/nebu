@@ -80,7 +80,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      JANUS_DATA_DIR: ${{ runner.temp }}/janus-browser
+      JANUS_DATA_DIR: /tmp/janus-browser
     defaults:
       run:
         working-directory: janus

@@ -75,7 +75,12 @@ export function SourcePreview({
           </a>
         </div>
       </header>
-      <div className="source-scroll">
+      <div
+        className="source-scroll"
+        tabIndex={0}
+        role="region"
+        aria-label="PDF page preview"
+      >
         {failed ? (
           <p role="alert">
             Could not render this page.{" "}

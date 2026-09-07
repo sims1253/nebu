@@ -374,7 +374,7 @@ function ExtractionResultView({ saved }: { saved: SavedExtraction }) {
             </div>
           )}
           {view === "json" ? (
-            <pre className="data-json">
+            <pre className="data-json" tabIndex={0} aria-label="Extracted JSON">
               {JSON.stringify(result.data, null, 2)}
             </pre>
           ) : (
