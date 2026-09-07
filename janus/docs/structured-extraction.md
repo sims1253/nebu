@@ -95,8 +95,10 @@ not presented as a probability of correctness.
 
 Comparison rules explicitly pair an output `path` with a `reference_pointer`. JSON, CSV, and
 XLSX references use the [reference normalization rules](comparison-specification-v1.md#reference-data).
-Numbers compare with an optional nonnegative `absolute_tolerance` (default zero). Other values
-use typed equality. Missing or invalid inputs produce `not_compared`. Record comparisons must
+At least one rule is required. Numbers compare with an optional nonnegative `absolute_tolerance` (default zero). Other values
+use typed equality after parsing date and boolean reference cells. Date checks compare calendar
+days, ignoring a reference datetime's time component. Numeric comparison supports precision up to
+10,000 decimal places; greater ranges are not compared. Missing or invalid inputs produce `not_compared`. Record comparisons must
 name the intended row pointers; Janus does not infer record identity across datasets.
 
 ## Python

@@ -5,6 +5,7 @@ import json
 import sys
 from pathlib import Path
 
+import pymupdf
 from pydantic import TypeAdapter, ValidationError
 
 from janus.comparison.reference import ReferenceSource, normalize_reference
@@ -53,7 +54,7 @@ def main() -> int:
             code = 2 if any(c.status != "match" for c in checks) else 0
         print(json.dumps(output, indent=2, ensure_ascii=False))
         return code
-    except (OSError, ValueError, ValidationError) as exc:
+    except (OSError, ValueError, ValidationError, pymupdf.FileDataError) as exc:
         print(f"janus: {exc}", file=sys.stderr)
         return 1
 
