@@ -268,20 +268,29 @@ def field_identifier(
     return hashlib.sha256(basis.encode()).hexdigest()
 
 
-class PlannedField(StrictModel):
+class ExtractionField(StrictModel):
     id: str
     section_key: str
     section_label: str
     key: str
     label: str
+    value: ValueRule
+    locate: FieldLocator
+    rows: RowGeneratorRule | None = None
+
+
+class PlannedField(ExtractionField):
     reference_pointer: str
     reference_required: bool
     expected_value: Any = None
     expected_value_present: bool = True
-    value: ValueRule
-    locate: FieldLocator
     compare: ComparisonRule
-    rows: RowGeneratorRule | None = None
+
+
+class ExtractionPlan(StrictModel):
+    specification_id: str
+    extraction_hash: str
+    fields: list[ExtractionField]
 
 
 class ComparisonPlan(StrictModel):

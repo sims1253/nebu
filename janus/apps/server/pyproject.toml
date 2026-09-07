@@ -18,6 +18,9 @@ dependencies = [
     "jsonschema>=4.23.0",
 ]
 
+[project.scripts]
+janus = "janus.cli:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3.0",
