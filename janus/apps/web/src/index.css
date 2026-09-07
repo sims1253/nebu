@@ -1,4 +1,8 @@
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
 @import "tailwindcss";
+@import "./workbench.css";
 
 @custom-variant dark (&:is(.dark, .dark *));
 
@@ -67,6 +71,7 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: "IBM Plex Sans", sans-serif;
   }
 
   :root {

@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from janus.api.extractions import router as extractions_router
 from janus.api.reviews import router as reviews_router
 from janus.pipeline.review_pipeline import get_review_pipeline
 
@@ -66,6 +67,7 @@ app.add_middleware(
 )
 
 app.include_router(reviews_router)
+app.include_router(extractions_router)
 
 
 @app.get("/health", response_model=HealthResponse)

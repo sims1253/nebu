@@ -43,7 +43,7 @@ for (const outcome of ["ready", "error"] as const) {
 }
 
 test("shows the generic three-input workflow", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/compare");
   await expect(
     page.getByRole("heading", { name: "Start a document comparison" }),
   ).toBeVisible();
@@ -70,7 +70,7 @@ test("shows validation errors without structured diagnostics", async ({
       },
     }),
   );
-  await page.goto("/");
+  await page.goto("/compare");
   await page
     .getByLabel("Select Comparison specification (JSON)")
     .setInputFiles({
@@ -123,7 +123,7 @@ test("starts a review with one submission and shows result load errors", async (
       },
     }),
   );
-  await page.goto("/");
+  await page.goto("/compare");
   await page.getByLabel("Select Source document (PDF)").setInputFiles({
     name: "order.pdf",
     mimeType: "application/pdf",

@@ -10,11 +10,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { theme, toggleTheme } = useTheme();
   return (
     <div className="flex h-dvh flex-col bg-background text-sm">
-      <header className="flex h-10 shrink-0 items-center justify-between border-b bg-card px-3">
+      <header className="app-header">
         <Link to="/" className="flex items-baseline gap-2">
           <span className="font-semibold">Janus</span>
           <span className="text-[10px] text-muted-foreground">
-            Document Comparison
+            PDF extraction
           </span>
         </Link>
         <div className="flex items-center gap-2">
@@ -37,10 +37,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Moon className="size-4" />
             )}
           </Button>
-          <Link to="/">
-            <Button variant="ghost" size="sm">
-              + New
-            </Button>
+          <Link to="/compare" className="app-nav-link">
+            Comparison reviews
+          </Link>
+          <Link to="/" className="app-nav-link">
+            New extraction
           </Link>
         </div>
       </header>

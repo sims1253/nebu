@@ -10,11 +10,23 @@
 
 import { Route as rootRouteImport } from "./routes/__root"
 import { Route as IndexRouteImport } from "./routes/index"
+import { Route as CompareRouteImport } from "./routes/compare"
+import { Route as ExtractionsExtractionIdRouteImport } from "./routes/extractions.$extractionId"
 import { Route as ReviewsReviewIdRouteImport } from "./routes/reviews.$reviewId"
 
 const IndexRoute = IndexRouteImport.update({
   id: "/",
   path: "/",
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CompareRoute = CompareRouteImport.update({
+  id: "/compare",
+  path: "/compare",
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExtractionsExtractionIdRoute = ExtractionsExtractionIdRouteImport.update({
+  id: "/extractions/$extractionId",
+  path: "/extractions/$extractionId",
   getParentRoute: () => rootRouteImport,
 } as any)
 const ReviewsReviewIdRoute = ReviewsReviewIdRouteImport.update({
@@ -25,27 +37,44 @@ const ReviewsReviewIdRoute = ReviewsReviewIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute
+  "/compare": typeof CompareRoute
+  "/extractions/$extractionId": typeof ExtractionsExtractionIdRoute
   "/reviews/$reviewId": typeof ReviewsReviewIdRoute
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute
+  "/compare": typeof CompareRoute
+  "/extractions/$extractionId": typeof ExtractionsExtractionIdRoute
   "/reviews/$reviewId": typeof ReviewsReviewIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   "/": typeof IndexRoute
+  "/compare": typeof CompareRoute
+  "/extractions/$extractionId": typeof ExtractionsExtractionIdRoute
   "/reviews/$reviewId": typeof ReviewsReviewIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: "/" | "/reviews/$reviewId"
+  fullPaths:
+    | "/"
+    | "/compare"
+    | "/extractions/$extractionId"
+    | "/reviews/$reviewId"
   fileRoutesByTo: FileRoutesByTo
-  to: "/" | "/reviews/$reviewId"
-  id: "__root__" | "/" | "/reviews/$reviewId"
+  to: "/" | "/compare" | "/extractions/$extractionId" | "/reviews/$reviewId"
+  id:
+    | "__root__"
+    | "/"
+    | "/compare"
+    | "/extractions/$extractionId"
+    | "/reviews/$reviewId"
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CompareRoute: typeof CompareRoute
+  ExtractionsExtractionIdRoute: typeof ExtractionsExtractionIdRoute
   ReviewsReviewIdRoute: typeof ReviewsReviewIdRoute
 }
 
@@ -56,6 +85,20 @@ declare module "@tanstack/react-router" {
       path: "/"
       fullPath: "/"
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    "/compare": {
+      id: "/compare"
+      path: "/compare"
+      fullPath: "/compare"
+      preLoaderRoute: typeof CompareRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    "/extractions/$extractionId": {
+      id: "/extractions/$extractionId"
+      path: "/extractions/$extractionId"
+      fullPath: "/extractions/$extractionId"
+      preLoaderRoute: typeof ExtractionsExtractionIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     "/reviews/$reviewId": {
@@ -70,6 +113,8 @@ declare module "@tanstack/react-router" {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CompareRoute: CompareRoute,
+  ExtractionsExtractionIdRoute: ExtractionsExtractionIdRoute,
   ReviewsReviewIdRoute: ReviewsReviewIdRoute,
 }
 export const routeTree = rootRouteImport

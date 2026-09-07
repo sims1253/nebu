@@ -1,10 +1,10 @@
 # Janus
 
-Compare a PDF with reference data, then review each result beside the source document.
-Upload the PDF, a JSON comparison specification, and reference data in JSON, CSV, or XLSX.
-Janus runs locally and reads the PDF text layer; scans need text before Janus can read them.
+Extract structured data from PDFs using their text and layout. Define the fields you need,
+inspect their source locations, then export the data or compare it with a reference dataset.
+Janus runs locally. It does not send documents to a model or OCR scanned pages.
 
-## Start
+## Start the workbench
 
 Install Bun and uv, then run from this directory:
 
@@ -14,21 +14,46 @@ cp apps/server/.env.example apps/server/.env
 bun run dev
 ```
 
-Open [localhost:3002](http://localhost:3002). Try the three files in
-[examples/purchase-order](examples/purchase-order) first; both fields should match.
-Select a result to see its PDF page and extraction details. Record a decision in the
-resolution menu, or export the review as CSV or JSON.
+Open [localhost:3002](http://localhost:3002). Choose **Try purchase order** to run the bundled
+example, or upload a PDF and an extraction specification. Select a field to highlight its
+source on the PDF. Switch to JSON to inspect the nested output.
+
+- **Export data** saves the nested values for your own tools.
+- **Export with evidence** includes field statuses, source locations, and document identity.
+- **Specification** lets you edit the saved specification and extract again as a separate run.
+- **Compare data** checks the saved extraction against JSON, CSV, or XLSX reference data.
+
+Missing, ambiguous, and invalid fields remain visible. Inspect unresolved fields before using
+the exported data. Completed extractions are saved locally and can be reopened after a restart.
+Comparison previews stay in the current tab; export them to retain the results.
+
+## Use the library or CLI
+
+The extraction engine works without the web server, reference data, or a review record.
+From `apps/server`:
+
+```bash
+uv run janus extract ../../examples/purchase-order/document.pdf \
+  ../../examples/purchase-order/extraction.json > extraction.json
+uv run janus compare extraction.json ../../examples/purchase-order/reference.json \
+  ../../examples/purchase-order/checks.json
+```
+
+Read the [structured extraction guide](docs/structured-extraction.md) for nested objects,
+record tables, numeric formats, exit codes, and the Python interface.
 
 ## Guides
 
-- [Examples](examples/README.md): ready-to-run inputs.
-- [Write a specification](docs/comparison-specification-v1.md): reference pointers, values, and comparisons.
+- [Structured extraction](docs/structured-extraction.md): specification, outputs, library, and CLI.
 - [Locate PDF content](docs/locators.md): tables, labeled text, and prose sections.
-- [Repeated rows](docs/repeated-rows.md): one rule for many matching labels.
+- [Examples](examples/README.md): ready-to-run inputs.
 - [Server setup and checks](apps/server/README.md): configuration, storage, and development.
-- [How it works](DESIGN.md): pipeline, caches, and review screen.
-- [Schema-authoring skill](skills/schema-authoring/SKILL.md): instructions for an agent writing a specification.
+- [How it works](DESIGN.md): extraction, comparison, and persistence.
 
-A reviewer must check the results. Janus does not do OCR, evaluate formulas, derive values
-across fields, align arbitrary repeated records, or answer free-text questions. Specifications
-are written outside the browser.
+The **Comparison reviews** page retains the existing three-input workflow and saved reviews.
+Its [comparison specification](docs/comparison-specification-v1.md), [repeated-row rules](docs/repeated-rows.md),
+and [authoring skill](skills/schema-authoring/SKILL.md) remain available.
+
+Janus depends on readable PDF text and recoverable layout. It does not infer arbitrary record
+identity across datasets, evaluate formulas, or answer free-text questions. Specifications are
+JSON documents; the workbench can edit and rerun them.
