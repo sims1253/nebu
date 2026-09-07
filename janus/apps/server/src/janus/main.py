@@ -46,8 +46,8 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
 
 
 app = FastAPI(
-    title="Janus Document Comparison API",
-    description="Compile comparison specifications, extract grounded PDF values, and review comparisons.",
+    title="Janus PDF Extraction API",
+    description="Extract structured PDF data, inspect source evidence, and compare saved results.",
     version="2.0.0",
     lifespan=lifespan,
 )

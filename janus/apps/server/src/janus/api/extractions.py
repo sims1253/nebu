@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import re
 import shutil
 import uuid
@@ -180,7 +179,7 @@ async def compare_extraction(
 
     try:
         return await asyncio.to_thread(check)
-    except (ValueError, json.JSONDecodeError) as exc:
+    except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
 
 

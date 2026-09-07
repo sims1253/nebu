@@ -695,3 +695,14 @@ button:disabled {
 .app-header button {
   color: var(--wb-muted);
 }
+
+.field-value strong {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.source-caption {
+  max-height: 240px;
+  overflow: auto;
+}

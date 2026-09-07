@@ -2,7 +2,7 @@
   "name": "@janus/web",
   "version": "0.0.1",
   "private": true,
-  "description": "Janus Web - Shared React Components",
+  "description": "Janus PDF extraction workbench",
   "type": "module",
   "scripts": {
     "dev": "vite",
