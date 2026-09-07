@@ -41,7 +41,8 @@ resumed; leftover temporary directories are hidden from history. The response wa
 operation to finish. The browser does not create a second progress state.
 
 The workbench puts data beside the PDF. Selecting a field shows its page and overlays its source
-rectangle when available. Pages are rendered on demand from the saved PDF, with a maximum long
+rectangle when available. Extraction and page previews use unrotated PDF coordinates; the
+original PDF stays unchanged. Pages are rendered on demand from the saved PDF, with a maximum long
 edge of 1800 pixels. Text values remain available beside the image. On narrow screens the source
 pane follows the data pane. Editing a specification creates a new run and preserves the old one.
 Comparison previews stay in the browser tab and can be exported; they do not alter saved data.

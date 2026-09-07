@@ -94,3 +94,34 @@ def test_invalid_pdf_does_not_publish_partial_run(client):
 def test_schema_is_available_and_unknown_extractions_return_404(client):
     assert client.get("/api/extractions/schema").json()["title"] == "ExtractionSpecification"
     assert client.get("/api/extractions/invalid").status_code == 404
+
+
+def test_rotated_pdf_preview_uses_the_extraction_coordinate_system(client):
+    import struct
+
+    import pymupdf
+
+    with pymupdf.open(EXAMPLE / "document.pdf") as pdf:
+        expected_width, expected_height = pdf[0].rect.width, pdf[0].rect.height
+        pdf[0].set_rotation(90)
+        content = pdf.tobytes()
+    response = client.post(
+        "/api/extractions",
+        files={
+            "document": ("rotated.pdf", content, "application/pdf"),
+            "specification": (
+                "spec.json",
+                (EXAMPLE / "extraction.json").read_bytes(),
+                "application/json",
+            ),
+        },
+    )
+    assert response.status_code == 201
+    saved = response.json()
+    assert saved["result"]["data"]["order"]["total"] == "1275.50"
+    assert saved["result"]["pages"][0] == {"width": expected_width, "height": expected_height}
+    image = client.get(f"/api/extractions/{saved['id']}/pages/0")
+    width, height = struct.unpack(">II", image.content[16:24])
+    assert abs(width / height - expected_width / expected_height) < 0.01
+    original = client.get(f"/api/extractions/{saved['id']}/document").content
+    assert original == content

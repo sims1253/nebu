@@ -149,6 +149,7 @@ async def get_page(run_id: str, page: int) -> Response:
             if not 0 <= page < pdf.page_count:
                 raise HTTPException(404, "PDF page not found.")
             source = pdf[page]
+            source.set_rotation(0)
             scale = min(2.0, 1800 / max(source.rect.width, source.rect.height))
             return source.get_pixmap(matrix=pymupdf.Matrix(scale, scale), alpha=False).tobytes(
                 "png"
