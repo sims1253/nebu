@@ -227,3 +227,80 @@ def test_same_record_spec_extracts_real_pdfs_with_reordered_columns(tmp_path, he
         {"description": "Pens", "quantity": 3, "amount": "7.25"},
     ]
     assert all(field.status == "extracted" for field in result.fields)
+
+
+def result_with(value, value_type):
+    from janus.extraction.models import FieldResult, StructuredExtraction
+
+    return StructuredExtraction(
+        specification_name="Test",
+        specification_hash="spec",
+        document_hash="doc",
+        data={"value": value},
+        fields=[FieldResult(path="/value", type=value_type, status="extracted")],
+        pages=[],
+    )
+
+
+def test_xlsx_dates_compare_calendar_days(tmp_path):
+    from datetime import datetime
+
+    from openpyxl import Workbook
+
+    from janus.comparison.reference import ReferenceSource, normalize_reference
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["date"])
+    sheet.append([datetime(2024, 3, 1, 14, 30)])
+    path = tmp_path / "reference.xlsx"
+    workbook.save(path)
+    reference, _ = normalize_reference(ReferenceSource.from_path(path))
+    rule = CheckRule(path="/value", reference_pointer="/sheets/Sheet/rows/0/date")
+    assert compare(result_with("2024-03-01", "date"), reference, [rule])[0].status == "match"
+    assert compare(result_with("2024-03-02", "date"), reference, [rule])[0].status == "mismatch"
+
+
+def test_csv_booleans_compare_as_boolean_values():
+    from janus.comparison.reference import ReferenceSource, normalize_reference
+
+    reference, _ = normalize_reference(ReferenceSource(b"flag\nyes\n", "reference.csv"))
+    assert (
+        compare(
+            result_with(True, "boolean"),
+            reference,
+            [CheckRule(path="/value", reference_pointer="/rows/0/flag")],
+        )[0].status
+        == "match"
+    )
+
+
+def test_decimal_difference_does_not_round_into_tolerance():
+    result = result_with("0.0100000000000000000000000000001", "decimal")
+    assert (
+        compare(
+            result,
+            {"value": 0},
+            [CheckRule(path="/value", reference_pointer="/value", absolute_tolerance=0.01)],
+        )[0].status
+        == "mismatch"
+    )
+
+
+def test_comparison_requires_at_least_one_check():
+    with pytest.raises(ValueError, match="At least one"):
+        compare(result_with("A", "text"), {}, [])
+
+
+def test_cli_reports_unreadable_pdf_without_traceback(tmp_path):
+    document = tmp_path / "bad.pdf"
+    document.write_bytes(b"not a PDF")
+    spec = tmp_path / "spec.json"
+    spec.write_text(record_spec().model_dump_json())
+    cli = subprocess.run(
+        ["janus", "extract", str(document), str(spec)], capture_output=True, text=True
+    )
+    assert cli.returncode == 1
+    assert cli.stderr.startswith("janus:")
+    assert "Traceback" not in cli.stderr
+    assert cli.stdout == ""
