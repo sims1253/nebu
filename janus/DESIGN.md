@@ -16,7 +16,9 @@ reads PDF text and tables, locates the requested values, then compares them. Ext
 the specification and document evidence; it does not read expected reference values.
 
 Reviews move through `created`, `validating_inputs`, `reading_document`, `extracting_fields`,
-`comparing`, and `ready`, or end in `error`. Each stage saves a versioned JSON artifact.
+`comparing`, and `ready`, or end in `error`. The pipeline saves versioned plan, evidence,
+extraction, and result artifacts.
+The browser polls review metadata and displays the current stage.
 Writes use a temporary file followed by an atomic rename. Evidence is cached by document hash;
 extraction is cached by document and extraction hashes. Both caches live under a shared machine
 cache revision, independent of the artifact schema version. Changing only reference data reuses

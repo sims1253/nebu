@@ -13,7 +13,7 @@ from janus.comparison.extractor import SchemaExtractor
 from janus.comparison.models import ReviewResult
 from janus.comparison.reader import TextLayerDocumentReader
 from janus.comparison.reference import ReferenceSource
-from janus.schemas.review import ReviewProgress, ReviewStatus
+from janus.schemas.review import ReviewStatus
 from janus.store.artifact_store import ReviewArtifactStore, get_artifact_store
 from janus.store.review_store import ReviewStore, get_review_store
 
@@ -32,17 +32,6 @@ class ReviewPipeline:
         self.extractor = SchemaExtractor()
         self.comparison = ComparisonEngine()
 
-    async def _progress(
-        self, review_id: str, status: ReviewStatus, percent: float, detail: str
-    ) -> None:
-        progress = ReviewProgress(
-            review_id=review_id,
-            status=status,
-            progress_percent=percent,
-            current_stage_detail=detail,
-        )
-        await asyncio.to_thread(self.artifacts.save_progress, review_id, progress)
-
     async def process(self, review_id: str) -> None:
         """Run the full pipeline for one stored review.
 
@@ -57,7 +46,6 @@ class ReviewPipeline:
         # them off the event loop so other requests stay responsive.
         try:
             await self.store.update_status(review_id, ReviewStatus.VALIDATING_INPUTS)
-            await self._progress(review_id, ReviewStatus.VALIDATING_INPUTS, 10, "Compiling inputs")
 
             def compile_plan():
                 return self.compiler.compile(
@@ -69,9 +57,6 @@ class ReviewPipeline:
             await asyncio.to_thread(self.artifacts.save_plan, review_id, plan)
 
             await self.store.update_status(review_id, ReviewStatus.READING_DOCUMENT)
-            await self._progress(
-                review_id, ReviewStatus.READING_DOCUMENT, 30, "Reading source document"
-            )
             # FileNotFoundError: no cache entry yet. ValueError: the cached
             # artifact has an unsupported schema version (ArtifactVersionError
             # subclasses ValueError). Either way, fall back to a fresh read.
@@ -86,7 +71,6 @@ class ReviewPipeline:
             await asyncio.to_thread(self.artifacts.save_evidence, review_id, evidence)
 
             await self.store.update_status(review_id, ReviewStatus.EXTRACTING_FIELDS)
-            await self._progress(review_id, ReviewStatus.EXTRACTING_FIELDS, 60, "Extracting fields")
             # Same cache contract as above: on a miss or a stale version, redo
             # the work.
             try:
@@ -100,7 +84,6 @@ class ReviewPipeline:
             await asyncio.to_thread(self.artifacts.save_extraction, review_id, extraction)
 
             await self.store.update_status(review_id, ReviewStatus.COMPARING)
-            await self._progress(review_id, ReviewStatus.COMPARING, 85, "Comparing values")
             comparisons = await asyncio.to_thread(self.comparison.compare, plan, extraction)
             result = ReviewResult(
                 review_id=review_id,
@@ -113,14 +96,12 @@ class ReviewPipeline:
             )
             await asyncio.to_thread(self.artifacts.save_result, review_id, result)
             await self.store.update_status(review_id, ReviewStatus.READY)
-            await self._progress(review_id, ReviewStatus.READY, 100, "Review ready")
         except Exception as exc:
             current = await self.store.get(review_id)
             if current is not None and current.status is not ReviewStatus.ERROR:
                 await self.store.update_status(
                     review_id, ReviewStatus.ERROR, f"{type(exc).__name__}: {exc}"
                 )
-            await self._progress(review_id, ReviewStatus.ERROR, 100, "Review failed")
             raise
 
 

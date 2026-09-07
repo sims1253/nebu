@@ -1,5 +1,5 @@
 """Review metadata storage (in-memory or SQLite) and the artifact store
-for plan, evidence, extraction, result, and progress files."""
+for plan, evidence, extraction, and result files."""
 
 from janus.store.artifact_store import (
     ReviewArtifactStore,

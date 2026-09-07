@@ -24,7 +24,6 @@ from janus.comparison.models import (
     ReviewResult,
 )
 from janus.config import artifact_root
-from janus.schemas.review import ReviewProgress
 
 if TYPE_CHECKING:
     from types import EllipsisType
@@ -133,12 +132,6 @@ class ReviewArtifactStore:
 
     def load_result(self, review_id: str) -> ReviewResult:
         return self._load(review_id, "result", ReviewResult)
-
-    def save_progress(self, review_id: str, value: ReviewProgress) -> None:
-        self._save(review_id, "progress", value)
-
-    def load_progress(self, review_id: str) -> ReviewProgress:
-        return self._load(review_id, "progress", ReviewProgress)
 
     def annotate_comparison(
         self,

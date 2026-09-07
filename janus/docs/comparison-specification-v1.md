@@ -156,7 +156,7 @@ and, when relevant, `reference_pointer`. Codes are `INVALID_SPECIFICATION_JSON`,
 `REFERENCE_POINTER_NOT_FOUND`, and `REFERENCE_POINTER_NOT_OBJECT`. The upload page displays them.
 [Row diagnostics](repeated-rows.md#reference-matching) appear in the comparison result.
 
-Plan, evidence, extraction, result, and progress artifacts carry `artifact_schema_version: "2"`,
+Plan, evidence, extraction, and result artifacts carry `artifact_schema_version: "2"`,
 independent of specification version `"1"`. Evidence page, row, and column indexes are zero-based;
 the UI and CSV page column show pages starting at one.
 

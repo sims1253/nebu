@@ -6,7 +6,6 @@ export const queryKeys = {
   health: ["health"] as const,
   reviews: ["reviews"] as const,
   review: (id: string) => ["review", id] as const,
-  progress: (id: string) => ["reviewProgress", id] as const,
   result: (id: string) => ["reviewResult", id] as const,
 };
 
@@ -37,17 +36,6 @@ export function useReview(id: string) {
   return useQuery({
     queryKey: queryKeys.review(id),
     queryFn: () => api.getReview(id),
-    refetchInterval: (query) =>
-      ["ready", "error"].includes(query.state.data?.status ?? "")
-        ? false
-        : 1000,
-  });
-}
-
-export function useReviewProgress(id: string) {
-  return useQuery({
-    queryKey: queryKeys.progress(id),
-    queryFn: () => api.getReviewProgress(id),
     refetchInterval: (query) =>
       ["ready", "error"].includes(query.state.data?.status ?? "")
         ? false

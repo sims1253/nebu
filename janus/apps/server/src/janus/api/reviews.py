@@ -29,7 +29,7 @@ from janus.comparison.models import (
 from janus.comparison.reference import ReferenceSource
 from janus.config import upload_root
 from janus.pipeline.review_pipeline import get_review_pipeline
-from janus.schemas.review import ReviewMetadata, ReviewProgress, ReviewStatus
+from janus.schemas.review import ReviewMetadata, ReviewStatus
 from janus.store.artifact_store import ArtifactVersionError, get_artifact_store
 from janus.store.review_store import get_review_store
 
@@ -319,23 +319,6 @@ async def get_review(review_id: str) -> ReviewMetadata:
     if metadata is None:
         _error(status.HTTP_404_NOT_FOUND, "REVIEW_NOT_FOUND", "Review not found.")
     return metadata
-
-
-@router.get("/{review_id}/progress", response_model=ReviewProgress)
-async def get_review_progress(review_id: str) -> ReviewProgress:
-    _validate_review_id(review_id)
-    if await get_review_store().get(review_id) is None:
-        _error(status.HTTP_404_NOT_FOUND, "REVIEW_NOT_FOUND", "Review not found.")
-    try:
-        return get_artifact_store().load_progress(review_id)
-    except FileNotFoundError:
-        return ReviewProgress(review_id=review_id, status=ReviewStatus.CREATED)
-    except ArtifactVersionError as exc:
-        _error(
-            status.HTTP_500_INTERNAL_SERVER_ERROR,
-            "ARTIFACT_VERSION_UNSUPPORTED",
-            f"Stored progress artifact cannot be read: {exc}",
-        )
 
 
 @router.get("/{review_id}/result", response_model=ReviewResult)
