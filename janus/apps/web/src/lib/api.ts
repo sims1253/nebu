@@ -4,7 +4,6 @@ import type {
   ReviewAnnotationRequest,
   ReviewAnnotationResponse,
   ReviewMetadata,
-  ReviewProgress,
   ReviewResult,
   ValidationResponse,
 } from "@janus/contracts";
@@ -70,8 +69,6 @@ export const api = {
         method: "DELETE",
       },
     ),
-  getReviewProgress: (id: string) =>
-    fetchJson<ReviewProgress>(`/api/reviews/${id}/progress`),
   getReviewResult: (id: string) =>
     fetchJson<ReviewResult>(`/api/reviews/${id}/result`),
   getReviewDocumentUrl: (id: string) => `/api/reviews/${id}/document`,

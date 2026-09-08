@@ -17,6 +17,9 @@ Open [API documentation](http://localhost:3001/docs) for request and response sc
 `reference`. `POST /api/reviews/validate` checks only the specification and reference.
 PDFs have a 500 MB limit; each other input has a 50 MB limit.
 
+`GET /api/reviews/{review_id}` returns the current stage in `status` and any failure
+message in `error_message`. Fetch `/api/reviews/{review_id}/result` when the status is `ready`.
+
 ## Configuration and storage
 
 Environment variables override `.env` settings. Paths default under `~/.janus`.

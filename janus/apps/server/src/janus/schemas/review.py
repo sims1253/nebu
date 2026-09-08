@@ -1,4 +1,4 @@
-"""Wire models for review metadata and progress (artifact schema v2)."""
+"""Wire models for review metadata (artifact schema v2)."""
 
 from __future__ import annotations
 
@@ -51,21 +51,9 @@ class ReviewMetadata(StrictModel):
     error_message: str | None = None
 
 
-class ReviewProgress(StrictModel):
-    artifact_schema_version: Literal["2"] = "2"
-    review_id: str
-    status: ReviewStatus
-    pages_processed: int = Field(default=0, ge=0)
-    total_pages: int = Field(default=0, ge=0)
-    progress_percent: float = Field(default=0, ge=0, le=100)
-    current_stage_detail: str | None = None
-    estimated_remaining_seconds: float | None = Field(default=None, ge=0)
-
-
 __all__ = [
     "ARTIFACT_SCHEMA_VERSION",
     "ReviewMetadata",
-    "ReviewProgress",
     "ReviewResult",
     "ReviewStatus",
 ]

@@ -158,17 +158,6 @@ export interface ReviewMetadata {
   error_message: string | null;
 }
 
-export interface ReviewProgress {
-  artifact_schema_version: "2";
-  review_id: string;
-  status: ReviewStatus;
-  pages_processed: number;
-  total_pages: number;
-  progress_percent: number;
-  current_stage_detail: string | null;
-  estimated_remaining_seconds: number | null;
-}
-
 export interface ReviewAnnotationRequest {
   comparison_id: string;
   resolution: Resolution;

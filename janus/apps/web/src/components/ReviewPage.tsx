@@ -4,6 +4,7 @@ import type {
   ComparisonStatus,
   FieldComparison,
   Resolution,
+  ReviewStatus,
 } from "@janus/contracts";
 import {
   exportFilename,
@@ -13,11 +14,20 @@ import {
 import { api } from "~/lib/api";
 import {
   useReview,
-  useReviewProgress,
   useReviewResult,
   useSubmitReviewAnnotation,
 } from "~/lib/queries";
 import { Button } from "~/components/ui/button";
+
+const stageLabel: Record<ReviewStatus, string> = {
+  created: "Starting review…",
+  validating_inputs: "Checking specification and reference data…",
+  reading_document: "Reading PDF…",
+  extracting_fields: "Extracting fields…",
+  comparing: "Comparing values…",
+  ready: "Loading results…",
+  error: "Review failed.",
+};
 
 const statusLabel: Record<ComparisonStatus, string> = {
   match: "Match",
@@ -120,7 +130,6 @@ function ComparisonRow({
 export function ReviewPage() {
   const { reviewId } = useParams({ from: "/reviews/$reviewId" });
   const review = useReview(reviewId);
-  const progress = useReviewProgress(reviewId);
   const result = useReviewResult(reviewId, review.data?.status);
   const annotate = useSubmitReviewAnnotation(reviewId);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -159,15 +168,13 @@ export function ReviewPage() {
     return (
       <div className="mx-auto max-w-md p-8">
         <h1 className="font-medium">{review.data.document_filename}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          {progress.data?.current_stage_detail ?? "Starting…"}
+        <p
+          role="status"
+          aria-label="Review stage"
+          className="mt-2 text-sm text-muted-foreground"
+        >
+          {stageLabel[review.data.status]}
         </p>
-        <div className="mt-3 h-2 overflow-hidden rounded bg-muted">
-          <div
-            className="h-full bg-primary transition-all"
-            style={{ width: `${progress.data?.progress_percent ?? 0}%` }}
-          />
-        </div>
       </div>
     );
   }

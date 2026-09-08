@@ -1,5 +1,47 @@
 import { expect, test } from "@playwright/test";
 
+for (const outcome of ["ready", "error"] as const) {
+  test(`tracks review stages through ${outcome}`, async ({ page }) => {
+    const review = {
+      id: "b".repeat(32),
+      status: "reading_document",
+      document_filename: "order.pdf",
+      specification_version: "1",
+      error_message: "Could not read the PDF.",
+    };
+    let resultRequests = 0;
+    await page.route(`**/api/reviews/${review.id}`, (route) =>
+      route.fulfill({ json: review }),
+    );
+    await page.route(`**/api/reviews/${review.id}/result`, (route) => {
+      resultRequests++;
+      return route.fulfill({
+        json: { comparisons: [], summary: { total_fields: 0 } },
+      });
+    });
+    await page.route(`**/api/reviews/${review.id}/document`, (route) =>
+      route.fulfill({ contentType: "application/pdf", body: "%PDF-" }),
+    );
+    await page.goto(`/reviews/${review.id}`);
+    const stage = page.getByRole("status", { name: "Review stage" });
+    await expect(stage).toHaveText("Reading PDF…");
+    review.status = "extracting_fields";
+    await expect(stage).toHaveText("Extracting fields…");
+    expect(resultRequests).toBe(0);
+
+    review.status = outcome;
+    if (outcome === "ready") {
+      await expect(
+        page.getByText("No fields match this filter."),
+      ).toBeVisible();
+      expect(resultRequests).toBeGreaterThan(0);
+    } else {
+      await expect(page.getByRole("alert")).toHaveText(review.error_message);
+      expect(resultRequests).toBe(0);
+    }
+  });
+}
+
 test("shows the generic three-input workflow", async ({ page }) => {
   await page.goto("/");
   await expect(
@@ -69,15 +111,6 @@ test("starts a review with one submission and shows result load errors", async (
   );
   await page.route(`**/api/reviews/${review.id}`, (route) =>
     route.fulfill({ json: review }),
-  );
-  await page.route(`**/api/reviews/${review.id}/progress`, (route) =>
-    route.fulfill({
-      json: {
-        status: "ready",
-        progress_percent: 100,
-        current_stage_detail: "Review ready",
-      },
-    }),
   );
   await page.route(`**/api/reviews/${review.id}/result`, (route) =>
     route.fulfill({
