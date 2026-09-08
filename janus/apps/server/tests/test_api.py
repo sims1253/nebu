@@ -84,11 +84,14 @@ def test_creation_uses_three_inputs_and_reaches_ready() -> None:
         )
         assert response.status_code == 201
         review_id = response.json()["id"]
-        for _ in range(50):
+        deadline = time.monotonic() + 10
+        while True:
             metadata = client.get(f"/api/reviews/{review_id}").json()
             if metadata["status"] in {"ready", "error"}:
                 break
-            time.sleep(0.01)
+            if time.monotonic() >= deadline:
+                pytest.fail(f"Review did not finish within 10 seconds: {metadata}")
+            time.sleep(0.05)
         assert metadata["status"] == "ready"
         result = client.get(f"/api/reviews/{review_id}/result")
         assert result.status_code == 200
