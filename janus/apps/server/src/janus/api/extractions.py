@@ -39,6 +39,16 @@ def _load(directory: Path) -> SavedExtraction:
     return SavedExtraction.model_validate_json((directory / "result.json").read_bytes())
 
 
+def _validation_error(exc: ValidationError) -> HTTPException:
+    return HTTPException(
+        422,
+        [
+            {"path": "/" + "/".join(map(str, error["loc"])), "message": error["msg"]}
+            for error in exc.errors()
+        ],
+    )
+
+
 async def _read(upload: UploadFile, allowed: set[str], limit: int) -> bytes:
     if Path(upload.filename or "").suffix.lower() not in allowed:
         raise HTTPException(422, f"Choose a file ending in {', '.join(sorted(allowed))}.")
@@ -84,13 +94,7 @@ async def create_extraction(
     try:
         return await asyncio.to_thread(_run, pdf, document.filename or "document.pdf", spec)
     except ValidationError as exc:
-        raise HTTPException(
-            422,
-            [
-                {"path": "/" + "/".join(map(str, e["loc"])), "message": e["msg"]}
-                for e in exc.errors()
-            ],
-        ) from exc
+        raise _validation_error(exc) from exc
     except (ValueError, pymupdf.FileDataError) as exc:
         raise HTTPException(422, str(exc)) from exc
 
@@ -179,6 +183,8 @@ async def compare_extraction(
 
     try:
         return await asyncio.to_thread(check)
+    except ValidationError as exc:
+        raise _validation_error(exc) from exc
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
 

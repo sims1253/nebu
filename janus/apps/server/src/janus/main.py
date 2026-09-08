@@ -40,9 +40,9 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     """Build the review pipeline at startup so the configured stores open (and
     fail, if misconfigured) before the first request, not during it."""
     get_review_pipeline()
-    logger.info("Janus document comparison backend starting up")
+    logger.info("Janus PDF extraction backend starting up")
     yield
-    logger.info("Janus document comparison backend shutting down")
+    logger.info("Janus PDF extraction backend shutting down")
 
 
 app = FastAPI(
@@ -79,4 +79,4 @@ async def health_check() -> HealthResponse:
 @app.get("/")
 async def root() -> dict[str, str]:
     """Report the API name and version."""
-    return {"name": "Janus Document Comparison API", "version": "2.0.0"}
+    return {"name": app.title, "version": "2.0.0"}

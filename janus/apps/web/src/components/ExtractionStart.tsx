@@ -39,6 +39,7 @@ export function ExtractionStart() {
   async function sample() {
     setLoadingSample(true);
     setError(null);
+    run.reset();
     try {
       const response = await fetch(samplePdf);
       if (!response.ok) throw new Error("Could not load the sample PDF.");
@@ -91,6 +92,7 @@ export function ExtractionStart() {
               onChange={(event) => {
                 setDocument(event.target.files?.[0] ?? null);
                 run.reset();
+                setError(null);
               }}
             />
           </label>
@@ -107,6 +109,7 @@ export function ExtractionStart() {
               onChange={(event) => {
                 setSpecification(event.target.files?.[0] ?? null);
                 run.reset();
+                setError(null);
               }}
             />
           </label>

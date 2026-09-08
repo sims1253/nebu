@@ -36,6 +36,17 @@ test("extract, inspect, compare, revise, and reopen a PDF", async ({
       JSON.stringify({ order: { number: "PO-1042", total: 999 } }),
     ),
   });
+  const rules = page.getByLabel("Comparison rules");
+  const validRules = await rules.inputValue();
+  await rules.fill('[{"path":"/order/total"}]');
+  await page
+    .getByRole("button", { name: "Compare data", exact: true })
+    .last()
+    .click();
+  await expect(page.getByRole("alert")).toHaveText(
+    "/0/reference_pointer: Field required",
+  );
+  await rules.fill(validRules);
   await page
     .getByRole("button", { name: "Compare data", exact: true })
     .last()
@@ -97,4 +108,27 @@ test("upload failures explain the problem", async ({ page }) => {
   await page.getByRole("button", { name: "Extract data", exact: true }).click();
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page).toHaveURL(/\/$/);
+});
+
+test("choosing either file clears a failed sample load", async ({ page }) => {
+  await page.goto("/");
+  const sampleUrl = await page
+    .getByRole("link", { name: "Download PDF" })
+    .getAttribute("href");
+  await page.route(sampleUrl!, (route) => route.fulfill({ status: 503 }));
+  async function chooseAfterSampleFailure(label: string, filename: string) {
+    await page.getByRole("button", { name: "Try purchase order" }).click();
+    await expect(page.getByRole("alert")).toHaveText(
+      "Could not load the sample PDF.",
+    );
+    await page
+      .getByLabel(label, { exact: true })
+      .setInputFiles("../../examples/purchase-order/" + filename);
+    await expect(page.getByRole("alert")).toHaveCount(0);
+  }
+  await chooseAfterSampleFailure("PDF document", "document.pdf");
+  await chooseAfterSampleFailure("Extraction specification", "extraction.json");
+  await page.getByRole("button", { name: "Extract data", exact: true }).click();
+  await expect(page).toHaveURL(/\/extractions\/[0-9a-f]{32}$/);
+  await page.request.delete("/api/extractions/" + page.url().split("/").at(-1));
 });

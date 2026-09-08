@@ -125,3 +125,23 @@ def test_rotated_pdf_preview_uses_the_extraction_coordinate_system(client):
     assert abs(width / height - expected_width / expected_height) < 0.01
     original = client.get(f"/api/extractions/{saved['id']}/document").content
     assert original == content
+
+
+@pytest.mark.parametrize(
+    ("rules", "path"),
+    [('[{"path":"/order/total"}]', "/0/reference_pointer"), ("{", "/")],
+)
+def test_invalid_comparison_rules_return_readable_validation_errors(client, rules, path):
+    saved = create(client).json()
+    response = client.post(
+        f"/api/extractions/{saved['id']}/compare",
+        files={"reference": ("reference.json", b"{}", "application/json")},
+        data={"rules": rules},
+    )
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert isinstance(detail, list)
+    assert detail[0]["path"] == path
+    assert set(detail[0]) == {"path", "message"}
+    assert detail[0]["message"]
+    assert client.get(f"/api/extractions/{saved['id']}").json() == saved
