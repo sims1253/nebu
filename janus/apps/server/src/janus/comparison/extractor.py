@@ -22,12 +22,14 @@ from janus.comparison.models import (
     CompoundShape,
     DocumentEvidence,
     EvidenceLocation,
+    ExtractionField,
+    ExtractionPlan,
     ExtractionResult,
     ExtractionStatus,
     FieldExtraction,
-    PlannedField,
     RowGeneratorRule,
     TextSpanLocator,
+    ValueRule,
     field_identifier,
 )
 
@@ -608,12 +610,12 @@ def _carries_token_set(needles: list[str], haystack: str) -> bool:
     return any(_tokens(needle) <= tokens for needle in needles)
 
 
-def _column_labels(field: PlannedField) -> list[str]:
+def _column_labels(field: ExtractionField) -> list[str]:
     # Only the table_label strategy has columns; text runs have none.
     return getattr(field.locate, "column_labels", [])
 
 
-def _is_complete_match(field: PlannedField, candidate: _Candidate) -> bool:
+def _is_complete_match(field: ExtractionField, candidate: _Candidate) -> bool:
     """Whether the candidate carries the requested label, and the requested
     column context, as complete token sets rather than approximations."""
     if not _carries_token_set(field.locate.labels, candidate.label):
@@ -621,7 +623,7 @@ def _is_complete_match(field: PlannedField, candidate: _Candidate) -> bool:
     return _is_complete_column_match(field, candidate)
 
 
-def _is_complete_column_match(field: PlannedField, candidate: _Candidate) -> bool:
+def _is_complete_column_match(field: ExtractionField, candidate: _Candidate) -> bool:
     """Check column-token containment when column labels are specified.
 
     Text locators have no columns, so only their label completeness matters."""
@@ -652,7 +654,7 @@ class _ScoreBreakdown:
         )
 
 
-def _section_factor(field: PlannedField, candidate: _Candidate) -> float:
+def _section_factor(field: ExtractionField, candidate: _Candidate) -> float:
     # Section context can cut the label score by at most 30 percent; it never
     # raises it.
     if not field.locate.section_labels:
@@ -665,7 +667,7 @@ def _section_factor(field: PlannedField, candidate: _Candidate) -> float:
     return 0.7 + 0.3 * section_score
 
 
-def _column_factor(field: PlannedField, candidate: _Candidate) -> float:
+def _column_factor(field: ExtractionField, candidate: _Candidate) -> float:
     # Column context can cut the label score by at most 30 percent; it never
     # raises it.
     if not _column_labels(field):
@@ -677,7 +679,7 @@ def _column_factor(field: PlannedField, candidate: _Candidate) -> float:
     return 0.7 + 0.3 * column_score
 
 
-def _detailed_score(field: PlannedField, candidate: _Candidate) -> _ScoreBreakdown:
+def _detailed_score(field: ExtractionField, candidate: _Candidate) -> _ScoreBreakdown:
     label_score = max(
         fuzz.token_set_ratio(alias.casefold(), candidate.label.casefold()) / 100
         for alias in field.locate.labels
@@ -800,7 +802,7 @@ def _sanitize_row_key(raw: str) -> str:
     return key[:_ROW_KEY_MAX_CHARS] or "row"
 
 
-def _row_breakdown(field: PlannedField, candidate: _Candidate) -> _ScoreBreakdown:
+def _row_breakdown(field: ExtractionField, candidate: _Candidate) -> _ScoreBreakdown:
     """The context score of a pattern-matched row: no alias scoring (the
     rows.label_pattern selected the row), but section and column context keep
     their multiplicative penalties and the reader confidence stays a factor —
@@ -872,12 +874,12 @@ def _rival_fields(rival: _Rival) -> dict[str, Any]:
     }
 
 
-def _extract_component(field: PlannedField, raw: str) -> tuple[str | None, str | None]:
-    shape = field.value.source_shape
+def extract_component(value_rule: ValueRule, raw: str) -> tuple[str | None, str | None]:
+    shape = value_rule.source_shape
     if shape is None:
         return raw, None
     text = _DECIMAL_GAP.sub("", raw)
-    component = field.value.component or ""
+    component = value_rule.component or ""
     if component in _ANNOTATION_COMPONENTS:
         # An annotation component rides a cell that still matches the declared
         # shape; the shape patterns tolerate (and skip) the annotation tail.
@@ -923,7 +925,9 @@ class SchemaExtractor:
     # gap of the winner, the field is reported ambiguous rather than guessed.
     ambiguity_gap = 0.03
 
-    def extract(self, plan: ComparisonPlan, evidence: DocumentEvidence) -> ExtractionResult:
+    def extract(
+        self, plan: ComparisonPlan | ExtractionPlan, evidence: DocumentEvidence
+    ) -> ExtractionResult:
         pools: dict[str, list[_Candidate]] = {}
         document_lines: list[_SpanLine] | None = None
         table_zones: list[_TableZone] | None = None
@@ -1090,7 +1094,7 @@ class SchemaExtractor:
                     )
                 )
                 continue
-            component, component_error = _extract_component(field, best.value)
+            component, component_error = extract_component(field.value, best.value)
             if component is None:
                 extractions.append(
                     FieldExtraction(
@@ -1150,7 +1154,7 @@ class SchemaExtractor:
     def _extract_rows(
         self,
         specification_id: str,
-        field: PlannedField,
+        field: ExtractionField,
         generator: RowGeneratorRule,
         pool: list[_Candidate],
     ) -> list[FieldExtraction]:
@@ -1322,7 +1326,7 @@ class SchemaExtractor:
                 continue
             # The same value contract a single field honours, per row: a row
             # that matched the label and the value shape still has to parse.
-            component, component_error = _extract_component(field, candidate.value)
+            component, component_error = extract_component(field.value, candidate.value)
             if component is None:
                 rows.append(
                     FieldExtraction(
@@ -1379,7 +1383,7 @@ class SchemaExtractor:
 
     @staticmethod
     def _score_fields(
-        breakdown: _ScoreBreakdown, field: PlannedField, rival: _Rival | None = None
+        breakdown: _ScoreBreakdown, field: ExtractionField, rival: _Rival | None = None
     ) -> Any:
         """The extraction artifact's optional score-breakdown fields for one
         winning candidate (and, on contested outcomes, its runner-up — score,
@@ -1396,7 +1400,7 @@ class SchemaExtractor:
         }
 
     @staticmethod
-    def _row_note(field: PlannedField, message: str) -> FieldExtraction:
+    def _row_note(field: ExtractionField, message: str) -> FieldExtraction:
         """A generator-level extraction entry: no row was generated (nothing
         matched) or the cap fired. It carries the generator's own id and no
         row key, so the comparison surfaces it as one loud row."""
@@ -1411,7 +1415,7 @@ class SchemaExtractor:
 
     def _extract_text_span(
         self,
-        field: PlannedField,
+        field: ExtractionField,
         locator: TextSpanLocator,
         lines: list[_SpanLine],
         zones: list[_TableZone],

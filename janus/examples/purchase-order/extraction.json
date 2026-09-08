@@ -1,0 +1,27 @@
+{
+  "kind": "extraction",
+  "schema_version": "1",
+  "name": "Purchase order",
+  "fields": {
+    "order": {
+      "type": "object",
+      "fields": {
+        "number": {
+          "type": "text",
+          "locate": {
+            "strategy": "table_label",
+            "labels": ["Order number", "Order no."]
+          }
+        },
+        "total": {
+          "type": "decimal",
+          "group_separator": ",",
+          "locate": {
+            "strategy": "table_label",
+            "labels": ["Grand total", "Total due"]
+          }
+        }
+      }
+    }
+  }
+}

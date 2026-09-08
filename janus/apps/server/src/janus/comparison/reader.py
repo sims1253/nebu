@@ -211,7 +211,9 @@ class TextLayerDocumentReader:
 
     name = "pymupdf_text_layer"
 
-    def read(self, pdf: Path, document_id: str) -> DocumentEvidence:
+    def read(
+        self, pdf: Path, document_id: str, *, normalize_rotation: bool = False
+    ) -> DocumentEvidence:
         # PyMuPDF advertises the optional pymupdf_layout package by PRINTING
         # a recommendation on first table detection — it is not routed through
         # the warnings machinery, so a warnings filter cannot suppress it
@@ -223,6 +225,8 @@ class TextLayerDocumentReader:
         previous_page_tables: list[TableStructure] = []
         with pymupdf.open(pdf) as document:
             for page_number, page in enumerate(document):
+                if normalize_rotation:
+                    page.set_rotation(0)
                 # One element per printed line, not per block: a line carries
                 # its own bounding box, which is the granularity a text-label
                 # locator needs to pair a label with the value printed beside
@@ -351,5 +355,6 @@ class TextLayerDocumentReader:
             document_id=document_id,
             document_hash=hashlib.sha256(content).hexdigest(),
             reader_name=self.name,
+            reader_configuration={"normalize_rotation": True} if normalize_rotation else {},
             pages=pages,
         )
