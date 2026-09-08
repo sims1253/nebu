@@ -1,6 +1,10 @@
 # Examples
 
-Upload `document.pdf`, `specification.json`, and the reference file from one directory.
+For standalone extraction, use `purchase-order/document.pdf` and `purchase-order/extraction.json`.
+The workbench's **Try purchase order** button runs those two files. `checks.json` maps the
+extracted fields to the separately supplied reference dataset for CLI comparison.
+
+For the existing comparison workflow, upload `document.pdf`, `specification.json`, and the reference file from one directory.
 The two bundled PDFs are generated fixtures. All their fields should extract and match.
 
 | Example                          | Reference | Covers                                                |

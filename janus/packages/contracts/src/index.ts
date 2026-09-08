@@ -197,3 +197,12 @@ export interface ValidationResponse {
   reference_format: string;
   field_count: number;
 }
+
+export type {
+  ExtractedField,
+  StructuredExtraction,
+  SavedExtraction,
+  ExtractionSummary,
+  CheckRule,
+  CheckResult,
+} from "./extraction";

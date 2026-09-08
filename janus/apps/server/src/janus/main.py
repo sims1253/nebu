@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from janus.api.extractions import router as extractions_router
 from janus.api.reviews import router as reviews_router
 from janus.pipeline.review_pipeline import get_review_pipeline
 
@@ -39,14 +40,14 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     """Build the review pipeline at startup so the configured stores open (and
     fail, if misconfigured) before the first request, not during it."""
     get_review_pipeline()
-    logger.info("Janus document comparison backend starting up")
+    logger.info("Janus PDF extraction backend starting up")
     yield
-    logger.info("Janus document comparison backend shutting down")
+    logger.info("Janus PDF extraction backend shutting down")
 
 
 app = FastAPI(
-    title="Janus Document Comparison API",
-    description="Compile comparison specifications, extract grounded PDF values, and review comparisons.",
+    title="Janus PDF Extraction API",
+    description="Extract structured PDF data, inspect source evidence, and compare saved results.",
     version="2.0.0",
     lifespan=lifespan,
 )
@@ -66,6 +67,7 @@ app.add_middleware(
 )
 
 app.include_router(reviews_router)
+app.include_router(extractions_router)
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -77,4 +79,4 @@ async def health_check() -> HealthResponse:
 @app.get("/")
 async def root() -> dict[str, str]:
     """Report the API name and version."""
-    return {"name": "Janus Document Comparison API", "version": "2.0.0"}
+    return {"name": app.title, "version": "2.0.0"}

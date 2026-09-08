@@ -20,6 +20,21 @@ PDFs have a 500 MB limit; each other input has a 50 MB limit.
 `GET /api/reviews/{review_id}` returns the current stage in `status` and any failure
 message in `error_message`. Fetch `/api/reviews/{review_id}/result` when the status is `ready`.
 
+## Extraction API
+
+`POST /api/extractions` accepts a `document` PDF (up to 50 MB) and `specification` JSON
+(up to 2 MB). It returns the completed extraction, including nested data and field evidence.
+The request waits for extraction to finish. `GET /api/extractions` lists completed runs;
+`GET /api/extractions/{id}` reopens one. The document, specification, and rendered pages are
+available under `/{id}/document`, `/{id}/specification`, and `/{id}/pages/{zero_based_page}`.
+`GET /api/extractions/schema` returns the extraction specification JSON schema.
+
+`POST /api/extractions/{id}/compare` accepts a `reference` file (JSON, CSV, or XLSX, up to
+10 MB) and a `rules` form field containing a JSON list of output/reference pointer pairs.
+It returns comparison checks without changing the saved extraction. `DELETE /api/extractions/{id}`
+removes the saved run and PDF. Extractions are stored under `JANUS_DATA_DIR/extractions`,
+independently of the review metadata backend. Back up that directory to keep completed runs.
+
 ## Configuration and storage
 
 Environment variables override `.env` settings. Paths default under `~/.janus`.

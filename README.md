@@ -2,4 +2,4 @@
 
 Published projects:
 
-- [Janus](janus/README.md): compare values in a PDF with reference data and review the results.
+- [Janus](janus/README.md): extract structured data from PDFs, inspect the evidence, and compare or export the results.

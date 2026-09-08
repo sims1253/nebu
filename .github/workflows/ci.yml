@@ -74,3 +74,28 @@ jobs:
       - run: uv sync --all-extras
       - run: uv run --no-sync python scripts/fetch_cohort_example.py
       - run: uv run --no-sync pytest tests/test_downloaded_example.py -q
+
+  browser:
+    name: Browser (extraction and comparison workflows)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JANUS_DATA_DIR: /tmp/janus-browser
+    defaults:
+      run:
+        working-directory: janus
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: astral-sh/setup-uv@v5
+      - run: bun install --frozen-lockfile
+      - run: uv sync --project apps/server --extra dev
+      - run: cd apps/web && bunx playwright install --with-deps chromium
+      - run: bun run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-failures
+          path: |
+            janus/apps/web/test-results
+            janus/apps/web/playwright-report

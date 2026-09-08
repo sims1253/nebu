@@ -1,9 +1,12 @@
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
 @import "tailwindcss";
+@import "./workbench.css";
 
 @custom-variant dark (&:is(.dark, .dark *));
 
 @theme inline {
-  --animate-skeleton: skeleton 2s -1s infinite linear;
   --animate-toast-in: toast-in 150ms cubic-bezier(0.22, 1, 0.36, 1);
   --color-mismatch-bg: var(--mismatch-bg);
   --color-focus-bg: var(--focus-bg);
@@ -44,11 +47,6 @@
   --font-mono:
     ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
     monospace;
-  @keyframes skeleton {
-    to {
-      background-position: -200% 0;
-    }
-  }
   @keyframes toast-in {
     from {
       opacity: 0;
@@ -67,6 +65,7 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: "IBM Plex Sans", sans-serif;
   }
 
   :root {
@@ -135,50 +134,5 @@
     --warning-text: oklch(0.75 0.1 55);
     --mismatch-bg: oklch(from var(--destructive) l c h / 0.15);
     --focus-bg: oklch(from var(--primary) l c h / 0.2);
-  }
-
-  /* Keep PDF canvas rendering stable in dark mode. */
-  .janus-pdf-page {
-    background: white;
-    color-scheme: light;
-    forced-color-adjust: none;
-  }
-
-  .janus-pdf-page canvas,
-  .janus-pdf-page .react-pdf__Page__canvas {
-    background: white !important;
-    filter: none !important;
-    opacity: 1 !important;
-    mix-blend-mode: normal !important;
-    color-scheme: light !important;
-    forced-color-adjust: none !important;
-  }
-
-  .janus-pdf-canvas {
-    background: white !important;
-    filter: none !important;
-    opacity: 1 !important;
-    color-scheme: light !important;
-    forced-color-adjust: none !important;
-  }
-
-  .janus-pdf-page svg,
-  .janus-pdf-page .react-pdf__Page__svg {
-    display: block;
-    background: white;
-    filter: none !important;
-    opacity: 1 !important;
-  }
-
-  .janus-pdf-page .react-pdf__Page__textContent,
-  .janus-pdf-page .react-pdf__Page__annotations {
-    mix-blend-mode: normal;
-    color-scheme: light;
-    forced-color-adjust: none;
-  }
-
-  [data-pdf-panel] {
-    color-scheme: light;
-    forced-color-adjust: none;
   }
 }

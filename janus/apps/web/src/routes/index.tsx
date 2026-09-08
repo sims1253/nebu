@@ -1,16 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { UploadView } from "~/components/UploadView";
-import { ReviewList } from "~/components/ReviewList";
+import { ExtractionStart } from "~/components/ExtractionStart";
 
-function IndexPage() {
-  return (
-    <div className="space-y-8">
-      <UploadView />
-      <ReviewList />
-    </div>
-  );
-}
-
-export const Route = createFileRoute("/")({
-  component: IndexPage,
-});
+export const Route = createFileRoute("/")({ component: ExtractionStart });
