@@ -1,8 +1,12 @@
 # Janus
 
+<img align="right" src="assets/branding/janus-logo.webp" alt="Janus logo: two watercolor profiles and a J inside a golden hexagon" width="160" height="160">
+
 Extract structured data from PDFs using their text and layout. Define the fields you need,
 inspect their source locations, then export the data or compare it with a reference dataset.
 Janus runs locally. It does not send documents to a model or OCR scanned pages.
+
+<br clear="right">
 
 ## Start the workbench
 
