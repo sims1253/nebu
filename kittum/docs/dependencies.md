@@ -1,0 +1,152 @@
+# Dependencies
+
+This page records which dependencies Kittum uses and why. For each one it looks at fit for Kittum,
+quality, maintenance, and licence. Document tools and models have their own page,
+[Document and model tools](document-tools.md), because their accuracy needs more room. This page
+covers the licence decision and the application stack.
+
+Facts were checked on 28.10.2026. "Releases" counts releases in the twelve months before that
+date. "Commits" counts commits on the default branch in the 90 days before it. Both come from the
+GitHub API. A count shows activity, not quality, so the verdicts also weigh the backing
+organisation and open bugs.
+
+## Licence
+
+Kittum is licensed **AGPL-3.0-or-later**. The rest of the Nebu repository stays MIT.
+
+What that changes:
+
+- Any open-source code licence is acceptable in a dependency, including AGPL, GPL, LGPL, and MPL.
+  PyMuPDF, Ghostscript, and psycopg (LGPL) are fine.
+- The Janus reader swap is no longer needed. Janus keeps PyMuPDF, and Kittum uses Janus as it is.
+- Anyone who uses Kittum over a network can get its source (AGPL section 13). The workbench footer
+  links to the source of the running version.
+- Clients who receive a handover bundle get the `verify` tool under the AGPL, with its source.
+- Selling a proprietary licence later would need copyright in every contribution. Kittum has one
+  author now. If outside contributions start, decide on a contributor agreement first.
+
+What stays blocked, in code and in model weights:
+
+- Non-commercial terms (CC-BY-NC, PolyForm Noncommercial).
+- Revenue, funding, or user caps (MinerU code from 3.1.0, Datalab weights, Mistral Medium 3.5,
+  Llama).
+- Field-of-use limits and no-competition clauses (dots.ocr, Chandra, MedGemma).
+- Source-available licences (BSL, SSPL, FCL).
+
+These terms are "further restrictions" under AGPL section 10, so they are incompatible with the
+licence and not only with the business. Weights get their own allowlist, because a weights licence
+is not visible to an SPDX scanner. A CI job checks SPDX identifiers for code and the allowlist for
+weights.
+
+## Application stack
+
+### Store and storage
+
+| Dependency | Licence | Releases | Commits | Notes | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| PostgreSQL 18 | PostgreSQL | 18.6 current; supported to November 2030 | | `uuidv7()` in the database, asynchronous I/O, OLD and NEW in `RETURNING`. Version 19 reached RC1 on 15.10.2026 with GA planned for 19.11.2026. | **Use 18.** Add 19 to CI and move after 19.2. |
+| SQLite | Public domain | | | Handover bundle and test adapter | **Use** |
+| MinIO | AGPL-3.0 | 0 | 0 | The console was stripped in 2025, binaries stopped in October 2025, and the repository was **archived on 25.04.2026** | **Remove** |
+| Ceph RGW | LGPL | Active (Tentacle 20.2) | | Mature S3 Object Lock. Heaviest to run. | **Use** where WORM storage is required |
+| SeaweedFS | Apache-2.0 | 49 | about 1,200 | Object Lock with retention and legal hold. Lock-enforcement fixes landed in October 2026. One lead maintainer. | Optional, after the conformance test |
+| RustFS | Apache-2.0 | 61 | about 2,400 | 1.0 GA on 16.09.2026. A pre-GA bug could delete objects under COMPLIANCE retention. | Optional, after the conformance test |
+| Garage | AGPL-3.0 | about 5 | | No object versioning, so no Object Lock | Development only |
+| Filesystem with content addressing | | | | Hashes detect tampering but do not stop deletion | Development, tests, and the bundle |
+
+Object storage sits behind a thin S3 interface. Before any store holds audit data, it must pass an
+Object Lock conformance test: write under COMPLIANCE retention, try to delete, try to shorten the
+retention, and set and lift a legal hold.
+
+### Jobs
+
+| Dependency | Licence | Releases | Fit | Verdict |
+| --- | --- | --- | --- | --- |
+| Own `SKIP LOCKED` lease table | | | A job row has `locked_until`, a heartbeat, attempts, and an idempotency key. Job state and its `audit_event` commit in the same transaction. | **Use** |
+| procrastinate | MIT | 9 | A Postgres job table on psycopg 3 with retries and locks | Fallback if the own table grows |
+| PgQueuer | MIT | 18 | Similar; one maintainer | Optional |
+| DBOS Transact, Hatchet, Temporal | MIT | Very active | Each brings its own workflow vocabulary, and Hatchet and Temporal need a separate engine | **Avoid** |
+
+### Python libraries
+
+| Dependency | Licence | Releases | Commits | Notes | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| Python 3.13 | PSF | | | `uuid.uuid7()` arrives only in 3.14, so IDs come from Postgres | **Use** |
+| uv | Apache-2.0 or MIT | 100 | about 1,300 | | **Use** |
+| FastAPI | MIT | 100 | about 350 | Same as Janus | **Use** |
+| Pydantic 2.14 | MIT | 18 | about 230 | Contracts and model output schemas | **Use** |
+| psycopg 3.3 | LGPL-3.0 | 8 on PyPI | about 95 | `class_row` with Pydantic models, pipeline mode | **Use** |
+| dbmate | MIT | 16 | | Plain SQL migrations | **Use**. The SQLAlchemy ORM would get in the way of hash-chained writes. |
+| scipy | BSD-3-Clause | 9 | | Clopper-Pearson through `binomtest(...).proportion_ci("exact")`; `hypergeom` for the stop test | **Use**. Capture-recapture and split-conformal thresholds are about 50 lines each, written in `stats`. |
+| rapidfuzz | MIT | 6 | | Quote verification and dedupe | **Use** |
+| rfc8785 (Trail of Bits) | Apache-2.0 | 0 (0.1.4, September 2024) | 7 | Small and finished. Pin it and test against the RFC vectors. | **Use** |
+| rfc3161-client (Trail of Bits) | Apache-2.0 | 4 | 33 | | **Use** |
+| cryptography | Apache-2.0 or BSD | 11 | | Ed25519 checkpoint signatures | **Use**. PyNaCl would duplicate it. |
+| pyrate-limiter | MIT | 10 | | Its Postgres bucket shares one rate limit across all workers | **Use** in the source gateway |
+| stamina | MIT | | | Retries with jitter and instrumentation, on tenacity | **Use** |
+| httpx | BSD-3-Clause | 0 (0.28.1, December 2024) | | One maintainer; issues reportedly closed in February 2026 | **Use with care**. aiohttp or niquests if it decays further. |
+| ruff | MIT | 49 | | | **Use** |
+| ty | MIT | Pre-1.0 | | Janus uses it | Optional. Gate on pyright until 1.0. |
+
+### Workbench
+
+| Dependency | Licence | Releases | Commits | Verdict |
+| --- | --- | --- | --- | --- |
+| React 19.3 | MIT | 31 | about 140 | **Use** |
+| Vite 8 (Rolldown bundler) | MIT | 100 | about 330 | **Use** |
+| TanStack Router and Query | MIT | 100 each | about 280 and 1,000 | **Use** |
+| Tailwind 4.3 | MIT | 12 | 64 | **Use** |
+| zustand 5 | MIT | | | **Use** |
+| Bun 1.4 | MIT (owned by Anthropic since December 2025) | 18 | about 1,900 | **Use** |
+| turbo 2.11 | MIT | 100 | about 1,000 | **Use** |
+| Playwright 1.64 | Apache-2.0 | 14 | about 690 | **Use** |
+
+The PDF viewer decides how fast a reviewer can check an anchor, so it got a closer look:
+
+| Viewer | Licence | Releases | Fit for a 300-page CSR with anchored highlights | Verdict |
+| --- | --- | --- | --- | --- |
+| pdfjs-dist 6.4 (Mozilla) | Apache-2.0 | 12 | Renders visible pages only. Kittum draws its own highlight overlay. | **Use** |
+| Lector | MIT | 51 | Headless React 19 parts on pdf.js, TanStack Virtual, and zustand, so it matches the stack. Small team. | Optional; prototype first |
+| EmbedPDF | MIT packages; its CloudPDF server is source-available | 55 | PDFium compiled to WASM in a worker, with tiling and virtual scrolling. The same engine as pypdfium2. | Spike against a real CSR |
+| react-pdf (wojtekmaj) | MIT | 5 | One component per page; needs added virtualization | Optional |
+| react-pdf-highlighter | MIT | 0 | No release since 2024 | Avoid |
+| Nutrient (PSPDFKit), Apryse, Foxit | Proprietary | | | Blocked |
+
+Anchors are page numbers and boxes in PDF points, the same frame the parsers produce. The viewer only
+draws them. That keeps anchors independent of the viewer: pdf.js and PDFium split text into runs
+differently, so text-layer offsets would tie an anchor to one engine.
+
+## Document tools and models in short
+
+The full comparison is on [Document and model tools](document-tools.md).
+
+| Job | Pick | Main reason |
+| --- | --- | --- |
+| Text layer and rendering | PyMuPDF 2.0, with pypdfium2 as a cross-check | Fastest and most precise geometry; Janus uses it |
+| Layout and tables | Docling | Maps table cells with spans back onto PDF text cells; clean licences; 100 releases a year |
+| Scans | OCRmyPDF with Tesseract, RapidOCR; PaddleOCR-VL-1.6 on GPU | A text layer keeps scans on the same anchoring path |
+| Scholarly metadata | GROBID | The standard for headers and references |
+| Deterministic extraction | Janus | Typed decimals and locators |
+| Agent extraction | PydanticAI with Kittum's quote verifier | LangExtract's offsets are not reliable enough for provenance |
+| Judges | gpt-oss-120b and Gemma-4-31B | Two families with published screening sensitivity of 95.9% as a pair over 419 Cochrane reviews |
+| Long context | Qwen3.8-27B | 262k context, Apache-2.0 |
+| Serving | vLLM with xgrammar; Ollama on laptops | Most active serving stack; a batch-invariant mode to test |
+
+## Open checks
+
+- Ask Artifex where the corresponding source for PyMuPDF Layout is, before relying on Layout.
+- Read the Fagerberg supplementary tables for per-model specificity and workload.
+- Test vLLM batch-invariant mode on each picked model.
+- Run the Object Lock conformance test on the chosen store.
+- Spike pdf.js and EmbedPDF on a 300-page CSR.
+- Confirm the PubTator 3 terms and rate limit, which only third parties report.
+
+## Sources
+
+- GitHub API, PyPI, and npm registry metadata, queried 28.10.2026
+- [PostgreSQL versioning policy](https://www.postgresql.org/support/versioning/),
+  [PostgreSQL 19 RC1](https://www.postgresql.org/about/news/postgresql-19-rc-1-3409/)
+- [minio/minio](https://github.com/minio/minio) (archived)
+- [RustFS WORM documentation](https://docs.rustfs.com/features/worm),
+  [Ceph releases](https://docs.ceph.com/en/latest/releases/)
+- [EmbedPDF licensing](https://github.com/embedpdf/embed-pdf-viewer)
+- [GNU AGPL-3.0](https://www.gnu.org/licenses/agpl-3.0.html)
