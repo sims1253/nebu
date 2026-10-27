@@ -122,20 +122,23 @@ The full comparison is on [Document and model tools](document-tools.md).
 
 | Job | Pick | Main reason |
 | --- | --- | --- |
+| Page triage | pdf-inspector (Firecrawl) | Deterministic, fast check of which pages need OCR and which have broken encodings |
 | Text layer and rendering | PyMuPDF 2.0, with pypdfium2 as a cross-check | Fastest and most precise geometry; Janus uses it |
-| Layout and tables | Docling | Maps table cells with spans back onto PDF text cells; clean licences; 100 releases a year |
-| Scans | OCRmyPDF with Tesseract, RapidOCR; PaddleOCR-VL-1.6 on GPU | A text layer keeps scans on the same anchoring path |
+| Layout and tables | Docling | Maps table cells with spans back onto PDF text cells; top three on PubMed Central tables; 100 releases a year |
+| Scans | OCRmyPDF with Tesseract, RapidOCR | A text layer keeps scans on the same anchoring path |
+| Hard pages | PaddleOCR-VL-1.6 and Nemotron 3.5 Parse on GPU | Strong on OmniDocBench and ParseBench respectively; output re-anchored to the text layer |
 | Scholarly metadata | GROBID | The standard for headers and references |
 | Deterministic extraction | Janus | Typed decimals and locators |
 | Agent extraction | PydanticAI with Kittum's quote verifier | LangExtract's offsets are not reliable enough for provenance |
-| Judges | gpt-oss-120b and Gemma-4-31B | Two families with published screening sensitivity of 95.9% as a pair over 419 Cochrane reviews |
-| Long context | Qwen3.8-27B | 262k context, Apache-2.0 |
+| Judges | Qwen3.8-27B and Gemma-4-31B | Two separate lineages, the top two deployable models on the BRIDGE clinical board, one GPU each |
+| Main extractor | Qwen3.8-27B | Best independent long-context score among models that fit (AA-LCR 0.82); 262k context |
+| Long documents | Nemotron 3.5 Super VL | 1M context and page images for CSRs beyond 256k tokens |
 | Serving | vLLM with xgrammar; Ollama on laptops | Most active serving stack; a batch-invariant mode to test |
 
 ## Open checks
 
 - Ask Artifex where the corresponding source for PyMuPDF Layout is, before relying on Layout.
-- Read the Fagerberg supplementary tables for per-model specificity and workload.
+- Benchmark Qwen3.8-27B, Gemma 4, and Nemotron 3.5 Super VL on the gold data; gpt-oss-120b stays as a baseline.
 - Test vLLM batch-invariant mode on each picked model.
 - Run the Object Lock conformance test on the chosen store.
 - Spike pdf.js and EmbedPDF on a 300-page CSR.
