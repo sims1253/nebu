@@ -18,7 +18,7 @@ This was a design review, so nobody gave a score.
 - Correct the seed brief's unit of inclusion. The study is the unit, not the record. Linking records
   to studies is its own human-confirmed step.
 - PyMuPDF makes Janus AGPL. Swap the reader to pypdfium2 and pdfplumber, then use Janus as a
-  library. Superseded on 28.10.2026: Kittum is now AGPL itself, so Janus keeps PyMuPDF.
+  library. Superseded on 28.10.2026: Nebu, Kittum included, is now AGPL, so Janus keeps PyMuPDF.
 - Use Postgres as the live store, content-addressed objects for files, and SQLite for the handover.
 - Use Python for the backend and a TypeScript workbench like the one in Janus. Skip Rust and skip agent
   frameworks.

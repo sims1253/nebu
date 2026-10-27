@@ -12,7 +12,7 @@ organisation and open bugs.
 
 ## Licence
 
-Kittum is licensed **AGPL-3.0-or-later**. The rest of the Nebu repository stays MIT.
+Kittum is licensed **AGPL-3.0-or-later**, as is the rest of the Nebu repository.
 
 What that changes:
 

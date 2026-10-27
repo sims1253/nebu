@@ -30,5 +30,5 @@ checkable record, so the name describes the job. Say it KIT-toom.
 
 ## Licence
 
-Kittum is licensed under the [GNU Affero General Public License v3.0 or later](LICENSE). The rest
-of the Nebu repository is MIT.
+Kittum, like the rest of Nebu, is licensed under the
+[GNU Affero General Public License v3.0 or later](../LICENSE).

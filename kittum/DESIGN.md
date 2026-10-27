@@ -619,7 +619,7 @@ forbid it.
 
 ### Licence policy
 
-Kittum is AGPL-3.0-or-later. The rest of the Nebu repository stays MIT. Any open-source code licence
+Kittum, like all of Nebu, is AGPL-3.0-or-later. Any open-source code licence
 is acceptable in a dependency, including AGPL and GPL, so PyMuPDF is in. Blocked, in code and in
 model weights: non-commercial terms, revenue or user caps, field-of-use limits, no-competition
 clauses, and source-available licences. Those terms are further restrictions under AGPL section
