@@ -104,7 +104,8 @@ The PDF viewer decides how fast a reviewer can check an anchor, so it got a clos
 
 | Viewer | Licence | Releases | Fit for a 300-page CSR with anchored highlights | Verdict |
 | --- | --- | --- | --- | --- |
-| pdfjs-dist 6.4 (Mozilla) | Apache-2.0 | 12 | Renders visible pages only. Kittum draws its own highlight overlay. | **Use** |
+| Own viewer, as in Janus | AGPL (Kittum) | | The server renders page images with PyMuPDF. The client virtualizes pages with TanStack Virtual and lays an invisible text layer from the reader's word boxes over each image, plus the highlight overlay. The browser never interprets the PDF, so what the reviewer selects is what the parser saw. | **Use** |
+| pdfjs-dist 6.4 (Mozilla) | Apache-2.0 | 12 | Renders visible pages only. Kittum would still draw its own overlay. | Fallback if server rendering is too slow |
 | Lector | MIT | 51 | Headless React 19 parts on pdf.js, TanStack Virtual, and zustand, so it matches the stack. Small team. | Optional; prototype first |
 | EmbedPDF | MIT packages; its CloudPDF server is source-available | 55 | PDFium compiled to WASM in a worker, with tiling and virtual scrolling. The same engine as pypdfium2. | Spike against a real CSR |
 | react-pdf (wojtekmaj) | MIT | 5 | One component per page; needs added virtualization | Optional |
@@ -113,7 +114,7 @@ The PDF viewer decides how fast a reviewer can check an anchor, so it got a clos
 
 Anchors are page numbers and boxes in PDF points, the same frame the parsers produce. The viewer only
 draws them. That keeps anchors independent of the viewer: pdf.js and PDFium split text into runs
-differently, so text-layer offsets would tie an anchor to one engine.
+differently, so a browser text layer would tie an anchor to one engine.
 
 ## Document tools and models in short
 

@@ -607,7 +607,7 @@ forbid it.
 - **TypeScript** with React 19, Vite, TanStack Router and Query, Tailwind, and Playwright for the
   workbench, in a Bun and turbo monorepo like Janus. Contracts come from Pydantic JSON Schemas, as
   `@janus/contracts` does. Shared components such as the source preview can move to a shared
-  package later. The PDF viewer is pdf.js with Kittum's own highlight overlay.
+  package later. The PDF viewer shows server-rendered page images, as in Janus.
 - **Postgres 18**, with IDs from its `uuidv7()`. Jobs are a `SKIP LOCKED` lease table in the same
   database, so a job's state and its audit event commit together.
 - **Object storage** behind a thin S3 interface: the filesystem for development, and a store that
