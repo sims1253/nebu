@@ -10,8 +10,9 @@ own reader, so its locations map back to layer cells and lines one to one. The c
   tell spanned groups apart;
 - each body row's `section` is the run of group rows (a label and no values) above it.
 
-Janus locates a cell; Kittum parses it with Janus's typed parser after normalizing typographic
-minus signs and an inline estimator label ("RR:1.124 (0.978, 1.290)"), and anchors the value on
+Janus locates a cell and reports a not-reported mark ("NR", "n/a") as missing. Kittum parses the
+cell with Janus's typed parser, which reads typographic minus signs, an inline estimator label
+("RR:1.124 (0.978, 1.290)") and a count printed without its percentage, and anchors the value on
 the cell's span in the layer with `make_anchor`.
 """
 
@@ -28,10 +29,13 @@ from janus.comparison.content import (
     TextElement,
 )
 from janus.comparison.models import CompoundShape, DocumentEvidence, ValueType
-from janus.extraction import ExtractionSpecification
-from janus.extraction.engine import extract_evidence, pointer
-from janus.extraction.models import Scalar
-from janus.extraction.parsing import parse_value
+from janus.extraction import (
+    ExtractionSpecification,
+    Scalar,
+    extract_evidence,
+    parse_value,
+    pointer,
+)
 
 from kittum.core import Span
 from kittum.documents import make_anchor
@@ -57,8 +61,6 @@ JANUS_VERSION = version("janus-server")
 READER_NAME = "kittum.layer"
 # A fixed evidence time, so the same layer gives byte-identical evidence.
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
-# What a table prints for a value that was not reported or does not apply.
-_NOT_REPORTED = frozenset({"-", "\u2013", "\u2014", "na", "n/a", "nr", "ne", "not reported"})
 
 _TYPES: dict[Kind, ValueType] = {
     "count": ValueType.INTEGER,
@@ -77,13 +79,6 @@ class JanusEvidence:
     evidence: DocumentEvidence
     cells: dict[tuple[int, int, int, int], LayerCell]  # (page, table index, row, col) -> cell
     lines: dict[tuple[int, int], tuple[int, int]]  # (page, line ordinal) -> layer span
-    # (page, rounded x, y, width, height) -> layer span. A text label's value can sit on its own
-    # line beside the label; Janus then reports the label line's ordinal but the value's box.
-    line_boxes: dict[tuple[int, ...], tuple[int, int]]
-
-
-def _box_key(page: int, box: dict[str, float]) -> tuple[int, ...]:
-    return (page, *(round(box[k] * 100) for k in ("x", "y", "width", "height")))
 
 
 def _bbox(box: Box) -> BoundingBox:
@@ -166,7 +161,6 @@ def to_evidence(layer: Layer, document_hash: str) -> JanusEvidence:
     """Janus's `DocumentEvidence` contract for a layer."""
     cells: dict[tuple[int, int, int, int], LayerCell] = {}
     lines: dict[tuple[int, int], tuple[int, int]] = {}
-    line_boxes: dict[tuple[int, ...], tuple[int, int]] = {}
     pages: list[PageContent] = []
     for page in layer.pages:
         number = page.number - 1
@@ -178,9 +172,9 @@ def to_evidence(layer: Layer, document_hash: str) -> JanusEvidence:
             if not text:
                 continue
             lines[(number, len(elements))] = (line.start, line.end)
-            box = _bbox(line.box)
-            line_boxes[_box_key(number, box.model_dump())] = (line.start, line.end)
-            elements.append(TextElement(text=text, confidence=1, element_type="line", bbox=box))
+            elements.append(
+                TextElement(text=text, confidence=1, element_type="line", bbox=_bbox(line.box))
+            )
         tables, back = _tables(layer, page.number)
         cells.update({(number, *k): v for k, v in back.items()})
         pages.append(
@@ -201,7 +195,7 @@ def to_evidence(layer: Layer, document_hash: str) -> JanusEvidence:
         pages=pages,
         created_at=_EPOCH,
     )
-    return JanusEvidence(evidence=evidence, cells=cells, lines=lines, line_boxes=line_boxes)
+    return JanusEvidence(evidence=evidence, cells=cells, lines=lines)
 
 
 def field_path(field: SchemaField) -> str:
@@ -235,30 +229,27 @@ def specification(name: str, fields: tuple[SchemaField, ...]) -> ExtractionSpeci
 
 
 def _parse(raw: str, field: SchemaField) -> tuple[str | None, str | None]:
-    """The value in a cell, as an exact string, or the reason it cannot be read."""
-    text, _label = strip_label(normalize(raw))
+    """The value in a cell, as an exact string, or the reason it cannot be read.
+
+    Janus reads numbers; a p-value printed with its comparator and a labelled text ("Smoker:
+    yes") are read here, because Janus's decimal and text types keep neither apart.
+    """
     shape = component = None
     if field.locate is not None and field.locate.cell is not None:
         name, component = field.locate.cell.split(".")
         shape = CompoundShape(name)
+    labelled, _label = strip_label(normalize(raw))
     if field.kind == "p_value":
         # "<0.001" is an interval statement; keep it as printed.
-        stripped = text.replace(" ", "")
+        stripped = labelled.replace(" ", "")
         if stripped[:1] in "<>\u2264\u2265" and shape is None:
             problem = well_formed(stripped, "p_value")
             return (None, problem) if problem else (stripped, None)
     rule = Scalar(type=_TYPES[field.kind], source_shape=shape, component=component)
     try:
-        value = parse_value(text, rule)
+        value = parse_value(labelled if field.kind == "text" else raw, rule)
     except ValueError as e:
-        if shape is CompoundShape.COUNT_PERCENTAGE and component == "count":
-            # A zero count is often printed without its percentage: "0" in an "n (%)" column.
-            try:
-                value = parse_value(text, Scalar(type=ValueType.INTEGER))
-            except ValueError:
-                return None, f"cannot read {raw!r}: {e}"
-        else:
-            return None, f"cannot read {raw!r}: {e}"
+        return None, f"cannot read {raw!r}: {e}"
     value = str(value)
     problem = well_formed(value, field.kind)
     return (None, problem) if problem else (value, None)
@@ -277,8 +268,7 @@ def _span(
     janus: JanusEvidence, field: SchemaField, source: EvidenceLocation
 ) -> tuple[int, int] | None:
     if field.locate is not None and field.locate.strategy == "text_label":
-        if source.cell_bbox is not None:
-            return janus.line_boxes.get(_box_key(source.page, source.cell_bbox))
+        # The row is the line that prints the value, also when it sits beside its label.
         return janus.lines.get((source.page, source.row))
     cell = janus.cells.get((source.page, source.table_index, source.row, source.column))
     return (cell.start, cell.end) if cell is not None and cell.end > cell.start else None
@@ -318,13 +308,17 @@ def run(
             proposals.append(proposal(f, "error", message="Janus returned no result"))
             continue
         if result.status != "extracted" or result.source is None:
+            if result.status == "missing" and result.source is not None:
+                # A not-reported mark: missing, with the cell it was read from.
+                raw = result.source.raw_text
+                proposals.append(
+                    proposal(f, "missing", message=f"the cell prints {raw!r}", quote=raw)
+                )
+                continue
             proposals.append(proposal(f, result.status, message=result.message or None))
             continue
         span = _span(janus, f, result.source)
         raw = result.source.raw_text
-        if raw.strip().casefold() in _NOT_REPORTED:
-            proposals.append(proposal(f, "missing", message=f"the cell prints {raw!r}", quote=raw))
-            continue
         if span is None:
             proposals.append(
                 proposal(f, "error", message="Janus located a cell the layer cannot anchor")

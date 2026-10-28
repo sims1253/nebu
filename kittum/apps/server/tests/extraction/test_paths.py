@@ -233,3 +233,95 @@ def test_a_text_label_value_on_its_own_line_is_anchored_on_that_line(env):
         load_schema(
             _TEXT_LABEL.replace("arms: [intervention]", "arms: [intervention, intervention]")
         )
+
+
+_PLANTED_TABLE = """
+schema_version: 1
+name: Planted outcomes table
+analysis_set: itt
+arms:
+  - {id: vitamin_c, label: Vitamin C, columns: [Vitamin C group]}
+  - {id: control, label: Control, columns: [Control group]}
+comparisons:
+  - id: vitamin_c_vs_control
+    label: Vitamin C versus control
+    intervention: vitamin_c
+    comparator: control
+    columns: [Effect size (95% CI)]
+endpoints:
+  - id: transfusion
+    label: Transfusion
+    timepoints: [{id: h24, label: 24 h}]
+    locate: {rows: ["Transfusion required, n (%)"]}
+    quantities:
+      - quantity: events
+        arms: [vitamin_c, control]
+        locate: {cell: count_percentage.count}
+      - quantity: percent
+        arms: [vitamin_c]
+        locate: {cell: count_percentage.percentage}
+      - quantity: risk_difference
+        unit: percentage points
+        comparisons: [vitamin_c_vs_control]
+        locate: {cell: estimate_interval.estimate}
+  - id: egfr
+    label: Change in eGFR
+    unit: mL/min
+    timepoints: [{id: h24, label: 24 h}]
+    locate: {rows: ["Change in eGFR, mL/min"]}
+    quantities:
+      - quantity: mean_difference
+        comparisons: [vitamin_c_vs_control]
+        locate: {cell: estimate_interval.estimate}
+      - quantity: ci_lower
+        comparisons: [vitamin_c_vs_control]
+        locate: {cell: estimate_interval.lower}
+"""
+
+
+def test_janus_reads_typeset_minus_signs_bare_zero_counts_and_not_reported_cells(env):
+    """Planted: a ruled table as journals set it. A zero count without its percentage, "NR" for
+    an effect that was not estimated, and a difference printed with U+2212 minus signs."""
+    minus = "\N{MINUS SIGN}"
+    rows = [
+        ["Outcome", "Vitamin C group", "Control group", "Effect size (95% CI)"],
+        ["Transfusion required, n (%)", "0", "2 (0.6)", "NR"],
+        ["Change in eGFR, mL/min", "1.2 (0.4)", "1.3 (0.5)", f"{minus}0.040 ({minus}0.187, 0.107)"],
+    ]
+    pdf = pymupdf.open()
+    page = pdf.new_page(width=595, height=842)
+    xs = [40, 190, 290, 390, 560]
+    writer = pymupdf.TextWriter(page.rect)
+    for r, row in enumerate(rows):
+        y = 100 + r * 20
+        for c, text in enumerate(row):
+            writer.append((xs[c] + 3, y + 14), text, font=pymupdf.Font("helv"), fontsize=8)
+    writer.write_text(page)
+    for r in range(len(rows) + 1):
+        page.draw_line((xs[0], 100 + r * 20), (xs[-1], 100 + r * 20))
+    for x in xs:
+        page.draw_line((x, 100), (x, 100 + len(rows) * 20))
+    document = ingest(env.tx, env.artifacts, pdf.tobytes())
+    layer = derive(env.tx, document, _PARSER, artifacts=env.artifacts)
+    schema = load_schema(_PLANTED_TABLE)
+    result = extract(layer, document.artifact_hash, schema, schema.fields(new_id(), new_id()))
+    janus = {(p.key.endpoint, p.key.arm, p.key.quantity): p for p in result.proposals.proposals}
+    summary = {key: (p.status, p.value) for key, p in janus.items() if p.path == "janus"}
+    assert summary == {
+        ("transfusion", "vitamin_c", "events"): ("extracted", "0"),
+        ("transfusion", "control", "events"): ("extracted", "2"),
+        # The percentage is not printed: never invented.
+        ("transfusion", "vitamin_c", "percent"): ("invalid", None),
+        ("transfusion", "vitamin_c_vs_control", "risk_difference"): ("missing", None),
+        ("egfr", "vitamin_c_vs_control", "mean_difference"): ("extracted", "-0.040"),
+        ("egfr", "vitamin_c_vs_control", "ci_lower"): ("extracted", "-0.187"),
+    }
+    not_reported = janus[("transfusion", "vitamin_c_vs_control", "risk_difference")]
+    assert (not_reported.message, not_reported.quote) == ("the cell prints 'NR'", "NR")
+    for key, printed in (
+        (("transfusion", "vitamin_c", "events"), "0"),
+        (("egfr", "vitamin_c_vs_control", "mean_difference"), f"{minus}0.040"),
+        (("egfr", "vitamin_c_vs_control", "ci_lower"), f"{minus}0.187"),
+    ):
+        (anchor_id,) = janus[key].anchor_ids
+        assert result.anchors[str(anchor_id)].quote.exact == printed, key
