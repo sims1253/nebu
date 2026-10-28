@@ -1,6 +1,7 @@
 """The gateway implementation: throttling, retries, budgets, and the response cache."""
 
 import base64
+import math
 import random
 import re
 import threading
@@ -109,16 +110,14 @@ def request_hash(request: HttpRequest) -> str:
 def _rates(policy: SourcePolicy) -> list[Rate]:
     """Translate a per-second rate into pyrate-limiter's window form.
 
-    Rates of one per second or more use a one-second window; slower sources use ten seconds, so
-    the integer limit never rounds up above the published rate.
+    Rates of one per second or more use a one-second window, so the integer limit never rounds up
+    above the published rate. A slower source gets one request per interval, rounded up to the
+    millisecond: arXiv's one request every three seconds must be spaced, not three in a burst
+    every ten seconds.
     """
     if policy.requests_per_second >= 1:
-        limit = max(1, int(policy.requests_per_second))
-        interval = Duration.SECOND
-    else:
-        limit = max(1, int(policy.requests_per_second * 10))
-        interval = 10 * Duration.SECOND
-    return [Rate(limit=limit, interval=interval)]
+        return [Rate(limit=max(1, int(policy.requests_per_second)), interval=Duration.SECOND)]
+    return [Rate(limit=1, interval=math.ceil(1000 / policy.requests_per_second))]
 
 
 def _table_name(source: str) -> str:
