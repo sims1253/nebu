@@ -389,9 +389,7 @@ function FieldRow({
           ) : (
             <span className="text-ink-3">Empty</span>
           ))}
-        {value && unit && unit !== "patients" ? (
-          <span className="ml-1 text-ink-3">{unit}</span>
-        ) : null}
+        {value && unit ? <span className="ml-1 text-ink-3">{unit}</span> : null}
       </span>
       <span className="narrow flex items-center gap-1.5 text-xs whitespace-nowrap">
         {status === "agree" ? (
