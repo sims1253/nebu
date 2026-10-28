@@ -8,22 +8,22 @@ license = { text = "AGPL-3.0-or-later" }
 authors = [{ name = "Maximilian Scholz" }]
 dependencies = [
     "fastapi>=0.162.0",
-    "uvicorn[standard]>=0.37.0",
-    "pydantic>=2.14.0",
+    "uvicorn[standard]>=0.54.0",
+    "pydantic>=2.14.1",
     "rfc8785>=0.1.4",
-    "psycopg[binary]>=3.3",
-    "psycopg-pool>=3.3",
-    "scipy>=1.18",
-    "cryptography>=50",
-    "pyrate-limiter>=4.5",
-    "stamina>=26.1",
-    "httpx2>=2.16",
+    "psycopg[binary]>=3.3.6",
+    "psycopg-pool>=3.3.3",
+    "scipy>=1.18.1",
+    "cryptography>=50.0.2",
+    "pyrate-limiter>=4.5.1",
+    "stamina>=26.1.0",
+    "httpx2>=2.16.0",
     "pymupdf>=2.0",
-    "pypdfium2>=5.14",
-    "pyyaml>=6.0",
-    "rispy>=0.10",
-    "rapidfuzz>=3.14",
-    "pydantic-ai-slim[openai]>=2.62",
+    "pypdfium2>=5.14.0",
+    "pyyaml>=6.0.3",
+    "rispy>=0.10.0",
+    "rapidfuzz>=3.14.6",
+    "pydantic-ai-slim[openai]>=2.62.0",
     "janus-server",
 ]
 
@@ -32,15 +32,15 @@ kittum = "kittum.cli:main"
 
 [project.optional-dependencies]
 docling = [
-    "docling>=2.143",
+    "docling>=2.143.1",
 ]
 
 [dependency-groups]
 dev = [
-    "pytest>=8.4.0",
-    "ruff>=0.17.0",
-    "ty>=0.0.90",
-    "httpx2",
+    "pytest>=9.2.0",
+    "ruff>=0.17.3",
+    "ty>=0.0.92",
+    "httpx2>=2.16.0",
 ]
 
 [build-system]
