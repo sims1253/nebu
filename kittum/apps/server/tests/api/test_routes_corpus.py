@@ -98,11 +98,19 @@ def test_corpus_api_endpoints_e2e(api_client: TestClient) -> None:
             "insert into actor (id, identity_ref, kind) values (%s, %s, %s)",
             (actor_id, f"actor-{actor_id}@kittum.org", "human"),
         )
+        # The actor leads the project: the catalogue is the lead's alone.
+        tx.execute(
+            "insert into project_member (project_id, actor_id, role, display_name, event_id)"
+            " values (%s, %s, 'lead', 'Lead', %s)",
+            (proj_id, actor_id, new_id()),
+        )
         ledger = api_client.app.state.context.ledger
         corpus_rev = ingest(tx, proj_id, [execution], actor_id=actor_id, ledger=ledger)
 
-    # 1. GET /api/projects/{project_id}/corpus/proposals
-    resp = api_client.get(f"/api/projects/{proj_id}/corpus/proposals")
+    # 1. GET /api/projects/{project_id}/corpus/proposals, the lead's only
+    path = f"/api/projects/{proj_id}/corpus/proposals"
+    assert api_client.get(path, headers={"X-Kittum-Reviewer": str(new_id())}).status_code == 403
+    resp = api_client.get(path, headers={"X-Kittum-Reviewer": str(actor_id)})
     assert resp.status_code == 200
     proposals = resp.json()
     assert len(proposals) == 1

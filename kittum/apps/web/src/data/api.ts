@@ -62,11 +62,13 @@ const toError = (error: unknown) => {
   const reason =
     status === 404
       ? "not_found"
-      : status === 409
-        ? "conflict"
-        : status === 422 || status === 400
-          ? "invalid"
-          : "unavailable";
+      : status === 403
+        ? "forbidden"
+        : status === 409
+          ? "conflict"
+          : status === 422 || status === 400
+            ? "invalid"
+            : "unavailable";
   return new WorkbenchError({ reason, message });
 };
 
@@ -350,11 +352,14 @@ export const makeApiWorkbench = (): Workbench => ({
 
   ledger: (projectId) => call((api) => api.verifyProjectLedger(projectId, undefined)),
 
-  searches: (projectId) => call((api) => api.listSearchExecutions(projectId, undefined)),
+  searches: ({ projectId, as }) =>
+    call((api) => api.listSearchExecutions(projectId, { params: reviewer(as) })),
 
-  corpus: (projectId) => orNull(call((api) => api.getLatestCorpusRevision(projectId, undefined))),
+  corpus: ({ projectId, as }) =>
+    orNull(call((api) => api.getLatestCorpusRevision(projectId, { params: reviewer(as) }))),
 
-  proposals: (projectId) => call((api) => api.listCorpusProposals(projectId, undefined)),
+  proposals: ({ projectId, as }) =>
+    call((api) => api.listCorpusProposals(projectId, { params: reviewer(as) })),
 
   link: (request) =>
     call((api): Effect.Effect<KittumApi.IdentityRevision, unknown> => {

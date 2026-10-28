@@ -6,7 +6,8 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, HTTPException, Query
 
 from kittum.api import AppContext, Context  # noqa: TC001
-from kittum.app import LifecycleError, ingest_corpus
+from kittum.api.routes.projects import Viewer  # noqa: TC001 - FastAPI resolves it at runtime
+from kittum.app import LifecycleError, NotLead, ingest_corpus, require_lead
 from kittum.core import Id, NotFoundError, Record
 from kittum.corpus import (
     CorpusReport,
@@ -74,8 +75,10 @@ def ingest_route(project_id: Id, body: IngestRequest, ctx: Context) -> CorpusRev
 
 
 @router.get("/revisions/latest", operation_id="getLatestCorpusRevision")
-def latest_route(project_id: Id, ctx: Context) -> CorpusView:
+def latest_route(project_id: Id, viewer: Viewer, ctx: Context) -> CorpusView:
+    """Every record of the project, for its methods lead only (403 otherwise)."""
     with _errors(), ctx.db.transaction() as tx:
+        require_lead(tx, project_id, viewer)
         revision = latest_revision(tx, project_id)
         if revision is None:
             raise NotFoundError("the corpus is not ingested yet")
@@ -85,11 +88,14 @@ def latest_route(project_id: Id, ctx: Context) -> CorpusView:
 @router.get("/proposals", operation_id="listCorpusProposals")
 def list_proposals_route(
     project_id: Id,
+    viewer: Viewer,
     ctx: Context,
     corpus_revision_id: Id | None = Query(default=None),
     status: ProposalStatus | None = Query(default=None),
 ) -> list[LinkProposal]:
-    with ctx.db.transaction() as tx:
+    """The link proposals, for the project's methods lead only (403 otherwise)."""
+    with _errors(), ctx.db.transaction() as tx:
+        require_lead(tx, project_id, viewer)
         return list_proposals(
             tx,
             project_id,
@@ -169,6 +175,8 @@ def _errors() -> Generator[None]:
         yield
     except NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+    except NotLead as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
     except LifecycleError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
     except ValueError as e:

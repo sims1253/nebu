@@ -33,7 +33,7 @@ import type {
 } from "./schema.ts";
 
 export class WorkbenchError extends Data.TaggedError("WorkbenchError")<{
-  readonly reason: "not_found" | "conflict" | "invalid" | "unavailable";
+  readonly reason: "not_found" | "forbidden" | "conflict" | "invalid" | "unavailable";
   readonly message: string;
 }> {}
 
@@ -125,10 +125,13 @@ export interface Workbench {
   ) => Call<StageInfo>;
   readonly ledger: (projectId: string) => Call<LedgerSummary>;
 
-  readonly searches: (projectId: string) => Call<ReadonlyArray<SearchExecution>>;
+  // The catalogue (every search's records, the corpus, the link proposals) is the methods
+  // lead's alone: a reviewer who could list every record could tell the sentinels in their
+  // queue by their absence. The server refuses anyone else (`not_found` is not used for it).
+  readonly searches: (caller: Caller) => Call<ReadonlyArray<SearchExecution>>;
   /** The newest identity revision with its reports, or null before the corpus is ingested. */
-  readonly corpus: (projectId: string) => Call<CorpusView | null>;
-  readonly proposals: (projectId: string) => Call<ReadonlyArray<LinkProposal>>;
+  readonly corpus: (caller: Caller) => Call<CorpusView | null>;
+  readonly proposals: (caller: Caller) => Call<ReadonlyArray<LinkProposal>>;
   readonly link: (
     request: Caller & { readonly revisionId: string } & (
         | { readonly action: "confirm"; readonly proposalId: string }

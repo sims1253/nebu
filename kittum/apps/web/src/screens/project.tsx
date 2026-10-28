@@ -58,6 +58,10 @@ export const plural = (word: string) =>
       ? `${word}es`
       : `${word}s`;
 
+/** Why the catalogue is the lead's alone, for screens that would show it. */
+export const LEAD_ONLY =
+  "Only the methods lead sees every record. A reviewer who could list them all could tell which records in their queue were placed there to check them.";
+
 export const ROLE_LABELS: Record<Role, string> = {
   lead: "Methods lead",
   reviewer: "Reviewer",

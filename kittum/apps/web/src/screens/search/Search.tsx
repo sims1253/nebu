@@ -7,7 +7,7 @@ import type { SearchExecution } from "../../data/schema.ts";
 import { run, WorkbenchError } from "../../data/workbench.ts";
 import { KeyHint } from "../../ui/Key.tsx";
 import { useKeys } from "../../ui/keys.ts";
-import { useProject } from "../project.tsx";
+import { LEAD_ONLY, useProject } from "../project.tsx";
 
 const when = (iso: string) =>
   new Date(iso).toLocaleString("en-GB", {
@@ -22,15 +22,17 @@ const when = (iso: string) =>
 
 export function SearchScreen() {
   const { workbench } = useRouteContext({ from: "/p/$projectId" });
-  const { project } = useProject();
+  const { project, me, has } = useProject();
+  const lead = has("lead");
   const [executions, setExecutions] = useState<ReadonlyArray<SearchExecution> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState(0);
   const items = useRef<Array<HTMLElement | null>>([]);
 
   useEffect(() => {
+    if (!lead) return;
     let live = true;
-    run(workbench.searches(project.id)).then(
+    run(workbench.searches({ projectId: project.id, as: me.actor_id })).then(
       // The server lists the newest first; read them in the order they were run.
       (found) => live && setExecutions([...found].reverse()),
       (e: unknown) =>
@@ -39,7 +41,7 @@ export function SearchScreen() {
     return () => {
       live = false;
     };
-  }, [workbench, project.id]);
+  }, [workbench, project.id, me.actor_id, lead]);
 
   useEffect(() => {
     items.current[selected]?.scrollIntoView({ block: "nearest" });
@@ -69,7 +71,11 @@ export function SearchScreen() {
             </span>
           ) : null}
         </div>
-        {error ? (
+        {!lead ? (
+          <p className="mt-4 max-w-[60ch] text-ink-2" data-testid="lead-only">
+            {LEAD_ONLY}
+          </p>
+        ) : error ? (
           <p role="alert" className="mt-4 text-exclude">
             {error}
           </p>

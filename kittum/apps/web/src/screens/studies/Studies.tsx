@@ -8,7 +8,7 @@ import type { CorpusReport, CorpusView, LinkProposal, SourceRecord } from "../..
 import { run, WorkbenchError } from "../../data/workbench.ts";
 import { Key, KeyHint } from "../../ui/Key.tsx";
 import { useKeys } from "../../ui/keys.ts";
-import { plural, useProject } from "../project.tsx";
+import { LEAD_ONLY, plural, useProject } from "../project.tsx";
 
 const RELATIONS: Record<LinkProposal["relation"], string> = {
   same_record: "The same record, found twice",
@@ -63,7 +63,10 @@ export function StudiesScreen() {
 
   const load = useCallback(
     () =>
-      Promise.all([run(workbench.corpus(project.id)), run(workbench.proposals(project.id))]).then(
+      Promise.all([
+        run(workbench.corpus({ projectId: project.id, as: me.actor_id })),
+        run(workbench.proposals({ projectId: project.id, as: me.actor_id })),
+      ]).then(
         ([view, found]) => {
           setCorpus(view);
           setProposals(found);
@@ -71,12 +74,12 @@ export function StudiesScreen() {
         (e: unknown) =>
           setError(e instanceof WorkbenchError ? e.message : "The corpus could not load."),
       ),
-    [workbench, project.id],
+    [workbench, project.id, me.actor_id],
   );
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (lead) void load();
+  }, [load, lead]);
 
   const byOccurrence = useMemo(() => {
     const map = new Map<string, Located>();
@@ -239,7 +242,11 @@ export function StudiesScreen() {
               you confirm now count from the next stage on.
             </p>
           ) : null}
-          {error ? (
+          {!lead ? (
+            <p className="mt-4 max-w-[60ch] text-ink-2" data-testid="lead-only">
+              {LEAD_ONLY}
+            </p>
+          ) : error ? (
             <p role="alert" className="mt-4 text-exclude">
               {error}
             </p>

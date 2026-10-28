@@ -71,9 +71,14 @@ def test_a_project_from_nothing_to_an_open_stage(database: Database, tmp_path: P
         ("Jun Park", ["reviewer"]),
         ("Rita Nunes", ["auditor"]),
         ("Elena Weiss", ["adjudicator"]),
+        ("Ola Berg", ["reviewer"]),  # a third reviewer, whom M1 does not need
     ):
         body = {"display_name": name, "roles": roles, "added_by": lead}
         ok(client.post(f"/api/projects/{pid}/members", json=body), 201)
+    people = {
+        m["display_name"]: m["actor_id"] for m in ok(client.get(f"/api/projects/{pid}"))["members"]
+    }
+    as_lead = {"X-Kittum-Reviewer": lead}
 
     # Nothing to screen before a protocol, searches, and a corpus.
     stage = {"scope_id": "nrt-vs-control", "stage": "title_abstract", "actor_id": lead}
@@ -110,7 +115,7 @@ def test_a_project_from_nothing_to_an_open_stage(database: Database, tmp_path: P
     again = client.post(f"/api/projects/{pid}/corpus/ingest", json={"actor_id": lead})
     assert again.status_code == 409  # update searches need the corpus diff, not a second corpus
 
-    corpus = ok(client.get(f"/api/projects/{pid}/corpus/revisions/latest"))
+    corpus = ok(client.get(f"/api/projects/{pid}/corpus/revisions/latest", headers=as_lead))
     assert len(corpus["reports"]) == 10  # seven CENTRAL records and three found by citation
     sentinels = [s.model_dump(mode="json") for s in SENTINELS]
     info = ok(
@@ -178,7 +183,7 @@ def test_a_project_from_nothing_to_an_open_stage(database: Database, tmp_path: P
     )
     assert len(items) == 11  # ten records and one sentinel, now that the AI has read them
 
-    progress = ok(client.get(f"/api/projects/{pid}/progress", headers={"X-Kittum-Reviewer": lead}))
+    progress = ok(client.get(f"/api/projects/{pid}/progress", headers=as_lead))
     assert progress["identification"]["total_records_identified"] == 10
     assert progress["full_texts"] == 0
     (ta,) = progress["stages"]
@@ -187,8 +192,29 @@ def test_a_project_from_nothing_to_an_open_stage(database: Database, tmp_path: P
     mine = ok(client.get(f"/api/projects/{pid}/progress", headers=reviewer))
     assert mine["stages"][0]["status"]["view"] == "reviewer"
     assert mine["stages"][0]["outcomes"] is None
+    assert mine["identification"] is None and mine["searches"] == 0
+
+    # Only the lead reads the whole catalogue: anyone else could tell the sentinels in their
+    # queue by their absence from it.
+    catalogue = ("corpus/revisions/latest", "corpus/proposals", "search/executions")
+    for person in ("Sam Okafor", "Rita Nunes", "Ola Berg"):
+        for path in catalogue:
+            read = client.get(
+                f"/api/projects/{pid}/{path}", headers={"X-Kittum-Reviewer": people[person]}
+            )
+            assert read.status_code == 403, (person, path)
+    for path in catalogue:
+        ok(client.get(f"/api/projects/{pid}/{path}", headers=as_lead))
+
+    # A reviewer with no part in the stage gets nothing of it: no lead view by default.
+    outsider = {"X-Kittum-Reviewer": people["Ola Berg"]}
+    assert people["Ola Berg"] not in info["screeners"]
+    theirs = ok(client.get(f"/api/projects/{pid}/progress", headers=outsider))
+    assert theirs["stages"] == [] and theirs["identification"] is None
+    unseen = client.get(f"/api/projects/{pid}/screening/status", params=queue, headers=outsider)
+    assert unseen.status_code == 404
 
     ledger = ok(client.get(f"/api/projects/{pid}/ledger/verify"))
     assert ledger["verify"]["ok"]
-    assert ledger["by_type"]["project.member_added"] == 4
+    assert ledger["by_type"]["project.member_added"] == 5
     assert ledger["by_type"]["judge.verdict_recorded"] == 11

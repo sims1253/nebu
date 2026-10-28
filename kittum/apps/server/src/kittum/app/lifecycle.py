@@ -33,6 +33,7 @@ from kittum.documents import ingest as ingest_pdf
 from kittum.ledger import EventDraft
 from kittum.protocol import StoredProtocol, compile, latest_published, publish, save_draft
 from kittum.screening import (
+    NotAssigned,
     RecordFacts,
     ScopeStatus,
     ScreeningRecord,
@@ -44,6 +45,8 @@ from kittum.screening import (
 from kittum.search import list_executions
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from kittum.app.context import AppContext
     from kittum.db import Tx
     from kittum.ledger import Ledger
@@ -61,6 +64,10 @@ FULL_TEXT_ATTACHED = "project.full_text_attached"
 class LifecycleError(KittumError):
     """A lifecycle step does not fit the project's state, e.g. opening a stage before the
     protocol is published."""
+
+
+class NotLead(KittumError):
+    """The caller is not the project's methods lead. Reported as forbidden."""
 
 
 class Member(Record):
@@ -452,6 +459,15 @@ def full_text_records(
 # Screening
 
 
+def load_sentinels(path: Path) -> tuple[Sentinel, ...]:
+    """Sentinels from a YAML or JSON file: a list of `Sentinel` records (see
+    examples/sentinels/)."""
+    data = yaml.safe_load(path.read_text())
+    if not isinstance(data, list):
+        raise LifecycleError(f"{path} must hold a list of sentinels")
+    return tuple(Sentinel.model_validate(item) for item in data)
+
+
 def open_screening(
     tx: Tx,
     ctx: AppContext,
@@ -523,20 +539,45 @@ def open_screening(
 # Progress
 
 
+def is_lead(tx: Tx, project_id: Id, actor_id: Id) -> bool:
+    """Whether the actor is a methods lead of the project. The identity is the API's stand-in
+    (`X-Kittum-Reviewer`) until it has authentication."""
+    row = tx.execute(
+        "select 1 from project_member where project_id = %s and actor_id = %s and role = 'lead'",
+        (project_id, actor_id),
+    ).fetchone()
+    return row is not None
+
+
+def require_lead(tx: Tx, project_id: Id, actor_id: Id) -> None:
+    """Refuse reads of the whole catalogue to anyone but a lead: a reviewer who could list every
+    record could tell which records in their queue are sentinels by their absence."""
+    if not is_lead(tx, project_id, actor_id):
+        raise NotLead(f"only the project's methods lead may read this; {actor_id} is not one")
+
+
 def progress(tx: Tx, project_id: Id, viewer_id: Id, screening: Screening) -> Progress:
-    """Identification counts and each stage as the viewer may see it (see `Screening.status`)."""
-    revision = latest_revision(tx, project_id)
+    """Each stage the viewer has a part in, as `Screening.status` shows it to them, and, for the
+    methods lead, the identification counts and each record's outcome. Stages the viewer has no
+    part in are left out."""
+    lead = is_lead(tx, project_id, viewer_id)
+    revision = latest_revision(tx, project_id) if lead else None
     stages = []
     for info in screening.stages(tx, project_id):
-        status = screening.status(
-            tx, project_id, viewer_id, info.scope_id, info.stage, topic_id=info.topic_id
-        )
+        try:
+            status = screening.status(
+                tx, project_id, viewer_id, info.scope_id, info.stage, topic_id=info.topic_id
+            )
+        except NotAssigned:
+            continue
         outcomes = None
-        if status.view == "lead":
+        if status.view == "lead" and lead:
             found = screening.outcomes(
                 tx, project_id, info.scope_id, info.stage, topic_id=info.topic_id
             )
             outcomes = dict(Counter(o or "pending" for o in found.values()))
+        elif status.view == "lead":
+            continue  # a stage's lead by the ledger who no longer leads the project
         stages.append(StageProgress(stage=info, status=status, outcomes=outcomes))
     full_texts = tx.execute(
         "select count(*) as n from full_text where project_id = %s", (project_id,)
@@ -544,8 +585,8 @@ def progress(tx: Tx, project_id: Id, viewer_id: Id, screening: Screening) -> Pro
     return Progress(
         identity_revision_id=revision.id if revision else None,
         identification=get_counts(tx, project_id, revision.id) if revision else None,
-        searches=len(list_executions(tx, project_id)),
-        full_texts=full_texts["n"] if full_texts else 0,
+        searches=len(list_executions(tx, project_id)) if lead else 0,
+        full_texts=(full_texts["n"] if full_texts else 0) if lead else 0,
         stages=tuple(stages),
     )
 
@@ -558,6 +599,7 @@ __all__ = [
     "LifecycleError",
     "Member",
     "MemberRole",
+    "NotLead",
     "Progress",
     "ProjectSummary",
     "ProtocolRef",
@@ -571,10 +613,13 @@ __all__ = [
     "full_text_records",
     "full_text_sentinels",
     "ingest_corpus",
+    "is_lead",
     "list_projects",
+    "load_sentinels",
     "members",
     "open_screening",
     "progress",
     "project_summary",
     "publish_protocol",
+    "require_lead",
 ]

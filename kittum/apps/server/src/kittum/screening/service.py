@@ -853,6 +853,17 @@ class Screening:
             etag=row["etag"],
         )
 
+    def _leads(self, tx: Tx, row: dict[str, Any]) -> set[Id]:
+        """Who leads a stage: whoever opened it, and whoever approved its protocol version."""
+        opener = tx.execute(
+            "select actor_id from audit_event where event_id = %s", (row["opened_event_id"],)
+        ).fetchone()
+        stored = get_version(tx, row["project_id"], row["protocol_version_id"])
+        leads: set[Id] = {opener["actor_id"]} if opener else set()
+        if stored.approved_by is not None:
+            leads.add(stored.approved_by)
+        return leads
+
     def _own_assignment(
         self, tx: Tx, project_id: Id, reviewer_id: Id, assignment_id: Id, *, lock: bool = False
     ) -> dict[str, Any]:
@@ -1266,7 +1277,9 @@ class Screening:
         topic_id: str | None = None,
     ) -> ScopeStatus:
         """Progress for the viewer. Someone who screens or audits the stage sees only their own
-        counts; anyone else sees the stage, its agreement, the audit gauge, and the M3 stop test."""
+        counts; an adjudicator the progress and their conflicts. The whole stage (its agreement,
+        the audit gauge, and the M3 stop test) is for its methods lead only: the person who
+        opened the stage or approved its protocol version. Anyone else is not assigned."""
         row = store.find_stage(tx, project_id, scope_id, stage, topic_id)
         viewer = tx.execute("select kind from actor where id = %s", (viewer_id,)).fetchone()
         if viewer is None or viewer["kind"] != "human":
@@ -1304,6 +1317,8 @@ class Screening:
                 conflicts=None,
                 metrics=None,
             )
+        if viewer_id not in self._leads(tx, row):
+            raise NotAssigned(f"actor {viewer_id} has no part in this stage")
         protocol = self._protocol(tx, project_id, row["protocol_version_id"])
         topic = topic_for(protocol, scope_id, row["topic_id"])
         screened, remaining, conflicts, metrics = stage_metrics(tx, row, topic)

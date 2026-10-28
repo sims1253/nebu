@@ -72,6 +72,15 @@ def actor_id(url: str) -> str:
     )
 
 
+def _lead(url: str, project_id: str, actor_id: str) -> None:
+    """Make the actor the project's methods lead, who alone reads its records."""
+    _insert(
+        url,
+        "insert into project_member (project_id, actor_id, role, display_name, event_id)"
+        f" values ('{project_id}', '{actor_id}', 'lead', 'Lead', uuidv7()) returning actor_id as id",
+    )
+
+
 def _project(url: str) -> str:
     return _insert(
         url, "insert into project (name, policy_version) values ('api-test', 'v1') returning id"
@@ -138,13 +147,18 @@ def test_search_routes_end_to_end(url: str, actor_id: str, context: AppContext) 
         assert [e.payload["execution_id"] for e in events] == [exec_id, import_data["id"]]
         assert {str(e.actor_id) for e in events} == {actor_id}
 
-        # 4. List executions
-        list_resp = client.get(f"/api/projects/{project_id}/search/executions")
+        # 4. List executions: the records are the lead's alone, so a reviewer cannot tell the
+        # sentinels in their queue by their absence from the catalogue.
+        executions = f"/api/projects/{project_id}/search/executions"
+        reviewer = {"X-Kittum-Reviewer": actor_id}
+        assert client.get(executions, headers=reviewer).status_code == 403
+        _lead(url, project_id, actor_id)
+        list_resp = client.get(executions, headers=reviewer)
         assert list_resp.status_code == 200
         assert {e["id"] for e in list_resp.json()} == {exec_id, import_data["id"]}
 
         # 5. Get specific execution
-        get_resp = client.get(f"/api/projects/{project_id}/search/executions/{exec_id}")
+        get_resp = client.get(f"{executions}/{exec_id}", headers=reviewer)
         assert get_resp.status_code == 200
         get_data = get_resp.json()
         assert get_data["id"] == exec_id
@@ -154,7 +168,7 @@ def test_search_routes_end_to_end(url: str, actor_id: str, context: AppContext) 
 
         # 6. Non-existent execution returns 404
         not_found_resp = client.get(
-            f"/api/projects/{project_id}/search/executions/00000000-0000-0000-0000-000000000000"
+            f"{executions}/00000000-0000-0000-0000-000000000000", headers=reviewer
         )
         assert not_found_resp.status_code == 404
 
@@ -185,9 +199,14 @@ def test_one_project_cannot_read_another_projects_execution(
         assert resp.status_code == 200, resp.text
         exec_id = resp.json()["id"]
 
-        assert client.get(f"/api/projects/{owner}/search/executions/{exec_id}").status_code == 200
-        assert client.get(f"/api/projects/{other}/search/executions/{exec_id}").status_code == 404
-        assert client.get(f"/api/projects/{other}/search/executions").json() == []
+        for project in (owner, other):
+            _lead(url, project, actor_id)
+        reviewer = {"X-Kittum-Reviewer": actor_id}
+        path = f"search/executions/{exec_id}"
+        assert client.get(f"/api/projects/{owner}/{path}", headers=reviewer).status_code == 200
+        assert client.get(f"/api/projects/{other}/{path}", headers=reviewer).status_code == 404
+        listed = client.get(f"/api/projects/{other}/search/executions", headers=reviewer)
+        assert listed.json() == []
 
 
 def test_search_routes_refuse_to_write_without_a_ledger_or_gateway(
@@ -220,4 +239,9 @@ def test_search_routes_refuse_to_write_without_a_ledger_or_gateway(
         )
         assert resp.status_code == 503
         assert "gateway" in resp.json()["detail"]
-        assert client.get(f"/api/projects/{project_id}/search/executions").json() == []
+        _lead(url, project_id, actor_id)
+        listed = client.get(
+            f"/api/projects/{project_id}/search/executions",
+            headers={"X-Kittum-Reviewer": actor_id},
+        )
+        assert listed.json() == []
