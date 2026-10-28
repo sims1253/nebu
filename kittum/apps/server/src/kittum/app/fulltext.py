@@ -1,20 +1,34 @@
-"""What the full-text screen shows beside the page: protocol-term mentions per criterion.
+"""What the full-text screen shows beside the page, and the reviewer's "wrong document".
 
 Mentions come from the protocol, never from the AI, so a reviewer may see them before deciding
 (DESIGN.md, "Reviewer workbench"). Each criterion's terms are its keywords and the content words
 of its wording; a mention is every whole-word occurrence in the layer, in document order, as an
-unsaved anchor. Adopting one saves it (`POST /api/layers/{id}/anchors` with its offsets).
+unsaved anchor. Adopting one saves it (`POST /api/layers/{id}/anchors` with its offsets). Once the
+reviewer's own provisional decision revealed the AI's reading, its verified quote comes as an
+unsaved anchor too, so the page can highlight it in place.
+
+A reviewer who finds that the PDF shown is not the record's report marks it as the wrong document
+(`mark_wrong_document`): the item leaves screening, the document is detached from the record, and
+the record has no full text again. That is not an exclusion.
 """
 
 import re
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from kittum.core import Id, Record, Span
+from kittum.app.lifecycle import LifecycleError, full_text
+from kittum.core import Id, Record, Span, new_id
 from kittum.documents import Anchor, make_anchor
+from kittum.ledger import EventDraft
 
 if TYPE_CHECKING:
+    from kittum.app.context import AppContext
+    from kittum.db import Tx
     from kittum.documents import Layer
     from kittum.protocol import Criterion
+    from kittum.screening import Reveal
+
+FULL_TEXT_DETACHED = "project.full_text_detached"
 
 MAX_MENTIONS = 40
 """Per criterion; a term on every page helps nobody."""
@@ -94,6 +108,13 @@ class AssignmentFullText(Record):
     page_count: int | None
     licence: str | None
     mentions: tuple[CriterionMentions, ...]
+    ai_quote: Anchor | None = None
+    """The verified quote of the AI's reading shown after the reviewer's own provisional
+    decision, as an unsaved anchor; None before that, and when the quote is not in the text."""
+
+
+class WrongDocument(Record):
+    recorded_at: datetime
 
 
 def terms(criterion: Criterion, language: str = "en") -> tuple[str, ...]:
@@ -125,4 +146,102 @@ def mentions(layer: Layer, criteria: tuple[Criterion, ...]) -> tuple[CriterionMe
     return tuple(out)
 
 
-__all__ = ["MAX_MENTIONS", "AssignmentFullText", "CriterionMentions", "mentions", "terms"]
+def ai_quote(layer: Layer, reveal: Reveal | None) -> Anchor | None:
+    """The revealed quote on the page. A full-text item's text is its layer's text, so the
+    reveal's text offsets are layer offsets."""
+    span = reveal.quote_span if reveal else None
+    if span is None or span.part != "text" or span.end > len(layer.text):
+        return None
+    return make_anchor(layer, Span(span.start, span.end))
+
+
+def mark_wrong_document(
+    tx: Tx,
+    ctx: AppContext,
+    project_id: Id,
+    *,
+    command_id: Id,
+    reviewer_id: Id,
+    assignment_id: Id,
+    expected_etag: str,
+    document_id: Id,
+    note: str | None = None,
+) -> WrongDocument:
+    """The PDF of one of the reviewer's full-text assignments is not the record's report.
+
+    The item leaves screening (`Screening.withdraw_item`), the document is detached from the
+    record, and the ledger records who said so, when, and the note. The record then has no full
+    text again: the retrieval list shows it as missing and PRISMA counts it as not retrieved. It is
+    not an exclusion. `document_id` is the PDF the reviewer saw; if the record's full text is
+    another one by now, nothing changes. A retry with the same `command_id` returns the first
+    result.
+    """
+    done = tx.execute(
+        "select recorded_at from full_text_detachment where command_id = %s", (command_id,)
+    ).fetchone()
+    if done is not None:
+        return WrongDocument(recorded_at=done["recorded_at"])
+    screening = ctx.screening()
+    ledger = ctx.require_ledger()
+    ref, info, _ = screening.assignment_source(tx, project_id, reviewer_id, assignment_id)
+    found = full_text(tx, project_id, ref)
+    if found is None or found.document_id != document_id:
+        raise LifecycleError("This PDF is no longer the record's full text. Reload the queue.")
+    screening.withdraw_item(
+        tx,
+        command_id=command_id,
+        project_id=project_id,
+        reviewer_id=reviewer_id,
+        assignment_id=assignment_id,
+        expected_etag=expected_etag,
+        reason="wrong_document",
+    )
+    note = (note or "").strip() or None
+    event = ledger.append(
+        tx,
+        EventDraft(
+            project_id=project_id,
+            type=FULL_TEXT_DETACHED,
+            schema_version=1,
+            actor_id=reviewer_id,
+            payload={
+                "item_ref": ref,
+                "document_id": str(found.document_id),
+                "layer_id": str(found.layer_id),
+                "stage_id": str(info.stage_id),
+                "reason": "wrong_document",
+                "note": note,
+            },
+        ),
+    )
+    tx.execute("delete from full_text where project_id = %s and item_ref = %s", (project_id, ref))
+    tx.execute(
+        "insert into full_text_detachment (id, project_id, item_ref, document_id, reason, note,"
+        " actor_id, command_id, event_id, recorded_at)"
+        " values (%s, %s, %s, %s, 'wrong_document', %s, %s, %s, %s, %s)",
+        (
+            new_id(),
+            project_id,
+            ref,
+            found.document_id,
+            note,
+            reviewer_id,
+            command_id,
+            event.event_id,
+            event.recorded_at,
+        ),
+    )
+    return WrongDocument(recorded_at=event.recorded_at)
+
+
+__all__ = [
+    "FULL_TEXT_DETACHED",
+    "MAX_MENTIONS",
+    "AssignmentFullText",
+    "CriterionMentions",
+    "WrongDocument",
+    "ai_quote",
+    "mark_wrong_document",
+    "mentions",
+    "terms",
+]

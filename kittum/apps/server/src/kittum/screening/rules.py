@@ -7,9 +7,9 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from kittum.core import sha256_hex
+from kittum.core import find_quote, sha256_hex
 from kittum.protocol import ScreeningMode
-from kittum.screening.types import InvalidDecision, Reveal
+from kittum.screening.types import InvalidDecision, QuoteSpan, Reveal
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
@@ -151,25 +151,28 @@ def validate(decision: Decision, stage: Stage, criteria: Sequence[Criterion]) ->
         raise InvalidDecision("criterion readings must name each applicable criterion once")
     if stage == "title_abstract":
         return
-    if set(readings) != known:
-        missing = ", ".join(sorted(known - set(readings)))
-        raise InvalidDecision(
-            f"a full-text decision needs a reading of every criterion ({missing})"
-        )
-    if not decision.evidence_anchor_ids and not any(
-        c.evidence_anchor_ids for c in decision.criteria
-    ):
-        raise InvalidDecision("every full-text outcome cites at least one evidence anchor")
-    statuses = {c.status for c in decision.criteria}
+    # One reason per report is what PRISMA asks for: an exclusion cites the criterion it fails, an
+    # inclusion says every criterion is met. Readings of the other criteria are optional.
     if decision.outcome == "exclude":
-        reason = readings[decision.reason_criterion_id or ""]
-        if reason.status != "not_met" or not reason.evidence_anchor_ids:
-            raise InvalidDecision("a full-text exclusion cites a not-met criterion with evidence")
+        reason = readings.get(decision.reason_criterion_id or "")
+        if reason is None or reason.status != "not_met" or not reason.evidence_anchor_ids:
+            raise InvalidDecision(
+                "To exclude, mark the failing criterion not met and adopt evidence for it."
+            )
     elif decision.outcome == "include":
-        if statuses - {"met"}:
-            raise InvalidDecision("a full-text inclusion needs every criterion met")
-    elif "unclear" not in statuses:
-        raise InvalidDecision("insufficient information needs at least one unclear criterion")
+        if any(c.status != "met" for c in decision.criteria):
+            raise InvalidDecision(
+                "Include means every criterion is met. Change the verdicts that say otherwise."
+            )
+    else:
+        if not any(c.status == "unclear" for c in decision.criteria):
+            raise InvalidDecision(
+                "Insufficient information needs at least one criterion marked unclear."
+            )
+        if not decision.evidence_anchor_ids and not any(
+            c.evidence_anchor_ids for c in decision.criteria
+        ):
+            raise InvalidDecision("Insufficient information needs at least one evidence anchor.")
 
 
 def excluding_criterion(reading: Reading) -> CriterionVerdict | None:
@@ -189,7 +192,29 @@ def _reveal(verdict: CriterionVerdict) -> Reveal:
         status=verdict.status,
         quote=verdict.quote or "",
         rationale=verdict.rationale,
+        quote_verified=verdict.quote_verified,
+        downgraded_from=verdict.downgraded_from,
     )
+
+
+def locate_quote(quote: str | None, title: str, text: str) -> QuoteSpan | None:
+    """Where a quote the judge verified is in the item, by `find_quote`: its first occurrence in
+    the title, else in the text. The judge checks quotes against the title and the text joined,
+    so a quote across both is found in neither and stays unplaced."""
+    if not quote:
+        return None
+    for part, source in (("title", title), ("text", text)):
+        spans = find_quote(quote, source)
+        if spans:
+            return QuoteSpan(part=part, start=spans[0].start, end=spans[0].end)
+    return None
+
+
+def locate(reveal: Reveal, title: str, text: str) -> Reveal:
+    """The reveal with its verified quote placed in the item."""
+    if not reveal.quote_verified:
+        return reveal
+    return reveal.model_copy(update={"quote_span": locate_quote(reveal.quote, title, text)})
 
 
 def reveal_for(setting: RevealSetting, decision: Decision, reading: Reading) -> Reveal | None:

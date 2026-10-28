@@ -583,17 +583,25 @@ def _stage(
     extra: Mapping[tuple[str, str], Rescreen],
 ) -> StageResult:
     stage_id = stage["id"]
-    items = tx.execute(
-        "select item_ref, kind, expected_outcome, audit, title from screening_item"
-        " where stage_id = %s order by item_ref",
-        (stage_id,),
-    ).fetchall()
+    # An item withdrawn as the wrong document by the cutoff is no longer part of the stage: its
+    # record has no full text again, so PRISMA counts it as not retrieved, never as excluded.
+    items = [
+        i
+        for i in tx.execute(
+            "select item_ref, kind, expected_outcome, audit, title, withdrawn_event_id"
+            " from screening_item where stage_id = %s order by item_ref",
+            (stage_id,),
+        ).fetchall()
+        if i["withdrawn_event_id"] not in seq_of
+    ]
+    refs = {i["item_ref"] for i in items}
     assignments = {
         a["id"]: a
         for a in tx.execute(
             "select id, item_ref, reviewer_id, role from screening_assignment where stage_id = %s",
             (stage_id,),
         ).fetchall()
+        if a["item_ref"] in refs
     }
     ids = list(assignments)
     history: list[tuple[int, str, dict[str, Any]]] = []

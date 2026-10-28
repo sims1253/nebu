@@ -31,6 +31,9 @@ type RescreenReason = Literal[
 ]
 type Highlight = tuple[int, int, str]
 """(start, end, tag): half-open code-point offsets; tags are `protocol:<criterion id>`."""
+type WithdrawReason = Literal["wrong_document"]
+"""Why an item left screening without a decision: the full text shown is not the record's
+report. Not an exclusion."""
 
 
 class StaleRevision(CommandRejected):
@@ -143,6 +146,16 @@ class DecisionTiming(Record):
     reveal_shown_at: datetime | None = None
 
 
+class QuoteSpan(Record):
+    """Where a verified quote of the AI is in the item: half-open code-point offsets into its
+    `title` or its `text`. A full-text item's text is its layer's text, so text offsets are layer
+    offsets."""
+
+    part: Literal["title", "text"]
+    start: int
+    end: int
+
+
 class Reveal(Record):
     """Shown after a provisional decision when the AI disagrees (or always, if set so)."""
 
@@ -150,6 +163,13 @@ class Reveal(Record):
     status: CriterionStatus
     quote: str
     rationale: str
+    quote_verified: bool = False
+    """Whether the judge found the quote in the record. An unverified quote is the model's own
+    words, never a passage of the record."""
+    quote_span: QuoteSpan | None = None
+    """Where the verified quote is, for highlighting it in place; None if it is unverified."""
+    downgraded_from: CriterionStatus | None = None
+    """What the model answered, if the judge's checks turned it into `unclear`."""
 
 
 class QueueRecord(Record):
@@ -199,6 +219,10 @@ class UndoResult(Record):
     recorded_at: datetime
 
 
+class WithdrawResult(Record):
+    recorded_at: datetime
+
+
 # Adjudication
 
 
@@ -229,6 +253,8 @@ class AdjudicationItem(Record):
 class AiColumn(Record):
     excludes: bool
     criteria: tuple[CriterionVerdict, ...]
+    quote_spans: dict[str, QuoteSpan]
+    """Where each verified quote is in the record, by criterion ID."""
 
 
 class AdjudicationResult(Record):

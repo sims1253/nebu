@@ -49,7 +49,15 @@ from kittum.app.enrichment import (
     record_flags,
     request_enrichment,
 )
-from kittum.app.fulltext import AssignmentFullText, CriterionMentions, mentions
+from kittum.app.fulltext import (
+    FULL_TEXT_DETACHED,
+    AssignmentFullText,
+    CriterionMentions,
+    WrongDocument,
+    ai_quote,
+    mark_wrong_document,
+    mentions,
+)
 from kittum.app.lifecycle import (
     FULL_TEXT_ATTACHED,
     MEMBER_ADDED,
@@ -109,6 +117,7 @@ from kittum.app.open_access import (
 __all__ = [
     "ENRICHMENT_JOB",
     "FULL_TEXT_ATTACHED",
+    "FULL_TEXT_DETACHED",
     "JOB_HANDLERS",
     "MEMBER_ADDED",
     "OPEN_ACCESS_JOB",
@@ -142,7 +151,9 @@ __all__ = [
     "SourceFailureView",
     "SourceProgress",
     "StageProgress",
+    "WrongDocument",
     "add_member",
+    "ai_quote",
     "attach_acquired_full_text",
     "attach_full_text",
     "attach_sentinel_full_text",
@@ -171,6 +182,7 @@ __all__ = [
     "latest_open_access_run",
     "list_projects",
     "load_sentinels",
+    "mark_wrong_document",
     "members",
     "mentions",
     "open_access_run",
