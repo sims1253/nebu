@@ -1,6 +1,162 @@
 {
   "components": {
     "schemas": {
+      "AdjudicateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "adopted": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adopted"
+          },
+          "command_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Decision"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expected_etag": {
+            "title": "Expected Etag",
+            "type": "string"
+          },
+          "timing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DecisionTiming"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "command_id",
+          "expected_etag"
+        ],
+        "title": "AdjudicateRequest",
+        "type": "object"
+      },
+      "AdjudicationItem": {
+        "additionalProperties": false,
+        "description": "A conflict for the adjudicator. The AI column is not here; it opens after the commit.",
+        "properties": {
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewerColumn"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "conflict_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "etag": {
+            "title": "Etag",
+            "type": "string"
+          },
+          "record": {
+            "$ref": "#/components/schemas/QueueRecord"
+          },
+          "scope_id": {
+            "title": "Scope Id",
+            "type": "string"
+          },
+          "stage": {
+            "$ref": "#/components/schemas/Stage"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "conflict_id",
+          "etag",
+          "stage",
+          "scope_id",
+          "title",
+          "text",
+          "record",
+          "columns"
+        ],
+        "title": "AdjudicationItem",
+        "type": "object"
+      },
+      "AdjudicationResult": {
+        "additionalProperties": false,
+        "properties": {
+          "ai": {
+            "$ref": "#/components/schemas/AiColumn"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/kittum__screening__types__Outcome"
+          },
+          "reason_criterion_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Criterion Id"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome",
+          "reason_criterion_id",
+          "recorded_at",
+          "ai"
+        ],
+        "title": "AdjudicationResult",
+        "type": "object"
+      },
+      "AiColumn": {
+        "additionalProperties": false,
+        "properties": {
+          "criteria": {
+            "items": {
+              "$ref": "#/components/schemas/CriterionVerdict"
+            },
+            "title": "Criteria",
+            "type": "array"
+          },
+          "excludes": {
+            "title": "Excludes",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "excludes",
+          "criteria"
+        ],
+        "title": "AiColumn",
+        "type": "object"
+      },
       "Anchor": {
         "additionalProperties": false,
         "properties": {
@@ -82,6 +238,69 @@
         "title": "AnchorRequest",
         "type": "object"
       },
+      "AuditGauge": {
+        "additionalProperties": false,
+        "properties": {
+          "audit_decided": {
+            "title": "Audit Decided",
+            "type": "integer"
+          },
+          "audit_relevant_found": {
+            "title": "Audit Relevant Found",
+            "type": "integer"
+          },
+          "audit_samples": {
+            "title": "Audit Samples",
+            "type": "integer"
+          },
+          "elusion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Interval"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "excluded_population": {
+            "title": "Excluded Population",
+            "type": "integer"
+          },
+          "sentinels": {
+            "title": "Sentinels",
+            "type": "integer"
+          },
+          "sentinels_correct": {
+            "title": "Sentinels Correct",
+            "type": "integer"
+          },
+          "sentinels_decided": {
+            "title": "Sentinels Decided",
+            "type": "integer"
+          },
+          "strata": {
+            "items": {
+              "$ref": "#/components/schemas/AuditStratum"
+            },
+            "title": "Strata",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sentinels",
+          "sentinels_decided",
+          "sentinels_correct",
+          "audit_samples",
+          "audit_decided",
+          "excluded_population",
+          "audit_relevant_found",
+          "strata",
+          "elusion"
+        ],
+        "title": "AuditGauge",
+        "type": "object"
+      },
       "AuditPlan": {
         "additionalProperties": false,
         "properties": {
@@ -100,6 +319,36 @@
           }
         },
         "title": "AuditPlan",
+        "type": "object"
+      },
+      "AuditStratum": {
+        "additionalProperties": false,
+        "description": "Excluded records whose AI reading was, or was not, a verified exclusion.",
+        "properties": {
+          "ai_excludes": {
+            "title": "Ai Excludes",
+            "type": "boolean"
+          },
+          "population": {
+            "title": "Population",
+            "type": "integer"
+          },
+          "relevant_found": {
+            "title": "Relevant Found",
+            "type": "integer"
+          },
+          "sampled": {
+            "title": "Sampled",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ai_excludes",
+          "population",
+          "sampled",
+          "relevant_found"
+        ],
+        "title": "AuditStratum",
         "type": "object"
       },
       "Box": {
@@ -294,6 +543,263 @@
         "title": "Criterion",
         "type": "object"
       },
+      "CriterionDecision": {
+        "additionalProperties": false,
+        "description": "A reviewer's reading of one criterion at full text, with the evidence for it.",
+        "properties": {
+          "criterion_id": {
+            "title": "Criterion Id",
+            "type": "string"
+          },
+          "evidence_anchor_ids": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Id"
+            },
+            "title": "Evidence Anchor Ids",
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CriterionStatus"
+          }
+        },
+        "required": [
+          "criterion_id",
+          "status"
+        ],
+        "title": "CriterionDecision",
+        "type": "object"
+      },
+      "CriterionStatus": {
+        "enum": [
+          "met",
+          "not_met",
+          "unclear"
+        ],
+        "type": "string"
+      },
+      "CriterionVerdict": {
+        "additionalProperties": false,
+        "properties": {
+          "criterion_id": {
+            "title": "Criterion Id",
+            "type": "string"
+          },
+          "downgraded_from": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CriterionStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failed_check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FailedCheck"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote"
+          },
+          "quote_verified": {
+            "title": "Quote Verified",
+            "type": "boolean"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CriterionStatus"
+          }
+        },
+        "required": [
+          "criterion_id",
+          "status",
+          "quote",
+          "rationale",
+          "quote_verified"
+        ],
+        "title": "CriterionVerdict",
+        "type": "object"
+      },
+      "DecideRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "command_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/Decision"
+          },
+          "expected_etag": {
+            "title": "Expected Etag",
+            "type": "string"
+          },
+          "phase": {
+            "$ref": "#/components/schemas/Phase"
+          },
+          "timing": {
+            "$ref": "#/components/schemas/DecisionTiming"
+          }
+        },
+        "required": [
+          "command_id",
+          "decision",
+          "phase",
+          "expected_etag",
+          "timing"
+        ],
+        "title": "DecideRequest",
+        "type": "object"
+      },
+      "DecideResult": {
+        "additionalProperties": false,
+        "properties": {
+          "etag": {
+            "title": "Etag",
+            "type": "string"
+          },
+          "phase": {
+            "$ref": "#/components/schemas/Phase"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "reveal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Reveal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "phase",
+          "reveal",
+          "recorded_at",
+          "etag"
+        ],
+        "title": "DecideResult",
+        "type": "object"
+      },
+      "Decision": {
+        "additionalProperties": false,
+        "properties": {
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "criteria": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CriterionDecision"
+            },
+            "title": "Criteria",
+            "type": "array"
+          },
+          "evidence_anchor_ids": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Id"
+            },
+            "title": "Evidence Anchor Ids",
+            "type": "array"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/Outcome-Input"
+          },
+          "reason_criterion_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Criterion Id"
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "Decision",
+        "type": "object"
+      },
+      "DecisionTiming": {
+        "additionalProperties": false,
+        "description": "Client-side timing of one decision (DESIGN.md, \"Metrics\").",
+        "properties": {
+          "decided_at": {
+            "format": "date-time",
+            "title": "Decided At",
+            "type": "string"
+          },
+          "first_key_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Key At"
+          },
+          "reveal_shown_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reveal Shown At"
+          },
+          "shown_at": {
+            "format": "date-time",
+            "title": "Shown At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shown_at",
+          "decided_at"
+        ],
+        "title": "DecisionTiming",
+        "type": "object"
+      },
       "Deviation": {
         "additionalProperties": false,
         "description": "A justified departure from a required source plan, e.g. a source that cannot be searched.",
@@ -403,6 +909,20 @@
         "additionalProperties": true,
         "type": "object"
       },
+      "FailedCheck": {
+        "enum": [
+          "quote_not_found",
+          "no_quote",
+          "off_criterion",
+          "negation",
+          "polarity",
+          "language_unverifiable",
+          "multiple_sentences",
+          "injection_suspected",
+          "invalid_output"
+        ],
+        "type": "string"
+      },
       "FreshnessPolicy": {
         "additionalProperties": false,
         "properties": {
@@ -461,6 +981,22 @@
         ],
         "title": "Health",
         "type": "object"
+      },
+      "Highlight": {
+        "maxItems": 3,
+        "minItems": 3,
+        "prefixItems": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "type": "array"
       },
       "Id": {
         "format": "uuid",
@@ -548,6 +1084,41 @@
           "actor_id"
         ],
         "title": "ImportSearchRequest",
+        "type": "object"
+      },
+      "Interval": {
+        "additionalProperties": false,
+        "description": "A point estimate with an interval.",
+        "properties": {
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "estimate": {
+            "title": "Estimate",
+            "type": "number"
+          },
+          "lower": {
+            "title": "Lower",
+            "type": "number"
+          },
+          "method": {
+            "title": "Method",
+            "type": "string"
+          },
+          "upper": {
+            "title": "Upper",
+            "type": "number"
+          }
+        },
+        "required": [
+          "estimate",
+          "lower",
+          "upper",
+          "confidence",
+          "method"
+        ],
+        "title": "Interval",
         "type": "object"
       },
       "KnownInclude": {
@@ -684,49 +1255,14 @@
         "title": "MergeRequest",
         "type": "object"
       },
-      "Outcome": {
-        "additionalProperties": false,
-        "properties": {
-          "category": {
-            "$ref": "#/components/schemas/Identifier"
-          },
-          "definition": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/LocalizedText"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "extensions": {
-            "$ref": "#/components/schemas/Extensions"
-          },
-          "id": {
-            "$ref": "#/components/schemas/Identifier"
-          },
-          "name": {
-            "$ref": "#/components/schemas/LocalizedText"
-          },
-          "rationale": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/LocalizedText"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "id",
-          "category",
-          "name"
+      "Outcome-Input": {
+        "enum": [
+          "include",
+          "exclude",
+          "unclear",
+          "insufficient_information"
         ],
-        "title": "Outcome",
-        "type": "object"
+        "type": "string"
       },
       "PageTriage": {
         "additionalProperties": false,
@@ -854,8 +1390,79 @@
         "title": "PageWords",
         "type": "object"
       },
+      "PairAgreement": {
+        "additionalProperties": false,
+        "description": "Agreement on include against exclude, from the blind provisional decisions.\n\n`human_ai` compares with the model's own reading (no criterion it answered `not_met`);\n`human_ai_verified` with the reading the judge's filter verified (`Verdict.excludes`).",
+        "properties": {
+          "items": {
+            "title": "Items",
+            "type": "integer"
+          },
+          "kappa": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kappa"
+          },
+          "kind": {
+            "enum": [
+              "human_human",
+              "human_ai",
+              "human_ai_verified"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "pabak": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pabak"
+          },
+          "raters": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Raters",
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "raters",
+          "items",
+          "kappa",
+          "pabak"
+        ],
+        "title": "PairAgreement",
+        "type": "object"
+      },
       "Percent": {
         "pattern": "^[0-9]{1,3}(\\.[0-9]+)?$",
+        "type": "string"
+      },
+      "Phase": {
+        "enum": [
+          "provisional",
+          "final"
+        ],
         "type": "string"
       },
       "PicoSlot": {
@@ -1087,6 +1694,174 @@
         "title": "PublishRequest",
         "type": "object"
       },
+      "QueueItem": {
+        "additionalProperties": false,
+        "description": "What a reviewer sees. Never contains AI output before their own provisional decision,\nsentinel or audit flags, or anything of another reviewer.",
+        "properties": {
+          "assignment_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "etag": {
+            "title": "Etag",
+            "type": "string"
+          },
+          "highlights": {
+            "items": {
+              "$ref": "#/components/schemas/Highlight"
+            },
+            "title": "Highlights",
+            "type": "array"
+          },
+          "phase": {
+            "$ref": "#/components/schemas/Phase"
+          },
+          "record": {
+            "$ref": "#/components/schemas/QueueRecord"
+          },
+          "reveal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Reveal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scope_id": {
+            "title": "Scope Id",
+            "type": "string"
+          },
+          "stage": {
+            "$ref": "#/components/schemas/Stage"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "assignment_id",
+          "stage",
+          "scope_id",
+          "title",
+          "text",
+          "highlights",
+          "etag",
+          "record",
+          "phase",
+          "reveal"
+        ],
+        "title": "QueueItem",
+        "type": "object"
+      },
+      "QueueRecord": {
+        "additionalProperties": false,
+        "description": "The record's facts as the queue shows them, with title highlights and abstract sections.",
+        "properties": {
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "journal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal"
+          },
+          "pmid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pmid"
+          },
+          "publication_types": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Publication Types",
+            "type": "array"
+          },
+          "registry_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Registry Ids",
+            "type": "array"
+          },
+          "sections": {
+            "items": {
+              "maxItems": 3,
+              "minItems": 3,
+              "prefixItems": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            },
+            "title": "Sections",
+            "type": "array"
+          },
+          "title_highlights": {
+            "items": {
+              "$ref": "#/components/schemas/Highlight"
+            },
+            "title": "Title Highlights",
+            "type": "array"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "required": [
+          "pmid",
+          "doi",
+          "journal",
+          "year",
+          "publication_types",
+          "registry_ids",
+          "title_highlights",
+          "sections"
+        ],
+        "title": "QueueRecord",
+        "type": "object"
+      },
       "ReferenceSet": {
         "additionalProperties": false,
         "description": "Known relevant records: the strategy is built on one set and validated on the other.",
@@ -1129,6 +1904,73 @@
         ],
         "type": "string"
       },
+      "RescreenGauge": {
+        "additionalProperties": false,
+        "description": "Blind extra screens that AI-only disagreements sent to the auditor. Lead's view only.",
+        "properties": {
+          "adjudicated": {
+            "title": "Adjudicated",
+            "type": "integer"
+          },
+          "pending": {
+            "title": "Pending",
+            "type": "integer"
+          },
+          "triggered": {
+            "title": "Triggered",
+            "type": "integer"
+          },
+          "upheld": {
+            "title": "Upheld",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "triggered",
+          "pending",
+          "upheld",
+          "adjudicated"
+        ],
+        "title": "RescreenGauge",
+        "type": "object"
+      },
+      "Reveal": {
+        "additionalProperties": false,
+        "description": "Shown after a provisional decision when the AI disagrees (or always, if set so).",
+        "properties": {
+          "criterion_id": {
+            "title": "Criterion Id",
+            "type": "string"
+          },
+          "quote": {
+            "title": "Quote",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CriterionStatus"
+          }
+        },
+        "required": [
+          "criterion_id",
+          "status",
+          "quote",
+          "rationale"
+        ],
+        "title": "Reveal",
+        "type": "object"
+      },
+      "RevealSetting": {
+        "enum": [
+          "never",
+          "on_disagreement",
+          "always"
+        ],
+        "type": "string"
+      },
       "ReviewProtocol": {
         "additionalProperties": false,
         "properties": {
@@ -1148,7 +1990,7 @@
           },
           "outcomes": {
             "items": {
-              "$ref": "#/components/schemas/Outcome"
+              "$ref": "#/components/schemas/kittum__protocol__model__Outcome"
             },
             "minItems": 1,
             "title": "Outcomes",
@@ -1254,6 +2096,65 @@
         "title": "ReviewQuestion",
         "type": "object"
       },
+      "ReviewerColumn": {
+        "additionalProperties": false,
+        "description": "One human's final decision, pseudonymized as A, B, ...",
+        "properties": {
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "criteria": {
+            "items": {
+              "$ref": "#/components/schemas/CriterionDecision"
+            },
+            "title": "Criteria",
+            "type": "array"
+          },
+          "evidence_anchor_ids": {
+            "items": {
+              "$ref": "#/components/schemas/Id"
+            },
+            "title": "Evidence Anchor Ids",
+            "type": "array"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/kittum__screening__types__Outcome"
+          },
+          "reason_criterion_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Criterion Id"
+          }
+        },
+        "required": [
+          "label",
+          "outcome",
+          "reason_criterion_id",
+          "criteria",
+          "evidence_anchor_ids",
+          "comment"
+        ],
+        "title": "ReviewerColumn",
+        "type": "object"
+      },
       "RunSearchRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1301,6 +2202,68 @@
           "search_topic"
         ],
         "type": "string"
+      },
+      "ScopeStatus": {
+        "additionalProperties": false,
+        "description": "Progress of a scope and stage.\n\nA reviewer who screens or audits the stage sees only their own counts (`view == \"reviewer\"`,\nhidden items included, no conflicts, no metrics). An adjudicator of the stage sees the\nscreening progress and, as `conflicts`, the adjudications pending for them, without\nmetrics. Anyone else (the methods lead) sees the whole stage.",
+        "properties": {
+          "conflicts": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conflicts"
+          },
+          "metrics": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StageMetrics"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "remaining": {
+            "title": "Remaining",
+            "type": "integer"
+          },
+          "scope_id": {
+            "title": "Scope Id",
+            "type": "string"
+          },
+          "screened": {
+            "title": "Screened",
+            "type": "integer"
+          },
+          "stage": {
+            "$ref": "#/components/schemas/Stage"
+          },
+          "view": {
+            "enum": [
+              "reviewer",
+              "adjudicator",
+              "lead"
+            ],
+            "title": "View",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope_id",
+          "stage",
+          "view",
+          "screened",
+          "remaining",
+          "conflicts",
+          "metrics"
+        ],
+        "title": "ScopeStatus",
+        "type": "object"
       },
       "ScreeningMode": {
         "enum": [
@@ -1786,6 +2749,139 @@
         ],
         "type": "string"
       },
+      "StageMetrics": {
+        "additionalProperties": false,
+        "properties": {
+          "agreement": {
+            "items": {
+              "$ref": "#/components/schemas/PairAgreement"
+            },
+            "title": "Agreement",
+            "type": "array"
+          },
+          "audit": {
+            "$ref": "#/components/schemas/AuditGauge"
+          },
+          "conflicts_resolved": {
+            "title": "Conflicts Resolved",
+            "type": "integer"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/ScreeningMode"
+          },
+          "rescreens": {
+            "$ref": "#/components/schemas/RescreenGauge"
+          },
+          "reveal": {
+            "$ref": "#/components/schemas/RevealSetting"
+          },
+          "reveals_shown": {
+            "title": "Reveals Shown",
+            "type": "integer"
+          },
+          "revised_after_reveal": {
+            "title": "Revised After Reveal",
+            "type": "integer"
+          },
+          "stop_test": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StopStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "mode",
+          "reveal",
+          "conflicts_resolved",
+          "reveals_shown",
+          "revised_after_reveal",
+          "agreement",
+          "audit",
+          "rescreens",
+          "stop_test"
+        ],
+        "title": "StageMetrics",
+        "type": "object"
+      },
+      "StopStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "alpha": {
+            "title": "Alpha",
+            "type": "number"
+          },
+          "method": {
+            "title": "Method",
+            "type": "string"
+          },
+          "minimum_met": {
+            "title": "Minimum Met",
+            "type": "boolean"
+          },
+          "minimum_screened_percent": {
+            "title": "Minimum Screened Percent",
+            "type": "string"
+          },
+          "p_value": {
+            "title": "P Value",
+            "type": "number"
+          },
+          "pending_conflicts": {
+            "title": "Pending Conflicts",
+            "type": "integer"
+          },
+          "relevant": {
+            "title": "Relevant",
+            "type": "integer"
+          },
+          "remaining": {
+            "title": "Remaining",
+            "type": "integer"
+          },
+          "screened": {
+            "title": "Screened",
+            "type": "integer"
+          },
+          "stop": {
+            "title": "Stop",
+            "type": "boolean"
+          },
+          "target_recall": {
+            "title": "Target Recall",
+            "type": "number"
+          },
+          "verdict": {
+            "enum": [
+              "stop",
+              "continue",
+              "pending_conflicts"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "screened",
+          "relevant",
+          "remaining",
+          "target_recall",
+          "alpha",
+          "p_value",
+          "minimum_screened_percent",
+          "minimum_met",
+          "pending_conflicts",
+          "verdict",
+          "stop",
+          "method"
+        ],
+        "title": "StopStatus",
+        "type": "object"
+      },
       "StoppingPlan": {
         "additionalProperties": false,
         "description": "When an M3 topic may stop screening in AI order.",
@@ -1932,6 +3028,44 @@
         "title": "TextQuote",
         "type": "object"
       },
+      "UndoRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "command_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "expected_etag": {
+            "title": "Expected Etag",
+            "type": "string"
+          }
+        },
+        "required": [
+          "command_id",
+          "expected_etag"
+        ],
+        "title": "UndoRequest",
+        "type": "object"
+      },
+      "UndoResult": {
+        "additionalProperties": false,
+        "properties": {
+          "etag": {
+            "title": "Etag",
+            "type": "string"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "etag",
+          "recorded_at"
+        ],
+        "title": "UndoResult",
+        "type": "object"
+      },
       "UploadedDocument": {
         "additionalProperties": false,
         "properties": {
@@ -2065,6 +3199,59 @@
         ],
         "title": "WordBox",
         "type": "object"
+      },
+      "kittum__protocol__model__Outcome": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "definition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "extensions": {
+            "$ref": "#/components/schemas/Extensions"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "name": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "category",
+          "name"
+        ],
+        "title": "Outcome",
+        "type": "object"
+      },
+      "kittum__screening__types__Outcome": {
+        "enum": [
+          "include",
+          "exclude",
+          "unclear",
+          "insufficient_information"
+        ],
+        "type": "string"
       }
     }
   },
@@ -2883,6 +4070,546 @@
         "summary": "Publish Protocol Version",
         "tags": [
           "protocol"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/screening/adjudications": {
+      "get": {
+        "description": "Open conflicts the caller did not screen. The AI column opens after the decision.",
+        "operationId": "listScreeningAdjudications",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope_id",
+            "required": true,
+            "schema": {
+              "title": "Scope Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "stage",
+            "required": true,
+            "schema": {
+              "enum": [
+                "title_abstract",
+                "full_text"
+              ],
+              "title": "Stage",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Needed only when the scope is screened in several topics.",
+            "in": "query",
+            "name": "topic_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Needed only when the scope is screened in several topics.",
+              "title": "Topic Id"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AdjudicationItem"
+                  },
+                  "title": "Response Listscreeningadjudications",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Adjudications",
+        "tags": [
+          "screening"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/screening/adjudications/{conflict_id}/decide": {
+      "post": {
+        "operationId": "decideScreeningAdjudication",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conflict_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conflict Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdjudicateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdjudicationResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Adjudicate",
+        "tags": [
+          "screening"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/screening/assignments/{assignment_id}/decide": {
+      "post": {
+        "description": "A provisional decision, then a final one if the AI was revealed.",
+        "operationId": "decideScreeningAssignment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "assignment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Assignment Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecideResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Decide",
+        "tags": [
+          "screening"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/screening/assignments/{assignment_id}/undo": {
+      "post": {
+        "operationId": "undoScreeningDecision",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "assignment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Assignment Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UndoRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UndoResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Undo",
+        "tags": [
+          "screening"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/screening/queue": {
+      "get": {
+        "description": "The reviewer's next undecided assignments in queue order, after `after`.",
+        "operationId": "getScreeningQueue",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope_id",
+            "required": true,
+            "schema": {
+              "title": "Scope Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "stage",
+            "required": true,
+            "schema": {
+              "enum": [
+                "title_abstract",
+                "full_text"
+              ],
+              "title": "Stage",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Needed only when the scope is screened in several topics.",
+            "in": "query",
+            "name": "topic_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Needed only when the scope is screened in several topics.",
+              "title": "Topic Id"
+            }
+          },
+          {
+            "description": "The last assignment the client holds.",
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Id"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The last assignment the client holds.",
+              "title": "After"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 5,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/QueueItem"
+                  },
+                  "title": "Response Getscreeningqueue",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Queue",
+        "tags": [
+          "screening"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/screening/status": {
+      "get": {
+        "description": "A screener's own counts, or the whole stage for anyone who does not screen it.",
+        "operationId": "getScreeningStatus",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope_id",
+            "required": true,
+            "schema": {
+              "title": "Scope Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "stage",
+            "required": true,
+            "schema": {
+              "enum": [
+                "title_abstract",
+                "full_text"
+              ],
+              "title": "Stage",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Needed only when the scope is screened in several topics.",
+            "in": "query",
+            "name": "topic_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Needed only when the scope is screened in several topics.",
+              "title": "Topic Id"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScopeStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Status Route",
+        "tags": [
+          "screening"
         ]
       }
     },
