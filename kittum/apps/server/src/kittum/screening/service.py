@@ -299,7 +299,7 @@ class Screening:
                     key = sort_key(
                         seed, ref, "" if shared and role == "screener" else str(reviewer)
                     )
-                    assignments.append((new_id(), stage_id, ref, reviewer, role, key, _etag()))
+                    assignments.append((_random_id(), stage_id, ref, reviewer, role, key, _etag()))
             info = StageInfo(
                 stage_id=stage_id,
                 project_id=project_id,
@@ -873,7 +873,7 @@ class Screening:
                 rescreen = _Rescreen(
                     item_ref=ref,
                     reason=reason,
-                    assignment_id=None if has_auditor else new_id(),
+                    assignment_id=None if has_auditor else _random_id(),
                     sort_key=sort_key(row["seed"], ref, str(row["auditor_id"])),
                 )
         auditor = next((d for role, d in finals if role == "auditor"), None)

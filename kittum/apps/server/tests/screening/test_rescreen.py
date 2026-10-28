@@ -133,6 +133,8 @@ def test_m1_ai_include_goes_to_a_blind_extra_screen_in_the_audit_stream(
     assert len(others) >= 2  # at least one random audit sample besides it, and the sentinel
     assert len({frozenset(i.model_dump()) for i in stream}) == 1
     assert len({i.phase for i in stream}) == 1 and all(i.reveal is None for i in stream)
+    # Random IDs: a time-ordered ID would show which item was added after the stage opened.
+    assert {i.assignment_id.version for i in stream} == {4}
 
     overrides = {} if auditor_agrees else {GLPG: Decision(outcome="include")}
     the_auditor_screens(world, overrides)
