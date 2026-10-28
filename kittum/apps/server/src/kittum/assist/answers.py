@@ -30,6 +30,7 @@ from kittum.protocol import (
     ReviewQuestion,
     compile,
     path_of,
+    strategy_dialect,
     strategy_problems,
 )
 
@@ -207,12 +208,34 @@ def normal(document: dict[str, Any]) -> dict[str, Any]:
     return ReviewProtocol.model_validate(document).model_dump(mode="json")
 
 
+_DIALECT_NAMES = {"pubmed": "PubMed", "ctgov": "ClinicalTrials.gov"}
+
+
+def _missing_strategies(document: dict[str, Any]) -> list[ProtocolIssue]:
+    """A draft's PubMed and ClinicalTrials.gov sources without a strategy. The prompt asks for
+    both; a hand-written protocol may leave any strategy out."""
+    protocol = ReviewProtocol.model_validate(document)
+    return [
+        _issue(
+            path_of("search_topics", ti, "source_plan", "sources", si, "strategy"),
+            f"write the {_DIALECT_NAMES[dialect]} search strategy for this source",
+        )
+        for ti, topic in enumerate(protocol.search_topics)
+        for si, source in enumerate(topic.source_plan.sources)
+        if (dialect := strategy_dialect(source)) and not (source.strategy or "").strip()
+    ]
+
+
 def draft(backend: LlmBackend, recipe_id: str, description: str, language: str = "en") -> Answer:
     """A first protocol from the lead's description of the review."""
 
     def check(data: Any) -> tuple[Any, list[ProtocolIssue]]:
-        # The same path a hand-written source takes: schema, cross-checks, profile rules.
-        return _compiled(data)
+        # The same path a hand-written source takes: schema, cross-checks, profile rules; then
+        # what only a draft must have.
+        document, issues = _compiled(data)
+        if document is not None:
+            issues = _missing_strategies(document)
+        return (None, issues) if issues else (document, [])
 
     document, use, issues, raw = _converse(
         backend,
