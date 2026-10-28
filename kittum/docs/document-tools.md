@@ -9,6 +9,8 @@ pinning: weights licences change more often than code licences.
 Kittum is AGPL-3.0-or-later. The [licence policy](../DESIGN.md#licence-policy) allows code
 licences compatible with AGPL-3.0, including AGPL and GPL-3.0. It blocks non-commercial terms, revenue or user
 caps, field-of-use limits, and no-competition clauses, in code and in weights.
+Kittum supports only models that meet this policy. It ships no adapters or recipes for models
+under restrictive terms, even ones a user could download themselves.
 [Dependencies](dependencies.md) covers the rest of the stack.
 
 ## What Kittum needs from a parser

@@ -613,7 +613,7 @@ forbid it.
 
 ## Stack
 
-- **Python 3.13** with uv, FastAPI, Pydantic v2, psycopg 3, and plain SQL migrations (dbmate) for
+- **Python 3.14** with uv, FastAPI, Pydantic v2, psycopg 3, and plain SQL migrations (dbmate) for
   everything that touches documents, models, and statistics. PyMuPDF, Docling, GROBID clients,
   PydanticAI, vLLM, and Janus are Python. TypeScript has no equivalent of Docling or GROBID.
 - **TypeScript** for the workbench, on the stack of [t3code](https://github.com/pingdotgg/t3code):

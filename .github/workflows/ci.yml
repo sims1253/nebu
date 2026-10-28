@@ -99,3 +99,64 @@ jobs:
           path: |
             janus/apps/web/test-results
             janus/apps/web/playwright-report
+
+  kittum-python:
+    name: Kittum Python (ruff, ty, pytest with Postgres 18)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: kittum
+          POSTGRES_PASSWORD: kittum
+          POSTGRES_DB: kittum
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U kittum" --health-interval 2s --health-timeout 3s
+          --health-retries 30
+    env:
+      KITTUM_DATABASE_URL: postgresql://kittum:kittum@127.0.0.1:5432/kittum
+    defaults:
+      run:
+        working-directory: kittum/apps/server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - run: uv run --no-sync ruff format --check src tests
+      - run: uv run --no-sync ruff check src tests
+      - run: uv run --no-sync ty check src
+      - name: Migrate
+        run: >-
+          docker run --rm --network host -v "$PWD/db:/db"
+          -e DATABASE_URL="postgres://kittum:kittum@127.0.0.1:5432/kittum?sslmode=disable"
+          ghcr.io/amacneil/dbmate:2 --migrations-dir /db/migrations --no-dump-schema --wait up
+      - run: uv run --no-sync pytest
+
+  kittum-web:
+    name: Kittum TypeScript (format, lint, typecheck, tests, knip, build, contracts)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: kittum
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: kittum/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: pnpm
+          cache-dependency-path: kittum/pnpm-lock.yaml
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - name: Generated contracts match the server
+        run: pnpm contracts:generate && git diff --exit-code -- packages/contracts

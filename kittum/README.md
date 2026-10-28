@@ -5,7 +5,9 @@ runs the review from the protocol to the Modul 4 annexes. AI screens and extract
 reviewers, and every decision lands in a hash-chained ledger. The deliverable is the dossier output
 plus one database file that holds the whole audit trail.
 
-Status: design only. No code exists yet.
+Status: scaffold. Every module has its interface and the shared fakes; the work is split into
+[work packages](docs/work-packages.md). [AGENTS.md](AGENTS.md) explains how to build, test, and
+work on it in parallel.
 
 ## Documents
 
@@ -19,6 +21,7 @@ Status: design only. No code exists yet.
   for fit, quality, and maintenance.
 - [Requirements and standards](docs/requirements.md): what IQWiG, G-BA, PRISMA, RAISE, the EU HTA
   Regulation, the EU AI Act, and GDPR require of the system.
+- [Work packages](docs/work-packages.md): the build split into independent pieces, with status.
 - [Council record](docs/council.md): how the design was reached, where the council disagreed, and
   which claims were checked.
 
