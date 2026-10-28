@@ -147,7 +147,9 @@ describe("extraction review", () => {
     // the source down to its bottom edge. Until they load, the scroll stops short.
     await expect
       .poll(() =>
-        [...document.querySelectorAll<HTMLImageElement>("[data-page] img")].every((i) => i.complete),
+        [...document.querySelectorAll<HTMLImageElement>("[data-page] img")].every(
+          (i) => i.complete,
+        ),
       )
       .toBe(true);
     const [first, second] = [
