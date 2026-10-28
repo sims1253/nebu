@@ -17,7 +17,7 @@ The two-week spike in [DESIGN.md](../DESIGN.md#two-week-spike) picks from these 
 | 03 | `protocol` | First-cut types; open |
 | 04 | `gateway` | Done: httpx transport, policies, shared buckets, budgets, cache, attempts; AppContext wiring open |
 | 05 | `search` | Types done; open |
-| 06 | `enrich` | Types done; open |
+| 06 | `enrich` | Clients, stored enrichment, and full-text waterfall done; local tagging open |
 | 07 | `corpus` | Types done; open |
 | 08 | `judge` and `models` | Types and recorded backend done; open |
 | 09 | `screening` | Types done; open |
@@ -172,10 +172,22 @@ Module `kittum.search`. Needs: `gateway`, `protocol`, `ledger`.
 
 Module `kittum.enrich`. Needs: `gateway`, `search`, `models`.
 
-- OpenAlex, Crossref (retractions through `update-to`, `clinical-trial-number`), Europe PMC,
-  Unpaywall, PubTator 3, with "first healthy source" and batched lookups.
-- Local entity tagging with the OpenMed GLiNER models, for text that must stay local.
-- Acceptance: recorded responses; a retracted DOI is flagged.
+- Done: OpenAlex (works by DOI and PMID in OR batches, inverted-index abstracts, OA locations),
+  Crossref (`update-to`, `updated-by`, and `relation` notices, `clinical-trial-number`, polite
+  pool), Europe PMC (batched ID search, `synonym=FALSE`, full-text availability), Unpaywall (best
+  OA location and licence), and PubTator 3 (BioC JSON entities re-anchored in the title plus
+  abstract).
+- Done: "first healthy source" per field. A source that errors or is out of budget is recorded in
+  `Enrichment.failures` and the next one answers; `FieldSource` records which source supplied each
+  field. Identifier lookups batch where the API allows.
+- Done: `enrich(tx, project_id, records, gateway)` writes one `record_enrichment` row per
+  occurrence, replacing an earlier row for the same occurrence. `EnrichmentConfig` carries the
+  contact email and OpenAlex key that entry points map from `Settings`.
+- Done: `full_text_candidates` lists Europe PMC XML and PDF, then Unpaywall, then OpenAlex file
+  URLs, each with its licence.
+- Done: recorded real responses in `tests/enrich/fixtures/`, including a retracted paper whose
+  Crossref notice DOI is flagged.
+- Open: local entity tagging with the OpenMed GLiNER models, for text that must stay local.
 
 ## WP-07 Corpus
 
