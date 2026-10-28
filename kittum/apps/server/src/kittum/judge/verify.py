@@ -71,8 +71,9 @@ _SLOT_WORDS: dict[str, frozenset[str]] = {
 }
 
 _NEGATION_WORDS = _vocabulary(
-    """no not without never none neither nor absence absent lack lacking naive untreated
-    excluding except kein keine keiner nicht ohne"""
+    """no not without never none neither nor nobody nothing absence absent lack lacking naive
+    untreated excluding except cannot didn doesn don isn aren wasn weren hasn haven hadn
+    kein keine keiner keinen keinem keines nicht ohne nie niemals weder ausgenommen"""
 )
 
 # Cues anywhere in the quote's sentence that turn its meaning around or make it two-sided.
@@ -84,7 +85,8 @@ _SCOPE_CUES = re.compile(
     re.IGNORECASE,
 )
 
-_SENTENCE_END = re.compile(r"(?<=[.;!?])\s+|\n+")
+# A line break alone does not end a sentence: abstracts are often wrapped mid-sentence.
+_SENTENCE_END = re.compile(r"(?<=[.;!?])\s+|\n\s*\n")
 
 # Text in a record that addresses the model. The only harmful effect of an injection is an
 # exclusion, so a record that matches cannot be excluded by the judge.
@@ -101,7 +103,22 @@ _INJECTION = re.compile(
     r"(record|study|article|abstract|paper|criteri\w*)\b"
     r"|\bnot_met\b"
     r"|<\|[a-z_]+\|?>|<\|?[a-z_]+\|>|</?record\b"
-    r"|ignoriere\s+(alle\s+)?(vorherigen|bisherigen|obigen)\s+anweisungen",
+    r"|ignoriere\s+(alle\s+)?(vorherigen|bisherigen|obigen)\s+anweisungen"
+    # Directives aimed at whoever assesses the record: "output a negative decision", "for
+    # eligibility assessment, ...", "using this evidence", "actual methods:".
+    r"|\b(output|return|give|produce|emit|issue|assign|reach|respond\s+with)"
+    r"\s+(an?\s+|the\s+|your\s+)?(negative|positive|exclusion|inclusion|exclude|include)"
+    r"\s+(decision|verdict|label|answer|rating|judge?ment|classification|status)"
+    r"|\b(negative|positive)\s+(screening\s+|eligibility\s+)?(decision|verdict|classification)"
+    r"|\bfor\s+(the\s+)?(eligibility|inclusion|exclusion)\s+(assessment|decision|review|check)"
+    r"|\b(decide|mark|classify|label|flag|treat|consider|deem)\s+(this|the)\s+"
+    r"(record|study|trial|article|abstract|paper|publication|citation)\s+(as\s+)?"
+    r"(excluded|included|ineligible|eligible|irrelevant|relevant|not\s+relevant)"
+    r"|\b(exclude|include|reject|accept)\s+(this|the)\s+"
+    r"(record|study|article|abstract|paper|publication|citation)\b"
+    r"|\busing\s+this\s+evidence\b"
+    r"|\b(actual|real|true)\s+(methods|results|data|population)\s*:"
+    r"|\bnote\s+to\s+(the\s+)?(reviewers?|assessors?|screeners?|evaluators?|models?|ai)\b",
     re.IGNORECASE,
 )
 
@@ -148,19 +165,22 @@ def _sentence_around(source: str, span: Span) -> tuple[str, str]:
     return source[starts[-1] : span.start], source[span.end : end]
 
 
+def _negative(text: str) -> bool:
+    return any(w in _NEGATION_WORDS for w in _words(text))
+
+
 def _negation_flips(quote: str, criterion: Criterion, source: str, spans: tuple[Span, ...]) -> bool:
-    criterion_negative = any(w in _NEGATION_WORDS for w in _words(criterion.text_en))
-    quote_negative = any(w in _NEGATION_WORDS for w in _words(quote))
-    # "Without prior chemotherapy" does not contradict "no prior chemotherapy".
-    if quote_negative and criterion_negative:
+    # "Without prior chemotherapy" does not contradict "no prior chemotherapy" or "keine
+    # vorherige Chemotherapie": every wording the protocol gives counts.
+    wordings = (criterion.text_en, criterion.text_de)
+    if _negative(quote) and any(_negative(w) for w in wordings if w.strip()):
         return True
     for span in spans:
         before, after = _sentence_around(source, span)
-        # "We excluded patients without ...", "patients with or without ..."
-        if _SCOPE_CUES.search(f"{before} {quote} {after}"):
-            return True
-        # A negation just before the quote that the model left out: "no [prior chemotherapy]".
-        if any(w in _NEGATION_WORDS for w in _words(before)[-3:]):
+        # "We excluded patients without ...", "patients with or without ...", "[patients
+        # without prior chemotherapy] did not participate": any negation or exclusion in the
+        # rest of the sentence may reverse the quote, so the exclusion goes to a human.
+        if _SCOPE_CUES.search(f"{before} {quote} {after}") or _negative(f"{before} {after}"):
             return True
     return False
 

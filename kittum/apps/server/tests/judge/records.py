@@ -190,11 +190,15 @@ ANSWERS = {
 }
 
 
-def recorded(*items: ScreeningItem, answers: dict[str, str] | None = None) -> RecordedBackend:
+def recorded(
+    *items: ScreeningItem,
+    answers: dict[str, str] | None = None,
+    criteria: tuple[Criterion, ...] = CRITERIA,
+) -> RecordedBackend:
     """A backend that knows the first-attempt answer for each item."""
     answers = answers or ANSWERS
     table = {}
     for it in items:
-        request = build_request(it, applicable(CRITERIA, SCOPE, it), CONFIG)
+        request = build_request(it, applicable(criteria, SCOPE, it), CONFIG)
         table[RecordedBackend.key(request)] = answers[it.item_ref]
     return RecordedBackend(table, model_identity="Qwen/Qwen3.8-27B")
