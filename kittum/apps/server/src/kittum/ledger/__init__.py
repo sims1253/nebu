@@ -11,8 +11,21 @@ the Postgres store, the SQLite handover bundle, and the offline `verify` tool ag
 - `checkpoint` signs the chain head with an Ed25519 `SigningKey`. A hash chain alone cannot show
   that its end was cut or that it was rewritten from some point on; `verify` against a checkpoint
   can.
+- `seal` writes a handover bundle; `verify_bundle` (and `kittum verify`) checks one offline.
+  Modules add their tables to bundles with `register_exporter`.
 """
 
+from kittum.ledger.bundle import (
+    EXPORTERS,
+    Bundle,
+    BundleReport,
+    BundleWriter,
+    Exporter,
+    ExporterRegistry,
+    register_exporter,
+    seal,
+    verify_bundle,
+)
 from kittum.ledger.chain import GENESIS_HASH, event_hash, payload_hash
 from kittum.ledger.keys import SigningKey, VerifyKey
 from kittum.ledger.model import (
@@ -29,10 +42,16 @@ from kittum.ledger.sqlite import SqliteLedger
 from kittum.ledger.verify import verify_chain
 
 __all__ = [
+    "EXPORTERS",
     "GENESIS_HASH",
     "AuditEvent",
+    "Bundle",
+    "BundleReport",
+    "BundleWriter",
     "Checkpoint",
     "EventDraft",
+    "Exporter",
+    "ExporterRegistry",
     "Ledger",
     "LedgerIntegrityError",
     "PostgresLedger",
@@ -43,5 +62,8 @@ __all__ = [
     "VerifyReport",
     "event_hash",
     "payload_hash",
+    "register_exporter",
+    "seal",
+    "verify_bundle",
     "verify_chain",
 ]
