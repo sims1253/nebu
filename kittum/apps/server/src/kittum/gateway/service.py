@@ -239,11 +239,12 @@ class SourceGateway:
     ) -> HttpResponse:
         attempts[0] += 1
         number = attempts[0]
-        self._wait_for_cooldown(source)
-        self._acquire(source, policy)
-        self._consume_budget(policy)
-
+        # Take the slot first: a request queued behind another must see the cooldown that request
+        # may set, and must not spend a rate token or budget while it waits.
         with self._concurrency(policy):
+            self._wait_for_cooldown(source)
+            self._acquire(source, policy)
+            self._consume_budget(policy)
             started = self._clock.now()
             try:
                 response = self._transport.send(request)

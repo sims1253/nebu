@@ -492,3 +492,53 @@ def test_retry_after_keeps_the_full_deadline(database: Database) -> None:
     assert result.status == 200
     assert sum(sleep.durations) == pytest.approx(7_200.0)
     assert max(sleep.durations) <= 60.0
+
+
+def test_a_request_queued_for_a_slot_honours_a_cooldown_set_meanwhile(database: Database) -> None:
+    import os
+
+    import psycopg
+    from psycopg.pq import TransactionStatus
+
+    from kittum.gateway.service import _advisory_key
+
+    clock = FixedClock(START)
+    deadline = START + timedelta(seconds=30)
+    holder = psycopg.connect(os.environ["KITTUM_DATABASE_URL"])
+    holder.execute("select pg_advisory_xact_lock(%s, 0)", (_advisory_key("crossref"),))
+    sleeps: list[float] = []
+
+    def sleep(seconds: float) -> None:
+        if holder.info.transaction_status != TransactionStatus.IDLE:
+            # First poll for the slot: the request holding it gets a Retry-After, then finishes.
+            holder.execute(
+                "insert into gateway_cooldown (source, until) values ('crossref', %s)"
+                " on conflict (source) do update set until = excluded.until",
+                (deadline,),
+            )
+            holder.commit()
+        sleeps.append(seconds)
+        clock.advance(timedelta(seconds=seconds))
+
+    sent_at: list[object] = []
+
+    class StampingTransport:
+        def send(self, _request: HttpRequest) -> HttpResponse:
+            sent_at.append(clock.now())
+            return response(200, b"ok")
+
+    gateway = _gateway(
+        database,
+        StampingTransport(),
+        policies=[_policy("crossref", concurrency=1)],
+        clock=clock,
+        sleep=sleep,
+        buckets="memory",
+    )
+    try:
+        gateway.fetch("crossref", _request("https://api.crossref.org/works/queued"))
+    finally:
+        holder.close()
+
+    assert sent_at == [sent_at[0]]
+    assert sent_at[0] >= deadline
