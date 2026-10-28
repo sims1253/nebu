@@ -231,9 +231,11 @@ register_job_handler(JUDGE_JOB, _judge_jobs)
 
 
 def _extraction_jobs(ctx: AppContext) -> Handler | None:
-    if not ctx.backends or ctx.queue is None or ctx.receipts is None:
-        log.warning("no model server or job queue is configured, so no %s jobs", EXTRACTION_JOB)
+    if ctx.queue is None or ctx.receipts is None:
+        log.warning("no job queue is configured, so this worker runs no %s jobs", EXTRACTION_JOB)
         return None
+    # Without a model server a run still takes the Janus path; one that asks for the agent gets
+    # its LLM proposals recorded as errors naming the missing backend.
     commands = Commands(ctx.require_ledger(), ctx.queue, ctx.receipts, ctx.clock)
     return run_handler(
         db=ctx.db,
