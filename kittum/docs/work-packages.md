@@ -168,10 +168,12 @@ Done:
   `protocol.assist` ledger event with every attempt, also for an answer that never compiled.
   `accept` (some changes), `restore`, and `save_edit` add revisions; `assist_revision` is
   append-only.
-- AI marks by value: a field is the model's while its value is one a model wrote for that kind
-  of field (its path without object IDs, so renamed and moved objects keep theirs) in the
+- AI marks by value: a field is the model's while its value is one a model wrote in the
   project's assistant history (draft, suggestion, or accepted selection), whichever way the
-  document was saved. `kittum.protocol.publish` asks every registered `Attribution`; importing
+  document was saved. Free text (a string field of the schema without enumeration, constant, or
+  pattern) matches by kind of field, its path without object IDs, so renamed and moved objects
+  keep their marks; choices (enums, a source's name and platform), numbers, and booleans match at
+  the exact path; IDs are never marked. `kittum.protocol.publish` asks every registered `Attribution`; importing
   `kittum.assist` registers the assistant's, so publications from the workbench, an assistant
   revision, and the CLI all record `ai_parts`. With none registered, publishing a project that has
   assistant revisions raises `ProtocolStateError`. The `ai_disclosure` report lists them with every assistant request.

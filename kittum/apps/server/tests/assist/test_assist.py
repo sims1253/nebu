@@ -270,25 +270,32 @@ def test_a_lead_drafts_improves_and_publishes_a_protocol_with_the_assistant(pg: 
     ]
     ctx.assistant = Assistant(recipe_id=recipe_id, backend=backend)
 
-    # The lead brings in the example protocol as their own text. What says, word for word, what
-    # the model wrote for that kind of field is the model's (a criterion's polarity, the
-    # platform), and nothing else: none of the example's own criteria texts.
+    # The lead brings in the example protocol as their own text. Only words the model wrote for
+    # that kind of field are the model's ("Serious adverse events" as an outcome's name); the
+    # example's choices and numbers are its own, though the draft chose the same elsewhere.
     example = yaml.safe_load(EXAMPLE.read_text())
     mine = save(example)
     assert (mine["kind"], mine["parent_id"]) == ("edit", moved["id"])
+    shared = {m["path"] for m in mine["ai_parts"]}
+    assert shared == {"outcomes[sae].name.en"}
 
     def kind(path: str) -> str:
         return re.sub(r"\[[^\]]*\]", "[*]", path)
 
-    drafted_values = {(kind(p), json.dumps(v)) for p, v in written(draft["document"]).items()}
-    shared = {
+    drafted_choices = {
+        (kind(p), json.dumps(v))
+        for p, v in written(draft["document"]).items()
+        if p.endswith((".polarity", ".max_age_months", ".platform", ".random_audit_percent"))
+    }
+    own_choices = {
         p
         for p, v in written(mine["document"]).items()
-        if (kind(p), json.dumps(v)) in drafted_values
+        if (kind(p), json.dumps(v)) in drafted_choices
     }
-    assert {m["path"] for m in mine["ai_parts"]} == shared
-    assert "search_topics[TRIALS].source_plan.sources[medline].platform" in shared
-    assert not any(p.endswith(".text.en") for p in shared)
+    assert "search_topics[TRIALS].criteria[INT].polarity" in own_choices  # chosen alike
+    assert "search_topics[TRIALS].freshness.max_age_months" in own_choices
+    assert "search_topics[TRIALS].source_plan.sources[medline].platform" in own_choices
+    assert not shared & own_choices
     broken = {**example, "questions": []}
     refused = client.post(f"{url}/revisions", json={"source": broken}, headers=lead)
     assert (

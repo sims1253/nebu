@@ -1,15 +1,17 @@
 """Assistant revisions in Postgres, the marks on what a model wrote, and publishing a revision.
 
 Every revision compiles. What a model wrote is attributed by value, from the project's whole
-assistant history: a field is the model's when its value is one a model wrote for that kind of
-field (the path without object IDs) in a draft, a suggestion, or an accepted selection, however
-the document was saved since (an accepted change, the lead's own text with or without a base, a
-restore, the plain editor, the CLI). A person who changes the value takes the field over;
-changing it back gives it back to the model. Marks are computed when revisions are read, from the
-history up to each one, and at every publication from all of it (`ai_parts_for`, registered with
+assistant history (drafts, suggestions, accepted selections), however the document was saved
+since: an accepted change, the lead's own text with or without a base, a restore, the plain
+editor, the CLI. Free text is the model's when a model wrote those words for that kind of field
+anywhere, whatever the object is now called or wherever it moved; choices, numbers, and booleans
+only at the same path. A person who changes a value takes the field over; changing it back gives
+it back to the model. Marks are computed when revisions are read, from the history up to each
+one, and at every publication from all of it (`ai_parts_for`, registered with
 `kittum.protocol.register_attribution` when `kittum.assist` is imported).
 """
 
+import functools
 import json
 import re
 from typing import TYPE_CHECKING, Any
@@ -28,13 +30,14 @@ from kittum.assist.model import (
     RevisionKind,
     Suggestion,
 )
-from kittum.assist.paths import changed_written, written
+from kittum.assist.paths import changed_written, steps, written
 from kittum.core import Id, NotFoundError, new_id
 from kittum.ledger import EventDraft
 from kittum.protocol import (
     ProtocolDiff,
     ProtocolError,
     ProtocolVersion,
+    ReviewProtocol,
     StoredProtocol,
     compile,
     diff,
@@ -73,18 +76,15 @@ def _from_row(row: dict[str, Any]) -> ProtocolRevision:
 
 
 class _History:
-    """What models wrote, by the kind of field and its value, in revision order, and where a
-    person first kept it.
+    """What models wrote, by field and value, in revision order, and where a person first kept it.
 
-    The kind of a field is its path without the IDs of the objects on the way
-    (`search_topics[*].criteria[*].text.en`), so a value stays the model's when its criterion is
-    renamed, moved to another topic, or its question reordered: a value a model wrote for that
-    kind of field anywhere in the project's history is the model's wherever it appears. This
-    errs on the side of naming the model, the safe side for a disclosure.
-
-    A draft wrote every field; a suggestion the fields it changes. Accepting some of a suggestion's
-    changes writes, in the model's name, the values that selection makes (a strategy with two of
-    three edits is text no model revision held)."""
+    Free text (a title, a criterion's text, a population, a strategy, an outcome's name, a
+    rationale) is matched by the kind of field, its path without the IDs of the objects on the
+    way (`search_topics[*].criteria[*].text.en`): the words stay the model's when their criterion
+    is renamed or moved, or their question reordered. Choices (IDs, a polarity, a mode, a kind, a
+    source's name and platform), numbers, and booleans are matched at their exact path, so a
+    lead's own protocol that happens to choose what a model chose elsewhere is not the model's.
+    Free text errs on the side of naming the model, the safe side for a disclosure."""
 
     def __init__(self) -> None:
         self._written: dict[tuple[str, str], ProtocolRevision] = {}
@@ -132,12 +132,54 @@ class _History:
 
 
 _IDS = re.compile(r"\[[^\]]*\]")
+_SCHEMA = ReviewProtocol.model_json_schema(mode="validation")
+# Free strings in the schema that name an entry of the source list rather than say anything.
+_CHOSEN = frozenset(
+    {
+        "search_topics[*].source_plan.sources[*].name",
+        "search_topics[*].source_plan.sources[*].platform",
+    }
+)
 
 
 def _key(item: tuple[str, Any]) -> tuple[str, str]:
-    """The kind of field at a path, and its value."""
+    """Where a value counts as the same field: its kind for free text, its path otherwise."""
     path, value = item
-    return _IDS.sub("[*]", path), json.dumps(value, sort_keys=True, ensure_ascii=False)
+    kind = _IDS.sub("[*]", path)
+    return kind if _free_text(kind) else path, json.dumps(value, sort_keys=True, ensure_ascii=False)
+
+
+@functools.cache
+def _free_text(kind: str) -> bool:
+    """Whether the protocol's schema makes the field at `kind` free text: a string, or a list of
+    strings, with no enumeration, constant, or pattern (an ID's). Unknown paths are not."""
+    if kind in _CHOSEN or kind.rsplit(".", 1)[-1] == "id":
+        return False
+    defs = _SCHEMA.get("$defs", {})
+
+    def resolve(node: dict[str, Any]) -> dict[str, Any]:
+        while True:
+            if "$ref" in node:
+                node = defs[node["$ref"].rsplit("/", 1)[-1]]
+            elif "anyOf" in node:
+                node = next(b for b in node["anyOf"] if b != {"type": "null"})
+            else:
+                return node
+
+    node = resolve(_SCHEMA)
+    try:
+        for step in steps(kind):
+            if isinstance(step, tuple):
+                node = resolve(node["items"])
+            elif "properties" in node:
+                node = resolve(node["properties"][step])
+            else:  # a mapping, such as a text per language
+                node = resolve(node["additionalProperties"])
+    except KeyError, TypeError, StopIteration:
+        return False
+    if node.get("type") == "array" and isinstance(node.get("items"), dict):
+        node = resolve(node["items"])
+    return node.get("type") == "string" and not {"enum", "const", "pattern"} & set(node)
 
 
 def _history(tx: Tx, project_id: Id) -> tuple[_History, list[ProtocolRevision]]:

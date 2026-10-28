@@ -71,14 +71,16 @@ def replace(document: Any, path: str, value: Any) -> Any:
 
 
 # Fields that hold no writing: the format version and the default language, which every
-# protocol shares, and the profile, which only a lead names.
+# protocol shares, the profile, which only a lead names, and IDs, which name their object.
 _UNWRITTEN = frozenset({"schema_version", "default_language", "profile"})
 
 
 def written(document: Any) -> dict[str, Any]:
-    """The leaves someone wrote: everything but format fields and empty values."""
+    """The leaves someone wrote: everything but format fields, IDs, and empty values."""
     return {
-        p: v for p, v in leaves(document).items() if p not in _UNWRITTEN and v not in (None, [], {})
+        p: v
+        for p, v in leaves(document).items()
+        if p not in _UNWRITTEN and p.rsplit(".", 1)[-1] != "id" and v not in (None, [], {})
     }
 
 
