@@ -116,6 +116,34 @@ def add_member_route(project_id: Id, body: AddMemberRequest, ctx: Context) -> Me
         )
 
 
+def _check_lead(ctx: AppContext, project_id: Id, actor_id: Id) -> None:
+    with _errors(), ctx.db.transaction() as tx:
+        # The lead's upload queue names every record; whoever uploads works from it.
+        require_lead(tx, project_id, actor_id)
+
+
+async def lead_pdf(request: Request, ctx: AppContext, project_id: Id, actor_id: Id) -> bytes:
+    """The PDF a lead uploads, read only once the caller is the project's lead (403 otherwise),
+    and only up to `Settings.upload_max_bytes` (413 beyond it, before the rest is read)."""
+    await run_in_threadpool(_check_lead, ctx, project_id, actor_id)
+    limit = ctx.settings.upload_max_bytes
+    too_big = HTTPException(
+        status.HTTP_413_CONTENT_TOO_LARGE,
+        f"the file is larger than the {limit:,} bytes an upload may have",
+    )
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > limit:
+        raise too_big
+    parts: list[bytes] = []
+    size = 0
+    async for part in request.stream():
+        size += len(part)
+        if size > limit:
+            raise too_big
+        parts.append(part)
+    return b"".join(parts)
+
+
 def _attach(
     ctx: AppContext, project_id: Id, item_ref: str, pdf: bytes, actor_id: Id, licence: str | None
 ) -> FullText:
@@ -149,7 +177,7 @@ async def attach_full_text_route(
     licence: Annotated[str | None, Query()] = None,
 ) -> FullText:
     """Upload a record's full text (the human end of the full-text waterfall)."""
-    pdf = await request.body()
+    pdf = await lead_pdf(request, ctx, project_id, actor_id)
     try:
         with _errors():
             return await run_in_threadpool(
@@ -209,7 +237,7 @@ async def attach_sentinel_route(
     licence: Annotated[str | None, Query()] = None,
 ) -> FullText:
     """Upload a report with a known outcome; full-text stages seed it into every queue."""
-    pdf = await request.body()
+    pdf = await lead_pdf(request, ctx, project_id, actor_id)
     try:
         with _errors():
             return await run_in_threadpool(

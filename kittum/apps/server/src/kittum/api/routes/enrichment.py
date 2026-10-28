@@ -15,7 +15,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from starlette.concurrency import run_in_threadpool
 
 from kittum.api import AppContext, Context  # noqa: TC001 - FastAPI resolves it at runtime
-from kittum.api.routes.projects import Viewer  # noqa: TC001 - FastAPI resolves it at runtime
+from kittum.api.routes.projects import Viewer, lead_pdf
 from kittum.app import (
     AttemptView,
     EnrichmentRun,
@@ -283,8 +283,9 @@ async def upload(
     licence: Annotated[str | None, Query()] = None,
 ) -> UploadResult:
     """One PDF of a bulk upload: attached to the report its file name or first pages match, or
-    held for the lead when it matches none or several. 415 for a file that is not a PDF."""
-    pdf = await request.body()
+    held for the lead when it matches none or several. 415 for a file that is not a PDF, 413 for
+    one larger than `KITTUM_UPLOAD_MAX_BYTES`."""
+    pdf = await lead_pdf(request, ctx, project_id, actor_id)
     try:
         with _errors():
             return await run_in_threadpool(

@@ -68,6 +68,8 @@ class Settings:
     # caller; CORE answers only with one.
     semantic_scholar_api_key: str | None = None
     core_api_key: str | None = None
+    # The largest PDF an upload takes, in bytes; a bigger one is refused (413) as it streams in.
+    upload_max_bytes: int = 100_000_000
     llm_endpoints: tuple[LlmEndpoint, ...] = field(default=())
     # A deployment's own model recipes, in the format of kittum/models/recipes.yaml, added to the
     # shipped ones. Hosted APIs go here.
@@ -118,6 +120,7 @@ class Settings:
             openalex_api_key=env.get("KITTUM_OPENALEX_API_KEY"),
             semantic_scholar_api_key=env.get("KITTUM_SEMANTIC_SCHOLAR_API_KEY"),
             core_api_key=env.get("KITTUM_CORE_API_KEY"),
+            upload_max_bytes=int(env.get("KITTUM_UPLOAD_MAX_BYTES", "100000000")),
             llm_endpoints=_endpoints(
                 env.get("KITTUM_LLM_ENDPOINTS", ""), env.get("KITTUM_LLM_API_KEYS", "")
             ),

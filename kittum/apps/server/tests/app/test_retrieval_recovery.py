@@ -60,6 +60,7 @@ OUTAGE = (FIXTURES / "europepmc_outage_503.json").read_bytes()
 CHECKLIST = (PDF_FIXTURES / "jmir" / "app2.pdf").read_bytes()
 
 
+UPLOAD_LIMIT = 2_000_000
 UNPAYWALL = "https://api.unpaywall.org/v2/{}?email=test%40kittum.dev"
 
 
@@ -100,7 +101,10 @@ class Review:
         self.pg, self.db, self.ledger = pg, db, PostgresLedger()
         ctx = AppContext(
             settings=Settings(
-                database_url="unused", artifact_dir=Path("unused"), contact_email=CONTACT_EMAIL
+                database_url="unused",
+                artifact_dir=Path("unused"),
+                contact_email=CONTACT_EMAIL,
+                upload_max_bytes=UPLOAD_LIMIT,
             ),
             db=db,
             artifacts=artifacts,
@@ -376,6 +380,23 @@ def test_a_lead_uploads_a_folder_of_pdfs_and_exports_what_is_still_missing(
         headers={"Content-Type": "application/pdf"},
     )
     assert refused.status_code == 403
+    # Who may upload is settled before the body is read, and no body beyond the limit is read.
+    huge = b"%PDF-1.4\n" + b"0" * (UPLOAD_LIMIT + 1)
+    for actor, status in ((review.sam, 403), (review.lead, 413)):
+        answer = review.client.post(
+            f"/api/projects/{review.pid}/retrieval/uploads",
+            params={"actor_id": actor, "file_name": "huge.pdf"},
+            content=huge,
+            headers={"Content-Type": "application/pdf"},
+        )
+        assert answer.status_code == status, answer.text
+    streamed = review.client.post(
+        f"/api/projects/{review.pid}/retrieval/uploads",
+        params={"actor_id": review.lead, "file_name": "huge.pdf"},
+        content=iter([huge[:UPLOAD_LIMIT], huge[UPLOAD_LIMIT:]]),
+        headers={"Content-Type": "application/pdf"},
+    )
+    assert streamed.status_code == 413
 
     held = review.get("retrieval/uploads")
     assert [h["upload_id"] for h in held] == [named_wrongly["upload_id"], scan["upload_id"]]
