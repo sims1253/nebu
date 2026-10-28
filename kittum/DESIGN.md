@@ -520,8 +520,8 @@ is for the PDF.
   the paper" box and no bulk include or exclude.
 
 Protocol-derived highlights are allowed before the decision, because they come from the protocol
-and not from the AI. They mark protocol terms in the abstract and entities from PubTator or the local OpenMed taggers, such as drug
-and disease.
+and not from the AI. They mark protocol terms in the abstract, and drug and disease entities from
+PubTator or the local OpenMed taggers.
 
 ### Screens
 
