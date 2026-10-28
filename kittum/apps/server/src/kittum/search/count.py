@@ -65,7 +65,7 @@ def count_hits(
     else:
         params = {"query.term": strategy, "pageSize": "1", "countTotal": "true"}
         url = f"{CTGOV_BASE}?{urlencode(params, quote_via=quote)}"
-        source = "ctgov"
+        source = "clinicaltrials"  # the gateway policy's name
     response = gateway.fetch(source, HttpRequest(url=url), use_cache=False)
     raw_hash = artifacts.put(response.body)
     if not 200 <= response.status < 300:

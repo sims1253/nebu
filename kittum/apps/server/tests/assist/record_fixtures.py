@@ -5,7 +5,8 @@ Run once, by hand, with a hosted or local model configured as a deployment confi
     KITTUM_RECIPES_FILE=... KITTUM_LLM_ENDPOINTS=<recipe>=<url> KITTUM_LLM_API_KEYS=<recipe>=<VAR> \\
         uv run python -m tests.assist.record_fixtures <recipe>
 
-With `--replay` it answers from the recorded answers instead and records only the counts.
+It answers from the recordings where it has one and asks the model only for new requests; with
+`--replay` it asks no model and records only the counts; `--no-counts` skips the counts.
 It drafts the protocol from `DESCRIPTION`, improves the example's PubMed strategy and the draft's,
 and counts every strategy the tests count on PubMed and ClinicalTrials.gov. The answers go to
 `kittum/app/demo_data/assist/answers.json`, keyed by request (no key, no address); the counts to
@@ -25,18 +26,27 @@ from kittum import assist
 from kittum.app import recorded_backend
 from kittum.core import new_id
 from kittum.gateway.testing import PassThroughGateway
-from kittum.models import CompletionRequest, ModelRegistry, backends_from_endpoints, request_key
+from kittum.models import (
+    BackendError,
+    CompletionRequest,
+    ModelRegistry,
+    backends_from_endpoints,
+    request_key,
+)
+from kittum.profiles import load_profiles
 from kittum.protocol import compile, strategy_dialect
 from kittum.search import count_hits
 from kittum.settings import Settings
 from kittum.storage import MemoryStore
 from tests.assist.support import (
     ANSWERS,
+    CAPIVASERTIB,
     CONTACT_EMAIL,
     COUNTS,
     DESCRIPTION,
     EXAMPLE,
     PUBMED,
+    QUESTION,
     STACK,
     accepted_subset,
     drafted_pubmed,
@@ -45,15 +55,24 @@ from tests.enrich.record_fixtures import RecordingTransport
 
 
 class Recorder:
-    def __init__(self, inner: Any) -> None:
-        self._inner = inner
+    """Answers from the recordings where there is one, and asks `live` otherwise, keeping every
+    answer: recording again adds the new requests and leaves the others as they were."""
+
+    def __init__(self, recorded: Any, live: Any | None) -> None:
+        self._recorded = recorded
+        self._live = live
         self.answers: dict[str, str] = {}
         self.identity = ""
 
     def complete(self, request: CompletionRequest) -> Any:
-        completion = self._inner.complete(request)
+        try:
+            completion = self._recorded.complete(request)
+        except BackendError:
+            if self._live is None:
+                raise
+            completion = self._live.complete(request)
+            self.identity = completion.model_identity
         self.answers[request_key(request)] = completion.text
-        self.identity = completion.model_identity
         return completion
 
 
@@ -67,15 +86,19 @@ def _strategies(document: dict[str, Any]) -> list[tuple[str, str]]:
     ]
 
 
-def main(recipe_id: str, *, replay: bool = False) -> None:
+def main(recipe_id: str, *, replay: bool = False, counts: bool = True) -> None:
+    load_profiles()
     settings = Settings.from_env()
     store = MemoryStore()
-    if replay:
-        recipe_id, inner = recorded_backend(store)
-    else:
+    recorded_id, recorded = recorded_backend(store)
+    live = None
+    if not replay:
         registry = ModelRegistry.load(local=settings.recipes_file)
-        inner = backends_from_endpoints(settings.llm_endpoints, registry, store)[recipe_id]
-    backend = Recorder(inner)
+        live = backends_from_endpoints(settings.llm_endpoints, registry, store)[recipe_id]
+    assert recorded_id == recipe_id, f"the recordings are from {recorded_id}"
+    backend = Recorder(recorded, live)
+    known = json.loads(ANSWERS.read_text())
+    backend.identity = known["model_identity"]
 
     drafted = assist.draft(backend, recipe_id, DESCRIPTION)
     assert drafted.document, drafted.issues
@@ -92,10 +115,17 @@ def main(recipe_id: str, *, replay: bool = False) -> None:
             )
         print(f"{part}: {[c.rationale for c in changes]}")
 
+    capivasertib = compile(yaml.safe_load(CAPIVASERTIB.read_text())).protocol.model_dump(
+        mode="json"
+    )
+    question = assist.improve(backend, recipe_id, new_id(), capivasertib, QUESTION)
+    assert question.suggestion, question.issues
+    print(f"{QUESTION}: {[(c.field, c.rationale) for c in question.suggestion.changes]}")
     print(f"draft: {len(drafted.model.attempts)} attempts")
     if not replay:
         _write_answers(recipe_id, backend)
-    _record_counts(strategies, store)
+    if counts:
+        _record_counts(strategies, store)
 
 
 def _write_answers(recipe_id: str, backend: Recorder) -> None:
@@ -137,4 +167,4 @@ def _point_stack_at() -> None:
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], replay="--replay" in sys.argv)
+    main(sys.argv[1], replay="--replay" in sys.argv, counts="--no-counts" not in sys.argv)

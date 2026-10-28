@@ -654,7 +654,7 @@ def render_disclosure(review: Review, scope_id: str | None) -> list[RenderedFile
                 [
                     f"`{p['path']}`",
                     p["revision_id"],
-                    p["accepted_in"],
+                    p["accepted_in"] or "at publication",
                     _served_as_assistant(p),
                 ]
                 for p in d["protocol_assistant"]["ai_parts"]

@@ -231,18 +231,23 @@ def test_transport_errors_are_retried_and_http_errors_are_not(registry: ModelReg
     backend = OpenAICompatibleBackend(
         recipe, "http://gpu:8000/v1", store, client=busy.client(), wait_initial=0
     )
-    with pytest.raises(BackendError, match="HTTP 503"):
+    with pytest.raises(BackendError, match="HTTP 503") as busy_error:
         backend.complete(_request(recipe.id))
     assert len(busy.seen) == 1
-    assert any(b"engine busy" in data for data in store.puts)
+    assert b"engine busy" in store.get(busy_error.value.raw_response_hash or "")
+    assert store.get(busy_error.value.raw_request_hash or "") == busy.seen[0].content
 
+    # A server that stays down is a backend error too, naming the request that never got an answer.
+    store = RecordingStore()
     down = Server(*(httpx2.ConnectError("refused") for _ in range(3)))
     backend = OpenAICompatibleBackend(
-        recipe, "http://gpu:8000/v1", MemoryStore(), client=down.client(), wait_initial=0
+        recipe, "http://gpu:8000/v1", store, client=down.client(), wait_initial=0
     )
-    with pytest.raises(httpx2.ConnectError):
+    with pytest.raises(BackendError, match="unreachable: ConnectError") as down_error:
         backend.complete(_request(recipe.id))
     assert len(down.seen) == 3
+    assert down_error.value.raw_response_hash is None
+    assert store.get(down_error.value.raw_request_hash or "") == down.seen[0].content
 
 
 def test_a_hosted_api_gets_its_key_from_the_environment_and_the_recipe_unchanged(

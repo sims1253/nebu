@@ -37,7 +37,6 @@ from kittum.assist.schema import from_strict, strict_schema
 from kittum.assist.store import (
     ASSIST_EVENT,
     accept,
-    ai_parts,
     ai_parts_for,
     compare,
     get_revision,
@@ -66,7 +65,6 @@ __all__ = [
     "SuggestedChange",
     "Suggestion",
     "accept",
-    "ai_parts",
     "ai_parts_for",
     "apply",
     "compare",

@@ -5,7 +5,7 @@
 // the lead publishes one. Fields a model wrote carry its name and revision until a person changes
 // them, and the publication records them for the AI disclosure. Counts are informational.
 import { useRouteContext, useRouter } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
 import type {
@@ -289,109 +289,118 @@ export function Assistant({
   if (!current) return null;
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-[200px_minmax(0,1fr)_minmax(360px,32%)]">
-      <Rail revisions={revisions} at={at} onSelect={setAt} onNewDraft={() => setPrompting(true)} />
-      <RevisionView
-        key={current.id}
-        revision={current}
-        newest={at === revisions.length - 1}
-        position={`${current.seq} of ${revisions.length}`}
-        countOf={countOf}
-        onCount={count}
-        onStep={step}
-        onEditText={() => onEditText(JSON.stringify(current.document, null, 2), current)}
-        onImproved={(outcome) => {
-          if (outcome.revision) return reload(outcome.revision.id);
-          setError(
-            outcome.unchanged
-              ? "The model suggests no change to this part."
-              : `The model's answer did not compile after ${outcome.attempts} attempts: ${(outcome.issues ?? []).map((i) => `${i.path} ${i.message}`).join("; ")}`,
-          );
-          return Promise.resolve();
-        }}
-        onError={setError}
-      />
-      <aside
-        className="min-h-0 overflow-y-auto border-l border-rule-strong bg-paper px-5 py-5"
-        aria-label="Revision details"
-      >
-        {error ? (
-          <p
-            role="alert"
-            className="mb-4 border-l-2 border-exclude pl-3 text-sm text-exclude"
-            data-testid="assist-error"
-          >
-            {error}
-          </p>
-        ) : null}
-        {current.kind === "suggestion" && current.suggestion && current.parent_id ? (
-          <SuggestionReview
-            key={current.id}
-            revision={current}
-            base={revisions.find((r) => r.id === current.parent_id) ?? null}
-            countOf={countOf}
-            onCount={count}
-            onAccept={(ids) =>
-              act(
-                async () =>
-                  (
-                    await run(
-                      workbench.acceptChanges({
-                        ...caller,
-                        suggestionId: current.id,
-                        changeIds: ids,
-                      }),
-                    )
-                  ).id,
-                "The changes were not accepted.",
-              )
-            }
-            onReject={() => setAt(revisions.findIndex((r) => r.id === current.parent_id))}
-          />
-        ) : (
-          <>
-            <Provenance revision={current} revisions={revisions} />
-            {at < revisions.length - 1 ? (
-              <div className="mt-4">
-                <Button
-                  onClick={() =>
-                    void act(
-                      async () =>
-                        (
-                          await run(
-                            workbench.restoreRevision({ ...caller, revisionId: current.id }),
-                          )
-                        ).id,
-                      "The revision was not restored.",
-                    )
-                  }
-                  keys="r"
-                >
-                  Restore revision {current.seq}
-                </Button>
-              </div>
-            ) : null}
-            <Compare revision={current} revisions={revisions} />
-            <Publish
+    <Suggestions.Provider
+      value={new Set(revisions.filter((r) => r.kind === "suggestion").map((r) => r.id))}
+    >
+      <div className="grid h-full min-h-0 grid-cols-[200px_minmax(0,1fr)_minmax(360px,32%)]">
+        <Rail
+          revisions={revisions}
+          at={at}
+          onSelect={setAt}
+          onNewDraft={() => setPrompting(true)}
+        />
+        <RevisionView
+          key={current.id}
+          revision={current}
+          newest={at === revisions.length - 1}
+          position={`${current.seq} of ${revisions.length}`}
+          countOf={countOf}
+          onCount={count}
+          onStep={step}
+          onEditText={() => onEditText(JSON.stringify(current.document, null, 2), current)}
+          onImproved={(outcome) => {
+            if (outcome.revision) return reload(outcome.revision.id);
+            setError(
+              outcome.unchanged
+                ? "The model suggests no change to this part."
+                : `The model's answer did not compile after ${outcome.attempts} attempts: ${(outcome.issues ?? []).map((i) => `${i.path} ${i.message}`).join("; ")}`,
+            );
+            return Promise.resolve();
+          }}
+          onError={setError}
+        />
+        <aside
+          className="min-h-0 overflow-y-auto border-l border-rule-strong bg-paper px-5 py-5"
+          aria-label="Revision details"
+        >
+          {error ? (
+            <p
+              role="alert"
+              className="mb-4 border-l-2 border-exclude pl-3 text-sm text-exclude"
+              data-testid="assist-error"
+            >
+              {error}
+            </p>
+          ) : null}
+          {current.kind === "suggestion" && current.suggestion && current.parent_id ? (
+            <SuggestionReview
+              key={current.id}
               revision={current}
-              onPublish={async (reason) => {
-                const stored = await run(
-                  workbench.publishRevision({ ...caller, revisionId: current.id, reason }),
-                );
-                await router.invalidate();
-                const written = current.ai_parts?.length ?? 0;
-                onPublished(
-                  `Published version ${stored.version.protocol.version_label} from revision ${current.seq}. Your approval is in the ledger` +
-                    (written
-                      ? `, with the ${written} ${written === 1 ? "field" : "fields"} a model wrote.`
-                      : "."),
-                );
-              }}
+              base={revisions.find((r) => r.id === current.parent_id) ?? null}
+              countOf={countOf}
+              onCount={count}
+              onAccept={(ids) =>
+                act(
+                  async () =>
+                    (
+                      await run(
+                        workbench.acceptChanges({
+                          ...caller,
+                          suggestionId: current.id,
+                          changeIds: ids,
+                        }),
+                      )
+                    ).id,
+                  "The changes were not accepted.",
+                )
+              }
+              onReject={() => setAt(revisions.findIndex((r) => r.id === current.parent_id))}
             />
-          </>
-        )}
-      </aside>
-    </div>
+          ) : (
+            <>
+              <Provenance revision={current} revisions={revisions} />
+              {at < revisions.length - 1 ? (
+                <div className="mt-4">
+                  <Button
+                    onClick={() =>
+                      void act(
+                        async () =>
+                          (
+                            await run(
+                              workbench.restoreRevision({ ...caller, revisionId: current.id }),
+                            )
+                          ).id,
+                        "The revision was not restored.",
+                      )
+                    }
+                    keys="r"
+                  >
+                    Restore revision {current.seq}
+                  </Button>
+                </div>
+              ) : null}
+              <Compare revision={current} revisions={revisions} />
+              <Publish
+                revision={current}
+                onPublish={async (reason) => {
+                  const stored = await run(
+                    workbench.publishRevision({ ...caller, revisionId: current.id, reason }),
+                  );
+                  await router.invalidate();
+                  const written = current.ai_parts?.length ?? 0;
+                  onPublished(
+                    `Published version ${stored.version.protocol.version_label} from revision ${current.seq}. Your approval is in the ledger` +
+                      (written
+                        ? `, with the ${written} ${written === 1 ? "field" : "fields"} a model wrote.`
+                        : "."),
+                  );
+                }}
+              />
+            </>
+          )}
+        </aside>
+      </div>
+    </Suggestions.Provider>
   );
 }
 
@@ -579,11 +588,12 @@ function Rail({
 }
 
 /** The dashed petrol rule on what a model wrote, naming the model; a caption where the lead
- * took a model's suggestion, since a draft is the model's throughout. */
+ * kept a model's suggestion, since a draft is the model's throughout. */
 function Written({ marks, children }: { marks: ReadonlyArray<AiMark>; children: ReactNode }) {
+  const suggested = useContext(Suggestions);
   const mark = marks[0];
   if (!mark) return <>{children}</>;
-  const accepted = marks.find((m) => m.accepted_in);
+  const accepted = marks.find((m) => m.accepted_in && suggested.has(m.revision_id));
   return (
     <div
       className="border-l-2 border-dashed border-petrol pl-3"
@@ -601,6 +611,9 @@ function Written({ marks, children }: { marks: ReadonlyArray<AiMark>; children: 
     </div>
   );
 }
+
+/** The IDs of the model's suggestion revisions, so a mark can tell a suggestion from a draft. */
+const Suggestions = createContext<ReadonlySet<string>>(new Set());
 
 function RevisionView({
   revision,

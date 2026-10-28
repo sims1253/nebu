@@ -150,8 +150,8 @@ def _converse(
             attempts.append(
                 ModelAttempt(
                     request_hash=request_key(call),
-                    raw_request_hash=None,
-                    raw_response_hash=None,
+                    raw_request_hash=e.raw_request_hash,
+                    raw_response_hash=e.raw_response_hash,
                     model_identity=None,
                     issues=tuple(issues),
                 )
@@ -160,7 +160,10 @@ def _converse(
         last = completion
         data, issues = _parse(completion.text)
         if not issues:
-            result, issues = check(from_strict(data, answer_model))
+            converted, problems = from_strict(data, answer_model)
+            issues = [_issue(path, message) for path, message in problems]
+            if not issues:
+                result, issues = check(converted)
         attempts.append(
             ModelAttempt(
                 request_hash=completion.request_hash,
@@ -322,7 +325,7 @@ def _part_changes(
     part: str, kind: PartKind, current: dict[str, Any], answer: Any
 ) -> tuple[list[SuggestedChange], list[ProtocolIssue]]:
     model = PART_MODELS[kind]
-    data = answer.replacement.model_dump(mode="json")
+    data = _with_extensions(current, answer.replacement.model_dump(mode="json"))
     data |= {k: current[k] for k in _FIXED_FIELDS if k in current}
     try:
         replacement = model.model_validate(data).model_dump(mode="json")
@@ -350,6 +353,29 @@ def _part_changes(
         )
     ]
     return changes, []
+
+
+def _with_extensions(current: Any, replacement: Any) -> Any:
+    """`replacement` with the profile `extensions` of `current` at every level, objects in lists
+    matched by ID. The model never sees a schema for them, so it can neither drop nor change
+    them; an object it adds gets none."""
+    if isinstance(current, dict) and isinstance(replacement, dict):
+        out = {
+            k: _with_extensions(current[k], v) if k in current else v
+            for k, v in replacement.items()
+        }
+        if "extensions" in current:
+            out["extensions"] = current["extensions"]
+        return out
+    if isinstance(current, list) and isinstance(replacement, list):
+        by_id = {c["id"]: c for c in current if isinstance(c, dict) and "id" in c}
+        return [
+            _with_extensions(by_id[r["id"]], r)
+            if isinstance(r, dict) and r.get("id") in by_id
+            else r
+            for r in replacement
+        ]
+    return replacement
 
 
 def apply(

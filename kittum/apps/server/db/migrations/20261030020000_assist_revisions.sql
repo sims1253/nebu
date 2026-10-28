@@ -2,7 +2,8 @@
 
 -- The protocol assistant's revisions (kittum.assist). Every draft a model writes, every
 -- suggestion it makes, every change a lead accepts, edits, or restores is a new row; none is ever
--- changed or deleted, so stepping back is reading an older row. Every document compiles: an
+-- changed or deleted, so stepping back is reading an older row. What a model wrote is read from
+-- this history by value (kittum.assist), never stored beside a revision. Every document compiles: an
 -- answer that does not is never stored as a revision (its attempts are in the ledger event).
 
 create table assist_revision (
@@ -17,7 +18,6 @@ create table assist_revision (
     model jsonb,
     suggestion jsonb,
     accepted jsonb,
-    ai_parts jsonb not null default '{}',
     note text,
     created_at timestamptz not null default now(),
     unique (project_id, seq),

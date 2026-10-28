@@ -1,9 +1,15 @@
 """Assistant revisions in Postgres, the marks on what a model wrote, and publishing a revision.
 
-Every revision compiles. A new revision carries its parent's AI marks for every field it leaves
-as it was; a field it changes loses its mark unless the model wrote the new value.
+Every revision compiles. What a model wrote is attributed by value, from the project's whole
+assistant history: a field is the model's when its value is one a model wrote at that path, in a
+draft or a suggestion, whichever way the document was saved since (an accepted change, the lead's
+own text with or without a base, a restore, the plain editor, the CLI). A person who changes the
+value takes the field over; changing it back gives it back to the model. Marks are computed when
+revisions are read, from the history up to each one, and at every publication from all of it
+(`ai_parts_for`, registered with `kittum.protocol.register_attribution` at the entry points).
 """
 
+import json
 from typing import TYPE_CHECKING, Any
 
 from psycopg.types.json import Json, Jsonb
@@ -20,7 +26,7 @@ from kittum.assist.model import (
     RevisionKind,
     Suggestion,
 )
-from kittum.assist.paths import changed_written, leaves, written
+from kittum.assist.paths import changed_written, written
 from kittum.core import Id, NotFoundError, new_id
 from kittum.ledger import EventDraft
 from kittum.protocol import (
@@ -35,8 +41,6 @@ from kittum.protocol import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
-
     from kittum.db import Tx
     from kittum.ledger import Ledger
 
@@ -44,7 +48,7 @@ ASSIST_EVENT = "protocol.assist"
 
 _COLUMNS = (
     "id, project_id, seq, parent_id, kind, document, content_hash, actor_id, model, suggestion,"
-    " accepted, ai_parts, note, created_at"
+    " accepted, note, created_at"
 )
 
 
@@ -61,52 +65,92 @@ def _from_row(row: dict[str, Any]) -> ProtocolRevision:
         model=ModelUse.model_validate(row["model"]) if row["model"] else None,
         suggestion=Suggestion.model_validate(row["suggestion"]) if row["suggestion"] else None,
         accepted=Accepted.model_validate(row["accepted"]) if row["accepted"] else None,
-        ai_parts=tuple(AiMark.model_validate(m) for m in row["ai_parts"].values()),
         note=row["note"],
         created_at=row["created_at"],
     )
 
 
-def list_revisions(tx: Tx, project_id: Id) -> list[ProtocolRevision]:
+class _History:
+    """What models wrote, by (path, value), in revision order, and where a person first kept it.
+
+    A draft wrote every field; a suggestion the fields it changes. Accepting some of a suggestion's
+    changes writes, in the model's name, the values that selection makes (a strategy with two of
+    three edits is text no model revision held)."""
+
+    def __init__(self) -> None:
+        self._written: dict[tuple[str, str], ProtocolRevision] = {}
+        self._kept: dict[tuple[str, str], Id] = {}
+        self._revisions: dict[Id, ProtocolRevision] = {}
+
+    def add(self, revision: ProtocolRevision) -> None:
+        self._revisions[revision.id] = revision
+        values = written(revision.document)
+        author = revision
+        wrote: dict[str, Any] = {}
+        if revision.kind == "draft":
+            wrote = values
+        elif revision.kind in ("suggestion", "accepted") and revision.parent_id is not None:
+            base = self._revisions[revision.parent_id].document  # a base comes before
+            wrote = {p: values[p] for p in changed_written(base, revision.document)}
+            if revision.accepted is not None:
+                author = self._revisions[revision.accepted.suggestion_id]
+        for key in map(_key, wrote.items()):
+            self._written.setdefault(key, author)
+        if revision.model is None:  # a revision of the lead's keeps what it holds
+            for key in map(_key, values.items()):
+                if key in self._written:
+                    self._kept.setdefault(key, revision.id)
+
+    def marks(self, document: dict[str, Any]) -> tuple[AiMark, ...]:
+        found = []
+        for path, value in written(document).items():
+            key = _key((path, value))
+            source = self._written.get(key)
+            if source is None or source.model is None:
+                continue
+            found.append(
+                AiMark(
+                    path=path,
+                    revision_id=source.id,
+                    recipe_id=source.model.recipe_id,
+                    model_identity=source.model.model_identity,
+                    serving=source.model.serving,
+                    endpoint=source.model.endpoint,
+                    accepted_in=self._kept.get(key),
+                )
+            )
+        return tuple(found)
+
+
+def _key(item: tuple[str, Any]) -> tuple[str, str]:
+    path, value = item
+    return path, json.dumps(value, sort_keys=True, ensure_ascii=False)
+
+
+def _history(tx: Tx, project_id: Id) -> tuple[_History, list[ProtocolRevision]]:
     rows = tx.execute(
         f"select {_COLUMNS} from assist_revision where project_id = %s order by seq",
         (project_id,),
     ).fetchall()
-    return [_from_row(r) for r in rows]
+    history = _History()
+    revisions = []
+    for row in rows:
+        revision = _from_row(row)
+        history.add(revision)
+        revisions.append(revision.model_copy(update={"ai_parts": history.marks(revision.document)}))
+    return history, revisions
+
+
+def list_revisions(tx: Tx, project_id: Id) -> list[ProtocolRevision]:
+    """Every revision, oldest first, each with the marks the history up to it gives."""
+    return _history(tx, project_id)[1]
 
 
 def get_revision(tx: Tx, project_id: Id, revision_id: Id) -> ProtocolRevision:
-    row = tx.execute(
-        f"select {_COLUMNS} from assist_revision where id = %s and project_id = %s",
-        (revision_id, project_id),
-    ).fetchone()
-    if row is None:
+    found = next((r for r in list_revisions(tx, project_id) if r.id == revision_id), None)
+    if found is None:
         raise NotFoundError(f"assistant revision {revision_id} not found in project {project_id}")
-    return _from_row(row)
-
-
-def _carried(parent: ProtocolRevision | None, document: dict[str, Any]) -> dict[str, AiMark]:
-    """The parent's marks on fields this document leaves unchanged."""
-    if parent is None:
-        return {}
-    now, before = leaves(document), leaves(parent.document)
-    return {
-        m.path: m
-        for m in parent.ai_parts
-        if m.path in now and m.path in before and now[m.path] == before[m.path]
-    }
-
-
-def _mark(path: str, revision_id: Id, model: ModelUse, accepted_in: Id | None) -> AiMark:
-    return AiMark(
-        path=path,
-        revision_id=revision_id,
-        recipe_id=model.recipe_id,
-        model_identity=model.model_identity,
-        serving=model.serving,
-        endpoint=model.endpoint,
-        accepted_in=accepted_in,
-    )
+    return found
 
 
 def _insert(
@@ -117,7 +161,6 @@ def _insert(
     kind: RevisionKind,
     version: ProtocolVersion,
     parent: ProtocolRevision | None,
-    marks: Mapping[str, AiMark],
     revision_id: Id | None = None,
     model: ModelUse | None = None,
     suggestion: Suggestion | None = None,
@@ -137,9 +180,9 @@ def _insert(
         return Jsonb(value.model_dump(mode="json")) if value is not None else None
 
     row = tx.execute(
-        f"insert into assist_revision (id, project_id, seq, parent_id, kind, document,"
-        f" content_hash, actor_id, model, suggestion, accepted, ai_parts, note)"
-        f" values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) returning {_COLUMNS}",
+        "insert into assist_revision (id, project_id, seq, parent_id, kind, document,"
+        " content_hash, actor_id, model, suggestion, accepted, note)"
+        " values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) returning id",
         (
             revision_id or new_id(),
             project_id,
@@ -152,12 +195,11 @@ def _insert(
             dump(model),
             dump(suggestion),
             dump(accepted),
-            Jsonb({p: m.model_dump(mode="json") for p, m in sorted(marks.items())}),
             note,
         ),
     ).fetchone()
     assert row is not None
-    return _from_row(row)
+    return get_revision(tx, project_id, row["id"])
 
 
 def _compile(document: dict[str, Any]) -> ProtocolVersion:
@@ -203,24 +245,13 @@ def record(
     model = model.model_copy(update={"event_id": event.event_id})
     revision = None
     if answer.document is not None and revision_id is not None:
-        version = _compile(answer.document)
-        if base is None:  # a draft: the model wrote every field
-            parent = _latest(tx, project_id)
-            marks = {p: _mark(p, revision_id, model, None) for p in written(answer.document)}
-        else:
-            parent = base
-            marks = _carried(base, answer.document) | {
-                p: _mark(p, revision_id, model, None)
-                for p in changed_written(base.document, answer.document)
-            }
         revision = _insert(
             tx,
             project_id,
             actor_id,
             kind="draft" if base is None else "suggestion",
-            version=version,
-            parent=parent,
-            marks=marks,
+            version=_compile(answer.document),
+            parent=base or _latest(tx, project_id),
             revision_id=revision_id,
             model=model,
             suggestion=answer.suggestion,
@@ -243,9 +274,8 @@ def _latest(tx: Tx, project_id: Id) -> ProtocolRevision | None:
 def accept(
     tx: Tx, project_id: Id, actor_id: Id, suggestion_id: Id, change_ids: list[str]
 ) -> ProtocolRevision:
-    """The suggestion's base with only the chosen changes applied, as a new revision. The fields
-    they change carry the model's mark, accepted in this revision. Raises `AssistError` for an
-    unknown change or a choice that does not compile."""
+    """The suggestion's base with only the chosen changes applied, as a new revision. Raises
+    `AssistError` for an unknown change or a choice that does not compile."""
     suggested = get_revision(tx, project_id, suggestion_id)
     if suggested.suggestion is None or suggested.parent_id is None or suggested.model is None:
         raise AssistError(f"revision {suggestion_id} is not a suggestion")
@@ -258,27 +288,19 @@ def accept(
     base = get_revision(tx, project_id, suggested.parent_id)
     chosen = [known[c] for c in sorted(set(change_ids), key=list(known).index)]
     document = apply(base.document, suggested.suggestion.kind, suggested.suggestion.part, chosen)
-    version = _compile(document)
-    revision_id = new_id()
-    marks = _carried(base, document) | {
-        p: _mark(p, suggested.id, suggested.model, revision_id)
-        for p in changed_written(base.document, document)
-    }
     return _insert(
         tx,
         project_id,
         actor_id,
         kind="accepted",
-        version=version,
+        version=_compile(document),
         parent=base,
-        marks=marks,
-        revision_id=revision_id,
         accepted=Accepted(suggestion_id=suggested.id, change_ids=tuple(c.id for c in chosen)),
     )
 
 
 def restore(tx: Tx, project_id: Id, actor_id: Id, revision_id: Id) -> ProtocolRevision:
-    """An earlier revision, with its marks, as the newest one."""
+    """An earlier revision as the newest one."""
     earlier = get_revision(tx, project_id, revision_id)
     return _insert(
         tx,
@@ -287,7 +309,6 @@ def restore(tx: Tx, project_id: Id, actor_id: Id, revision_id: Id) -> ProtocolRe
         kind="restore",
         version=_compile(earlier.document),
         parent=earlier,
-        marks={m.path: m for m in earlier.ai_parts},
         note=f"restores revision {earlier.seq}",
     )
 
@@ -295,20 +316,16 @@ def restore(tx: Tx, project_id: Id, actor_id: Id, revision_id: Id) -> ProtocolRe
 def save_edit(
     tx: Tx, project_id: Id, actor_id: Id, source: dict[str, Any], *, base_id: Id | None = None
 ) -> ProtocolRevision:
-    """The lead's own text as a revision. Edited from `base_id`, it keeps the base's AI marks on
-    the fields the lead left as they were; a text of the lead's own (no base) carries none, even
-    where it happens to say what a model once wrote."""
+    """The lead's own text as a revision, edited from `base_id` or written anew. Whatever in it
+    still says what a model wrote stays the model's."""
     base = get_revision(tx, project_id, base_id) if base_id else None
-    version = _compile(source)
-    document = version.protocol.model_dump(mode="json")
     return _insert(
         tx,
         project_id,
         actor_id,
         kind="edit",
-        version=version,
+        version=_compile(source),
         parent=base or _latest(tx, project_id),
-        marks=_carried(base, document),
     )
 
 
@@ -317,29 +334,13 @@ def compare(tx: Tx, project_id: Id, a: Id, b: Id) -> ProtocolDiff:
     return diff(_compile(before.document), _compile(after.document))
 
 
-def ai_parts(revision: ProtocolRevision) -> list[dict[str, Any]]:
-    """The marks as a `protocol.published` event records them. Publishing accepts every part."""
-    return [
-        m.model_dump(mode="json") | {"accepted_in": str(m.accepted_in or revision.id)}
-        for m in revision.ai_parts
-    ]
-
-
 def ai_parts_for(tx: Tx, project_id: Id, version: ProtocolVersion) -> list[dict[str, Any]]:
-    """What a model wrote in a version published from the editor: the marks of the newest
-    revision with the same content, or else the newest revision's marks on fields the version
-    still holds as the model wrote them. Over-reporting a model's part is the safe error."""
-    row = tx.execute(
-        f"select {_COLUMNS} from assist_revision where project_id = %s"
-        " order by (content_hash = %s) desc, seq desc limit 1",
-        (project_id, version.content_hash),
-    ).fetchone()
-    if row is None:
-        return []
-    newest = _from_row(row)
-    document = version.protocol.model_dump(mode="json")
-    kept = _carried(newest, document)
-    return ai_parts(newest.model_copy(update={"ai_parts": tuple(kept.values())}))
+    """The fields of `version` a model wrote, from the project's whole assistant history, as
+    `protocol.published` records them. The `kittum.protocol.Attribution` of the assistant."""
+    history, _ = _history(tx, project_id)
+    return [
+        m.model_dump(mode="json") for m in history.marks(version.protocol.model_dump(mode="json"))
+    ]
 
 
 def publish_revision(
@@ -351,16 +352,8 @@ def publish_revision(
     ledger: Ledger,
     reason: str | None = None,
 ) -> StoredProtocol:
-    """Publish a revision as the protocol in force, with the approver's approval and the parts a
-    model wrote in the `protocol.published` event."""
+    """Publish a revision as the protocol in force, with the approver's approval. The publication
+    names the fields a model wrote, as every publication does."""
     revision = get_revision(tx, project_id, revision_id)
     draft = save_draft(tx, project_id, _compile(revision.document))
-    return publish(
-        tx,
-        project_id,
-        draft.id,
-        approved_by,
-        ledger=ledger,
-        reason=reason,
-        ai_parts=ai_parts(revision),
-    )
+    return publish(tx, project_id, draft.id, approved_by, ledger=ledger, reason=reason)

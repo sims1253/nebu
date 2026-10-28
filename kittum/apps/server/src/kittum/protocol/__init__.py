@@ -65,6 +65,7 @@ from kittum.protocol.profile import (
 from kittum.protocol.render import AnswerKey, CriterionQuestion, render_prompt, render_question
 from kittum.protocol.store import (
     PUBLISHED_EVENT,
+    Attribution,
     PostgresProtocolStore,
     ProtocolStateError,
     ProtocolStore,
@@ -73,12 +74,14 @@ from kittum.protocol.store import (
     latest_published,
     list_versions,
     publish,
+    register_attribution,
     save_draft,
 )
 
 __all__ = [
     "PUBLISHED_EVENT",
     "AnswerKey",
+    "Attribution",
     "AuditPlan",
     "Comparator",
     "Criterion",
@@ -125,6 +128,7 @@ __all__ = [
     "path_of",
     "protocol_hash",
     "publish",
+    "register_attribution",
     "register_profile",
     "registered_profiles",
     "render_prompt",

@@ -3,8 +3,10 @@
 Publishing freezes the version (a trigger rejects later changes) and appends a
 `protocol.published` event in the caller's transaction. A version that changes a topic's screening
 mode relative to the last published version needs a reason, which the event records. So does every
-part of the version a model wrote and a human accepted (`ai_parts`, from `kittum.assist`): which
-field, from which assistant revision, by which model.
+field of the version a model wrote (`ai_parts`): which field, from which revision, by which model.
+Publishing asks every registered attribution (`register_attribution`; the protocol assistant
+registers one at the entry points) whatever saved the version: the workbench, an assistant
+revision, or the CLI.
 """
 
 from datetime import datetime
@@ -18,12 +20,27 @@ from kittum.protocol.compiler import ProtocolVersion, compile
 from kittum.protocol.diffing import diff
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Callable, Mapping, Sequence
 
     from kittum.db import Tx
     from kittum.ledger import AuditEvent, Ledger
 
 PUBLISHED_EVENT = "protocol.published"
+
+type Attribution = Callable[[Tx, Id, ProtocolVersion], Sequence[Mapping[str, Any]]]
+"""The fields of a version that a model wrote, as `protocol.published` records them."""
+
+_ATTRIBUTIONS: dict[str, Attribution] = {}
+
+
+def register_attribution(name: str, attribution: Attribution) -> None:
+    """Have every publication record what `attribution` finds. Registering a name again replaces
+    its function."""
+    _ATTRIBUTIONS[name] = attribution
+
+
+def attributed(tx: Tx, project_id: Id, version: ProtocolVersion) -> list[dict[str, Any]]:
+    return [dict(p) for f in _ATTRIBUTIONS.values() for p in f(tx, project_id, version)]
 
 
 class ProtocolStateError(KittumError):
@@ -56,7 +73,6 @@ class ProtocolStore(Protocol):
         approved_by: Id,
         *,
         reason: str | None = None,
-        ai_parts: Sequence[Mapping[str, Any]] = (),
     ) -> StoredProtocol: ...
 
     def get_version(self, tx: Tx, project_id: Id, version_id: Id) -> StoredProtocol: ...
@@ -190,12 +206,9 @@ def publish(
     *,
     ledger: Ledger,
     reason: str | None = None,
-    ai_parts: Sequence[Mapping[str, Any]] = (),
 ) -> StoredProtocol:
-    """Freeze a draft with a human approval and append `protocol.published`.
-
-    `ai_parts` names the fields a model wrote and the approver accepted; the event keeps them for
-    the AI disclosure.
+    """Freeze a draft with a human approval and append `protocol.published`, naming the fields a
+    model wrote (every registered attribution) for the AI disclosure.
 
     Publications serialize per project, so the version compared against is the one in force when
     this one commits: two concurrent publications cannot both skip the mode-change reason.
@@ -218,6 +231,7 @@ def publish(
         raise ProtocolStateError("publishing a protocol needs the approval of a human actor")
     previous = latest_published(tx, project_id)
     check_publishable(stored, previous, reason)
+    ai_parts = attributed(tx, project_id, stored.version)
     event = ledger.append(tx, published_event(stored, previous, approved_by, reason, ai_parts))
     published = mark_published(stored, event, approved_by, reason)
     tx.execute(
@@ -274,17 +288,8 @@ class PostgresProtocolStore:
         approved_by: Id,
         *,
         reason: str | None = None,
-        ai_parts: Sequence[Mapping[str, Any]] = (),
     ) -> StoredProtocol:
-        return publish(
-            tx,
-            project_id,
-            version_id,
-            approved_by,
-            ledger=self._ledger,
-            reason=reason,
-            ai_parts=ai_parts,
-        )
+        return publish(tx, project_id, version_id, approved_by, ledger=self._ledger, reason=reason)
 
     def get_version(self, tx: Tx, project_id: Id, version_id: Id) -> StoredProtocol:
         return get_version(tx, project_id, version_id)

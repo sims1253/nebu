@@ -17,8 +17,9 @@ reads it for each call and sends it as a bearer token. The key is never part of 
 the stored bytes, the completion, or an error; an error body that echoes it is redacted.
 
 The exact request and response bytes go to the artifact store before anything else happens, so a
-failed or odd answer is still on record. Only transport errors are retried; an HTTP error status
-or an unusable body raises `BackendError` at once.
+failed or odd answer is still on record. Only transport errors are retried, and once the retries
+are spent they raise `BackendError` too; an HTTP error status or an unusable body raises it at
+once. The error names the stored request and response bytes.
 """
 
 import json
@@ -126,20 +127,34 @@ class OpenAICompatibleBackend:
         headers = self._headers()
         raw_request = canonical_json(self.body(request))
         raw_request_hash = self._store.put(raw_request)
-        response = self._post(raw_request, headers)
+        try:
+            response = self._post(raw_request, headers)
+        except httpx2.TransportError as e:
+            raise BackendError(
+                f"{self.recipe.id}: the model server is unreachable: {type(e).__name__}",
+                raw_request_hash=raw_request_hash,
+            ) from e
         # A provider that echoes the key in an error body gets it redacted before anything keeps it.
         key = headers.get("authorization", "").removeprefix("Bearer ").encode()
         content = response.content.replace(key, b"[redacted]") if key else response.content
         raw_response_hash = self._store.put(content)
         if response.status_code >= 400:
             text = content.decode(errors="replace")[:500]
-            raise BackendError(f"{self.recipe.id}: HTTP {response.status_code}: {text}")
+            raise BackendError(
+                f"{self.recipe.id}: HTTP {response.status_code}: {text}",
+                raw_request_hash=raw_request_hash,
+                raw_response_hash=raw_response_hash,
+            )
         try:
             data = json.loads(content)
             choice = data["choices"][0]
             message = choice["message"]
         except (ValueError, KeyError, IndexError, TypeError) as e:
-            raise BackendError(f"{self.recipe.id}: not a chat completion: {e}") from e
+            raise BackendError(
+                f"{self.recipe.id}: not a chat completion: {e}",
+                raw_request_hash=raw_request_hash,
+                raw_response_hash=raw_response_hash,
+            ) from e
         thinking, answer = split_reasoning(message.get("content") or "")
         reasoning = message.get("reasoning") or message.get("reasoning_content") or thinking
         return Completion(

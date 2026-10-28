@@ -7,7 +7,6 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, status
 
-from kittum import assist
 from kittum.api import Context  # noqa: TC001 - FastAPI resolves it at runtime
 from kittum.app import (
     ExampleProtocol,
@@ -194,10 +193,6 @@ def publish_protocol_version(
     try:
         with ctx.db.transaction() as tx:
             require_project_lead(tx, project_id, request.approved_by)
-            # A version written with the assistant keeps the marks on what a model wrote.
-            ai_parts = assist.ai_parts_for(
-                tx, project_id, get_version(tx, project_id, version_id).version
-            )
             return publish(
                 tx,
                 project_id,
@@ -205,7 +200,6 @@ def publish_protocol_version(
                 request.approved_by,
                 ledger=ctx.ledger,
                 reason=request.reason,
-                ai_parts=ai_parts,
             )
     except NotFoundError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from None

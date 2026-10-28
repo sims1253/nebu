@@ -23,6 +23,10 @@ ANSWERS = (
     Path(__file__).parents[2] / "src" / "kittum" / "app" / "demo_data" / "assist" / "answers.json"
 )
 PUBMED = "search_topics[TRIALS].source_plan.sources[medline].strategy"
+# A profile protocol whose comparators carry profile extensions (`off_label`), and the question the
+# assistant improves in it.
+CAPIVASERTIB = EXAMPLE.with_name("capivasertib.yaml")
+QUESTION = "questions[b1]"
 
 
 def drafted_pubmed(document: dict) -> str:

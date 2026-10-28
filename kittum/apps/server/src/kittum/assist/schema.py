@@ -11,7 +11,9 @@ protocol it must compile to.
 - `extensions` are left out: a profile's typed fields are the lead's to write.
 
 `from_strict` turns an answer back into the protocol's own shape: pairs into mappings, and a null
-for a property the model may leave out into no property, so its default applies. Then the answer
+for a property the model may leave out into no property, so its default applies. A key given twice
+in one list of pairs is a problem with its path, which goes back to the model; it is never
+resolved by keeping one of them. Then the answer
 goes through `kittum.protocol.compile` like any hand-written source.
 """
 
@@ -94,10 +96,13 @@ def _pairs(mapping: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def from_strict(value: Any, model: type[BaseModel]) -> Any:
-    """An answer in `strict_schema(model)`'s shape, back in the model's own shape."""
+def from_strict(value: Any, model: type[BaseModel]) -> tuple[Any, list[tuple[str, str]]]:
+    """An answer in `strict_schema(model)`'s shape, back in the model's own shape, and the problems
+    the conversion found, by path into the answer: a key given twice in one mapping, which the
+    model's own shape cannot hold."""
     raw = model.model_json_schema(mode="validation")
-    return _back(value, raw, raw.get("$defs", {}))
+    problems: list[tuple[str, str]] = []
+    return _back(value, raw, raw.get("$defs", {}), "", problems), problems
 
 
 def _resolve(schema: dict[str, Any], defs: dict[str, Any]) -> dict[str, Any]:
@@ -106,7 +111,13 @@ def _resolve(schema: dict[str, Any], defs: dict[str, Any]) -> dict[str, Any]:
     return schema
 
 
-def _back(value: Any, schema: dict[str, Any], defs: dict[str, Any]) -> Any:
+def _at(path: str, step: str | int) -> str:
+    return f"{path}[{step}]" if isinstance(step, int) else f"{path}.{step}" if path else step
+
+
+def _back(
+    value: Any, schema: dict[str, Any], defs: dict[str, Any], path: str, problems: list[Any]
+) -> Any:
     schema = _resolve(schema, defs)
     if "anyOf" in schema:
         if value is None:
@@ -114,29 +125,44 @@ def _back(value: Any, schema: dict[str, Any], defs: dict[str, Any]) -> Any:
         branches = [_resolve(b, defs) for b in schema["anyOf"] if b != {"type": "null"}]
         for branch in branches:
             if _fits(value, branch):
-                return _back(value, branch, defs)
+                return _back(value, branch, defs, path, problems)
         return value  # validation names the mismatch
     if schema.get("type") == "object" and isinstance(value, dict):
         props = schema.get("properties", {})
         required = set(schema.get("required", ()))
         return {
-            k: _back(v, props[k], defs) if k in props else v
+            k: _back(v, props[k], defs, _at(path, k), problems) if k in props else v
             for k, v in value.items()
             if not (v is None and k in props and k not in required)
         }
     if schema.get("type") == "object" and "properties" not in schema and isinstance(value, list):
+        if not all(isinstance(p, dict) and isinstance(p.get("key"), str) for p in value):
+            return value
         inner = schema.get("additionalProperties")
-        if all(isinstance(p, dict) and isinstance(p.get("key"), str) for p in value):
-            return {
-                p["key"]: _back(p.get("value"), inner, defs)
+        out: dict[str, Any] = {}
+        for i, pair in enumerate(value):
+            key = pair["key"]
+            if key in out:
+                first = next(n for n, p in enumerate(value) if p["key"] == key)
+                problems.append(
+                    (
+                        _at(_at(path, i), "key"),
+                        f"{key!r} is given twice; it is already at {_at(path, first)}",
+                    )
+                )
+                continue
+            here = _at(_at(path, i), "value")
+            out[key] = (
+                _back(pair.get("value"), inner, defs, here, problems)
                 if isinstance(inner, dict)
-                else p.get("value")
-                for p in value
-            }
-        return value
+                else pair.get("value")
+            )
+        return out
     if schema.get("type") == "array" and isinstance(value, list):
         items = schema.get("items")
-        return [_back(v, items, defs) for v in value] if isinstance(items, dict) else value
+        if not isinstance(items, dict):
+            return value
+        return [_back(v, items, defs, _at(path, i), problems) for i, v in enumerate(value)]
     return value
 
 
