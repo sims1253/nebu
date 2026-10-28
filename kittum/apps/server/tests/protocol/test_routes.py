@@ -67,6 +67,52 @@ def test_a_pubmed_strategy_may_use_every_field_tag_pubmed_lists() -> None:
     assert report["issues"][0]["message"] == "1 opening parenthesis is not closed"
 
 
+def test_a_europe_pmc_strategy_is_checked_like_a_pubmed_one() -> None:
+    """A source on Europe PMC uses Europe PMC's fields, in any case, and its date ranges; a field
+    Europe PMC does not know is a warning, since Europe PMC finds nothing for it without saying
+    so; unbalanced syntax is a problem."""
+    client = TestClient(create_app())
+    source = example_source("nicotine-replacement")
+    sources = source["search_topics"][0]["source_plan"]["sources"]
+    sources.append(
+        {
+            "id": "europepmc",
+            "kind": "bibliographic",
+            "name": "Europe PMC",
+            "platform": "Europe PMC",
+            "strategy": (
+                '(TITLE_ABS:"nicotine replacement" OR title:NRT OR MESH:"Smoking Cessation")'
+                ' AND PUB_TYPE:"Randomized Controlled Trial" AND (SRC:MED OR SRC:PPR)'
+                " AND FIRST_PDATE:[2024-01-01 TO 2024-03-31] AND LANG:eng"
+                # A colon inside a phrase or after a number is no field.
+                ' AND NOT TITLE:"Erratum: correction" AND NOT covid-19:x'
+            ),
+        }
+    )
+    at = f"search_topics[0].source_plan.sources[{len(sources) - 1}].strategy"
+    report = client.post("/api/protocol/validate", json=source).json()
+    assert (report["ok"], report["issues"], report["warnings"]) == (True, [], [])
+
+    sources[-1]["strategy"] += " AND JOURNAL_TITLE:Addiction AND Tiab:nicotine"
+    report = client.post("/api/protocol/validate", json=source).json()
+    assert report["ok"] is True
+    assert report["warnings"] == [
+        {
+            "path": at,
+            "message": "Europe PMC has no field JOURNAL_TITLE. It finds no records for a search"
+            " in it.",
+        },
+        {
+            "path": at,
+            "message": "Europe PMC has no field Tiab. It finds no records for a search in it.",
+        },
+    ]
+    sources[-1]["strategy"] = "(" + sources[-1]["strategy"]
+    report = client.post("/api/protocol/validate", json=source).json()
+    assert report["ok"] is False
+    assert report["issues"] == [{"path": at, "message": "1 opening parenthesis is not closed"}]
+
+
 def test_validate_reports_the_hash_or_the_issues() -> None:
     client = TestClient(create_app())
     for name in (AMNOG, "nicotine-replacement"):
