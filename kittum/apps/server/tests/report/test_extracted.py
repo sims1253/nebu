@@ -130,13 +130,14 @@ def test_accepted_values_download_as_csv_and_json_and_verify_against_the_ledger(
     )
     assert data["values"][rows.index(hba1c)]["proposal_path"] == "llm"
 
-    # The sealed bundle carries the same files, and `kittum verify` checks them.
+    # The sealed bundle carries the same files, and `kittum verify` checks them, from a folder
+    # whose name a file URI would misread.
     key = SigningKey.generate()
     sealed = seal_bundle(
         env.tx,
         env.project_id,
         env.artifacts,
-        tmp_path / "bundle",
+        tmp_path / "review #1?" / "bundle",
         signer=key,
         actor_id=env.requester,
         ledger=env.ledger,

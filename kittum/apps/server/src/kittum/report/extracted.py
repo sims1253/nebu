@@ -327,7 +327,7 @@ def _instant(value: Any) -> datetime | None:
 def _tables(root: Path, problems: list[str]) -> tuple[dict[str, dict[str, Any]], ...] | None:
     """The bundle's extraction fields, runs, anchors, and acceptances by ID."""
     try:
-        db = sqlite3.connect(f"file:{root / SQLITE_NAME}?mode=ro", uri=True)
+        db = sqlite3.connect(f"{(root / SQLITE_NAME).resolve().as_uri()}?mode=ro", uri=True)
     except sqlite3.Error as e:
         problems.append(f"{SQLITE_NAME} cannot be read: {e}")
         return None
