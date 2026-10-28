@@ -367,7 +367,7 @@ describe("extraction review", () => {
     await pause(VIEW_MS + 300);
     await press("Enter");
     await expect.element(page.getByText("2 of 21 accepted"), settle).toBeVisible();
-  });
+  }, 60_000); // its waits get 15 s each; the default 15 s budget would cut them short
 });
 
 const scrollParent = (element: HTMLElement): HTMLElement => {
