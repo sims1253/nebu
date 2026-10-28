@@ -10,17 +10,42 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 import rispy
+import yaml
 
-from kittum.corpus import get_counts
+from kittum.core import new_id
+from kittum.corpus import confirm, get_counts, ingest, list_proposals
 from kittum.judge import VERIFIER_LIMITS
 from kittum.models import weights_hash
 from kittum.report import flow, load_review, one_line, render, render_files
+from kittum.screening import Decision
 from kittum.search import SearchPlan, import_file
-from tests.report.support import NRT_SCOPE, NRT_TITLES, RECIPE, seed_people
+from tests.report.support import (
+    EXAMPLES,
+    FIXTURES,
+    NRT_SCOPE,
+    NRT_TITLES,
+    RECIPE,
+    build,
+    seed_people,
+)
+from tests.screening.support import (
+    NON_SMOKERS,
+    OFF_TOPIC,
+    RELEVANT,
+    SCOPE,
+    STAGE,
+    build_world,
+    central_import,
+    pubmed_search,
+    recorded_backend,
+    simulated_answers,
+    timing,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from kittum.db import Database
     from kittum.report import PrismaFlow, Review, StageResult
     from kittum.screening import StageMetrics
     from tests.report.support import NrtSeqs, ReviewWorld
@@ -141,7 +166,7 @@ def test_prisma_flow_reconciles_by_hand_with_screening_and_the_corpus(
 
     # The other scope was never screened, and its checks say so.
     failing = {c.name for c in prisma(review, "combination-vs-single").checks if not c.holds}
-    assert "identified minus duplicates equals screened" in failing
+    assert "identified minus duplicates equals screened plus awaiting screening" in failing
 
 
 def test_prisma_at_earlier_cutoffs_shows_the_review_as_it_stood(
@@ -154,11 +179,16 @@ def test_prisma_at_earlier_cutoffs_shows_the_review_as_it_stood(
     assert inhaler in before.members["records_unresolved"]
     assert inhaler not in before.members["reports_sought"]
     # Both screeners are done, but the AI sent two exclusions to the auditor, who has not screened
-    # them yet: they are unresolved, not excluded, and the sums still hold.
-    # The varenicline disagreement waits for the adjudicator.
+    # them yet: they still await screening, as screening counts them, and the sums hold.
+    # The varenicline disagreement is screened but waits for the adjudicator.
     waiting = prisma(review_at(world, seqs.rescreens_open))
-    assert set(waiting.members["records_unresolved"]) == {*rescreened, *refs(world, "varenicline")}
-    assert (waiting.records_excluded, waiting.records_unresolved) == (24, 3)
+    assert waiting.members["records_awaiting_screening"] == rescreened
+    assert waiting.members["records_unresolved"] == refs(world, "varenicline")
+    assert (waiting.records_screened, waiting.records_excluded, waiting.records_unresolved) == (
+        31,
+        24,
+        1,
+    )
     assert all(c.holds for c in waiting.checks)
     # After title and abstract, before any full text: every sought report is not yet retrieved.
     ta = prisma(review_at(world, seqs.title_abstract))
@@ -265,6 +295,136 @@ def test_search_report_records_every_prisma_s_field(nrt: tuple[ReviewWorld, NrtS
     assert "lumacaftor[ti] AND trial[tiab]" in text
     assert pubmed["query_translation"] in text
     assert "'nicotine replacement therapy'/exp" in text
+
+
+def test_prisma_counts_as_screened_only_what_screening_counts_as_screened(
+    nrt: tuple[ReviewWorld, NrtSeqs], database: Database
+) -> None:
+    world, seqs = nrt
+    # As the review ran: right after each stage opened, while the extra screens were open, and at
+    # the end, the flow at that ledger position shows what the lead's status showed then.
+    for seq, status in seqs.statuses:
+        f = prisma(review_at(world, seq))
+        if status.stage == "title_abstract":
+            counts = (f.records_screened, f.records_awaiting_screening, f.records_unresolved)
+        else:
+            counts = (f.reports_assessed, f.reports_awaiting_assessment, f.reports_unresolved)
+        assert counts == (status.screened, status.remaining, status.conflicts), (seq, status)
+        assert all(c.holds for c in f.checks), (seq, [c for c in f.checks if not c.holds])
+    opened, rescreens_open, *_ = seqs.statuses
+    assert (opened[1].screened, opened[1].remaining) == (0, 33)
+    assert (rescreens_open[1].screened, rescreens_open[1].remaining) == (31, 2)
+
+    # M3: the humans screen in the AI's order until the stop test certifies, and stop. The rest
+    # were never screened, and the flow says so for good.
+    m3 = build_world(database, "M3", simulate={RELEVANT: 8, NON_SMOKERS: 30, OFF_TOPIC: 112})
+    m3.open(
+        auditor=m3.people.auditor,
+        backend=recorded_backend(m3.records, m3.criteria(), answers=simulated_answers(m3.records)),
+    )
+    for reviewer in (m3.people.a, m3.people.b):
+        with m3.db.transaction() as tx:
+            items = m3.screening.queue(tx, m3.project_id, reviewer, SCOPE, STAGE, limit=110)
+        for item in items:
+            relevant = item.title.startswith(RELEVANT) or item.title.startswith("Nicotine")
+            decision = (
+                Decision(outcome="include")
+                if relevant
+                else Decision(outcome="exclude", reason_criterion_id="POP")
+            )
+            with m3.db.transaction() as tx:
+                result = m3.screening.decide(
+                    tx,
+                    command_id=new_id(),
+                    project_id=m3.project_id,
+                    reviewer_id=reviewer,
+                    assignment_id=item.assignment_id,
+                    decision=decision,
+                    phase="provisional",
+                    expected_etag=item.etag,
+                    timing=timing(0),
+                )
+                if result.phase == "provisional":
+                    m3.screening.decide(
+                        tx,
+                        command_id=new_id(),
+                        project_id=m3.project_id,
+                        reviewer_id=reviewer,
+                        assignment_id=item.assignment_id,
+                        decision=decision,
+                        phase="final",
+                        expected_etag=result.etag,
+                        timing=timing(20, revealed=True),
+                    )
+    with m3.db.transaction() as tx:
+        status = m3.screening.status(tx, m3.project_id, m3.people.lead, SCOPE, STAGE)
+        review = load_review(tx, m3.project_id)
+    assert status.metrics is not None and status.metrics.stop_test is not None
+    assert status.metrics.stop_test.stop
+    f = flow(review, "TRIALS", SCOPE)
+    assert (f.records_screened, f.records_awaiting_screening) == (status.screened, status.remaining)
+    assert f.records_awaiting_screening > 0
+    assert f.records_screened == f.records_excluded + f.reports_sought + f.records_unresolved
+    assert all(c.holds for c in f.checks), [c for c in f.checks if not c.holds]
+
+
+def test_identification_comes_from_the_frozen_revision_when_a_search_follows_it(
+    database: Database,
+) -> None:
+    """An update search imported after the corpus was frozen is not identified yet: the flow
+    counts what the selected identity revision holds, as the corpus does, and lists the rest."""
+    source = yaml.safe_load((EXAMPLES / "nicotine-replacement.yaml").read_text())
+    world = build(
+        database,
+        "Update search",
+        source,
+        topic="TRIALS",
+        scope=NRT_SCOPE,
+        config_id=f"upd-{new_id()}",
+    )
+    with database.transaction() as tx:
+        world.executions.append(central_import(tx, world.people, world.ledger, world.artifacts))  # type: ignore[arg-type]
+        world.import_file(tx, "embase", "Embase", "nicotine", FIXTURES / "nrt_embase.ris", "embase")
+        frozen = ingest(
+            tx, world.project_id, world.executions, actor_id=world.people.lead, ledger=world.ledger
+        ).identity_revision_id
+        (proposal, *_) = list_proposals(tx, world.project_id, status="pending")
+        merged = confirm(
+            tx, world.project_id, frozen, proposal.id, world.people.lead, ledger=world.ledger
+        ).id
+        # The update search: PubMed, run after the corpus was built and never ingested.
+        update = pubmed_search(tx, world.people, world.ledger, world.artifacts)  # type: ignore[arg-type]
+
+    with database.transaction() as tx:
+        for revision in (frozen, merged):
+            review = load_review(tx, world.project_id, identity_revision_id=revision)
+            f = flow(review, "TRIALS", NRT_SCOPE)
+            counts = get_counts(tx, world.project_id, revision)
+            assert (f.records_identified, f.duplicates_removed) == (
+                counts.total_records_identified,
+                counts.duplicates_removed,
+            ), revision
+            assert len(f.members["unique_records"]) == counts.unique_records
+            assert sum(s.records for s in f.identified_by_source) == f.records_identified == 11
+            assert {s.source for s in f.identified_by_source} == {"central", "embase"}
+            assert f.members["records_outside_identity"] == tuple(
+                sorted(str(r.occurrence_id) for r in update.records)
+            )
+            assert f.records_outside_identity == 24
+            # No stage is open yet, so nothing is screened or awaiting screening.
+            assert f.records_awaiting_screening == 0 and f.records_screened == 0
+    # Selecting the older revision undoes the lead's confirmed duplicate, and only that.
+    with database.transaction() as tx:
+        older = flow(
+            load_review(tx, world.project_id, identity_revision_id=frozen), "TRIALS", NRT_SCOPE
+        )
+        newer = flow(
+            load_review(tx, world.project_id, identity_revision_id=merged), "TRIALS", NRT_SCOPE
+        )
+    assert (older.duplicates_removed, newer.duplicates_removed) == (
+        0,
+        len(proposal.occurrence_ids) - 1,
+    )
 
 
 def test_ai_disclosure_names_the_models_both_readings_and_the_extra_screens(

@@ -69,7 +69,7 @@ if TYPE_CHECKING:
     from kittum.core import Id
     from kittum.db import Database, Tx
     from kittum.protocol import Criterion, Stage, StoredProtocol
-    from kittum.screening import AdjudicationItem, QueueItem, StageInfo
+    from kittum.screening import AdjudicationItem, QueueItem, ScopeStatus, StageInfo
     from kittum.search import SearchExecution
 
 HERE = Path(__file__).parent
@@ -238,6 +238,14 @@ class ReviewWorld:
             pass
         self.stages[stage] = info
         return info
+
+    def snapshot(self, into: list[tuple[int, ScopeStatus]], stage: Stage) -> None:
+        """Keep what the lead's status shows now, with the ledger position it belongs to."""
+        with self.db.transaction() as tx:
+            status = self.screening.status(
+                tx, self.project_id, self.people.lead, self.scope, stage, topic_id=self.topic
+            )
+        into.append((self.head(), status))
 
     def queue(self, reviewer: Id, stage: Stage) -> list[QueueItem]:
         with self.db.transaction() as tx:
@@ -437,6 +445,8 @@ class NrtSeqs:
     inhaler_excluded: int = 0
     rescreens_open: int = 0
     full_text: int = 0
+    statuses: list[tuple[int, ScopeStatus]] = field(default_factory=list)
+    """What `Screening.status` showed the lead at a ledger position, taken as the review ran."""
 
 
 def nrt_review(db: Database) -> tuple[ReviewWorld, NrtSeqs]:
@@ -461,6 +471,7 @@ def nrt_review(db: Database) -> tuple[ReviewWorld, NrtSeqs]:
 
     ta: Stage = "title_abstract"
     world.open(ta, world.records, _nrt_answers)
+    world.snapshot(seqs.statuses, ta)
     a, b = world.people.a, world.people.b
     c = world.criteria(ta)
     t = NRT_TITLES
@@ -502,6 +513,7 @@ def nrt_review(db: Database) -> tuple[ReviewWorld, NrtSeqs]:
     # The model saw nothing wrong with two PubMed records both humans excluded: the auditor screens
     # them again, blind. They uphold one exclusion and include the other, a human disagreement.
     seqs.rescreens_open = world.head()
+    world.snapshot(seqs.statuses, ta)
     world.audit(ta, overrides={t["predictors"]: include(ta, c)})
     # Adjudication: the varenicline disagreement, and the auditor's disagreement.
     resolved = world.adjudicate(
@@ -515,6 +527,7 @@ def nrt_review(db: Database) -> tuple[ReviewWorld, NrtSeqs]:
     ft: Stage = "full_text"
     retrieved = [world.record(t[k]) for k in ("patch", "gum", "combination", "followup", "spray")]
     world.open(ft, retrieved, unclear)
+    world.snapshot(seqs.statuses, ft)
     c = world.criteria(ft)
     for key in ("patch", "gum", "followup"):
         world.decide(a, ft, t[key], include(ft, c))
@@ -536,6 +549,8 @@ def nrt_review(db: Database) -> tuple[ReviewWorld, NrtSeqs]:
     # Only the screeners' different reasons for the combination trial need an adjudicator.
     assert world.adjudicate(ft, choose) == 1
     seqs.full_text = world.head()
+    world.snapshot(seqs.statuses, ta)
+    world.snapshot(seqs.statuses, ft)
     return world, seqs
 
 

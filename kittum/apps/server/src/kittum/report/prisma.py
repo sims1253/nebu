@@ -67,17 +67,23 @@ class PrismaFlow(Record):
     identified_from_registers: int
     identified_from_other_sources: int
     duplicates_removed: int
+    records_outside_identity: int
+    """Records of the topic's searches that the identity revision does not hold yet (a search run
+    after it was frozen). They are in no other count."""
     records_screened: int
+    """Decided by every screener, and by the auditor if the AI sent it to an extra screen."""
+    records_awaiting_screening: int
     records_excluded: int
-    records_unresolved: int  # pending or in conflict at title and abstract
+    records_unresolved: int  # screened, but in conflict at title and abstract
     ai_title_abstract: AiInvolvement
     reports_sought: int
     reports_not_retrieved: int
     reports_assessed: int
+    reports_awaiting_assessment: int  # retrieved, not yet decided by every screener
     reports_excluded: int
     exclusion_reasons: tuple[ReasonCount, ...]
     reports_awaiting_classification: int  # insufficient information at full text
-    reports_unresolved: int  # pending or in conflict at full text
+    reports_unresolved: int  # assessed, but in conflict at full text
     ai_full_text: AiInvolvement
     reports_included: int
     studies_included: int
@@ -126,42 +132,54 @@ def flow(review: Review, topic_id: str, scope_id: str) -> PrismaFlow:
     report_of = identity.report_of() if identity else {}
     study_of = identity.study_of() if identity else {}
 
-    # Identification: every occurrence of the topic's searches, deduplicated by report.
+    # Identification: the occurrences of the topic's searches that the frozen identity revision
+    # holds, deduplicated by its reports. Records of searches run after it are listed apart.
     by_source: dict[str, SourceCount] = {}
     occurrences: list[str] = []
+    unique_reports: set[str] = set()
     kinds: Counter[str] = Counter()
-    for run in review.searches:
-        if run.execution.plan.topic_id != topic_id:
+    by_occurrence = review.records_by_occurrence()
+    for link in identity.links if identity else ():
+        found = by_occurrence.get(link.occurrence_id)
+        if found is None or found[0].execution.plan.topic_id != topic_id:
             continue
+        run = found[0]
         key = run.source.id if run.source else run.execution.plan.source
         name = run.source.name if run.source else run.execution.plan.platform
-        n = len(run.execution.records)
         known = by_source.get(key)
         by_source[key] = SourceCount(
-            source=key,
-            name=name,
-            kind=run.source_kind,
-            records=(known.records if known else 0) + n,
+            source=key, name=name, kind=run.source_kind, records=(known.records if known else 0) + 1
         )
-        kinds[run.source_kind] += n
-        occurrences += [str(r.occurrence_id) for r in run.execution.records]
-    linked = [o for o in occurrences if UUID(o) in report_of]
-    unique = sorted({str(report_of[UUID(o)]) for o in linked})
-    unlinked = sorted(set(occurrences) - set(linked))
+        kinds[run.source_kind] += 1
+        occurrences.append(str(link.occurrence_id))
+        unique_reports.add(str(link.report_id))
+    unique = sorted(unique_reports)
+    outside = sorted(
+        str(r.occurrence_id)
+        for run in review.searches
+        if run.execution.plan.topic_id == topic_id
+        for r in run.execution.records
+        if r.occurrence_id not in report_of
+    )
 
+    # Screening: a record counts as screened once every screener (and the auditor of an extra
+    # screen) has decided it, as screening counts it; the rest await screening.
     ta = review.stage(scope_id, "title_abstract", topic_id)
     ft = review.stage(scope_id, "full_text", topic_id)
-    screened = _records(ta)
+    stage_records = _records(ta)
+    screened = [i for i in stage_records if i.screened]
+    awaiting = [i for i in stage_records if not i.screened]
     excluded = [i for i in screened if i.outcome == "exclude"]
     sought = [i for i in screened if i.outcome == "include"]
     unresolved = [i for i in screened if i.outcome in ("pending", "conflict")]
     sought_refs = {i.item_ref for i in sought}
-    assessed = [i for i in _records(ft) if i.item_ref in sought_refs]
+    retrieved = [i for i in _records(ft) if i.item_ref in sought_refs]
     not_sought = sorted(i.item_ref for i in _records(ft) if i.item_ref not in sought_refs)
-    assessed_refs = {i.item_ref for i in assessed}
-    not_retrieved = sorted(sought_refs - assessed_refs)
+    not_retrieved = sorted(sought_refs - {i.item_ref for i in retrieved})
+    assessed = [i for i in retrieved if i.screened]
+    awaiting_assessment = [i for i in retrieved if not i.screened]
     ft_excluded = [i for i in assessed if i.outcome == "exclude"]
-    awaiting = [i for i in assessed if i.outcome == "insufficient_information"]
+    awaiting_classification = [i for i in assessed if i.outcome == "insufficient_information"]
     ft_unresolved = [i for i in assessed if i.outcome in ("pending", "conflict")]
     included = [i for i in assessed if i.outcome == "include"]
     reasons: Counter[str] = Counter()
@@ -183,16 +201,18 @@ def flow(review: Review, topic_id: str, scope_id: str) -> PrismaFlow:
     members: dict[str, tuple[str, ...]] = {
         "records_identified": tuple(sorted(occurrences)),
         "unique_records": tuple(unique),
-        "occurrences_without_identity": tuple(unlinked),
+        "records_outside_identity": tuple(outside),
         "records_screened": refs(screened),
+        "records_awaiting_screening": refs(awaiting),
         "records_excluded": refs(excluded),
         "records_unresolved": refs(unresolved),
         "reports_sought": refs(sought),
         "reports_not_retrieved": tuple(not_retrieved),
         "reports_assessed": refs(assessed),
+        "reports_awaiting_assessment": refs(awaiting_assessment),
         "full_texts_not_sought": tuple(not_sought),
         "reports_excluded": refs(ft_excluded),
-        "reports_awaiting_classification": refs(awaiting),
+        "reports_awaiting_classification": refs(awaiting_classification),
         "reports_unresolved": refs(ft_unresolved),
         "reports_included": refs(included),
         "studies_included": tuple(studies),
@@ -200,31 +220,21 @@ def flow(review: Review, topic_id: str, scope_id: str) -> PrismaFlow:
         **{f"full_text:{k}": v for k, v in ai_ft_members.items()},
         **{k: tuple(sorted(v)) for k, v in by_reason.items()},
     }
-    screened_refs = {i.item_ref for i in screened}
+    stage_refs = {i.item_ref for i in stage_records}
 
     def check(name: str, expected: int, actual: int) -> Check:
         return Check(name=name, expected=expected, actual=actual, holds=expected == actual)
 
     checks = (
         check(
-            "identified equals the records of the topic's searches",
-            sum(
-                len(r.execution.records)
-                for r in review.searches
-                if r.execution.plan.topic_id == topic_id
-            ),
-            len(occurrences),
-        ),
-        check("every identified record is in the identity revision", len(occurrences), len(linked)),
-        check(
-            "identified minus duplicates equals screened",
-            len(occurrences) - (len(linked) - len(unique)),
-            len(screened),
-        ),
-        check(
-            "every unique record was screened",
+            "identified minus duplicates equals screened plus awaiting screening",
             len(unique),
-            len(set(unique) & screened_refs),
+            len(screened) + len(awaiting),
+        ),
+        check(
+            "every unique record is in the screening stage",
+            len(unique),
+            len(set(unique) & stage_refs),
         ),
         check(
             "screened equals excluded plus sought plus unresolved",
@@ -232,15 +242,15 @@ def flow(review: Review, topic_id: str, scope_id: str) -> PrismaFlow:
             len(excluded) + len(sought) + len(unresolved),
         ),
         check(
-            "sought equals assessed plus not retrieved",
+            "sought equals assessed plus awaiting assessment plus not retrieved",
             len(sought),
-            len(assessed) + len(not_retrieved),
+            len(assessed) + len(awaiting_assessment) + len(not_retrieved),
         ),
         check("every full text assessed was sought", 0, len(not_sought)),
         check(
             "assessed equals excluded plus included plus awaiting plus unresolved",
             len(assessed),
-            len(ft_excluded) + len(included) + len(awaiting) + len(ft_unresolved),
+            len(ft_excluded) + len(included) + len(awaiting_classification) + len(ft_unresolved),
         ),
         check(
             "excluded full texts equal the sum over reasons",
@@ -263,19 +273,22 @@ def flow(review: Review, topic_id: str, scope_id: str) -> PrismaFlow:
         identified_from_databases=kinds["bibliographic"],
         identified_from_registers=kinds["registry"],
         identified_from_other_sources=kinds["website"] + kinds["other"],
-        duplicates_removed=len(linked) - len(unique),
+        duplicates_removed=len(occurrences) - len(unique),
+        records_outside_identity=len(outside),
         records_screened=len(screened),
+        records_awaiting_screening=len(awaiting),
         records_excluded=len(excluded),
         records_unresolved=len(unresolved),
         ai_title_abstract=ai_ta,
         reports_sought=len(sought),
         reports_not_retrieved=len(not_retrieved),
         reports_assessed=len(assessed),
+        reports_awaiting_assessment=len(awaiting_assessment),
         reports_excluded=len(ft_excluded),
         exclusion_reasons=tuple(
             ReasonCount(criterion_id=c, reports=n) for c, n in sorted(reasons.items())
         ),
-        reports_awaiting_classification=len(awaiting),
+        reports_awaiting_classification=len(awaiting_classification),
         reports_unresolved=len(ft_unresolved),
         ai_full_text=ai_ft,
         reports_included=len(included),
@@ -338,11 +351,23 @@ def svg(f: PrismaFlow, title: str) -> str:
                 f"Duplicate records removed: n = {f.duplicates_removed}",
                 "Records marked as ineligible by automation",
                 f"  tools: n = {f.ai_title_abstract.marked_ineligible_by_automation}",
+                *(
+                    [f"Not yet in the identity revision: n = {f.records_outside_identity}"]
+                    if f.records_outside_identity
+                    else []
+                ),
             ],
         ),
         (
             "Screening",
-            [f"Records screened: n = {f.records_screened}"],
+            [
+                f"Records screened: n = {f.records_screened}",
+                *(
+                    [f"Awaiting screening: n = {f.records_awaiting_screening}"]
+                    if f.records_awaiting_screening
+                    else []
+                ),
+            ],
             [
                 f"Records excluded: n = {f.records_excluded}",
                 "  of which with AI involvement:",
@@ -357,7 +382,14 @@ def svg(f: PrismaFlow, title: str) -> str:
         ),
         (
             "",
-            [f"Reports assessed for eligibility: n = {f.reports_assessed}"],
+            [
+                f"Reports assessed for eligibility: n = {f.reports_assessed}",
+                *(
+                    [f"Awaiting assessment: n = {f.reports_awaiting_assessment}"]
+                    if f.reports_awaiting_assessment
+                    else []
+                ),
+            ],
             [
                 f"Reports excluded: n = {f.reports_excluded}",
                 *reasons,
