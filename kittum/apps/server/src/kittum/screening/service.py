@@ -574,7 +574,9 @@ class Screening:
 
         Reads only `screening_reviewer_queue`, which cannot return another reviewer's rows, AI
         output, or sentinel and audit flags. An item enters the queue once the AI has read it,
-        so a reveal is always possible and M3 can order by the AI.
+        so a reveal is always possible and M3 can order by the AI. The queue can grow behind
+        `after` (an auditor's extra screen takes its record's place), so a client that pages
+        forward must re-read from the start when `status.remaining` says it missed items.
         """
         row = store.find_stage(tx, project_id, scope_id, stage, topic_id)
         criteria = self._criteria(tx, row)

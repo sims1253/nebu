@@ -104,7 +104,9 @@ def queue(
     after: Annotated[Id | None, Query(description="The last assignment the client holds.")] = None,
     limit: Annotated[int, Query(ge=1, le=50)] = 5,
 ) -> list[QueueItem]:
-    """The reviewer's next undecided assignments in queue order, after `after`."""
+    """The reviewer's next undecided assignments in queue order, after `after`. Items can appear
+    behind `after`; re-read without it when `remaining` in the stage status is higher than the
+    items held."""
     screening = _screening(ctx)
     with _errors(), ctx.db.transaction() as tx:
         return screening.queue(

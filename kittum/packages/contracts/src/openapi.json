@@ -4393,7 +4393,7 @@
     },
     "/api/projects/{project_id}/screening/queue": {
       "get": {
-        "description": "The reviewer's next undecided assignments in queue order, after `after`.",
+        "description": "The reviewer's next undecided assignments in queue order, after `after`. Items can appear\nbehind `after`; re-read without it when `remaining` in the stage status is higher than the\nitems held.",
         "operationId": "getScreeningQueue",
         "parameters": [
           {

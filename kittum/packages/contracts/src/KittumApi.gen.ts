@@ -888,7 +888,9 @@ readonly "undoScreeningDecision": {
     <Config extends OperationConfig | undefined = undefined>(projectId: string, assignmentId: string, options: { readonly params: typeof UndoScreeningDecisionParams.Encoded; readonly payload: typeof UndoScreeningDecisionRequestJson.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<UndoScreeningDecision200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"UndoScreeningDecision422", UndoScreeningDecision422>>;
   }
   /**
-* The reviewer's next undecided assignments in queue order, after `after`.
+* The reviewer's next undecided assignments in queue order, after `after`. Items can appear
+* behind `after`; re-read without it when `remaining` in the stage status is higher than the
+* items held.
 */
 readonly "getScreeningQueue": {
     <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly params: typeof GetScreeningQueueParams.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<GetScreeningQueue200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetScreeningQueue422", GetScreeningQueue422>>;

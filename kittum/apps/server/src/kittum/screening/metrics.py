@@ -168,7 +168,8 @@ def stage_metrics(
     items, assignments, records = data.items, data.assignments, data.records
 
     def excluded_unseen(ref: str) -> bool:
-        """Excluded on the screeners' path alone, without an adjudicator deciding it."""
+        """Excluded on the screeners' path alone. An adjudication the audit itself raised keeps the
+        record in the frame, so an audit miss still counts against the bound."""
         path = [c for c in data.genuine(ref) if set(c["kinds"]) - {"audit_disagreement"}]
         finals = [a["f_outcome"] for a in data.screeners(ref)]
         return data.screened(ref) and not path and all(f == "exclude" for f in finals)

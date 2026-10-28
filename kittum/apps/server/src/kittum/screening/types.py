@@ -267,7 +267,8 @@ class AuditGauge(Record):
     audit_samples: int  # records sampled for audit
     audit_decided: int
     excluded_population: int
-    """Records excluded without adjudication (plus, in M3, every record not yet screened)."""
+    """Records excluded without adjudication, other than the audit's own (plus, in M3, every
+    record not yet screened)."""
     audit_relevant_found: int
     strata: tuple[AuditStratum, ...]
     elusion: Interval | None
