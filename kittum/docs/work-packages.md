@@ -19,7 +19,7 @@ The two-week spike in [DESIGN.md](../DESIGN.md#two-week-spike) picks from these 
 | 05 | `search` | Done |
 | 06 | `enrich` | Clients, stored enrichment, and full-text waterfall done; local tagging open |
 | 07 | `corpus` | Dedupe, link proposals, immutable identity revisions, PRISMA counts done |
-| 08 | `judge` and `models` | Types and recorded backend done; open |
+| 08 | `judge` and `models` | Done; ledger store and job wiring wait for WP-01 and WP-02 |
 | 09 | `screening` | Types done; open |
 | 10 | `documents` | Types done; open |
 | 11 | `extraction` | Types done; open |
@@ -257,6 +257,41 @@ Modules `kittum.judge` and `kittum.models`. Needs: `protocol`, `core`.
   checks, downgrade to `unclear`, raw output capture.
 - Gold-data metrics: per-judge recall and specificity, the double-fault rate, run-to-run kappa.
 - Acceptance: recorded completions cover verified, unverified, paraphrased, and negated quotes.
+
+**Done.**
+
+- `models.OpenAICompatibleBackend`: `response_format` with `json_schema`, temperature 0, a seed,
+  the recipe's `extra_body` (thinking switches), raw request and response bytes in the artifact
+  store, the model identity the server reports, thinking removed before the JSON (`<think>`,
+  Gemma channels, harmony, code fences, or the `reasoning` field), retries on transport errors
+  only. `backends_from_endpoints` builds backends from `Settings.llm_endpoints`. A `local_only`
+  request to a `hosted` recipe raises `ConfidentialityError` before anything is sent.
+- `models.ModelRegistry` loads `models/recipes.yaml`: Qwen3.8-27B (thinking off and on),
+  Gemma-4-31B-it, Nemotron 3.5 Super VL NVFP4, and Gemma 4 E4B, Gemma 4 12B, and Qwen3.5-4B on
+  Ollama. Revisions and weight hashes were checked against Hugging Face and the Ollama registry on
+  28.10.2026. Loading rejects licences outside `ALLOWED_WEIGHTS_LICENCES`.
+- `judge.judge` and `judge.judge_many`: one call per record and scope, a per-criterion schema
+  generated from Pydantic, verification and downgrades with `failed_check`, retry with the next
+  seed on malformed output, then `unclear` with the `invalid_output` flag. Records that try to
+  instruct the model cannot be excluded. `judge_many` stores verdicts (migration
+  `20261028120000_judge_verdicts.sql`), artifacts, and `judge.verdict_recorded` events, and
+  skips records already judged under the same cache key.
+- `judge.judge_metrics`, `pair_metrics` (double-fault rate, OR rule, Cohen's kappa), and
+  `fleiss_kappa` for run-to-run agreement.
+
+**Left.**
+
+- `judge_many` holds the caller's transaction across model calls. When WP-02 lands, split it into
+  a job that calls the model and a command that records the verdict.
+- Keyword checks derive keywords from the criterion text and a per-slot vocabulary. If the
+  protocol gains explicit keywords per criterion (WP-03), use them.
+- `Criterion` has `text_en` and `text_de`; the prompt renders every non-empty wording. If WP-03
+  generalizes this to any set of languages, update `_render_criterion`.
+- Ollama reports only the tag as the model identity. Record the blob digest from `/api/show` if
+  audits need more.
+- Calibrate the injection and negation patterns on gold data: they are conservative and will
+  cost some work saved.
+- A live test against Ollama or vLLM; the tests use recorded response bodies.
 
 ## WP-09 Screening
 

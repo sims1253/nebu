@@ -171,6 +171,7 @@ lists no current open model. Neither helps.
 | Judge, family 2 | **Gemma-4-31B-it** | Top of BRIDGE, best faithfulness score here, a separate lineage from Qwen. Already validated for Cochrane screening: paired with gpt-oss-120b it reached 95.9% sensitivity over 419 reviews (medRxiv, June 2026). | Apache-2.0 since Gemma 4 | One 80 GB GPU |
 | Long documents and second extractor | **Nemotron 3.5 Super VL** (120B, 12B active) | Best open model in the 40 to 150B class on Artificial Analysis; 1M context; reads page images. Covers CSRs beyond 256k tokens. | OpenMDW-1.1, permissive | NVFP4 on two H100s or one H200 |
 | Laptop | Qwen3.8-27B at Q4, or Gemma 4 12B | | Apache-2.0 | 24 GB GPU or 32 GB unified memory |
+| Development | Gemma 4 E4B (`google/gemma-4-E4B-it`, Ollama `gemma4:e4b`) and Qwen3.5-4B (`Qwen/Qwen3.5-4B`, Ollama `qwen3.5:4b`) | Small enough for any laptop; for building and debugging, never for real decisions | Apache-2.0 | 16 GB of memory |
 | Embeddings for queue order and clustering | MedCPT (PubMed-trained, English) for abstracts. For non-English and mixed text, a bake-off of mDenseOn (LightOn, 307M, multilingual, open training data), EmbeddingGemma 2 (740M, 100+ languages, 8k context, Matryoshka sizes down to 128), and Qwen3-Embedding. | Never used for primary search | Public domain; Apache-2.0 for all three | CPU or a small GPU |
 | Reranker (later, large topics only) | MedCPT cross-encoder, or LightOn-rerank (on Qwen3.5-4B, also reads page images) | Orders the queue only | Public domain; Apache-2.0 | |
 
