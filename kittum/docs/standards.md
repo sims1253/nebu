@@ -2,8 +2,7 @@
 
 This page maps the standards and laws that apply to any AI-assisted systematic review to the parts
 of Kittum that meet them. Requirements of a particular agency or jurisdiction live in its
-[profile](../DESIGN.md#profiles); the G-BA and IQWiG rules, for example, are in
-[the G-BA/AMNOG profile](profiles/gba-amnog.md#requirements).
+[profile](../DESIGN.md#profiles), and each profile's doc maps them the same way.
 
 The status column says how each fact was confirmed:
 

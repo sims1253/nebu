@@ -8,8 +8,8 @@ The supporting reference pages are:
 - [Document and model tools](docs/document-tools.md) for parsers, OCR, and models.
 - [Standards and regulation](docs/standards.md) for the mapping to PRISMA, RAISE, the EU AI Act,
   GDPR, and quality frameworks.
-- [Profiles](#profiles) for the optional rules of a particular agency or jurisdiction, such as
-  [the G-BA benefit dossier](docs/profiles/gba-amnog.md).
+- [Profiles](#profiles) for the optional rules of a particular agency or jurisdiction, each with
+  its own doc.
 
 Kittum's core does not depend on any jurisdiction. It rests on these principles:
 
@@ -140,9 +140,8 @@ Criteria are executable. Each criterion compiles to a question that a human answ
 and that the AI judge answers as `met`, `not_met`, or `unclear` with a quote. Exclusion reasons are
 criterion IDs, so every exclusion list in every report comes from data instead of free text.
 
-A profile extends this schema. The G-BA profile, for example, wraps scopes in its own hierarchy of
-indications and subpopulations and fixes the freshness limit; see
-[its protocol extensions](docs/profiles/gba-amnog.md#protocol-extensions).
+A profile extends this schema. It can, for example, wrap scopes in a hierarchy of indications and
+subpopulations with an assigned comparator, and fix the freshness limit.
 
 ### Search
 
@@ -301,8 +300,8 @@ Kittum renders every report from the ledger. Nobody types counts. The core targe
 | `bundle` | The handover bundle, with a validation pack for client vendor audits |
 
 Profiles register further targets: an agency's dossier sections and annexes, a submission
-directory tree with fixed file names, or a written justification in the agency's wording. The G-BA
-profile's targets are listed [in its doc](docs/profiles/gba-amnog.md#reports).
+directory tree with fixed file names, or a written justification in the agency's wording. Each
+profile's doc lists its targets.
 
 The AI-use disclosure is data first. The PRISMA executive does not endorse PRISMA-trAIce, and RAISE
 is still changing, so Kittum renders the same disclosure record into whichever template a client
@@ -409,7 +408,7 @@ A profile can add rules and make existing ones stricter. It cannot weaken these:
 | Profile | ID | Status | Doc |
 | --- | --- | --- | --- |
 | G-BA benefit dossier (German AMNOG procedure) | `gba_amnog` | First profile, in progress | [gba-amnog.md](docs/profiles/gba-amnog.md) |
-| EU joint clinical assessment | Not yet named | Idea. Today part of the G-BA profile. | None yet |
+| EU joint clinical assessment | Not yet named | Idea. Today part of the first profile. | None yet |
 | Cochrane intervention review (MECIR conduct and reporting standards, GRADE summary-of-findings tables) | Not yet named | Idea | None yet |
 
 ## Provenance that survives re-parsing
@@ -774,8 +773,7 @@ The data model already keys everything by project, so a tenant is one more key, 
 
 The spike answers one question: which AI role is defensible, and with which numbers? It uses one
 search topic from a completed review, ideally one where an external assessor found a study the
-authors missed. A profile can add deliverables; the G-BA profile's are in
-[its doc](docs/profiles/gba-amnog.md#two-week-spike-under-this-profile).
+authors missed. A profile can add deliverables; each profile's doc lists them.
 
 | Days | Deliverable |
 | --- | --- |

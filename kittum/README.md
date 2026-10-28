@@ -5,8 +5,8 @@ from the protocol to the final reports. AI screens and extracts beside two human
 every decision lands in a hash-chained ledger. The deliverable is the review output plus one
 database file that holds the whole audit trail.
 
-The core does not depend on any jurisdiction. The rules of a particular agency, such as the German
-G-BA benefit dossier, come from an optional [profile](DESIGN.md#profiles).
+The core does not depend on any jurisdiction. The rules of a particular agency or jurisdiction come
+from an optional [profile](DESIGN.md#profiles).
 
 Status: scaffold. Every module has its interface and the shared fakes; the work is split into
 [work packages](docs/work-packages.md). [AGENTS.md](AGENTS.md) explains how to build, test, and
@@ -24,8 +24,8 @@ work on it in parallel.
   for fit, quality, and maintenance.
 - [Standards and regulation](docs/standards.md): what PRISMA, RAISE, the EU AI Act, GDPR, and
   quality frameworks require of the system.
-- [Profiles](DESIGN.md#profiles): optional agency and jurisdiction rules. The first is the
-  [G-BA benefit dossier profile](docs/profiles/gba-amnog.md).
+- [Profiles](DESIGN.md#profiles): optional agency and jurisdiction rules, with a list of the
+  profiles and their docs.
 - [Work packages](docs/work-packages.md): the build split into independent pieces, with status.
 - [Council record](docs/council.md): how the design was reached, where the council disagreed, and
   which claims were checked.

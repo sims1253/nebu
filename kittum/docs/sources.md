@@ -31,8 +31,8 @@ Some method guidance excludes routine searches of preprint servers, and a profil
 Preprints found another way (citation chasing, Europe PMC, the sponsor's study list) still go
 through normal screening and quality assessment.
 
-A profile can add sources, such as a lookup on an agency's own website. The G-BA profile's minimum
-is in [its doc](profiles/gba-amnog.md#search-and-sources).
+A profile can add sources, such as a lookup on an agency's own website. Each profile's doc lists
+its minimum.
 
 ## Free sources
 
