@@ -14,7 +14,7 @@ The two-week spike in [DESIGN.md](../DESIGN.md#two-week-spike) picks from these 
 | 00 | Scaffold: `core`, layout, CI, compose, contracts pipeline | Done |
 | 01 | `ledger` | Done: Postgres and SQLite stores, checkpoints, `seal`, `kittum verify`; TSA and WORM copies open |
 | 02 | `runs` | Done: job queue, worker, receipts, decider helper, fakes; run manifests and `diff` open |
-| 03 | `protocol` | First-cut types; open |
+| 03 | `protocol`, `profiles` | Done: schema, profiles, compile, diff, rendering, persistence, routes |
 | 04 | `gateway` | Done: httpx transport, policies, shared buckets, budgets, cache, attempts; AppContext wiring open |
 | 05 | `search` | Types done; open |
 | 06 | `enrich` | Clients, stored enrichment, and full-text waterfall done; local tagging open |
@@ -110,16 +110,46 @@ Left open:
 
 ## WP-03 Protocol
 
-Module `kittum.protocol`. Needs: `core`.
+Module `kittum.protocol` (domain-neutral core) and `kittum.profiles` (review-community profiles).
+Needs: `core`, `db`, `ledger`.
 
-- The generic schema from DESIGN.md "Protocol" (review questions and scopes, PICO, comparators,
-  outcomes, effect modifiers, source plan, reference set, audit and stopping plans, freshness
-  policy), with a profile registry for extensions. The `gba_amnog` dossier fields live in
-  `kittum.profiles.gba_amnog`.
-- `compile(source)` from JSON or YAML with clear validation errors; a content hash per version.
-- `diff(a, b)` for criteria, scopes, and modes.
-- Criterion rendering: the human question and the model prompt fragment.
-- Acceptance: a worked example protocol in `tests/protocol/fixtures/`, round-trip stable hashes.
+Done:
+
+- A generic schema: review questions (each a scope) with PICO, comparators (optionally
+  alternatives), and outcome IDs; outcomes with a category; effect modifiers; search topics with
+  criteria, source plan, reference set, screening mode with audit and stopping plans, and a
+  freshness policy. All human text is localized (`{en: ..., de: ...}`) with a required
+  `default_language`.
+- Profiles: `register_profile(Profile)` adds extension schemas (protocol, question, comparator,
+  outcome, topic, criterion), vocabularies (`outcome_category`, `topic_kind`), rules, labels, and
+  default effect modifiers. The core never imports a profile; `api.create_app` calls
+  `kittum.profiles.load_profiles()`.
+- `kittum.profiles.gba_amnog`: dossier and Anwendungsgebiete, Teilpopulationen with zVT
+  (comparators as alternatives, "nach ärztlicher Maßgabe", off-label options), JCA PICOs as linked
+  questions, the four AMNOG endpoint categories, Modul 4 search kinds, the three-month search age,
+  the Modul 4 source minimum, German as the default language.
+- `compile(source)` from YAML, JSON, or a mapping: every issue with its path, duplicate YAML keys
+  with line numbers, cross-checks (unique IDs, scopes exist, every topic and scope decidable at
+  title and abstract, mode rules, reference identifiers), and a content hash over RFC 8785 JSON.
+- `diff(a, b)`: added, removed, and changed criteria and scopes, mode changes, and field-level
+  changes keyed by ID.
+- `render_question` (reviewer question with answer keys, profile slot labels) and
+  `render_prompt` (judge fragment asking for a verbatim quote, languages in stable order).
+- Persistence in `protocol_version` (migration `20261028140000_protocol_versions.sql`):
+  `save_draft` (idempotent per content hash), `publish` (human approver, `protocol.published`
+  ledger event, reason required for a mode change, then frozen by trigger), `get_version`,
+  `list_versions`, `latest_published`. `testing.InMemoryProtocolStore` is the fake.
+- Routes: `POST /api/protocol/validate`, `POST /api/projects/{id}/protocol-versions`,
+  `POST .../{version_id}/publish`, `GET .../protocol-versions`, `GET .../{version_id}`.
+- Examples: `examples/protocols/capivasertib.yaml` (G-BA D-1110, `gba_amnog`) and
+  `examples/protocols/nicotine-replacement.yaml` (no profile).
+
+Left:
+
+- Swap the test-only `SqlLedger` (tests/protocol/support.py) for the WP-01 Postgres ledger, and
+  give `AppContext.ledger` a real default once it exists.
+- Approver identity comes from the request body until the API has authentication (WP-15).
+- A profile for EU JCA dossiers as a report target, if JCA needs more than linked questions.
 
 ## WP-04 Gateway
 
