@@ -14,6 +14,7 @@ from kittum.search import (
     list_executions,
     run,
 )
+from kittum.search.pubmed import parse_pubmed_xml
 from kittum.storage import MemoryStore
 
 if TYPE_CHECKING:
@@ -196,3 +197,19 @@ def test_pubmed_reads_registry_ids_from_databanklist(
     loaded = get_execution(pg, project_id, execution.id)
     assert loaded is not None
     assert "NCT03052283" in loaded.records[0].registry_ids
+
+
+def test_only_trial_registry_databanks_become_registry_ids() -> None:
+    xml = (FIXTURES / "pubmed_efetch_databank_only.xml").read_bytes()
+    genbank = (
+        b"<DataBank><DataBankName>GENBANK</DataBankName><AccessionNumberList>"
+        b"<AccessionNumber>KJ466205</AccessionNumber></AccessionNumberList></DataBank>"
+    )
+    mixed = xml.replace(
+        b'<DataBankList CompleteYN="Y">', b'<DataBankList CompleteYN="Y">' + genbank
+    )
+    assert mixed != xml
+
+    (record,) = parse_pubmed_xml(mixed, "0" * 64)
+
+    assert record.registry_ids == ("NCT03052283",)

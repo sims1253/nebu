@@ -33,6 +33,31 @@ EUDRACT_PATTERN = re.compile(r"\b(\d{4}-\d{6}-\d{2})\b")
 YEAR_PATTERN = re.compile(r"\b(19\d\d|20\d\d)\b")
 
 
+# DataBankName values that NLM uses for clinical trial registries
+# (https://www.nlm.nih.gov/bsd/medline_databank_source.html).
+TRIAL_REGISTRY_DATABANKS = frozenset(
+    {
+        "ANZCTR",
+        "ChiCTR",
+        "ClinicalTrials.gov",
+        "CRiS",
+        "CTRI",
+        "DRKS",
+        "EudraCT",
+        "IRCT",
+        "ISRCTN",
+        "JPRN",
+        "NTR",
+        "PACTR",
+        "ReBec",
+        "RPCEC",
+        "SLCTR",
+        "TCTR",
+        "UMIN CTR",
+    }
+)
+
+
 def parse_pubmed_xml(
     xml_bytes: bytes, raw_hash: Sha256, start_ordinal: int = 0
 ) -> list[SourceRecord]:
@@ -133,12 +158,14 @@ def parse_pubmed_xml(
                     doi = art_id.text.strip()
                     break
 
-        # Registry IDs from DataBankList, which sits under Article
-        for acc in medline.findall(
-            "Article/DataBankList/DataBank/AccessionNumberList/AccessionNumber"
-        ):
-            if acc.text:
-                registry_ids.append(acc.text.strip())
+        # Registry IDs from DataBankList, which sits under Article. It also lists sequence and
+        # data repositories (GenBank, PDB, ...), so keep only trial registries.
+        for bank in medline.findall("Article/DataBankList/DataBank"):
+            if (bank.findtext("DataBankName") or "").strip() not in TRIAL_REGISTRY_DATABANKS:
+                continue
+            for acc in bank.findall("AccessionNumberList/AccessionNumber"):
+                if acc.text:
+                    registry_ids.append(acc.text.strip())
 
         # Registry IDs from abstract and title
         combined_text = f"{title} {abstract or ''}"
