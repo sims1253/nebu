@@ -283,10 +283,9 @@ Modules `kittum.judge` and `kittum.models`. Needs: `protocol`, `core`.
 
 - `judge_many` holds the caller's transaction across model calls. When WP-02 lands, split it into
   a job that calls the model and a command that records the verdict.
-- Keyword checks derive keywords from the criterion text and a per-slot vocabulary. If the
-  protocol gains explicit keywords per criterion (WP-03), use them.
-- `Criterion` has `text_en` and `text_de`; the prompt renders every non-empty wording. If WP-03
-  generalizes this to any set of languages, update `_render_criterion`.
+- The judge is built against WP-03's `Criterion` (`text` per language, `polarity`, `keywords`)
+  and renders criteria with `kittum.protocol.render_prompt`. This branch carries a temporary copy
+  of those types in `protocol/__init__.py`; drop it when the protocol branch is merged.
 - Ollama reports only the tag as the model identity. Record the blob digest from `/api/show` if
   audits need more.
 - Calibrate the injection and negation patterns on gold data: they are conservative and will

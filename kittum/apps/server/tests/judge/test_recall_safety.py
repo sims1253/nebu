@@ -6,6 +6,8 @@ from kittum.judge import CriterionVerdict, ScreeningItem, Verdict, judge
 from kittum.models.testing import RecordedBackend
 from kittum.protocol import Criterion
 from tests.judge.records import (
+    ADOLESCENTS,
+    ADULT_NSCLC,
     CHEMO_NAIVE,
     CONFIG,
     CRITERIA,
@@ -80,8 +82,7 @@ def test_a_negative_criterion_in_any_language_is_checked_for_polarity() -> None:
     german_only = Criterion(
         id="C_NO_CHEMO",
         slot="population",
-        text_en="",
-        text_de="Keine vorherige Chemotherapie",
+        text={"de": "Keine vorherige Chemotherapie"},
         decidable_at=("title_abstract",),
         applies_to=(SCOPE,),
     )
@@ -132,3 +133,45 @@ def test_a_think_tag_inside_a_json_quote_is_kept(prefix: str) -> None:
     assert verdict.flags == ()
     assert (pop.status, pop.quote, pop.quote_verified) == ("not_met", quote, True)
     assert verdict.excludes
+
+
+@pytest.mark.parametrize(
+    ("wording", "stands"),
+    [
+        ("Prior chemotherapy", False),  # "without" is the opposite of what excludes
+        ("No prior chemotherapy", True),  # the record shows the exclusion condition
+    ],
+)
+def test_an_exclude_criterion_is_checked_against_what_it_excludes(
+    wording: str, stands: bool
+) -> None:
+    exclusion = Criterion(
+        id="C_EXCL_CHEMO",
+        slot="population",
+        polarity="exclude",
+        text={"en": wording},
+        decidable_at=("title_abstract",),
+        applies_to=(SCOPE,),
+    )
+    text = answer(
+        C_EXCL_CHEMO=("not_met", "patients without prior chemotherapy", "Chemotherapy-naive.")
+    )
+    backend = recorded(CHEMO_NAIVE, answers={CHEMO_NAIVE.item_ref: text}, criteria=(exclusion,))
+    verdict = judge(CHEMO_NAIVE, SCOPE, (exclusion,), CONFIG, backend)
+    assert verdict.excludes is stands
+    assert verdict.criteria[0].failed_check == (None if stands else "negation")
+    # The judge sees the protocol's own rendering, with the polarity spelled out.
+    assert "Exclusion condition. The record passes unless it shows this:" in (
+        backend.requests[0].messages[1].content
+    )
+
+
+def test_a_quote_without_the_protocols_keywords_cannot_exclude() -> None:
+    adults = ADULT_NSCLC.model_copy(update={"keywords": ("aged", "years old", "adolescent")})
+    criteria = (adults,)
+    for quote, stands in (("patients aged 12 to 17 years", True), ("48 patients", False)):
+        text = answer(C_POP_ADULT_NSCLC=("not_met", quote, "Not adults."))
+        backend = recorded(ADOLESCENTS, answers={ADOLESCENTS.item_ref: text}, criteria=criteria)
+        verdict = judge(ADOLESCENTS, SCOPE, criteria, CONFIG, backend)
+        assert verdict.excludes is stands, quote
+        assert verdict.criteria[0].failed_check == (None if stands else "off_criterion")

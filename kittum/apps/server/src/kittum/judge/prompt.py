@@ -11,8 +11,9 @@ One call judges every applicable criterion for one record. The design choices:
 - The schema has one required property per criterion ID, so constrained decoding cannot skip or
   repeat a criterion. Inside each answer the quote comes first, then the rationale, then the
   status: the model commits to evidence before it decides.
-- The prompt works from the protocol's criteria alone. Each criterion is shown in every
-  language the protocol words it in, with the protocol's examples. Nothing in the prompt varies between runs, so the rendered prompt is a cache key.
+- The prompt works from the protocol's criteria alone. Each criterion is rendered by
+  `kittum.protocol.render_prompt`: include or exclude polarity, every language it is worded in,
+  its keywords, and its examples, so reviewers and the judge are asked the same question. Nothing in the prompt varies between runs, so the rendered prompt is a cache key.
 
 Bump `PROMPT_VERSION` with any change to the wording or to how criteria are rendered.
 """
@@ -23,12 +24,13 @@ from pydantic import BaseModel, ConfigDict, Field, create_model
 
 from kittum.core import content_hash, sha256_hex
 from kittum.models import CompletionRequest, Message
+from kittum.protocol import render_prompt
 
 if TYPE_CHECKING:
     from kittum.judge.types import JudgeConfig, ScreeningItem
     from kittum.protocol import Criterion
 
-PROMPT_VERSION = "judge.v1"
+PROMPT_VERSION = "judge.v2"
 
 SYSTEM_PROMPT = """\
 You screen records for a systematic literature review. For one record you judge each \
@@ -36,9 +38,12 @@ eligibility criterion of the review protocol separately and independently. A cri
 worded in more than one language; every version states the same criterion.
 
 Statuses
-- met: the record states something that satisfies the criterion.
-- not_met: the record explicitly states something that contradicts the criterion. Use not_met \
-only when you can copy words from the record that show it.
+Each criterion is an inclusion condition the record must meet or an exclusion condition the \
+record must not show; its text says which.
+- met: the record passes the criterion.
+- not_met: the record explicitly shows that it does not pass: it contradicts an inclusion \
+condition or shows an exclusion condition. Use not_met only when you can copy words from the \
+record that show it.
 - unclear: the record says nothing about the criterion, says too little, or is ambiguous. \
 Missing information is unclear, never not_met.
 
@@ -154,20 +159,11 @@ def prompt_template_hash() -> str:
     )
 
 
-def _render_criterion(c: Criterion) -> str:
-    lines = [f"[{c.id}] ({c.slot.replace('_', ' ')})"]
-    wordings = (("en", c.text_en), ("de", c.text_de))
-    lines += [f"Wording ({lang}): {text}" for lang, text in wordings if text.strip()]
-    lines += [f"Meets it, for example: {e}" for e in c.positive_examples]
-    lines += [f"Does not meet it, for example: {e}" for e in c.negative_examples]
-    return "\n".join(lines)
-
-
 def render_user(item: ScreeningItem, criteria: tuple[Criterion, ...]) -> str:
     """Stage, criteria, then the record inside a tag named after its hash."""
     return USER_TEMPLATE.format(
         stage=STAGE_LABELS[item.stage],
-        criteria="\n\n".join(_render_criterion(c) for c in criteria),
+        criteria="\n\n".join(render_prompt(c, item.stage) for c in criteria),
         tag="record-" + sha256_hex(item.source.encode())[:16],
         title=item.title,
         text=item.text,

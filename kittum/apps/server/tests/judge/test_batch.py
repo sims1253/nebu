@@ -107,7 +107,7 @@ def test_a_batch_records_verdicts_and_a_rerun_makes_no_model_calls(pg: Tx) -> No
     injected = next(r for r in rows if r["item_ref"] == INJECTED.item_ref)
     assert injected["flags"] == ["injection_suspected"]
     assert injected["model_identity"] == "Qwen/Qwen3.8-27B"
-    assert injected["prompt_version"] == "judge.v1"
+    assert injected["prompt_version"] == "judge.v2"
     negated = next(r for r in rows if r["item_ref"] == EXCLUDED_CHEMO_NAIVE.item_ref)
     chemo = next(c for c in negated["criteria"] if c["criterion_id"] == "C_PRIOR_CHEMO")
     assert (chemo["status"], chemo["downgraded_from"], chemo["failed_check"]) == (

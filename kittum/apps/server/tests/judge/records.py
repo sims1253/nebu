@@ -16,8 +16,10 @@ SCOPE = "S1"
 ADULT_NSCLC = Criterion(
     id="C_POP_ADULT_NSCLC",
     slot="population",
-    text_en="Adults (18 years or older) with non-small cell lung cancer",
-    text_de="Erwachsene (ab 18 Jahren) mit nicht-kleinzelligem Lungenkarzinom",
+    text={
+        "en": "Adults (18 years or older) with non-small cell lung cancer",
+        "de": "Erwachsene (ab 18 Jahren) mit nicht-kleinzelligem Lungenkarzinom",
+    },
     decidable_at=("title_abstract", "full_text"),
     applies_to=(SCOPE,),
     positive_examples=("adults with stage IV NSCLC",),
@@ -26,30 +28,27 @@ ADULT_NSCLC = Criterion(
 PRIOR_CHEMO = Criterion(
     id="C_PRIOR_CHEMO",
     slot="population",
-    text_en="Previously treated with chemotherapy",
-    text_de="Vorbehandlung mit Chemotherapie",
+    text={"en": "Previously treated with chemotherapy", "de": "Vorbehandlung mit Chemotherapie"},
     decidable_at=("title_abstract", "full_text"),
     applies_to=(SCOPE,),
 )
 RCT = Criterion(
     id="C_RCT",
     slot="study_type",
-    text_en="Randomised controlled trial",
-    text_de="Randomisierte kontrollierte Studie",
+    text={"en": "Randomised controlled trial", "de": "Randomisierte kontrollierte Studie"},
     decidable_at=("title_abstract", "full_text"),
     applies_to=(SCOPE,),
 )
 OS_FULL_TEXT = Criterion(
     id="C_OS_REPORTED",
     slot="outcome",
-    text_en="Reports overall survival",
-    text_de="Berichtet Gesamtüberleben",
+    text={"en": "Reports overall survival", "de": "Berichtet Gesamtüberleben"},
     decidable_at=("full_text",),
     applies_to=(SCOPE,),
 )
 CRITERIA = (ADULT_NSCLC, PRIOR_CHEMO, RCT, OS_FULL_TEXT)
 
-CONFIG = JudgeConfig(id="qwen-ta-v1", model_id="qwen3.8-27b-bf16", prompt_version="judge.v1")
+CONFIG = JudgeConfig(id="qwen-ta-v1", model_id="qwen3.8-27b-bf16", prompt_version="judge.v2")
 
 
 def item(ref: str, title: str, text: str) -> ScreeningItem:

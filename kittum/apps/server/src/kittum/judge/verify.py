@@ -138,8 +138,8 @@ def _stem(word: str) -> str:
 def criterion_keywords(criterion: Criterion) -> frozenset[str]:
     """Stems of the criterion's own content words and of its slot's vocabulary."""
     texts = [
-        criterion.text_en,
-        criterion.text_de,
+        *criterion.text.values(),
+        *criterion.keywords,
         *criterion.positive_examples,
         *criterion.negative_examples,
     ]
@@ -153,6 +153,9 @@ def criterion_keywords(criterion: Criterion) -> frozenset[str]:
 
 
 def _relates_to_criterion(quote: str, criterion: Criterion) -> bool:
+    if criterion.keywords:  # the protocol's own rule: the quote must contain one of them
+        folded = quote.casefold()
+        return any(k.casefold() in folded for k in criterion.keywords)
     keywords = criterion_keywords(criterion)
     return any(_stem(w) in keywords for w in _words(quote))
 
@@ -170,10 +173,12 @@ def _negative(text: str) -> bool:
 
 
 def _negation_flips(quote: str, criterion: Criterion, source: str, spans: tuple[Span, ...]) -> bool:
-    # "Without prior chemotherapy" does not contradict "no prior chemotherapy" or "keine
-    # vorherige Chemotherapie": every wording the protocol gives counts.
-    wordings = (criterion.text_en, criterion.text_de)
-    if _negative(quote) and any(_negative(w) for w in wordings if w.strip()):
+    # "Without prior chemotherapy" does not fail "no prior chemotherapy", "keine vorherige
+    # Chemotherapie", or an exclusion condition "prior chemotherapy". Every wording counts, and
+    # an exclude criterion requires the opposite of its text.
+    worded_negative = any(_negative(t) for t in criterion.text.values())
+    requires_absence = worded_negative != (criterion.polarity == "exclude")
+    if _negative(quote) and requires_absence:
         return True
     for span in spans:
         before, after = _sentence_around(source, span)
