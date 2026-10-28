@@ -59,7 +59,9 @@ def _endpoints(raw: str, keys: str = "") -> tuple[LlmEndpoint, ...]:
 class Settings:
     database_url: str
     artifact_dir: Path
-    contact_email: str | None = None  # polite pools for Crossref, Unpaywall, NCBI
+    contact_email: str | None = (
+        None  # polite pools for Crossref, Unpaywall, NCBI; Unpaywall needs it
+    )
     ncbi_api_key: str | None = None
     openalex_api_key: str | None = None
     llm_endpoints: tuple[LlmEndpoint, ...] = field(default=())
@@ -78,6 +80,9 @@ class Settings:
     judge_backend: Literal["endpoint", "demo"] = "endpoint"
     # The built workbench (`pnpm build` writes apps/web/dist). `kittum serve` serves it when set.
     web_dist: Path | None = None
+    # A directory of recorded source responses (`kittum.gateway.RecordedTransport`). When set, the
+    # gateway answers from it and never touches the network: the end-to-end stack and offline demos.
+    gateway_recordings: Path | None = None
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -103,6 +108,11 @@ class Settings:
             judge_model=env.get("KITTUM_JUDGE_MODEL") or None,
             judge_backend=_judge_backend(env.get("KITTUM_JUDGE_BACKEND", "endpoint")),
             web_dist=Path(env["KITTUM_WEB_DIST"]) if env.get("KITTUM_WEB_DIST") else None,
+            gateway_recordings=(
+                Path(env["KITTUM_GATEWAY_RECORDINGS"])
+                if env.get("KITTUM_GATEWAY_RECORDINGS")
+                else None
+            ),
         )
 
 
