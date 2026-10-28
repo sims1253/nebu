@@ -150,7 +150,8 @@ Module `kittum.extraction`. Needs: `documents`, `protocol`, `models`.
 
 Module `kittum.appraisal`. Needs: `documents`, `extraction`.
 
-- Instruments as data (G-BA Bewertungsbogen, RoB 2, ROBINS-I V2); quote assembly per question.
+- Instruments as data (RoB 2, ROBINS-I V2, plus profile-registered forms); quote assembly per
+  question.
 
 ## WP-13 Statistics
 
