@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 
 from kittum.api import AppContext, create_app
 from kittum.app.demo import DATA, PDFS, PROTOCOL, demo_judge
+from kittum.core import new_id
 from kittum.ledger import PostgresLedger
 from kittum.models import ModelRegistry
 from kittum.settings import Settings
@@ -131,6 +132,34 @@ def test_a_lead_sets_up_a_review_from_files_over_http(pg: Tx) -> None:
         == 400
     )
 
+    # A reviewer who names themselves is refused every write that is the lead's, and the server
+    # writes nothing: not the person, the protocol version, the search, or the corpus.
+    sam = people["Sam"]
+    draft_two = ok(client.post(f"/api/projects/{pid}/protocol-versions", json=edited), 201)
+    revision = {"revision_id": str(new_id()), "actor_id": sam}
+    two = [str(new_id()), str(new_id())]
+    stage = {"scope_id": "nrt-vs-control", "stage": "title_abstract"}
+    for path, body in (
+        ("members", {"display_name": "Mallory", "roles": ["lead"], "added_by": sam}),
+        (f"protocol-versions/{draft_two['id']}/publish", {"approved_by": sam}),
+        ("search/import", {"plan": plan, "data": "", "format": "ris", "actor_id": sam}),
+        ("search/run", {"plan": plan | {"source": "pubmed"}, "actor_id": sam}),
+        ("corpus/ingest", {"actor_id": sam}),
+        ("corpus/confirm", revision | {"proposal_id": str(new_id())}),
+        ("corpus/merge", revision | {"occurrence_ids": two, "relation": "same_record"}),
+        ("corpus/split", revision | {"occurrence_ids": two[:1], "level": "report"}),
+        ("screening/stages", stage | {"actor_id": sam}),
+    ):
+        refused = client.post(f"/api/projects/{pid}/{path}", json=body)
+        assert refused.status_code == 403, (path, refused.text)
+    # The lead passes the same check; this context has no gateway to search with.
+    run = {"plan": plan | {"source": "pubmed"}, "actor_id": lead}
+    assert client.post(f"/api/projects/{pid}/search/run", json=run).status_code == 503
+    after = ok(client.get(f"/api/projects/{pid}"))
+    assert [m["display_name"] for m in after["members"]] == ["Morgan Lee", *roles]
+    assert after["protocol"]["content_hash"] == draft["version"]["content_hash"]
+    assert len(ok(client.get(f"/api/projects/{pid}/search/executions", headers=as_lead))) == 3
+
     # No upload queue before the corpus; then every report, and none for a reviewer.
     assert client.get(f"/api/projects/{pid}/full-texts", headers=as_lead).status_code == 409
     ok(client.post(f"/api/projects/{pid}/corpus/ingest", json={"actor_id": lead}), 201)
@@ -139,6 +168,13 @@ def test_a_lead_sets_up_a_review_from_files_over_http(pg: Tx) -> None:
     assert all(item["full_text"] is None and item["outcomes"] == {} for item in queue)
     assert client.get(f"/api/projects/{pid}/full-texts", headers=as_sam).status_code == 403
     trial = next(i for i in queue if i["doi"] == "10.1186/s12916-026-04943-4")
+    by_sam = client.post(
+        f"/api/projects/{pid}/full-texts/{trial['item_ref']}",
+        params={"actor_id": sam},
+        content=LESOTHO.read_bytes(),
+        headers={"Content-Type": "application/pdf"},
+    )
+    assert by_sam.status_code == 403
     attached = ok(
         client.post(
             f"/api/projects/{pid}/full-texts/{trial['item_ref']}",

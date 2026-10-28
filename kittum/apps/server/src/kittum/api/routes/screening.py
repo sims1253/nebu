@@ -16,10 +16,12 @@ from kittum.api import AppContext, Context  # noqa: TC001 - FastAPI resolves it 
 from kittum.app import (
     AssignmentFullText,
     LifecycleError,
+    NotLead,
     full_text,
     mentions,
     open_screening,
     parse_sentinels,
+    require_lead,
 )
 from kittum.core import Id, NotFoundError, Record
 from kittum.documents import get_layer
@@ -122,6 +124,8 @@ def _errors() -> Generator[None]:
         # FastAPI's validation-error shape, so clients read one 422 format.
         detail = [{"loc": [], "msg": str(e), "type": "invalid_decision"}]
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=detail) from e
+    except NotLead as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
     except LifecycleError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
 
@@ -139,6 +143,8 @@ def open_stage(project_id: Id, body: OpenStageRequest, ctx: Context) -> StageInf
     abstract screens every report of the corpus; full text every record included at title and
     abstract that has a full text."""
     with _errors(), ctx.db.transaction() as tx:
+        # Whoever opens a stage hands over its sentinels: only a lead who screens nothing.
+        require_lead(tx, project_id, body.actor_id)
         return open_screening(
             tx,
             ctx,

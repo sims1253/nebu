@@ -79,7 +79,7 @@ def test_api_saves_and_publishes_the_example(api: tuple[TestClient, dict[str, An
     assert client.post(base, json=example_source(AMNOG)).json()["id"] == draft["id"]
 
     denied = client.post(f"{base}/{draft['id']}/publish", json={"approved_by": str(ids["system"])})
-    assert denied.status_code == 409
+    assert denied.status_code == 403  # not the project's lead
 
     published = client.post(
         f"{base}/{draft['id']}/publish", json={"approved_by": str(ids["approver"])}

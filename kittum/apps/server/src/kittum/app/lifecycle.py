@@ -639,6 +639,13 @@ def open_screening(
 # Progress
 
 
+def require_project_lead(tx: Tx, project_id: Id, actor_id: Id) -> None:
+    """Refuse a lead's write (adding people, publishing the protocol) to anyone who is not one of
+    the project's leads. Until the API has authentication the actor is the caller's claim."""
+    if not is_lead(tx, project_id, actor_id):
+        raise NotLead(f"only the project's methods lead may do this; {actor_id} is not one")
+
+
 def require_lead(tx: Tx, project_id: Id, actor_id: Id) -> None:
     """Refuse reads of the whole catalogue to anyone but a lead who screens nothing
     (`sees_lead_data`): whoever could list every record and has a queue could tell which records
@@ -720,5 +727,6 @@ __all__ = [
     "protocol_source",
     "publish_protocol",
     "require_lead",
+    "require_project_lead",
     "retrieval",
 ]

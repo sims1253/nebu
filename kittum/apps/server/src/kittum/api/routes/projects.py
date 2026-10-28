@@ -29,6 +29,7 @@ from kittum.app import (
     progress,
     project_summary,
     require_lead,
+    require_project_lead,
     retrieval,
 )
 from kittum.core import Id, NotFoundError, Record
@@ -104,6 +105,7 @@ def get_project(project_id: Id, ctx: Context) -> ProjectSummary:
 @router.post("/{project_id}/members", operation_id="addProjectMember", status_code=201)
 def add_member_route(project_id: Id, body: AddMemberRequest, ctx: Context) -> Member:
     with _errors(), ctx.db.transaction() as tx:
+        require_project_lead(tx, project_id, body.added_by)
         return add_member(
             tx,
             project_id,
@@ -118,6 +120,8 @@ def _attach(
     ctx: AppContext, project_id: Id, item_ref: str, pdf: bytes, actor_id: Id, licence: str | None
 ) -> FullText:
     with ctx.db.transaction() as tx:
+        # The lead's upload queue names every record; whoever uploads works from it.
+        require_lead(tx, project_id, actor_id)
         return attach_full_text(
             tx,
             project_id,

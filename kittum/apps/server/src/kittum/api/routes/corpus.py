@@ -71,6 +71,8 @@ class SplitRequest(Record):
 def ingest_route(project_id: Id, body: IngestRequest, ctx: Context) -> CorpusRevision:
     """Deduplicate every search of the project into the first identity revision."""
     with _errors(), ctx.db.transaction() as tx:
+        # The revision comes back with every record: the lead's catalogue.
+        require_lead(tx, project_id, body.actor_id)
         return ingest_corpus(tx, project_id, actor_id=body.actor_id, ledger=_ledger(ctx))
 
 
@@ -111,6 +113,7 @@ def confirm_route(
     ctx: Context,
 ) -> IdentityRevision:
     with _errors(), ctx.db.transaction() as tx:
+        require_lead(tx, project_id, body.actor_id)
         return confirm(
             tx,
             project_id,
@@ -128,6 +131,7 @@ def merge_route(
     ctx: Context,
 ) -> IdentityRevision:
     with _errors(), ctx.db.transaction() as tx:
+        require_lead(tx, project_id, body.actor_id)
         return merge(
             tx,
             project_id,
@@ -147,6 +151,7 @@ def split_route(
     ctx: Context,
 ) -> IdentityRevision:
     with _errors(), ctx.db.transaction() as tx:
+        require_lead(tx, project_id, body.actor_id)
         return split(
             tx,
             project_id,

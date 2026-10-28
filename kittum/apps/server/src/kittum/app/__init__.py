@@ -60,6 +60,7 @@ from kittum.app.lifecycle import (
     protocol_source,
     publish_protocol,
     require_lead,
+    require_project_lead,
     retrieval,
 )
 
@@ -115,6 +116,7 @@ __all__ = [
     "publish_protocol",
     "register_job_handler",
     "require_lead",
+    "require_project_lead",
     "retrieval",
     "run_judge_jobs",
     "seed_demo",

@@ -789,6 +789,10 @@ Modules `kittum.api`, `kittum.app`, and `kittum.people`. Needs: the modules it e
   `tests/app/test_worker.py` runs extraction jobs with no model server;
   `tests/app/test_cli.py` sets a review up from the command line; the
   end-to-end journey (WP-16) covers the rest on the real stack.
+- Every lead write is checked inside its transaction against the claimed actor: adding people and
+  publishing need a project lead; searches, the corpus and its links, opening a stage, and full
+  texts need a lead who screens nothing, as the catalogue reads do
+  (`tests/app/test_setup_routes.py` refuses a reviewer's own ID on each).
 
 Open:
 

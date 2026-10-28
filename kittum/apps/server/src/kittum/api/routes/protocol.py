@@ -11,9 +11,11 @@ from kittum.api import Context  # noqa: TC001 - FastAPI resolves it at runtime
 from kittum.app import (
     ExampleProtocol,
     LifecycleError,
+    NotLead,
     example_protocols,
     parse_source,
     protocol_source,
+    require_project_lead,
 )
 from kittum.core import Id, NotFoundError, Record
 from kittum.protocol import (
@@ -190,6 +192,7 @@ def publish_protocol_version(
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "no ledger is configured")
     try:
         with ctx.db.transaction() as tx:
+            require_project_lead(tx, project_id, request.approved_by)
             return publish(
                 tx,
                 project_id,
@@ -200,6 +203,8 @@ def publish_protocol_version(
             )
     except NotFoundError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from None
+    except NotLead as e:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(e)) from None
     except ProtocolStateError as e:
         raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from None
 
