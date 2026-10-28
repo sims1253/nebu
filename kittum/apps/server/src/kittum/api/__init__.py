@@ -20,6 +20,8 @@ from kittum.storage import ArtifactStore, FilesystemStore
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
+    from kittum.ledger import Ledger
+
 
 @dataclass
 class AppContext:
@@ -29,6 +31,7 @@ class AppContext:
     db: Database
     artifacts: ArtifactStore
     clock: Clock = field(default_factory=SystemClock)
+    ledger: Ledger | None = None  # None until the Postgres ledger (WP-01) exists
 
     @classmethod
     def from_settings(cls, settings: Settings) -> AppContext:
@@ -53,6 +56,9 @@ class Health(Record):
 
 def create_app(context: AppContext | None = None) -> FastAPI:
     """Build the app. Without a context, one is built from the environment at startup."""
+    from kittum.profiles import load_profiles
+
+    load_profiles()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:

@@ -1,6 +1,204 @@
 {
   "components": {
     "schemas": {
+      "AuditPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "census_of_disagreements": {
+            "default": true,
+            "title": "Census Of Disagreements",
+            "type": "boolean"
+          },
+          "random_audit_percent": {
+            "$ref": "#/components/schemas/Percent",
+            "default": "0"
+          },
+          "sentinel_percent": {
+            "$ref": "#/components/schemas/Percent",
+            "default": "0"
+          }
+        },
+        "title": "AuditPlan",
+        "type": "object"
+      },
+      "Comparator": {
+        "additionalProperties": false,
+        "properties": {
+          "extensions": {
+            "$ref": "#/components/schemas/Extensions"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "text": {
+            "$ref": "#/components/schemas/LocalizedText"
+          }
+        },
+        "required": [
+          "id",
+          "text"
+        ],
+        "title": "Comparator",
+        "type": "object"
+      },
+      "Criterion": {
+        "additionalProperties": false,
+        "description": "An executable eligibility criterion.\n\n`text` states the condition. For an `include` criterion a record must meet it; for an\n`exclude` criterion a record that shows it is excluded. Either way the judge answers whether\nthe record *passes*: `not_met` with a verified quote is what excludes.",
+        "properties": {
+          "applies_to": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Applies To",
+            "type": "array"
+          },
+          "decidable_at": {
+            "items": {
+              "$ref": "#/components/schemas/Stage"
+            },
+            "minItems": 1,
+            "title": "Decidable At",
+            "type": "array"
+          },
+          "extensions": {
+            "$ref": "#/components/schemas/Extensions"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "keywords": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Text"
+            },
+            "title": "Keywords",
+            "type": "array"
+          },
+          "negative_examples": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Negative Examples",
+            "type": "array"
+          },
+          "polarity": {
+            "$ref": "#/components/schemas/Polarity",
+            "default": "include"
+          },
+          "positive_examples": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Positive Examples",
+            "type": "array"
+          },
+          "slot": {
+            "$ref": "#/components/schemas/PicoSlot"
+          },
+          "text": {
+            "$ref": "#/components/schemas/LocalizedText"
+          }
+        },
+        "required": [
+          "id",
+          "slot",
+          "text",
+          "decidable_at",
+          "applies_to"
+        ],
+        "title": "Criterion",
+        "type": "object"
+      },
+      "Deviation": {
+        "additionalProperties": false,
+        "description": "A justified departure from a required source plan, e.g. a source that cannot be searched.",
+        "properties": {
+          "justification": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "source_id": {
+            "$ref": "#/components/schemas/Identifier"
+          }
+        },
+        "required": [
+          "source_id",
+          "justification"
+        ],
+        "title": "Deviation",
+        "type": "object"
+      },
+      "EffectModifier": {
+        "additionalProperties": false,
+        "properties": {
+          "categories": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Text"
+            },
+            "title": "Categories",
+            "type": "array"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "label": {
+            "$ref": "#/components/schemas/LocalizedText"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "EffectModifier",
+        "type": "object"
+      },
+      "Extensions": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "FreshnessPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "deadline": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deadline"
+          },
+          "max_age_months": {
+            "minimum": 1.0,
+            "title": "Max Age Months",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "max_age_months"
+        ],
+        "title": "FreshnessPolicy",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
       "Health": {
         "additionalProperties": false,
         "properties": {
@@ -18,6 +216,884 @@
           "version"
         ],
         "title": "Health",
+        "type": "object"
+      },
+      "Id": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "Identifier": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,63}$",
+        "type": "string"
+      },
+      "IdentifierKind": {
+        "enum": [
+          "doi",
+          "pmid",
+          "nct",
+          "isrctn",
+          "eudract",
+          "euct"
+        ],
+        "type": "string"
+      },
+      "KnownInclude": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/IdentifierKind"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Text"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "value": {
+            "$ref": "#/components/schemas/Text"
+          }
+        },
+        "required": [
+          "kind",
+          "value"
+        ],
+        "title": "KnownInclude",
+        "type": "object"
+      },
+      "LanguageCode": {
+        "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$",
+        "type": "string"
+      },
+      "LocalizedText": {
+        "additionalProperties": {
+          "$ref": "#/components/schemas/Text"
+        },
+        "minProperties": 1,
+        "propertyNames": {
+          "$ref": "#/components/schemas/LanguageCode"
+        },
+        "type": "object"
+      },
+      "Outcome": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "definition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "extensions": {
+            "$ref": "#/components/schemas/Extensions"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "name": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "rationale": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "category",
+          "name"
+        ],
+        "title": "Outcome",
+        "type": "object"
+      },
+      "Percent": {
+        "pattern": "^(100|[0-9]{1,2})(\\.[0-9]+)?$",
+        "type": "string"
+      },
+      "PicoSlot": {
+        "enum": [
+          "population",
+          "intervention",
+          "comparator",
+          "outcome",
+          "study_type",
+          "other"
+        ],
+        "type": "string"
+      },
+      "Polarity": {
+        "enum": [
+          "include",
+          "exclude"
+        ],
+        "type": "string"
+      },
+      "PressReview": {
+        "additionalProperties": false,
+        "properties": {
+          "reviewed_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed On"
+          },
+          "reviewer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Text"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "planned",
+              "done"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "PressReview",
+        "type": "object"
+      },
+      "ProtocolIssue": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "message"
+        ],
+        "title": "ProtocolIssue",
+        "type": "object"
+      },
+      "ProtocolVersion": {
+        "additionalProperties": false,
+        "properties": {
+          "content_hash": {
+            "$ref": "#/components/schemas/Sha256"
+          },
+          "protocol": {
+            "$ref": "#/components/schemas/ReviewProtocol"
+          }
+        },
+        "required": [
+          "protocol",
+          "content_hash"
+        ],
+        "title": "ProtocolVersion",
+        "type": "object"
+      },
+      "ProtocolVersionSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "published"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version_label": {
+            "title": "Version Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "parent_id",
+          "status",
+          "version_label",
+          "content_hash",
+          "created_at",
+          "published_at"
+        ],
+        "title": "ProtocolVersionSummary",
+        "type": "object"
+      },
+      "PublishRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "approved_by": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "approved_by"
+        ],
+        "title": "PublishRequest",
+        "type": "object"
+      },
+      "ReferenceSet": {
+        "additionalProperties": false,
+        "description": "Known relevant records: the strategy is built on one set and validated on the other.",
+        "properties": {
+          "development": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/KnownInclude"
+            },
+            "title": "Development",
+            "type": "array"
+          },
+          "press": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PressReview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "validation": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/KnownInclude"
+            },
+            "title": "Validation",
+            "type": "array"
+          }
+        },
+        "title": "ReferenceSet",
+        "type": "object"
+      },
+      "ReviewProtocol": {
+        "additionalProperties": false,
+        "properties": {
+          "default_language": {
+            "$ref": "#/components/schemas/LanguageCode"
+          },
+          "effect_modifiers": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/EffectModifier"
+            },
+            "title": "Effect Modifiers",
+            "type": "array"
+          },
+          "extensions": {
+            "$ref": "#/components/schemas/Extensions"
+          },
+          "outcomes": {
+            "items": {
+              "$ref": "#/components/schemas/Outcome"
+            },
+            "minItems": 1,
+            "title": "Outcomes",
+            "type": "array"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Identifier"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewQuestion"
+            },
+            "minItems": 1,
+            "title": "Questions",
+            "type": "array"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "search_topics": {
+            "items": {
+              "$ref": "#/components/schemas/SearchTopic"
+            },
+            "minItems": 1,
+            "title": "Search Topics",
+            "type": "array"
+          },
+          "title": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "version_label": {
+            "$ref": "#/components/schemas/Text"
+          }
+        },
+        "required": [
+          "version_label",
+          "title",
+          "default_language",
+          "questions",
+          "outcomes",
+          "search_topics"
+        ],
+        "title": "ReviewProtocol",
+        "type": "object"
+      },
+      "ReviewQuestion": {
+        "additionalProperties": false,
+        "description": "One question or population of the review. Decisions are keyed by it as a scope.",
+        "properties": {
+          "comparators": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Comparator"
+            },
+            "title": "Comparators",
+            "type": "array"
+          },
+          "comparators_are_alternatives": {
+            "default": false,
+            "title": "Comparators Are Alternatives",
+            "type": "boolean"
+          },
+          "extensions": {
+            "$ref": "#/components/schemas/Extensions"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "intervention": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "label": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "outcomes": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Identifier"
+            },
+            "title": "Outcomes",
+            "type": "array"
+          },
+          "population": {
+            "$ref": "#/components/schemas/LocalizedText"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "population",
+          "intervention"
+        ],
+        "title": "ReviewQuestion",
+        "type": "object"
+      },
+      "Scope": {
+        "additionalProperties": false,
+        "description": "One review question or search topic that decisions are keyed by.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ScopeKind",
+            "default": "question"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "Scope",
+        "type": "object"
+      },
+      "ScopeKind": {
+        "enum": [
+          "question",
+          "search_topic"
+        ],
+        "type": "string"
+      },
+      "ScreeningMode": {
+        "enum": [
+          "M1",
+          "M2",
+          "M3"
+        ],
+        "title": "ScreeningMode",
+        "type": "string"
+      },
+      "SearchTopic": {
+        "additionalProperties": false,
+        "properties": {
+          "audit": {
+            "$ref": "#/components/schemas/AuditPlan",
+            "default": {
+              "census_of_disagreements": true,
+              "random_audit_percent": "0",
+              "sentinel_percent": "0"
+            }
+          },
+          "criteria": {
+            "items": {
+              "$ref": "#/components/schemas/Criterion"
+            },
+            "minItems": 1,
+            "title": "Criteria",
+            "type": "array"
+          },
+          "extensions": {
+            "$ref": "#/components/schemas/Extensions"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/FreshnessPolicy"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "label": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/ScreeningMode"
+          },
+          "mode_rationale": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LocalizedText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reference_set": {
+            "$ref": "#/components/schemas/ReferenceSet",
+            "default": {
+              "development": [],
+              "validation": []
+            }
+          },
+          "scopes": {
+            "items": {
+              "$ref": "#/components/schemas/Scope"
+            },
+            "minItems": 1,
+            "title": "Scopes",
+            "type": "array"
+          },
+          "source_plan": {
+            "$ref": "#/components/schemas/SourcePlan"
+          },
+          "stopping": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StoppingPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "validation_pack": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Text"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "label",
+          "mode",
+          "scopes",
+          "criteria",
+          "source_plan",
+          "freshness"
+        ],
+        "title": "SearchTopic",
+        "type": "object"
+      },
+      "Sha256": {
+        "pattern": "^[0-9a-f]{64}$",
+        "type": "string"
+      },
+      "Source": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Identifier"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SourceKind"
+          },
+          "name": {
+            "$ref": "#/components/schemas/Text"
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Text"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "study_filter": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Text"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name"
+        ],
+        "title": "Source",
+        "type": "object"
+      },
+      "SourceKind": {
+        "enum": [
+          "bibliographic",
+          "registry",
+          "website",
+          "other"
+        ],
+        "type": "string"
+      },
+      "SourcePlan": {
+        "additionalProperties": false,
+        "properties": {
+          "deviations": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Deviation"
+            },
+            "title": "Deviations",
+            "type": "array"
+          },
+          "limits": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Text"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/Source"
+            },
+            "minItems": 1,
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sources"
+        ],
+        "title": "SourcePlan",
+        "type": "object"
+      },
+      "Stage": {
+        "enum": [
+          "title_abstract",
+          "full_text"
+        ],
+        "type": "string"
+      },
+      "StoppingPlan": {
+        "additionalProperties": false,
+        "description": "When an M3 topic may stop screening in AI order.",
+        "properties": {
+          "confidence_percent": {
+            "$ref": "#/components/schemas/Percent"
+          },
+          "method": {
+            "const": "buscar",
+            "title": "Method",
+            "type": "string"
+          },
+          "minimum_screened_percent": {
+            "$ref": "#/components/schemas/Percent"
+          },
+          "target_recall_percent": {
+            "$ref": "#/components/schemas/Percent"
+          }
+        },
+        "required": [
+          "method",
+          "target_recall_percent",
+          "confidence_percent",
+          "minimum_screened_percent"
+        ],
+        "title": "StoppingPlan",
+        "type": "object"
+      },
+      "StoredProtocol": {
+        "additionalProperties": false,
+        "properties": {
+          "approved_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "approved_event_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "project_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "publish_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publish Reason"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "published"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "$ref": "#/components/schemas/ProtocolVersion"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "parent_id",
+          "status",
+          "version",
+          "created_at"
+        ],
+        "title": "StoredProtocol",
+        "type": "object"
+      },
+      "Text": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "ValidationReport": {
+        "additionalProperties": false,
+        "properties": {
+          "content_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Hash"
+          },
+          "issues": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ProtocolIssue"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "ValidationReport",
         "type": "object"
       }
     }
@@ -44,6 +1120,265 @@
           }
         },
         "summary": "Health"
+      }
+    },
+    "/api/projects/{project_id}/protocol-versions": {
+      "get": {
+        "operationId": "listProtocolVersions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProtocolVersionSummary"
+                  },
+                  "title": "Response Listprotocolversions",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Protocol Versions",
+        "tags": [
+          "protocol"
+        ]
+      },
+      "post": {
+        "operationId": "saveProtocolDraft",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Source",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoredProtocol"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Protocol Draft",
+        "tags": [
+          "protocol"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/protocol-versions/{version_id}": {
+      "get": {
+        "operationId": "getProtocolVersion",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Version Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoredProtocol"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Protocol Version",
+        "tags": [
+          "protocol"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/protocol-versions/{version_id}/publish": {
+      "post": {
+        "operationId": "publishProtocolVersion",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Version Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoredProtocol"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Publish Protocol Version",
+        "tags": [
+          "protocol"
+        ]
+      }
+    },
+    "/api/protocol/validate": {
+      "post": {
+        "operationId": "validateProtocol",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Source",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Validate Protocol",
+        "tags": [
+          "protocol"
+        ]
       }
     }
   }
