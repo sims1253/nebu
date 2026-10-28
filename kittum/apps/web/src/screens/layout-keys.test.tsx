@@ -47,7 +47,7 @@ describe("layout keys", () => {
     const app = mount("/p/ivosidenib-cca/screening/title-abstract");
     unmount = app.unmount;
     await expect.element(page.getByTestId("record-title")).toMatchTextContent("ClarIDHy");
-    const switcher = page.getByRole("button", { name: /Ivosidenib/ });
+    const switcher = page.getByRole("button", { name: /Second-line therapy review/ });
     await switcher.click();
     await expect.element(page.getByRole("menu")).toBeVisible();
     // Inside the popup Base UI keeps letters for type-ahead; once focus is back on the page

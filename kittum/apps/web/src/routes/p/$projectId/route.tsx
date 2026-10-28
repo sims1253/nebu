@@ -1,17 +1,23 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { Menu } from "@base-ui/react/menu";
 import { createFileRoute, Link, Outlet, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
+import type { Member, ProjectSummary } from "../../../data/schema.ts";
 import { run } from "../../../data/workbench.ts";
-import { ProjectContext } from "../../../screens/project.tsx";
+import {
+  ProjectContext,
+  rememberedReviewer,
+  rememberReviewer,
+  ROLE_LABELS,
+} from "../../../screens/project.tsx";
 import type { ProjectState } from "../../../screens/project.tsx";
 import { Key } from "../../../ui/Key.tsx";
 import { useKeys } from "../../../ui/keys.ts";
 import { useTheme } from "../../../ui/theme.ts";
 
 export const Route = createFileRoute("/p/$projectId")({
-  loader: async ({ context, params }): Promise<ProjectState> => {
+  loader: async ({ context, params }): Promise<Omit<ProjectState, "me">> => {
     const [projects, protocol] = await Promise.all([
       run(context.workbench.projects()),
       run(context.workbench.protocol(params.projectId)),
@@ -24,6 +30,7 @@ export const Route = createFileRoute("/p/$projectId")({
 });
 
 type Section =
+  | "adjudication"
   | "protocol"
   | "search"
   | "studies"
@@ -45,6 +52,7 @@ const NAV: ReadonlyArray<{ section: Section; label: string; chord: string; group
     group: "Screening",
   },
   { section: "screening/full-text", label: "Full text", chord: "f", group: "Screening" },
+  { section: "adjudication", label: "Adjudication", chord: "a", group: "Screening" },
   { section: "extraction", label: "Extraction", chord: "x" },
   { section: "risk-of-bias", label: "Risk of bias", chord: "b" },
   { section: "progress", label: "Progress", chord: "o" },
@@ -54,7 +62,24 @@ const NAV: ReadonlyArray<{ section: Section; label: string; chord: string; group
 const path = (section: Section) => `/p/$projectId/${section}` as const;
 
 function ProjectLayout() {
-  const state = Route.useLoaderData();
+  const loaded = Route.useLoaderData();
+  const [actorId, setActorId] = useState(() => {
+    // `?as=<actor ID>` signs in for this tab, so a link can open the workbench as someone.
+    const asked = new URLSearchParams(window.location.search).get("as");
+    if (asked) rememberReviewer(loaded.project.id, asked);
+    return rememberedReviewer(loaded.project.id);
+  });
+  const me = loaded.project.members.find((m) => m.actor_id === actorId) ?? null;
+  const choose = (member: Member | null) => {
+    rememberReviewer(loaded.project.id, member?.actor_id ?? null);
+    setActorId(member?.actor_id ?? null);
+  };
+  const state = useMemo(() => (me ? { ...loaded, me } : null), [loaded, me]);
+  if (!state) return <IdentityPicker project={loaded.project} onChoose={choose} />;
+  return <Layout state={state} onSwitch={() => choose(null)} />;
+}
+
+function Layout({ state, onSwitch }: { state: ProjectState; onSwitch: () => void }) {
   const navigate = useNavigate();
   const [chord, setChord] = useState(false);
   const [help, setHelp] = useState(false);
@@ -115,6 +140,7 @@ function ProjectLayout() {
               <Key k="g" /> then a stage key
             </span>
           ) : null}
+          <Identity member={state.me} onSwitch={onSwitch} />
           <button
             type="button"
             onClick={toggle}
@@ -138,10 +164,7 @@ function ProjectSwitcher({ state }: { state: ProjectState }) {
   return (
     <Menu.Root>
       <Menu.Trigger className="flex max-w-[360px] min-w-0 flex-none items-baseline gap-2 rounded-[3px] px-2 py-1 text-left hover:bg-sheet-2 data-[popup-open]:bg-sheet-2">
-        <span className="text-sm font-semibold">{state.project.active_substance}</span>
-        <span className="hidden truncate text-xs text-ink-3 min-[1520px]:inline">
-          {state.project.indication}
-        </span>
+        <span className="max-w-[220px] truncate text-sm font-semibold">{state.project.name}</span>
         <svg
           width="9"
           height="6"
@@ -166,12 +189,13 @@ function ProjectSwitcher({ state }: { state: ProjectState }) {
                 }
                 className="grid cursor-default grid-cols-[1fr_auto] gap-x-3 px-3 py-2 outline-none data-[highlighted]:bg-petrol-wash"
               >
-                <span className="text-sm font-semibold">{project.active_substance}</span>
+                <span className="text-sm font-semibold">{project.name}</span>
                 <span className="text-xs text-ink-3">
                   {project.id === state.project.id ? "Open" : ""}
                 </span>
-                <span className="col-span-2 text-xs text-ink-2">{project.indication}</span>
-                <span className="col-span-2 text-xs text-ink-3">{project.review}</span>
+                <span className="col-span-2 text-xs text-ink-2">
+                  {project.title ?? "No protocol yet"}
+                </span>
               </Menu.Item>
             ))}
           </Menu.Popup>
@@ -188,7 +212,7 @@ const KEYS: ReadonlyArray<{
   {
     screen: "Everywhere",
     keys: [
-      [["g", "t"], "Go to a stage: p, s, d, t, f, x, b, o, r"],
+      [["g", "t"], "Go to a stage: p, s, d, t, f, a, x, b, o, r"],
       [["h"], "Show these keys"],
     ],
   },
@@ -210,6 +234,14 @@ const KEYS: ReadonlyArray<{
       [["Enter"], "Adopt the mention or selection as evidence"],
       [["y", "n", "?"], "Met, not met, unclear"],
       [["i", "e", "x"], "Include, exclude, insufficient information"],
+    ],
+  },
+  {
+    screen: "Adjudication",
+    keys: [
+      [["1", "2"], "Adopt reviewer A's or B's decision"],
+      [["i", "e", "u"], "Your own decision; e then 1 to 9 for the criterion"],
+      [[" "], "Next conflict, once the AI column is shown"],
     ],
   },
   {
@@ -264,5 +296,76 @@ function KeysDialog({
         </Dialog.Popup>
       </Dialog.Portal>
     </Dialog.Root>
+  );
+}
+
+function Identity({ member, onSwitch }: { member: Member; onSwitch: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onSwitch}
+      data-testid="identity"
+      title={`${member.roles.map((r) => ROLE_LABELS[r]).join(", ")}. There is no sign-in yet: choose who you are. Anyone who can reach the server can act as anyone.`}
+      className="flex items-baseline gap-2 rounded-[3px] px-2 py-1 text-sm hover:bg-sheet-2"
+    >
+      <span className="text-xs text-ink-3">Acting as</span>
+      <span className="font-medium">{member.display_name}</span>
+      <span className="text-xs text-ink-3">
+        {member.roles.map((r) => ROLE_LABELS[r]).join(", ")}
+      </span>
+    </button>
+  );
+}
+
+/** Who is at the workbench. Authentication is not built; the picker says so. */
+function IdentityPicker({
+  project,
+  onChoose,
+}: {
+  project: ProjectSummary;
+  onChoose: (member: Member) => void;
+}) {
+  useKeys((event) => {
+    const member = project.members[Number(event.key) - 1];
+    if (!member) return false;
+    onChoose(member);
+    return true;
+  });
+  return (
+    <div className="h-full overflow-y-auto bg-paper">
+      <div className="mx-auto max-w-[720px] px-8 pt-20 pb-12">
+        <Link to="/" className="text-sm font-semibold text-petrol">
+          Kittum
+        </Link>
+        <h1 className="mt-1 text-xl font-semibold tracking-[-0.01em]">Who is screening?</h1>
+        <p className="mt-2 max-w-[60ch] text-ink-2">
+          {project.name}. Kittum has no sign-in yet, so choose yourself. The server keeps each
+          person&rsquo;s queue blind to the others&rsquo;, but anyone who can reach it can act as
+          anyone: run it only where every user is trusted.
+        </p>
+        <ol className="mt-8 border-y border-rule" aria-label="People on this review">
+          {project.members.map((member, index) => (
+            <li key={member.actor_id} className="border-b border-rule last:border-b-0">
+              <button
+                type="button"
+                onClick={() => onChoose(member)}
+                className="grid w-full grid-cols-[28px_1fr_auto] items-baseline gap-x-4 px-2 py-3.5 text-left hover:bg-sheet focus-visible:bg-sheet"
+              >
+                <Key k={String(index + 1)} />
+                <span className="text-md font-semibold">{member.display_name}</span>
+                <span className="text-xs text-ink-2">
+                  {member.roles.map((r) => ROLE_LABELS[r]).join(", ")}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ol>
+        {project.members.length === 0 ? (
+          <p className="mt-4 text-ink-2">
+            This review has no people yet. Add them with <code>kittum project add-member</code>.
+          </p>
+        ) : null}
+      </div>
+    </div>
   );
 }

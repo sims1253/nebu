@@ -2,16 +2,22 @@ import { RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
-import { makeMockWorkbench } from "./data/mock/index.ts";
+import { makeApiWorkbench } from "./data/api.ts";
 import { createAppRouter } from "./router.tsx";
 import "./styles.css";
 import { applyStoredTheme } from "./ui/theme.ts";
 
 applyStoredTheme();
 
-// The mock stands in for the server until WP-15 exposes the screening, documents, and extraction
-// routes; swapping it is a one-line change here.
-const router = createAppRouter(makeMockWorkbench({ latency: { queue: 120, page: 60, other: 40 } }));
+// The server in development and production. `VITE_KITTUM_WORKBENCH=mock pnpm dev` shows the
+// recorded example data instead, without a server; the unit tests mount the mock directly.
+const workbench =
+  import.meta.env["VITE_KITTUM_WORKBENCH"] === "mock"
+    ? (await import("./data/mock/index.ts")).makeMockWorkbench({
+        latency: { queue: 120, page: 60, other: 40 },
+      })
+    : makeApiWorkbench();
+const router = createAppRouter(workbench);
 
 const root = document.getElementById("root");
 if (!root) throw new Error("missing #root");

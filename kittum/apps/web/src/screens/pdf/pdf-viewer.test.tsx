@@ -53,8 +53,6 @@ describe("PDF viewer", () => {
     const layer: LayerSummary = {
       id: "layer",
       document_id: "document",
-      recipe_hash: "",
-      output_hash: "",
       text,
       pages: [{ page: 1, width: 600, height: 800 }],
     };
@@ -83,8 +81,6 @@ describe("PDF viewer", () => {
     const layer: LayerSummary = {
       id: "layer-40",
       document_id: "document",
-      recipe_hash: "",
-      output_hash: "",
       text: "",
       pages,
     };

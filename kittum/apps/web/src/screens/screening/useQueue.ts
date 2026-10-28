@@ -3,18 +3,20 @@
 // The reviewer decides first. A decision goes to the server as provisional; the server either
 // settles it (the AI agrees, or the project never reveals) or returns a reveal, which stays on
 // screen until the reviewer keeps (Space) or revises (another decision key). Backspace reopens the
-// previous record.
+// previous record; a new decision on it takes the old one back on the server first (undo), and
+// Space leaves it as it was.
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { Decision, Outcome, QueueItem, Reveal } from "../../data/schema.ts";
+import type { Decision, Outcome, QueueItem, Reveal, Stage } from "../../data/schema.ts";
 import { run, WorkbenchError } from "../../data/workbench.ts";
-import type { Workbench } from "../../data/workbench.ts";
+import type { Caller, Workbench } from "../../data/workbench.ts";
 
 const AHEAD = 5;
 
 export interface Entry {
   readonly item: QueueItem;
-  readonly revision: number;
+  /** The server's token for the item's current state. */
+  readonly etag: string;
   readonly decision: Decision | null;
   /** The decision is recorded as final; the record may still be reopened. */
   readonly settled: boolean;
@@ -35,11 +37,12 @@ export interface SessionStats {
 
 const enter = (item: QueueItem): Entry => ({
   item,
-  revision: item.revision,
+  etag: item.etag,
   decision: null,
   settled: false,
-  reveal: null,
-  revealedAt: null,
+  // An item that comes back awaiting a final decision brings the reviewer's own reveal.
+  reveal: item.reveal,
+  revealedAt: item.reveal ? new Date().toISOString() : null,
   shownAt: new Date().toISOString(),
   shownMs: performance.now(),
   firstKeyAt: null,
@@ -52,7 +55,12 @@ const median = (values: ReadonlyArray<number>) => {
   return sorted.length % 2 ? (sorted[mid] ?? 0) : ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2;
 };
 
-export function useQueue(workbench: Workbench, scopeId: string | null) {
+export function useQueue(
+  workbench: Workbench,
+  caller: Caller,
+  scopeId: string | null,
+  stage: Stage = "title_abstract",
+) {
   // The current record and the buffer change together, so they are one state. `forward` holds
   // records that undo stepped back over, whole, so they return with their decision and revision.
   const [view, setView] = useState<{
@@ -90,8 +98,9 @@ export function useQueue(workbench: Workbench, scopeId: string | null) {
     loading.current = true;
     run(
       workbench.queue({
+        ...caller,
         scopeId,
-        stage: "title_abstract",
+        stage,
         after: last,
         limit: AHEAD + 1 - buffered,
       }),
@@ -117,7 +126,7 @@ export function useQueue(workbench: Workbench, scopeId: string | null) {
       .finally(() => {
         loading.current = false;
       });
-  }, [workbench, scopeId, exhausted, current, forward, ahead, history]);
+  }, [workbench, caller, scopeId, stage, exhausted, current, forward, ahead, history]);
 
   const advance = useCallback((settled: Entry) => {
     setHistory((h) => [...h, settled]);
@@ -156,17 +165,31 @@ export function useQueue(workbench: Workbench, scopeId: string | null) {
         evidence_anchor_ids: [],
         comment: null,
       };
-      const revising = current.reveal !== null;
+      const revising = current.reveal !== null && !current.settled;
       const now = new Date().toISOString();
       setBusy(true);
       setNotice(null);
       try {
+        let etag = current.etag;
+        if (current.settled) {
+          // A reopened record: take the decision back, then decide afresh.
+          etag = (
+            await run(
+              workbench.undo({
+                ...caller,
+                assignmentId: current.item.assignment_id,
+                expectedEtag: etag,
+              }),
+            )
+          ).etag;
+        }
         const result = await run(
           workbench.decide({
+            ...caller,
             assignmentId: current.item.assignment_id,
             decision,
             phase: revising ? "final" : "provisional",
-            expectedRevision: current.revision,
+            expectedEtag: etag,
             timing: {
               shown_at: current.shownAt,
               first_key_at: current.firstKeyAt ?? now,
@@ -178,7 +201,8 @@ export function useQueue(workbench: Workbench, scopeId: string | null) {
         const updated: Entry = {
           ...current,
           decision,
-          revision: result.revision,
+          settled: false,
+          etag: result.etag,
           firstKeyAt: current.firstKeyAt ?? now,
         };
         if (revising && current.decision && !same(current.decision, decision))
@@ -201,7 +225,7 @@ export function useQueue(workbench: Workbench, scopeId: string | null) {
         setBusy(false);
       }
     },
-    [current, busy, workbench, advance],
+    [current, busy, workbench, caller, advance],
   );
 
   /** Space: keep the decision shown with a reveal, or move on from a reopened record. */
@@ -239,9 +263,13 @@ export function useQueue(workbench: Workbench, scopeId: string | null) {
     setNotice("Reopened. Decide again, or press Space to keep the decision.");
   }, [busy, current, history]);
 
+  /** Asks the server again after the queue ran dry, e.g. while the AI judge is still reading. */
+  const retry = useCallback(() => setExhausted(false), []);
+
   return {
     current,
     ahead,
+    retry,
     previous: history.at(-1) ?? null,
     finished: exhausted && current === null && forward.length === 0 && ahead.length === 0,
     busy,

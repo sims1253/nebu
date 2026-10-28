@@ -1,20 +1,71 @@
-// What the workbench receives from the server, as Effect Schemas.
+// What the screens work with, as Effect Schemas.
 //
-// The first part mirrors the Python records in kittum.protocol, screening, judge, documents, and
-// extraction field for field (snake_case, tuples as arrays). The last part holds what the screens
-// need that the backend types do not carry yet; each says which work package should add it. When
-// the server exposes these through OpenAPI, @kittum/contracts generates the same shapes and the
-// mock below is replaced by the generated client.
+// Server records come from @kittum/contracts, generated from the server's OpenAPI document, so the
+// Pydantic models stay the single source of truth. This file adds what the screens compose from
+// several responses (a full-text assignment, a page with its words), the protocol as the screens
+// read it, and the extraction records, which the server does not serve yet (WP-11). Both
+// Workbench implementations, the API one and the mock, return these shapes.
+import { KittumApi } from "@kittum/contracts";
 import * as Schema from "effect/Schema";
 
 const Id = Schema.String;
 const Sha256 = Schema.String;
-const Timestamp = Schema.String; // ISO 8601 UTC
 
-// kittum.protocol
+// Server records, as generated.
 
 export const Stage = Schema.Literals(["title_abstract", "full_text"]);
-export type Stage = typeof Stage.Type;
+export type Stage = KittumApi.Stage;
+export type Phase = KittumApi.Phase;
+export type CriterionStatus = KittumApi.CriterionStatus;
+export type Outcome = KittumApi.Kittum__screening__types__Outcome;
+export type RevealSetting = KittumApi.RevealSetting;
+export type Role = KittumApi.Role;
+
+export const QueueItem = KittumApi.QueueItem;
+/** Never carries AI output before the reviewer's own provisional decision, or sentinel flags. */
+export type QueueItem = KittumApi.QueueItem;
+export const DecideResult = KittumApi.DecideResult;
+export type DecideResult = KittumApi.DecideResult;
+export type Reveal = KittumApi.Reveal;
+export type Highlight = KittumApi.Highlight;
+export type ScopeStatus = KittumApi.ScopeStatus;
+export type StageInfo = KittumApi.StageInfo;
+export type ProjectSummary = KittumApi.ProjectSummary;
+export type Member = KittumApi.Member;
+export type AdjudicationItem = KittumApi.AdjudicationItem;
+export type AdjudicationResult = KittumApi.AdjudicationResult;
+export type ReviewerColumn = KittumApi.ReviewerColumn;
+export type CriterionVerdict = KittumApi.CriterionVerdict;
+export type Progress = KittumApi.Progress;
+export type StageProgressView = KittumApi.StageProgress;
+export type SearchExecution = KittumApi.SearchExecution;
+export type CorpusView = KittumApi.CorpusView;
+export type CorpusReport = KittumApi.CorpusReport;
+export type SourceRecord = KittumApi.SourceRecord;
+export type LinkProposal = KittumApi.LinkProposal;
+export type IdentityRevision = KittumApi.IdentityRevision;
+export type LedgerSummary = KittumApi.LedgerSummary;
+type CriterionDecision = KittumApi.CriterionDecision;
+
+/** A decision as the screens build it: every field the server reads, none left to defaults. */
+export interface Decision {
+  readonly outcome: Outcome;
+  readonly reason_criterion_id: string | null;
+  readonly evidence_anchor_ids: ReadonlyArray<string>;
+  readonly comment: string | null;
+  /** Full text: one reading per criterion, with its evidence. */
+  readonly criteria?: ReadonlyArray<CriterionDecision>;
+}
+
+/** Per-item timing the workbench reports with each decision (DESIGN.md "Metrics"). */
+export interface DecisionTiming {
+  readonly shown_at: string;
+  readonly first_key_at: string | null;
+  readonly decided_at: string;
+  readonly reveal_shown_at: string | null;
+}
+
+// The protocol as the screens read it: criteria per scope, worded in English and German.
 
 const PicoSlot = Schema.Literals([
   "population",
@@ -25,41 +76,62 @@ const PicoSlot = Schema.Literals([
   "other",
 ]);
 
-const ScreeningMode = Schema.Literals(["M1", "M2", "M3"]);
-
 export const Criterion = Schema.Struct({
   id: Schema.String,
   slot: PicoSlot,
-  text_de: Schema.String,
+  polarity: Schema.Literals(["include", "exclude"]),
   text_en: Schema.String,
+  /** The German wording, or the English one when the protocol has none. */
+  text_de: Schema.String,
   decidable_at: Schema.Array(Stage),
+  /** Scope IDs; a criterion for a whole search topic lists every scope of the topic. */
   applies_to: Schema.Array(Schema.String),
+  keywords: Schema.Array(Schema.String),
   positive_examples: Schema.Array(Schema.String),
   negative_examples: Schema.Array(Schema.String),
 });
 export type Criterion = typeof Criterion.Type;
 
-export const Scope = Schema.Struct({ id: Schema.String, label: Schema.String });
-export type Scope = typeof Scope.Type;
+const Scope = Schema.Struct({ id: Schema.String, label: Schema.String });
 
 const SearchTopic = Schema.Struct({
   id: Schema.String,
-  kind: Schema.Literals(["rct_drug", "rct_indirect", "non_randomized", "other"]),
-  mode: ScreeningMode,
+  label: Schema.String,
+  kind: Schema.String,
+  mode: Schema.Literals(["M1", "M2", "M3"]),
+  mode_rationale: Schema.NullOr(Schema.String),
   scopes: Schema.Array(Scope),
   criteria: Schema.Array(Criterion),
+  sentinel_percent: Schema.String,
+  random_audit_percent: Schema.String,
+  sources: Schema.Array(
+    Schema.Struct({ id: Schema.String, kind: Schema.String, name: Schema.String }),
+  ),
+});
+export type SearchTopic = typeof SearchTopic.Type;
+
+const Question = Schema.Struct({
+  id: Schema.String,
+  label: Schema.String,
+  population: Schema.String,
+  intervention: Schema.String,
+  comparators: Schema.Array(Schema.String),
 });
 
 const ReviewProtocol = Schema.Struct({
-  active_substance: Schema.String,
+  title: Schema.String,
   version_label: Schema.String,
+  questions: Schema.Array(Question),
+  outcomes: Schema.Array(
+    Schema.Struct({ id: Schema.String, category: Schema.String, name: Schema.String }),
+  ),
   topics: Schema.Array(SearchTopic),
 });
 
 /**
- * Words a review profile uses for protocol concepts. Not on the backend yet (WP-03): the core is
- * domain-neutral, and a profile (for example a regulatory one) may rename "population" or
- * "report". The screens read every such label from here and never hard-code one.
+ * Words a review profile uses for core concepts. The core is domain-neutral; a profile may rename
+ * "question" (a subpopulation), "outcome" (an endpoint), and so on. The screens read every such
+ * label from here and never hard-code one.
  */
 export const ProfileLabels = Schema.Struct({
   scope: Schema.String,
@@ -69,87 +141,24 @@ export const ProfileLabels = Schema.Struct({
   outcome: Schema.String,
   study_type: Schema.String,
   other: Schema.String,
-  subgroup: Schema.String,
   report: Schema.String,
+  study: Schema.String,
+  search_topic: Schema.String,
 });
 export type ProfileLabels = typeof ProfileLabels.Type;
 
-const ProtocolProfile = Schema.Struct({ id: Schema.String, labels: ProfileLabels });
+const ProtocolProfile = Schema.Struct({ id: Schema.NullOr(Schema.String), labels: ProfileLabels });
 
 export const ProtocolVersion = Schema.Struct({
+  version_id: Id,
   protocol: ReviewProtocol,
   content_hash: Sha256,
+  published_at: Schema.NullOr(Schema.String),
   profile: ProtocolProfile,
 });
 export type ProtocolVersion = typeof ProtocolVersion.Type;
 
-// kittum.judge
-
-export const CriterionStatus = Schema.Literals(["met", "not_met", "unclear"]);
-export type CriterionStatus = typeof CriterionStatus.Type;
-
-export const CriterionVerdict = Schema.Struct({
-  criterion_id: Schema.String,
-  status: CriterionStatus,
-  quote: Schema.NullOr(Schema.String),
-  rationale: Schema.String,
-  quote_verified: Schema.Boolean,
-  downgraded_from: Schema.NullOr(CriterionStatus),
-});
-export type CriterionVerdict = typeof CriterionVerdict.Type;
-
-// kittum.screening
-
-export const Outcome = Schema.Literals([
-  "include",
-  "exclude",
-  "unclear",
-  "insufficient_information",
-]);
-export type Outcome = typeof Outcome.Type;
-
-export const Phase = Schema.Literals(["provisional", "final"]);
-export type Phase = typeof Phase.Type;
-
-/** (start, end, tag): half-open code-point offsets; tags are `protocol:<criterion id>` or `entity:<type>`. */
-export const Highlight = Schema.Tuple([Schema.Number, Schema.Number, Schema.String]);
-export type Highlight = typeof Highlight.Type;
-
-export const Decision = Schema.Struct({
-  outcome: Outcome,
-  reason_criterion_id: Schema.NullOr(Schema.String),
-  evidence_anchor_ids: Schema.Array(Id),
-  comment: Schema.NullOr(Schema.String),
-});
-export type Decision = typeof Decision.Type;
-
-export const Reveal = Schema.Struct({
-  criterion_id: Schema.String,
-  quote: Schema.String,
-  rationale: Schema.String,
-  // Not on the backend record yet (WP-09): the AI's reading of the criterion, so the banner can
-  // say "met" or "not met" instead of making the reviewer infer it.
-  status: CriterionStatus,
-});
-export type Reveal = typeof Reveal.Type;
-
-export const DecideResult = Schema.Struct({
-  phase: Phase,
-  reveal: Schema.NullOr(Reveal),
-  recorded_at: Timestamp,
-});
-export type DecideResult = typeof DecideResult.Type;
-
-export const ScopeStatus = Schema.Struct({
-  scope_id: Schema.String,
-  stage: Stage,
-  screened: Schema.Number,
-  remaining: Schema.Number,
-  conflicts: Schema.Number,
-});
-export type ScopeStatus = typeof ScopeStatus.Type;
-
-// kittum.documents
+// kittum.documents, as the viewer uses them
 
 export const Box = Schema.Struct({
   page: Schema.Number, // 1-based
@@ -185,7 +194,64 @@ export const Anchor = Schema.Struct({
 });
 export type Anchor = typeof Anchor.Type;
 
-// kittum.extraction
+export const PageSize = Schema.Struct({
+  page: Schema.Number,
+  width: Schema.Number,
+  height: Schema.Number,
+});
+export type PageSize = typeof PageSize.Type;
+
+/** A parsed layer without its words: the viewer loads words per page. */
+export const LayerSummary = Schema.Struct({
+  id: Id,
+  document_id: Id,
+  text: Schema.String,
+  pages: Schema.Array(PageSize),
+});
+export type LayerSummary = typeof LayerSummary.Type;
+
+/** One rendered page: the server's PNG and the layer's words on it. */
+export const PageLayer = Schema.Struct({
+  page: Schema.Number,
+  width: Schema.Number,
+  height: Schema.Number,
+  image_url: Schema.String,
+  words: Schema.Array(Word),
+});
+export type PageLayer = typeof PageLayer.Type;
+
+const ReportSummary = Schema.Struct({
+  id: Id,
+  study_label: Schema.String,
+  title: Schema.String,
+  citation: Schema.String,
+  licence: Schema.String,
+});
+
+/** The next full text in the reviewer's queue: the record, its layer, and the protocol-term
+ * mentions per criterion in document order. */
+export const FullTextAssignment = Schema.Struct({
+  assignment_id: Id,
+  scope_id: Schema.String,
+  etag: Schema.String,
+  phase: Schema.Literals(["provisional", "final"]),
+  /** The AI's reading, when an earlier provisional decision of this reviewer revealed it. */
+  reveal: Schema.NullOr(
+    Schema.Struct({
+      criterion_id: Schema.String,
+      status: Schema.Literals(["met", "not_met", "unclear"]),
+      quote: Schema.String,
+      rationale: Schema.String,
+    }),
+  ),
+  report: ReportSummary,
+  document: Document,
+  layer: LayerSummary,
+  mentions: Schema.Array(Schema.Tuple([Schema.String, Schema.Array(Anchor)])),
+});
+export type FullTextAssignment = typeof FullTextAssignment.Type;
+
+// kittum.extraction: not served yet (WP-11), so only the mock implements it.
 
 export const Policy = Schema.Literals(["critical", "standard", "descriptive"]);
 export type Policy = typeof Policy.Type;
@@ -237,104 +303,6 @@ export const Proposal = Schema.Struct({
 });
 export type Proposal = typeof Proposal.Type;
 
-// Workbench additions: not on the backend records yet.
-
-/** Bibliographic facts the queue shows above the abstract (WP-07 corpus, served by WP-15). */
-const RecordMeta = Schema.Struct({
-  pmid: Schema.NullOr(Schema.String),
-  doi: Schema.NullOr(Schema.String),
-  journal: Schema.String,
-  year: Schema.Number,
-  publication_types: Schema.Array(Schema.String),
-  registry_ids: Schema.Array(Schema.String),
-  /** Highlights in the title; `QueueItem.highlights` covers the abstract. */
-  title_highlights: Schema.Array(Highlight),
-  /** Structured-abstract labels as (label, start, end) code-point ranges of `text`. */
-  sections: Schema.Array(Schema.Tuple([Schema.String, Schema.Number, Schema.Number])),
-});
-
-/** `kittum.screening.QueueItem` plus the record facts. Never carries AI output or sentinel flags. */
-export const QueueItem = Schema.Struct({
-  assignment_id: Id,
-  stage: Stage,
-  scope_id: Schema.String,
-  title: Schema.String,
-  text: Schema.String,
-  highlights: Schema.Array(Highlight),
-  revision: Schema.Number,
-  record: RecordMeta,
-});
-export type QueueItem = typeof QueueItem.Type;
-
-/** Per-item timing the workbench reports with each decision (DESIGN.md "Metrics"). */
-export const DecisionTiming = Schema.Struct({
-  shown_at: Timestamp,
-  first_key_at: Schema.NullOr(Timestamp),
-  decided_at: Timestamp,
-  reveal_shown_at: Schema.NullOr(Timestamp),
-});
-export type DecisionTiming = typeof DecisionTiming.Type;
-
-export const ProjectSummary = Schema.Struct({
-  id: Schema.String,
-  active_substance: Schema.String,
-  indication: Schema.String,
-  review: Schema.String,
-  reveal: Schema.Literals(["never", "on_disagreement", "always"]),
-  /** The scope this reviewer screens now. */
-  scope_id: Schema.NullOr(Schema.String),
-});
-export type ProjectSummary = typeof ProjectSummary.Type;
-
-export const PageSize = Schema.Struct({
-  page: Schema.Number,
-  width: Schema.Number,
-  height: Schema.Number,
-});
-export type PageSize = typeof PageSize.Type;
-
-/** A parsed layer without its words: the viewer loads words per page. */
-export const LayerSummary = Schema.Struct({
-  id: Id,
-  document_id: Id,
-  recipe_hash: Sha256,
-  output_hash: Sha256,
-  text: Schema.String,
-  pages: Schema.Array(PageSize),
-});
-export type LayerSummary = typeof LayerSummary.Type;
-
-/** One rendered page: the server's PNG and the layer's words on it. */
-export const PageLayer = Schema.Struct({
-  page: Schema.Number,
-  width: Schema.Number,
-  height: Schema.Number,
-  image_url: Schema.String,
-  words: Schema.Array(Word),
-});
-export type PageLayer = typeof PageLayer.Type;
-
-const ReportSummary = Schema.Struct({
-  id: Id,
-  study_id: Id,
-  study_label: Schema.String,
-  title: Schema.String,
-  citation: Schema.String,
-  licence: Schema.String,
-});
-
-/** A full text to screen: the report, its layer, and the protocol-term mentions per criterion. */
-export const FullTextAssignment = Schema.Struct({
-  assignment_id: Id,
-  scope_id: Schema.String,
-  revision: Schema.Number,
-  report: ReportSummary,
-  document: Document,
-  layer: LayerSummary,
-  mentions: Schema.Array(Schema.Tuple([Schema.String, Schema.Array(Anchor)])),
-});
-export type FullTextAssignment = typeof FullTextAssignment.Type;
-
 /** One field to review: the proposals of both paths for one semantic key. */
 export const ReviewField = Schema.Struct({
   id: Id,
@@ -346,7 +314,14 @@ export const ReviewField = Schema.Struct({
 export type ReviewField = typeof ReviewField.Type;
 
 export const ExtractionReview = Schema.Struct({
-  report: ReportSummary,
+  report: Schema.Struct({
+    id: Id,
+    study_id: Id,
+    study_label: Schema.String,
+    title: Schema.String,
+    citation: Schema.String,
+    licence: Schema.String,
+  }),
   document: Document,
   layer: LayerSummary,
   anchors: Schema.Array(Anchor),

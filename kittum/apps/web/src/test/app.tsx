@@ -5,11 +5,15 @@ import { commands, userEvent } from "vite-plus/test/browser";
 
 import { makeMockWorkbench } from "../data/mock/index.ts";
 import type { MockOptions } from "../data/mock/index.ts";
+import { PROJECTS, REVIEWER } from "../data/mock/protocol.ts";
+import { rememberReviewer } from "../screens/project.tsx";
 import { createAppRouter } from "../router.tsx";
 import "../styles.css";
 
 export function mount(path: string, options: MockOptions = {}) {
   const workbench = makeMockWorkbench(options);
+  // The mock's reviewer is at the workbench in every project.
+  for (const project of PROJECTS) rememberReviewer(project.id, REVIEWER);
   const router = createAppRouter(workbench, createMemoryHistory({ initialEntries: [path] }));
   const container = document.createElement("div");
   container.style.height = "900px";

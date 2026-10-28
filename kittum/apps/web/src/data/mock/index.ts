@@ -6,7 +6,6 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 import {
-  CriterionVerdict as CriterionVerdictSchema,
   DecideResult,
   ExtractionReview,
   FullTextAssignment,
@@ -18,10 +17,11 @@ import type {
   CriterionVerdict,
   Decision,
   DecisionTiming,
-  ProjectSummary,
   QueueItem,
   Reveal,
+  RevealSetting,
   ReviewField,
+  ScopeStatus,
   Stage,
 } from "../schema.ts";
 import { WorkbenchError } from "../workbench.ts";
@@ -32,7 +32,7 @@ import recordsJson from "./fixtures/records.json";
 import { extractionFields, REPORT_ID, STUDY_ID } from "./extraction.ts";
 import { tag } from "./highlights.ts";
 import { verdictsFor } from "./judge.ts";
-import { CRITERIA, draftProtocol, PROJECTS, PROTOCOL, SCOPE_A } from "./protocol.ts";
+import { CRITERIA, PROJECTS, PROTOCOL, SCOPE_A } from "./protocol.ts";
 
 const pageImages = import.meta.glob<string>("./fixtures/abc06/pages/*.png", {
   eager: true,
@@ -49,8 +49,8 @@ const pageWords = import.meta.glob<ReadonlyArray<readonly number[]>>(
 export interface MockOptions {
   /** Milliseconds each kind of call waits, to exercise prefetching and loading states. */
   readonly latency?: Partial<Record<"queue" | "decide" | "page" | "other", number>>;
-  /** Overrides the project's reveal setting. */
-  readonly reveal?: ProjectSummary["reveal"];
+  /** Overrides the stage's reveal setting. */
+  readonly reveal?: RevealSetting;
   /** Pages whose image URL is broken, to exercise the failed-image path. */
   readonly brokenPages?: ReadonlyArray<number>;
   /** Receives every call, for tests. */
@@ -107,14 +107,16 @@ const composeAbstract = (sections: ReadonlyArray<{ label: string | null; text: s
 
 const RECORDS = recordsJson.records.map((record, index) => {
   const { text, sections } = composeAbstract(record.sections);
-  const item: QueueItem = {
+  const item: Omit<QueueItem, "record"> & { record: QueueItem["record"] } = {
     assignment_id: `asg-ta-${record.pmid}`,
     stage: "title_abstract",
     scope_id: SCOPE_A,
     title: record.title,
     text,
     highlights: tag(text),
-    revision: 0,
+    etag: "e0",
+    phase: "provisional",
+    reveal: null,
     record: {
       pmid: record.pmid,
       doi: record.doi ?? null,
@@ -137,12 +139,12 @@ const TA_CRITERIA = CRITERIA.filter((c) => c.decidable_at.includes("title_abstra
 const verdicts = (pmid: string, item: QueueItem): CriterionVerdict[] =>
   verdictsFor(pmid, TA_CRITERIA).map((v) => {
     const found = v.quote !== null && (item.title.includes(v.quote) || item.text.includes(v.quote));
-    return Schema.decodeUnknownSync(CriterionVerdictSchema)({
+    return {
       ...v,
       status: v.status === "not_met" && !found ? "unclear" : v.status,
       quote_verified: found,
       downgraded_from: v.status === "not_met" && !found ? "not_met" : null,
-    });
+    };
   });
 
 const toReveal = (verdict: CriterionVerdict): Reveal => ({
@@ -172,14 +174,11 @@ const disagreement = (
 const layer = {
   id: layerJson.layer.id,
   document_id: layerJson.layer.document_id,
-  recipe_hash: layerJson.layer.recipe_hash,
-  output_hash: layerJson.layer.output_hash,
   text: layerJson.layer.text,
   pages: layerJson.pages,
 };
 const report = {
   id: REPORT_ID,
-  study_id: STUDY_ID,
   study_label: "ABC-06",
   title:
     "Second-line FOLFOX chemotherapy versus active symptom control for advanced biliary tract cancer (ABC-06): a phase 3, open-label, randomised, controlled trial",
@@ -189,6 +188,14 @@ const report = {
 const valueAnchors = anchorsJson.values as Record<string, Anchor>;
 const mentionAnchors = anchorsJson.mentions as Record<string, Anchor[]>;
 
+type Item = {
+  etag: string;
+  state: "pending" | "awaiting_final" | "decided";
+  revealed: boolean;
+  reveal: Reveal | null;
+  final: Decision | null;
+};
+
 export const makeMockWorkbench = (
   options: MockOptions = {},
 ): Workbench & {
@@ -197,9 +204,13 @@ export const makeMockWorkbench = (
   readonly acceptances: ReadonlyArray<Parameters<Workbench["accept"]>[0]>;
 } => {
   const decisions: DecisionRecord[] = [];
-  const state = new Map<string, { revision: number; revealed: boolean; final: Decision | null }>();
+  const state = new Map<string, Item>();
   const accepted = new Map<string, "janus" | "llm">();
   const acceptances: Array<Parameters<Workbench["accept"]>[0]> = [];
+  let tokens = 0;
+  const etag = () => `e${++tokens}`;
+  const itemOf = (id: string): Item =>
+    state.get(id) ?? { etag: "e0", state: "pending", revealed: false, reveal: null, final: null };
 
   const wait = (kind: keyof NonNullable<MockOptions["latency"]>) => {
     const ms = options.latency?.[kind] ?? 0;
@@ -219,26 +230,28 @@ export const makeMockWorkbench = (
   const fail = (reason: WorkbenchError["reason"], message: string) =>
     Effect.fail(new WorkbenchError({ reason, message }));
 
-  const project = (projectId: string) => PROJECTS.find((p) => p.id === projectId);
-  const revealSetting = () => options.reveal ?? PROJECTS[0]?.reveal ?? "on_disagreement";
+  const hasData = (projectId: string) => projectId === PROJECTS[0]?.id;
+  const revealSetting = () => options.reveal ?? "on_disagreement";
 
   const pending = (scopeId: string, stage: Stage) =>
     stage === "title_abstract" && scopeId === SCOPE_A
-      ? RECORDS.filter((r) => state.get(r.item.assignment_id)?.final == null)
+      ? RECORDS.filter((r) => itemOf(r.item.assignment_id).state !== "decided")
       : [];
 
+  const unavailable = () => fail("unavailable", "The example data has no server behind it.");
+
   return {
+    live: false,
     decisions,
     acceptances,
 
     projects: () => call("other", "projects", null, () => PROJECTS),
 
     protocol: (projectId) => {
-      const found = project(projectId);
-      if (!found) return fail("not_found", `No project ${projectId}`);
-      return call("other", "protocol", projectId, () =>
-        found.scope_id === SCOPE_A ? PROTOCOL : draftProtocol(found),
-      );
+      if (!PROJECTS.some((p) => p.id === projectId)) {
+        return fail("not_found", `No project ${projectId}`);
+      }
+      return call("other", "protocol", projectId, () => (hasData(projectId) ? PROTOCOL : null));
     },
 
     queue: ({ scopeId, stage, after, limit }) =>
@@ -249,46 +262,52 @@ export const makeMockWorkbench = (
         return pending(scopeId, stage)
           .filter((r) => r.order > cursor)
           .slice(0, limit)
-          .map((r) =>
-            Schema.decodeUnknownSync(QueueItemSchema)({
+          .map((r) => {
+            const item = itemOf(r.item.assignment_id);
+            return Schema.decodeUnknownSync(QueueItemSchema)({
               ...r.item,
-              revision: state.get(r.item.assignment_id)?.revision ?? 0,
-            }),
-          );
+              etag: item.etag,
+              phase: item.state === "awaiting_final" ? "final" : "provisional",
+              reveal: item.state === "awaiting_final" ? item.reveal : null,
+            });
+          });
       }),
 
-    decide: ({ assignmentId, decision, phase, expectedRevision, timing }) =>
+    decide: ({ assignmentId, decision, phase, expectedEtag, timing }) =>
       Effect.gen(function* () {
         options.log?.("decide", { assignmentId, decision, phase });
         yield* wait("decide");
-        const current = state.get(assignmentId) ?? { revision: 0, revealed: false, final: null };
-        if (assignmentId === FULL_TEXT_ASSIGNMENT) {
-          // The full-text judge is not modelled; the decision settles.
-          state.set(assignmentId, {
-            revision: current.revision + 1,
-            revealed: false,
-            final: decision,
-          });
-          decisions.push({ assignmentId, decision, phase: "final", revealed: false, timing });
-          return {
-            phase: "final" as const,
-            reveal: null,
-            recorded_at: timing.decided_at,
-            revision: current.revision + 1,
-          };
-        }
-        const record = RECORDS.find((r) => r.item.assignment_id === assignmentId);
-        if (!record) return yield* fail("not_found", `No assignment ${assignmentId}`);
-        if (current.revision !== expectedRevision) {
+        const current = itemOf(assignmentId);
+        if (current.etag !== expectedEtag) {
           return yield* fail(
             "conflict",
             "This record changed since it was loaded. Reload the queue.",
           );
         }
+        if (assignmentId === FULL_TEXT_ASSIGNMENT) {
+          // The full-text judge is not modelled; the decision settles.
+          const next = etag();
+          state.set(assignmentId, { ...current, etag: next, state: "decided", final: decision });
+          decisions.push({ assignmentId, decision, phase: "final", revealed: false, timing });
+          return {
+            phase: "final" as const,
+            reveal: null,
+            recorded_at: timing.decided_at,
+            etag: next,
+          };
+        }
+        const record = RECORDS.find((r) => r.item.assignment_id === assignmentId);
+        if (!record) return yield* fail("not_found", `No assignment ${assignmentId}`);
+        if (phase === "provisional" && current.state !== "pending") {
+          return yield* fail("invalid", "This item is decided; undo it first.");
+        }
+        if (phase === "final" && current.state !== "awaiting_final") {
+          return yield* fail("invalid", "A final decision follows a provisional one and a reveal.");
+        }
         const setting = revealSetting();
         let reveal: Reveal | null = null;
         if (phase === "provisional" && !current.revealed && setting !== "never") {
-          const judged = verdicts(record.pmid, record.item);
+          const judged = verdicts(record.pmid, record.item as QueueItem);
           reveal = disagreement(decision, judged);
           if (!reveal && setting === "always") {
             const basis =
@@ -297,44 +316,65 @@ export const makeMockWorkbench = (
             reveal = basis ? toReveal(basis) : null;
           }
         }
-        const revealed = current.revealed || reveal !== null;
         const settled = reveal === null;
+        const next = etag();
         state.set(assignmentId, {
-          revision: current.revision + 1,
-          revealed,
+          etag: next,
+          state: settled ? "decided" : "awaiting_final",
+          revealed: current.revealed || reveal !== null,
+          reveal: reveal ?? current.reveal,
           final: settled ? decision : current.final,
         });
         decisions.push({
           assignmentId,
           decision,
           phase: settled ? "final" : "provisional",
-          revealed,
+          revealed: current.revealed || reveal !== null,
           timing,
         });
+        return Schema.decodeUnknownSync(DecideResult)({
+          phase: settled ? "final" : "provisional",
+          reveal,
+          recorded_at: timing.decided_at,
+          etag: next,
+        });
+      }),
+
+    undo: ({ assignmentId, expectedEtag }) =>
+      call("decide", "undo", { assignmentId }, () => {
+        const current = itemOf(assignmentId);
+        if (current.etag !== expectedEtag || current.state === "pending") {
+          throw new Error(`undo of ${assignmentId} with a stale token`);
+        }
+        const next = etag();
+        state.set(assignmentId, { ...current, etag: next, state: "pending", final: null });
+        return { etag: next };
+      }),
+
+    status: ({ scopeId, stage }) =>
+      call("other", "status", { scopeId, stage }, (): ScopeStatus => {
+        const total = stage === "title_abstract" && scopeId === SCOPE_A ? RECORDS.length : 0;
+        const open = pending(scopeId, stage).length;
         return {
-          ...Schema.decodeUnknownSync(DecideResult)({
-            phase: settled ? "final" : "provisional",
-            reveal,
-            recorded_at: timing.decided_at,
-          }),
-          revision: current.revision + 1,
+          scope_id: scopeId,
+          stage,
+          view: "reviewer",
+          screened: total - open,
+          remaining: open,
+          conflicts: null,
+          metrics: null,
         };
       }),
 
-    status: (scopeId, stage) =>
-      call("other", "status", { scopeId, stage }, () => {
-        const total = stage === "title_abstract" && scopeId === SCOPE_A ? RECORDS.length : 0;
-        const open = pending(scopeId, stage).length;
-        return { scope_id: scopeId, stage, screened: total - open, remaining: open, conflicts: 0 };
-      }),
-
-    fullText: (projectId) =>
+    fullText: ({ projectId }) =>
       call("other", "fullText", projectId, () =>
-        project(projectId)?.scope_id === SCOPE_A
+        hasData(projectId) && itemOf(FULL_TEXT_ASSIGNMENT).state !== "decided"
           ? Schema.decodeUnknownSync(FullTextAssignment)({
               assignment_id: FULL_TEXT_ASSIGNMENT,
               scope_id: SCOPE_A,
-              revision: 0,
+              etag: itemOf(FULL_TEXT_ASSIGNMENT).etag,
+              phase: "provisional",
+              reveal: null,
               report,
               document: layerJson.document,
               layer,
@@ -346,15 +386,15 @@ export const makeMockWorkbench = (
           : null,
       ),
 
-    page: (layerId, page) =>
+    page: (pageLayer, page) =>
       Effect.gen(function* () {
-        options.log?.("page", { layerId, page });
+        options.log?.("page", { layerId: pageLayer.id, page });
         yield* wait("page");
         const size = layer.pages.find((p) => p.page === page);
         const load = pageWords[`./fixtures/abc06/words/${page}.json`];
         const image = pageImages[`./fixtures/abc06/pages/${page}.png`];
-        if (layerId !== layer.id || !size || !load || !image) {
-          return yield* fail("not_found", `No page ${page} in layer ${layerId}`);
+        if (pageLayer.id !== layer.id || !size || !load || !image) {
+          return yield* fail("not_found", `No page ${page} in layer ${pageLayer.id}`);
         }
         const rows = yield* Effect.promise(load);
         return Schema.decodeUnknownSync(PageLayer)({
@@ -368,16 +408,50 @@ export const makeMockWorkbench = (
         });
       }),
 
+    adopt: ({ layerId, quote, start }) =>
+      call("decide", "adopt", { layerId, quote, start }, (): Anchor => {
+        const mention = Object.values(mentionAnchors)
+          .flat()
+          .find((a) => a.start === start);
+        return (
+          mention ?? {
+            id: `anchor-${start}`,
+            layer_id: layerId,
+            quote: { exact: quote, prefix: "", suffix: "" },
+            start,
+            end: start + [...quote].length,
+            boxes: [],
+          }
+        );
+      }),
+
+    adjudications: () => call("other", "adjudications", null, () => []),
+    adjudicate: unavailable,
+    progress: ({ projectId, as }) =>
+      call("other", "progress", { projectId, as }, () => ({
+        identity_revision_id: null,
+        identification: null,
+        searches: 0,
+        full_texts: 0,
+        stages: [],
+      })),
+    openStage: unavailable,
+    ledger: unavailable,
+    searches: () => call("other", "searches", null, () => []),
+    corpus: () => call("other", "corpus", null, () => null),
+    proposals: () => call("other", "proposals", null, () => []),
+    link: unavailable,
+
     extraction: (projectId) =>
       call("other", "extraction", projectId, () => {
-        if (project(projectId)?.scope_id !== SCOPE_A) return null;
+        if (!hasData(projectId)) return null;
         const fields: ReviewField[] = extractionFields((name) => {
           const anchor = valueAnchors[name];
           if (!anchor) throw new Error(`fixture has no anchor ${name}`);
           return anchor.id;
         }).map((field) => ({ ...field, accepted: accepted.get(field.id) ?? field.accepted }));
         return Schema.decodeUnknownSync(ExtractionReview)({
-          report,
+          report: { ...report, study_id: STUDY_ID },
           document: layerJson.document,
           layer,
           anchors: Object.values(valueAnchors),

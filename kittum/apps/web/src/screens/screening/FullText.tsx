@@ -2,14 +2,17 @@
 // the right with one active. Mentions of the active criterion come in document order and carry no
 // verdict colour; the reviewer adopts the ones that are evidence.
 import { useRouteContext } from "@tanstack/react-router";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 
 import type {
   Anchor,
   Box,
   CriterionStatus,
+  Decision,
   FullTextAssignment,
   Outcome,
+  Reveal,
 } from "../../data/schema.ts";
 import { run, WorkbenchError } from "../../data/workbench.ts";
 import { Key, KeyHint } from "../../ui/Key.tsx";
@@ -20,7 +23,10 @@ import type { PageHighlight, TextSelection } from "../pdf/PdfViewer.tsx";
 import { useProject } from "../project.tsx";
 
 interface Evidence {
+  /** The saved anchor's ID. */
   readonly id: string;
+  /** The mention or selection it came from, so Enter on it again removes it. */
+  readonly key: string;
   readonly quote: string;
   readonly boxes: ReadonlyArray<Box>;
 }
@@ -38,26 +44,104 @@ const OUTCOME_KEYS: Record<string, Outcome> = {
   x: "insufficient_information",
 };
 
-export function FullTextScreen({ assignment }: { assignment: FullTextAssignment | null }) {
-  const { labels } = useProject();
-  if (!assignment) {
+/** The reviewer's full-text queue, one report at a time. */
+export function FullTextQueue() {
+  const { workbench } = useRouteContext({ from: "/p/$projectId" });
+  const { project, me, labels, screeningStage } = useProject();
+  const scopeId = screeningStage("full_text")?.scope_id ?? null;
+  const [assignment, setAssignment] = useState<FullTextAssignment | null | undefined>(undefined);
+  const [done, setDone] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  // Full texts still unread by the AI judge, while the queue is empty.
+  const [unread, setUnread] = useState(0);
+  const [poll, setPoll] = useState(0);
+
+  useEffect(() => {
+    if (!scopeId) return;
+    let live = true;
+    const caller = { projectId: project.id, as: me.actor_id };
+    run(workbench.fullText({ ...caller, scopeId }))
+      .then(async (next) => {
+        const status =
+          next === null
+            ? await run(workbench.status({ ...caller, scopeId, stage: "full_text" }))
+            : null;
+        if (!live) return;
+        setUnread(status?.remaining ?? 0);
+        setAssignment(next);
+      })
+      .catch(
+        (e: unknown) =>
+          live &&
+          setError(e instanceof WorkbenchError ? e.message : "The full text could not load."),
+      );
+    return () => {
+      live = false;
+    };
+  }, [workbench, project.id, me.actor_id, scopeId, done, poll]);
+
+  useEffect(() => {
+    if (assignment !== null || unread === 0) return;
+    const timer = window.setTimeout(() => setPoll((n) => n + 1), 3000);
+    return () => window.clearTimeout(timer);
+  }, [assignment, unread, poll]);
+
+  if (error) return <Message title="The full text could not load">{error}</Message>;
+  if (!scopeId) {
     return (
-      <div className="mx-auto max-w-[640px] px-10 py-16">
-        <h1 className="text-xl font-semibold">No full texts to screen</h1>
-        <p className="mt-2 text-md text-ink-2">
-          Full texts arrive here once records pass title and abstract screening and a{" "}
-          {labels.report.toLowerCase()} is acquired.
-        </p>
-      </div>
+      <Message title="No full texts to screen">
+        Full texts arrive here once records pass title and abstract screening, a{" "}
+        {labels.report.toLowerCase()} is acquired, and the methods lead opens full-text screening.
+      </Message>
     );
   }
-  return <Screen assignment={assignment} />;
+  if (assignment === undefined) return <Message title="Loading the next full text" />;
+  if (assignment === null && unread > 0) {
+    return (
+      <Message title="The AI judge is reading">
+        {unread} of your full texts are waiting for the AI judge. They appear here as soon as it has
+        read them; it reads every report before anyone screens it.
+      </Message>
+    );
+  }
+  if (assignment === null) {
+    return (
+      <Message title="Full texts finished">
+        Every full text assigned to you has a decision{done > 0 ? `: ${done} in this session` : ""}.
+      </Message>
+    );
+  }
+  return (
+    <FullTextScreen
+      key={assignment.assignment_id}
+      assignment={assignment}
+      onDecided={() => setDone((n) => n + 1)}
+    />
+  );
 }
 
-function Screen({ assignment }: { assignment: FullTextAssignment }) {
+function Message({ title, children }: { title: string; children?: ReactNode }) {
+  return (
+    <div className="mx-auto max-w-[640px] px-10 py-16">
+      <h1 className="text-xl font-semibold">{title}</h1>
+      {children ? <p className="mt-2 text-md text-ink-2">{children}</p> : null}
+    </div>
+  );
+}
+
+function FullTextScreen({
+  assignment,
+  onDecided,
+}: {
+  assignment: FullTextAssignment;
+  onDecided?: () => void;
+}) {
   const { workbench } = useRouteContext({ from: "/p/$projectId" });
-  const { labels, criteriaFor } = useProject();
-  const criteria = useMemo(() => criteriaFor("full_text"), [criteriaFor]);
+  const { project, me, labels, criteriaFor } = useProject();
+  const criteria = useMemo(
+    () => criteriaFor("full_text", assignment.scope_id),
+    [criteriaFor, assignment.scope_id],
+  );
   const mentions = useMemo(() => new Map(assignment.mentions), [assignment.mentions]);
   const [active, setActive] = useState(0);
   const [states, setStates] = useState<Record<string, CriterionState>>({});
@@ -65,9 +149,15 @@ function Screen({ assignment }: { assignment: FullTextAssignment }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<{ outcome: Outcome; reason: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
+  // The server's token, and the AI's reading once a provisional decision revealed it.
+  const [etag, setEtag] = useState(assignment.etag);
+  const [reveal, setReveal] = useState<Reveal | null>(assignment.reveal);
+  const [provisional, setProvisional] = useState<Decision | null>(null);
   // DESIGN.md "Metrics": when the report appeared and when the reviewer first acted on it.
   const [shownAt] = useState(() => new Date().toISOString());
   const firstKeyAt = useRef<string | null>(null);
+  // A reveal that came with the item was shown when the item was.
+  const revealedAt = useRef<string | null>(assignment.reveal ? shownAt : null);
 
   const criterion = criteria[active];
   const stateOf = useCallback(
@@ -137,32 +227,103 @@ function Screen({ assignment }: { assignment: FullTextAssignment }) {
     setNotice(null);
   };
 
-  const adopt = () => {
+  const adopt = async () => {
     if (!criterion) return;
-    const evidence: Evidence | null = selection
+    const source = selection
       ? {
-          id: `selection-${selection.start}-${selection.end}`,
+          key: `selection-${selection.start}-${selection.end}`,
           quote: selection.quote,
+          start: selection.start,
           boxes: selection.boxes,
         }
       : currentMention
-        ? { id: currentMention.id, quote: currentMention.quote.exact, boxes: currentMention.boxes }
+        ? {
+            key: currentMention.id,
+            quote: currentMention.quote.exact,
+            start: currentMention.start,
+            boxes: currentMention.boxes,
+          }
         : null;
-    if (!evidence) {
+    if (!source) {
       setNotice("Jump to a mention with ] or select text on the page first.");
       return;
     }
-    const already = stateOf(criterion.id).evidence.some((e) => e.id === evidence.id);
-    update(criterion.id, (s) => ({
-      ...s,
-      evidence: already
-        ? s.evidence.filter((e) => e.id !== evidence.id)
-        : [...s.evidence, evidence],
-    }));
-    setNotice(already ? "Removed from the evidence." : "Adopted as evidence.");
+    const already = stateOf(criterion.id).evidence.find((e) => e.key === source.key);
+    if (already) {
+      update(criterion.id, (s) => ({
+        ...s,
+        evidence: s.evidence.filter((e) => e.key !== source.key),
+      }));
+      setNotice("Removed from the evidence.");
+      return;
+    }
+    setBusy(true);
+    try {
+      // The span becomes an anchor on the layer: the decision cites it by ID.
+      const anchor = await run(
+        workbench.adopt({ layerId: assignment.layer.id, quote: source.quote, start: source.start }),
+      );
+      const evidence: Evidence = {
+        id: anchor.id,
+        key: source.key,
+        quote: anchor.quote.exact,
+        boxes: source.boxes,
+      };
+      update(criterion.id, (s) => ({ ...s, evidence: [...s.evidence, evidence] }));
+      setNotice("Adopted as evidence.");
+    } catch (e) {
+      setNotice(
+        e instanceof WorkbenchError
+          ? `Not adopted: ${e.message}`
+          : "Not adopted. Select whole words and try again.",
+      );
+    } finally {
+      setBusy(false);
+    }
     if (selection) {
       window.getSelection()?.removeAllRanges();
       setSelection(null);
+    }
+  };
+
+  const send = async (decision: Decision, phase: "provisional" | "final") => {
+    const now = new Date().toISOString();
+    setBusy(true);
+    try {
+      const result = await run(
+        workbench.decide({
+          projectId: project.id,
+          as: me.actor_id,
+          assignmentId: assignment.assignment_id,
+          decision,
+          phase,
+          expectedEtag: etag,
+          timing: {
+            shown_at: shownAt,
+            first_key_at: firstKeyAt.current ?? now,
+            decided_at: now,
+            reveal_shown_at: revealedAt.current,
+          },
+        }),
+      );
+      setEtag(result.etag);
+      if (result.phase === "provisional" && result.reveal) {
+        // The AI read the report differently: show its reading, then keep or revise.
+        revealedAt.current = new Date().toISOString();
+        setReveal(result.reveal);
+        setProvisional(decision);
+        setNotice(null);
+        return;
+      }
+      setOutcome({ outcome: decision.outcome, reason: decision.reason_criterion_id });
+      setNotice(null);
+      if (onDecided) window.setTimeout(onDecided, 900);
+    } catch (e) {
+      setNotice(
+        e instanceof WorkbenchError ? e.message : "The decision was not recorded. Try again.",
+      );
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -173,12 +334,19 @@ function Screen({ assignment }: { assignment: FullTextAssignment }) {
     }
     const notMet = criteria.filter((c) => stateOf(c.id).verdict === "not_met");
     const reason = notMet.find((c) => stateOf(c.id).evidence.length > 0) ?? null;
-    if (chosen === "include" && notMet.length > 0) {
-      setNotice("A criterion is not met. Exclude, or change that verdict.");
+    if (chosen === "include" && criteria.some((c) => stateOf(c.id).verdict !== "met")) {
+      setNotice("Include needs every criterion met. Exclude, or change a verdict.");
       return;
     }
     if (chosen === "exclude" && !reason) {
       setNotice("Exclude needs a criterion marked not met, with adopted evidence.");
+      return;
+    }
+    if (
+      chosen === "insufficient_information" &&
+      !criteria.some((c) => stateOf(c.id).verdict === "unclear")
+    ) {
+      setNotice("Insufficient information needs at least one criterion marked unclear.");
       return;
     }
     const anchors = criteria.flatMap((c) => stateOf(c.id).evidence.map((e) => e.id));
@@ -186,42 +354,33 @@ function Screen({ assignment }: { assignment: FullTextAssignment }) {
       setNotice("Every outcome cites evidence. Adopt at least one span with Enter.");
       return;
     }
-    const now = new Date().toISOString();
-    setBusy(true);
-    try {
-      await run(
-        workbench.decide({
-          assignmentId: assignment.assignment_id,
-          decision: {
-            outcome: chosen,
-            reason_criterion_id: chosen === "exclude" ? (reason?.id ?? null) : null,
-            evidence_anchor_ids: anchors,
-            comment: null,
-          },
-          phase: "provisional",
-          expectedRevision: assignment.revision,
-          timing: {
-            shown_at: shownAt,
-            first_key_at: firstKeyAt.current ?? now,
-            decided_at: now,
-            reveal_shown_at: null,
-          },
-        }),
-      );
-      setOutcome({ outcome: chosen, reason: chosen === "exclude" ? (reason?.id ?? null) : null });
-      setNotice(null);
-    } catch (e) {
-      setNotice(
-        e instanceof WorkbenchError ? e.message : "The decision was not recorded. Try again.",
-      );
-    } finally {
-      setBusy(false);
-    }
+    await send(
+      {
+        outcome: chosen,
+        reason_criterion_id: chosen === "exclude" ? (reason?.id ?? null) : null,
+        evidence_anchor_ids: anchors,
+        comment: null,
+        criteria: criteria.map((c) => ({
+          criterion_id: c.id,
+          status: stateOf(c.id).verdict ?? "unclear",
+          evidence_anchor_ids: stateOf(c.id).evidence.map((e) => e.id),
+        })),
+      },
+      reveal && !outcome ? "final" : "provisional",
+    );
+  };
+
+  /** Space after a reveal: the provisional decision stands as the final one. */
+  const keep = () => {
+    if (!reveal || !provisional || outcome) return false;
+    void send(provisional, "final");
+    return true;
   };
 
   function handleKey(event: KeyboardEvent): boolean {
-    if (busy || !criterion) return false;
+    if (busy || !criterion || outcome) return false;
     const key = event.key;
+    if (key === " ") return keep();
     // A held key repeats; adopting toggles and verdicts advance, so act on the first press only.
     if (event.repeat && (key === "Enter" || key in VERDICT_KEYS || key in OUTCOME_KEYS))
       return true;
@@ -238,7 +397,7 @@ function Screen({ assignment }: { assignment: FullTextAssignment }) {
       return true;
     }
     if (key === "Enter") {
-      adopt();
+      void adopt();
       return true;
     }
     const verdict = VERDICT_KEYS[key];
@@ -324,14 +483,24 @@ function Screen({ assignment }: { assignment: FullTextAssignment }) {
                   <Mentions
                     mentions={list}
                     cursor={state.cursor}
-                    adopted={new Set(state.evidence.map((e) => e.id))}
-                    selections={state.evidence.filter((e) => e.id.startsWith("selection-"))}
+                    adopted={new Set(state.evidence.map((e) => e.key))}
+                    selections={state.evidence.filter((e) => e.key.startsWith("selection-"))}
                   />
                 ) : null}
               </li>
             );
           })}
         </ol>
+        {reveal ? (
+          <FullTextReveal
+            reveal={reveal}
+            label={(() => {
+              const c = criteria.find((x) => x.id === reveal.criterion_id);
+              return c ? (labels[c.slot] ?? c.slot) : reveal.criterion_id;
+            })()}
+            settled={outcome !== null}
+          />
+        ) : null}
         <footer className="border-t border-rule-strong bg-sheet-2 px-5 py-3 text-sm">
           <div className="flex flex-wrap gap-x-4 gap-y-1.5">
             <KeyHint keys={["y"]}>{VERDICTS.met.label}</KeyHint>
@@ -358,7 +527,7 @@ function Screen({ assignment }: { assignment: FullTextAssignment }) {
                 {outcome.reason
                   ? ` on ${labels[criteria.find((c) => c.id === outcome.reason)?.slot ?? "other"]}`
                   : ""}
-                . No more full texts in your queue.
+                .
               </Status>
             ) : (
               (notice ??
@@ -446,3 +615,37 @@ const head = (text: string) => {
   if (flat.length <= 28) return flat;
   return `${flat.slice(0, 28).replace(/\s\S*$/, "")}…`;
 };
+
+function FullTextReveal({
+  reveal,
+  label,
+  settled,
+}: {
+  reveal: Reveal;
+  label: string;
+  settled: boolean;
+}) {
+  return (
+    <section
+      aria-label="AI judge"
+      data-testid="ai-reveal"
+      className="reveal-enter evidence-item border-t border-rule px-5 py-2.5 text-sm"
+    >
+      <p className="flex items-baseline gap-2">
+        <span className="font-semibold">The AI judge read this differently</span>
+        <span className="text-ink-2">{label}:</span>
+        <Status term={VERDICTS[reveal.status]} />
+      </p>
+      {reveal.quote ? (
+        <p className="mt-1 text-xs text-ink-2">&ldquo;{reveal.quote}&rdquo;</p>
+      ) : null}
+      <p className="mt-1 text-xs text-ink-2">{reveal.rationale}</p>
+      {settled ? null : (
+        <p className="mt-1.5 flex gap-4 text-xs">
+          <KeyHint keys={[" "]}>Keep yours</KeyHint>
+          <KeyHint keys={["i", "e", "x"]}>Revise</KeyHint>
+        </p>
+      )}
+    </section>
+  );
+}

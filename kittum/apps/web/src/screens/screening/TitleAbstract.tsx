@@ -17,23 +17,40 @@ import type { SessionStats } from "./useQueue.ts";
 
 export function TitleAbstractQueue() {
   const { workbench } = useRouteContext({ from: "/p/$projectId" });
-  const { project, scope, labels, criteriaFor } = useProject();
-  const criteria = useMemo(() => criteriaFor("title_abstract"), [criteriaFor]);
-  const queue = useQueue(workbench, project.scope_id);
+  const { project, me, labels, criteriaFor, screeningStage, scopeLabel, has } = useProject();
+  const stage = screeningStage("title_abstract");
+  const scopeId = stage?.scope_id ?? null;
+  const criteria = useMemo(() => criteriaFor("title_abstract", scopeId), [criteriaFor, scopeId]);
+  const caller = useMemo(
+    () => ({ projectId: project.id, as: me.actor_id }),
+    [project.id, me.actor_id],
+  );
+  const queue = useQueue(workbench, caller, scopeId);
   const [armed, setArmed] = useState(false);
   const [status, setStatus] = useState<ScopeStatus | null>(null);
+  const [poll, setPoll] = useState(0);
   const { current } = queue;
+  // The queue ran dry but records remain: the AI judge has not read them yet. Ask again.
+  const waiting = queue.finished && status !== null && status.remaining > 0;
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = window.setTimeout(() => {
+      queue.retry();
+      setPoll((n) => n + 1);
+    }, 3000);
+    return () => window.clearTimeout(timer);
+  }, [waiting, queue, poll]);
 
   useEffect(() => {
-    if (!project.scope_id) return;
+    if (!scopeId) return;
     let live = true;
-    void run(workbench.status(project.scope_id, "title_abstract")).then(
+    void run(workbench.status({ ...caller, scopeId, stage: "title_abstract" })).then(
       (s) => live && setStatus(s),
     );
     return () => {
       live = false;
     };
-  }, [workbench, project.scope_id, queue.stats.decided, current?.item.assignment_id]);
+  }, [workbench, caller, scopeId, queue.stats.decided, current?.item.assignment_id, poll]);
 
   useKeys((event) => {
     if (!current || event.repeat) return event.repeat;
@@ -75,21 +92,19 @@ export function TitleAbstractQueue() {
     }
   });
 
-  if (!project.scope_id) {
+  if (!scopeId) {
     return (
       <Empty title="No records to screen">
-        This review has no {labels.scope.toLowerCase()} assigned to you yet. Screening starts once
-        the protocol is published.
+        {has("reviewer") || has("auditor")
+          ? `You screen no ${labels.scope.toLowerCase()} at title and abstract yet. The methods lead opens screening once the protocol is published and the searches are in.`
+          : "Title and abstract screening is for the reviewers and the auditor. Choose another person, or another stage."}
       </Empty>
     );
   }
 
   return (
     <div className="grid h-full grid-rows-[auto_minmax(0,1fr)_auto]">
-      <QueueBar
-        scopeLabel={scope ? `${labels.scope} ${scope.label}` : labels.scope}
-        status={status}
-      />
+      <QueueBar scopeLabel={`${labels.scope} ${scopeLabel(scopeId)}`} status={status} />
       <div className="overflow-y-auto bg-sheet" data-testid="record-scroll">
         {current ? (
           <RecordView
@@ -99,6 +114,11 @@ export function TitleAbstractQueue() {
             criteria={criteria}
             labels={labels}
           />
+        ) : waiting ? (
+          <p className="px-10 py-10 text-ink-2" data-testid="queue-waiting">
+            The AI judge is still reading {status?.remaining} of your records. They appear here as
+            soon as it has; it reads every record before anyone screens it.
+          </p>
         ) : queue.finished ? (
           <Finished stats={queue.stats} />
         ) : queue.error ? null : (
@@ -200,13 +220,14 @@ function RecordView({
   return (
     <article className="mx-auto max-w-[900px] px-10 pt-7 pb-10" aria-label="Record">
       <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-2">
-        <span className="italic">{record.journal}</span>
-        <span>{record.year}</span>
+        {record.journal ? <span className="italic">{record.journal}</span> : null}
+        {record.year ? <span>{record.year}</span> : null}
         <span>{publicationTypes(record.publication_types)}</span>
         {record.registry_ids.map((id) => (
           <span key={id}>{id}</span>
         ))}
         {record.pmid ? <span className="text-ink-3">PMID {record.pmid}</span> : null}
+        {record.doi && !record.pmid ? <span className="text-ink-3">DOI {record.doi}</span> : null}
       </p>
       <h1
         className="mt-2 max-w-[68ch] text-xl font-semibold tracking-[-0.01em] text-balance"
