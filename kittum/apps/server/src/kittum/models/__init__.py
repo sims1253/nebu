@@ -13,7 +13,7 @@ API's key comes from an environment variable and is never stored. A deployment a
 recipes, hosted ones included, with `ModelRegistry.load(local=...)`.
 
 `RecordingBackend` records a live run's completions (`KITTUM_LLM_RECORD`) and `ReplayBackend`
-answers from them (`KITTUM_LLM_REPLAY`), keyed by `request_key`, never with a credential. A replayed
+answers from them (`KITTUM_LLM_REPLAY`), keyed by `request_key` and in order, never with a credential or the contact address. A replayed
 completion keeps the recorded model identity and reports its endpoint as `replay of <endpoint>`.
 
 Owner: WP-08. `kittum.models.testing.RecordedBackend` replays stored answers for tests.
@@ -30,6 +30,7 @@ from kittum.models.registry import ModelRegistry, RecipeError
 from kittum.models.replay import (
     REPLAY_PREFIX,
     ArtifactStorage,
+    LlmRecordingRefused,
     LlmRecordings,
     NotReplayed,
     RecordingBackend,
@@ -59,6 +60,7 @@ __all__ = [
     "CompletionRequest",
     "Endpoint",
     "LlmBackend",
+    "LlmRecordingRefused",
     "LlmRecordings",
     "Message",
     "ModelRecipe",

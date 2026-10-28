@@ -135,17 +135,26 @@ answers every request from those recordings, so the run gives the same records, 
 verdicts, and ledger payloads without a network, a model server, or a key. What people do in the
 workbench is not recorded: replay the same steps.
 
-| Variable                 | What it does                                                                                                                                                                                              |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `KITTUM_GATEWAY_RECORD`  | A directory. The gateway writes every source response into it (status, `Content-Type`, body) with a `manifest.json`, the format `KITTUM_GATEWAY_RECORDINGS` reads. Live only: refused with `KITTUM_OFFLINE=1`. |
-| `KITTUM_LLM_RECORD`      | A directory, or a file ending in `.json`. Every model completion is written under its request hash, with the model identity the server reported, the serving, the endpoint, and the exact request and response bytes. |
-| `KITTUM_LLM_REPLAY`      | A recording from `KITTUM_LLM_RECORD`. Replaces every model server: each request is answered from it, and one that was never recorded fails naming its request hash. Refused with `KITTUM_LLM_RECORD`.      |
+| Variable                | What it does                                                                                                                                                                                                                                         |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `KITTUM_GATEWAY_RECORD` | A directory. The gateway writes every source response into it (status, `Content-Type`, body), each attempt in order, with a `manifest.json`, the format `KITTUM_GATEWAY_RECORDINGS` reads. Live only: refused with `KITTUM_OFFLINE=1`.                 |
+| `KITTUM_LLM_RECORD`     | A directory, or a file ending in `.json`. Every model completion is written under its request hash, in order, with the model identity the server reported, the serving, the endpoint, and the exact request and response bytes, and which recipe judged. |
+| `KITTUM_LLM_REPLAY`     | A recording from `KITTUM_LLM_RECORD`. Replaces every model server: each request is answered from it, and one with no recorded answer left fails naming its request hash. The judge is the one the live run used. Refused with `KITTUM_LLM_RECORD`.     |
 
-Recordings hold no credentials and no personal data: request headers (where API keys travel) are
-never written, credential query parameters such as NCBI's `api_key` are dropped, and the contact
-address becomes `contact@example.invalid` in every URL and body, on recording and on lookup alike,
-so a replay finds them whatever `KITTUM_CONTACT_EMAIL` it runs with. Model keys go only in a
-request header, which no backend stores.
+A replay answers in the order the live run was answered: a source that failed twice and then
+answered fails twice and then answers, and a model asked the same thing twice gives its two
+answers in turn.
+
+Recordings hold no credentials and no personal data. Request headers (where API keys travel) are
+never written, and credential query parameters such as NCBI's `api_key` are dropped. The contact
+address becomes `contact@example.invalid` in the parameter each source takes it in (Crossref's and
+OpenAlex's `mailto`, Unpaywall's and NCBI's `email`), on recording and on lookup alike, so a replay
+finds the responses whatever `KITTUM_CONTACT_EMAIL` it runs with. A request with the address
+anywhere else, a configured key or password in any parameter, or user info in its URL is refused
+before it is sent, naming where, not what. A response body that holds the address or a key is
+cleaned, and the live run gets the cleaned body too, so it and its replay store the same bytes. A
+model completion whose request, answer, or raw bytes hold one is not recorded: the call fails,
+naming the field.
 
 A replay never passes itself off as a live call. The verdicts and transcripts keep the model
 identity that really answered and its serving, and their endpoint, which every verdict, ledger

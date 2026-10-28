@@ -12,8 +12,10 @@ screening judge, extraction runs, enrichment runs, and open-access retrieval.
 
 import functools
 import logging
+import os
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from kittum.app.enrichment import ENRICHMENT_JOB, enrichment_handler
@@ -118,6 +120,18 @@ def judge_config(recipe_id: str, *, label: str | None = None) -> JudgeConfig:
     )
 
 
+def recording_secrets(settings: Settings) -> tuple[str, ...]:
+    """What no recording may hold: every configured key and password. The contact address is
+    handled apart (it may stand in its contact parameter, as a placeholder)."""
+    values = [
+        settings.ncbi_api_key,
+        settings.openalex_api_key,
+        urlsplit(settings.database_url).password,
+    ]
+    values += [os.environ.get(e.api_key_env) for e in settings.llm_endpoints if e.api_key_env]
+    return tuple(dict.fromkeys(v for v in values if v))
+
+
 def build_backends(
     settings: Settings,
     registry: ModelRegistry,
@@ -151,7 +165,13 @@ def build_backends(
     if settings.llm_record:
         recordings = LlmRecordings(settings.llm_record)
         backends = {
-            recipe_id: RecordingBackend(backend, backend.recipe, recordings, artifacts)
+            recipe_id: RecordingBackend(
+                backend,
+                backend.recipe,
+                recordings,
+                artifacts,
+                sensitive=(*recording_secrets(settings), settings.contact_email),
+            )
             for recipe_id, backend in backends.items()
         }
     return backends
@@ -165,7 +185,16 @@ def build_judge(
         from kittum.app.demo import demo_judge
 
         return demo_judge(registry)
-    recipe_id = settings.judge_model or next(iter(backends), None)
+    recipe_id = settings.judge_model
+    if recipe_id is None and settings.llm_replay:
+        # The judge the live run used, not whichever recipe the recordings list first.
+        recipe_id = LlmRecordings(settings.llm_replay).role("judge")
+        if recipe_id is None and len(backends) > 1:
+            raise ConfigurationError(
+                f"KITTUM_LLM_REPLAY: {settings.llm_replay} does not say which recipe judged, and"
+                f" it holds several ({', '.join(backends)}); set KITTUM_JUDGE_MODEL"
+            )
+    recipe_id = recipe_id or next(iter(backends), None)
     if recipe_id is None:
         return None
     backend = backends.get(recipe_id)
@@ -173,6 +202,8 @@ def build_judge(
         raise ConfigurationError(
             f"KITTUM_JUDGE_MODEL is {recipe_id}, but no KITTUM_LLM_ENDPOINTS entry serves it"
         )
+    if settings.llm_record:
+        LlmRecordings(settings.llm_record).set_role("judge", recipe_id)
     return Judge(config=judge_config(recipe_id), recipe=backend.recipe, backend=backend)
 
 
@@ -211,7 +242,7 @@ def build_gateway(
                 transport,
                 settings.gateway_record,
                 contact_email=settings.contact_email,
-                secrets=(settings.ncbi_api_key, settings.openalex_api_key),
+                secrets=recording_secrets(settings),
             )
     in_memory = settings.offline or settings.gateway_record is not None
     return SourceGateway(

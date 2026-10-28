@@ -30,6 +30,7 @@ from kittum.gateway.recorded import (
     CONTACT_PLACEHOLDER,
     NotRecorded,
     RecordedTransport,
+    RecordingRefused,
     RecordingTransport,
     recording_key,
 )
@@ -48,6 +49,7 @@ __all__ = [
     "HttpxTransport",
     "NotRecorded",
     "RecordedTransport",
+    "RecordingRefused",
     "RecordingTransport",
     "SourceBudgetExhausted",
     "SourceGateway",

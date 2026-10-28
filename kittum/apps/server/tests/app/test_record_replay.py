@@ -39,7 +39,7 @@ from kittum.app.demo import DATA, PROTOCOL, SCOPE, SENTINELS
 from kittum.core import SystemClock
 from kittum.gateway import RecordedTransport
 from kittum.ledger import PostgresLedger
-from kittum.models import ModelRegistry
+from kittum.models import CompletionRequest, LlmRecordings, Message, ModelRegistry
 from kittum.runs import PostgresJobQueue, PostgresReceipts, Worker
 from kittum.search import SearchPlan, import_file
 from kittum.settings import LlmEndpoint, Settings
@@ -53,8 +53,6 @@ if TYPE_CHECKING:
 
     from kittum.db import Database
     from kittum.gateway import HttpRequest, HttpResponse
-
-pytestmark = pytest.mark.postgres
 
 PERSONAL = "max.mustermann@uni-example.de"
 OPENALEX_KEY = "oa-key-5f1c2d9e"
@@ -189,6 +187,7 @@ def _sorted(rows: list[Any]) -> list[str]:
     return sorted(json.dumps(r, sort_keys=True) for r in rows)
 
 
+@pytest.mark.postgres
 def test_a_recorded_live_run_replays_offline_to_the_same_rows_and_ledger(
     database: Database, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -272,3 +271,47 @@ def test_a_recorded_live_run_replays_offline_to_the_same_rows_and_ledger(
     unmarked = json.loads(json.dumps(replayed).replace("replay of https://", "https://"))
     for table in ("ledger", "enrichment_run", "record_enrichment", "verdict"):
         assert _sorted(unmarked[table]) == _sorted(recorded[table]), table
+
+
+def test_a_replay_judges_with_the_recipe_the_live_run_judged_with(tmp_path: Path) -> None:
+    """Two models answered in the live run and the second judged. The replay, told nothing about
+    the judge, must pick the second too, not whichever the recordings happen to list first; and a
+    recording that does not say which one judged is refused rather than guessed."""
+    path = tmp_path / "models"
+    recipes = ("qwen3.8-27b-bf16", "gemma-4-31b-it-bf16")
+    live = Settings(
+        database_url="unused",
+        artifact_dir=tmp_path / "artifacts",
+        llm_endpoints=tuple(
+            LlmEndpoint(recipe_id=r, base_url=f"http://gpu-{n}:8000/v1")
+            for n, r in enumerate(recipes)
+        ),
+        llm_record=path,
+    )
+    registry = ModelRegistry.load()
+    answer = {
+        "model": "served",
+        "choices": [{"message": {"content": "{}"}, "finish_reason": "stop"}],
+    }
+    client = httpx2.Client(
+        transport=httpx2.MockTransport(lambda _r: httpx2.Response(200, json=answer))
+    )
+    artifacts = FilesystemStore(live.artifact_dir)
+    backends = build_backends(live, registry, artifacts, client=client)
+    for recipe_id in recipes:
+        message = Message(role="user", content=f"Read this as {recipe_id}.")
+        backends[recipe_id].complete(CompletionRequest(model_id=recipe_id, messages=(message,)))
+    # The judge is the recipe a replay would not pick by itself.
+    first, judged = LlmRecordings(path).model_ids()
+    judge = build_judge(replace(live, judge_model=judged), registry, backends)
+    assert judge is not None and judge.recipe.id == judged
+
+    replay = replace(live, llm_endpoints=(), llm_record=None, llm_replay=path)
+    replays = build_backends(replay, registry, artifacts)
+    assert set(replays) == {first, judged}
+    replayed = build_judge(replay, registry, replays)
+    assert replayed is not None and replayed.recipe.id == judged
+
+    (path / "meta.json").unlink()
+    with pytest.raises(ConfigurationError, match="does not say which recipe judged"):
+        build_judge(replay, registry, replays)
