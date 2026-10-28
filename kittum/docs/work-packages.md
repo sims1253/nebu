@@ -15,7 +15,7 @@ The two-week spike in [DESIGN.md](../DESIGN.md#two-week-spike) picks from these 
 | 01 | `ledger` | Chain definition and in-memory fake done; stores open |
 | 02 | `runs` | Types done; queue open |
 | 03 | `protocol` | First-cut types; open |
-| 04 | `gateway` | Types and fake transport done; gateway open |
+| 04 | `gateway` | Done: httpx transport, policies, shared buckets, budgets, cache, attempts; AppContext wiring open |
 | 05 | `search` | Types done; open |
 | 06 | `enrich` | Types done; open |
 | 07 | `corpus` | Types done; open |
@@ -71,10 +71,34 @@ Module `kittum.protocol`. Needs: `core`.
 
 Module `kittum.gateway`. Needs: `core`.
 
-- An httpx (or niquests) transport, pyrate-limiter buckets persisted in Postgres, stamina retries
-  on 429 and 5xx with `Retry-After`, and a content-addressed response cache.
-- Source policies from configuration, with a 10% margin under published limits (docs/sources.md).
-- Acceptance: tests with `FakeTransport` show throttling, retries, and cache hits without network.
+- Done: `HttpxTransport` on httpx2, with timeouts, redirects, and a `User-Agent` naming the
+  Kittum version and the configured contact email.
+- Done: default policies for PubMed, ClinicalTrials.gov, Europe PMC, OpenAlex, Crossref,
+  Unpaywall, and PubTator, 10% under docs/sources.md (`default_policies()`); a caller overrides
+  any of them by passing its own mapping. A contact email moves Crossref to the polite pool and
+  an NCBI key raises PubMed's rate.
+- Done: `SourceGateway` with a pyrate-limiter bucket per source. The Postgres bucket shares the
+  limit across processes; `buckets="memory"` is for tests. One table per source, named
+  `ratelimit___gateway_<source>`. A per-source concurrency cap sits around each attempt.
+- Done: daily budgets in `gateway_budget`, consumed per attempt, so a new gateway instance
+  continues where the previous one stopped. Exhaustion raises `SourceBudgetExhausted`; the
+  caller decides whether to wait for the next day or fail the job.
+- Done: `Retry-After` (seconds or HTTP date) and `X-RateLimit-Remaining`/`X-RateLimit-Reset`
+  pause a source before the next attempt. Retries with stamina on 429, 502, 503, and 504, five
+  attempts, exponential backoff with full jitter.
+- Done: content-addressed cache: the body goes to `ArtifactStore`, `gateway_cache` maps the
+  canonical request hash to status, headers, and body hash. `use_cache=False` bypasses read and
+  write. Every transport attempt lands in `gateway_attempt`.
+- Done: `FakeTransport` scripts a sequence of responses (`kittum.gateway.testing`).
+- Left: entry points do not build a gateway yet. `AppContext` needs a `gateway` field (an
+  interface change outside this module) before search and enrichment can call it.
+- Left: PubMed's and OpenAlex's API keys are not attached to requests here; adapters pass them
+  as request parameters. Retry-After on 503 is honoured, but no circuit breaker/source health
+  memory spans gateway instances.
+- Acceptance met: tests against real Postgres with `FakeTransport` show a 429 then 200 with both
+  attempts recorded, five failures with a clear error, a cache hit with no transport call,
+  independent buckets for two sources, a budget that survives a new gateway, and the
+  concurrency cap.
 
 ## WP-05 Search
 
