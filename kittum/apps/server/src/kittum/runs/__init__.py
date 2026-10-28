@@ -15,6 +15,7 @@ Fakes for tests in other modules are in `kittum.runs.testing`.
 Still to build: run manifests, cache keys, and `diff` between runs.
 """
 
+from kittum.runs.commands import Commands
 from kittum.runs.model import (
     Apply,
     Command,
@@ -42,6 +43,7 @@ __all__ = [
     "Command",
     "CommandIdReused",
     "CommandRejected",
+    "Commands",
     "Decider",
     "Decision",
     "Handler",
