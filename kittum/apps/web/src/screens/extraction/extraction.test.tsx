@@ -138,18 +138,24 @@ describe("extraction review", () => {
     unmount = app.unmount;
     await expect.element(page.getByText("1 of 19 accepted")).toBeVisible();
     await press("Tab"); // "randomly assigned to ASC alone (n=81)" breaks over two lines
+    // `expect.poll` gives up after 1 s by default; under a full `pnpm check` the page images
+    // and the scroll can take longer than that, so these waits get room.
+    const settle = { timeout: 15_000 };
     await expect
       .poll(
         () => document.querySelectorAll("[data-page='6'] [data-testid=source-highlight]").length,
+        settle,
       )
       .toBe(2);
     // Every page image, not only page 6: the pages below give the viewer the height to scroll
     // the source down to its bottom edge. Until they load, the scroll stops short.
     await expect
-      .poll(() =>
-        [...document.querySelectorAll<HTMLImageElement>("[data-page] img")].every(
-          (i) => i.complete,
-        ),
+      .poll(
+        () =>
+          [...document.querySelectorAll<HTMLImageElement>("[data-page] img")].every(
+            (i) => i.complete,
+          ),
+        settle,
       )
       .toBe(true);
     const [first, second] = [
@@ -165,7 +171,7 @@ describe("extraction review", () => {
         scroller.scrollTop += first!.getBoundingClientRect().bottom - bottom + 2;
         const gap = bottom - first!.getBoundingClientRect().bottom;
         return gap >= 0 && gap < 4;
-      })
+      }, settle)
       .toBe(true);
     const rest = second!.getBoundingClientRect();
     expect((bottom - rest.top) / rest.height).toBeLessThan(0.5);
