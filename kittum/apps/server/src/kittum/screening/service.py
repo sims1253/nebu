@@ -11,6 +11,7 @@ from psycopg.types.json import Jsonb
 from kittum.core import SystemClock, content_hash, new_id, sha256_hex
 from kittum.judge import ScreeningItem
 from kittum.ledger import EventDraft
+from kittum.people import is_lead
 from kittum.protocol import ScreeningMode, get_version
 from kittum.runs import (
     Command,
@@ -853,17 +854,6 @@ class Screening:
             etag=row["etag"],
         )
 
-    def _leads(self, tx: Tx, row: dict[str, Any]) -> set[Id]:
-        """Who leads a stage: whoever opened it, and whoever approved its protocol version."""
-        opener = tx.execute(
-            "select actor_id from audit_event where event_id = %s", (row["opened_event_id"],)
-        ).fetchone()
-        stored = get_version(tx, row["project_id"], row["protocol_version_id"])
-        leads: set[Id] = {opener["actor_id"]} if opener else set()
-        if stored.approved_by is not None:
-            leads.add(stored.approved_by)
-        return leads
-
     def _own_assignment(
         self, tx: Tx, project_id: Id, reviewer_id: Id, assignment_id: Id, *, lock: bool = False
     ) -> dict[str, Any]:
@@ -1278,8 +1268,9 @@ class Screening:
     ) -> ScopeStatus:
         """Progress for the viewer. Someone who screens or audits the stage sees only their own
         counts; an adjudicator the progress and their conflicts. The whole stage (its agreement,
-        the audit gauge, and the M3 stop test) is for its methods lead only: the person who
-        opened the stage or approved its protocol version. Anyone else is not assigned."""
+        the audit gauge, and the M3 stop test) is for a methods lead of the project
+        (`kittum.people`) only. Anyone else, another reviewer of the project included, is not
+        assigned."""
         row = store.find_stage(tx, project_id, scope_id, stage, topic_id)
         viewer = tx.execute("select kind from actor where id = %s", (viewer_id,)).fetchone()
         if viewer is None or viewer["kind"] != "human":
@@ -1317,7 +1308,7 @@ class Screening:
                 conflicts=None,
                 metrics=None,
             )
-        if viewer_id not in self._leads(tx, row):
+        if not is_lead(tx, project_id, viewer_id):
             raise NotAssigned(f"actor {viewer_id} has no part in this stage")
         protocol = self._protocol(tx, project_id, row["protocol_version_id"])
         topic = topic_for(protocol, scope_id, row["topic_id"])

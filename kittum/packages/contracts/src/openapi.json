@@ -126,6 +126,32 @@
         "title": "Acceptance",
         "type": "object"
       },
+      "AddMemberRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "added_by": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "roles": {
+            "items": {
+              "$ref": "#/components/schemas/MemberRole"
+            },
+            "title": "Roles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "display_name",
+          "roles",
+          "added_by"
+        ],
+        "title": "AddMemberRequest",
+        "type": "object"
+      },
       "AdjudicateRequest": {
         "additionalProperties": false,
         "properties": {
@@ -433,6 +459,18 @@
           "quote": {
             "title": "Quote",
             "type": "string"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
           }
         },
         "required": [
@@ -603,6 +641,56 @@
           "document_hash"
         ],
         "title": "Assertion",
+        "type": "object"
+      },
+      "AssignmentFullText": {
+        "additionalProperties": false,
+        "description": "The full text behind a reviewer's full-text assignment.",
+        "properties": {
+          "document_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "layer_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "licence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Licence"
+          },
+          "mentions": {
+            "items": {
+              "$ref": "#/components/schemas/CriterionMentions"
+            },
+            "title": "Mentions",
+            "type": "array"
+          },
+          "page_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Count"
+          }
+        },
+        "required": [
+          "document_id",
+          "layer_id",
+          "page_count",
+          "licence",
+          "mentions"
+        ],
+        "title": "AssignmentFullText",
         "type": "object"
       },
       "AuditGauge": {
@@ -898,6 +986,120 @@
         "title": "ConfirmRequest",
         "type": "object"
       },
+      "CorpusReport": {
+        "additionalProperties": false,
+        "description": "One report of an identity revision with the source records that make it up.\n\n`records` are in source order; a report found by several searches has one record per\noccurrence. `relation` is the strongest link label among them.",
+        "properties": {
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/SourceRecord"
+            },
+            "title": "Records",
+            "type": "array"
+          },
+          "relation": {
+            "$ref": "#/components/schemas/LinkRelation"
+          },
+          "report_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "study_id": {
+            "$ref": "#/components/schemas/Id"
+          }
+        },
+        "required": [
+          "report_id",
+          "study_id",
+          "relation",
+          "records"
+        ],
+        "title": "CorpusReport",
+        "type": "object"
+      },
+      "CorpusRevision": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "identity_revision_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "occurrences": {
+            "items": {
+              "$ref": "#/components/schemas/Occurrence"
+            },
+            "title": "Occurrences",
+            "type": "array"
+          },
+          "project_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "proposals": {
+            "items": {
+              "$ref": "#/components/schemas/LinkProposal"
+            },
+            "title": "Proposals",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "occurrences",
+          "proposals"
+        ],
+        "title": "CorpusRevision",
+        "type": "object"
+      },
+      "CorpusView": {
+        "additionalProperties": false,
+        "description": "The newest identity revision: every report with its records and study.",
+        "properties": {
+          "reports": {
+            "items": {
+              "$ref": "#/components/schemas/CorpusReport"
+            },
+            "title": "Reports",
+            "type": "array"
+          },
+          "revision": {
+            "$ref": "#/components/schemas/IdentityRevision"
+          }
+        },
+        "required": [
+          "revision",
+          "reports"
+        ],
+        "title": "CorpusView",
+        "type": "object"
+      },
+      "CreateProjectRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "lead_name": {
+            "title": "Lead Name",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "lead_name"
+        ],
+        "title": "CreateProjectRequest",
+        "type": "object"
+      },
       "Criterion": {
         "additionalProperties": false,
         "description": "An executable eligibility criterion.\n\n`text` states the condition. For an `include` criterion a record must meet it; for an\n`exclude` criterion a record that shows it is excluded. Either way the judge answers whether\nthe record *passes*: `not_met` with a verified quote is what excludes.",
@@ -994,6 +1196,36 @@
           "status"
         ],
         "title": "CriterionDecision",
+        "type": "object"
+      },
+      "CriterionMentions": {
+        "additionalProperties": false,
+        "properties": {
+          "criterion_id": {
+            "title": "Criterion Id",
+            "type": "string"
+          },
+          "mentions": {
+            "items": {
+              "$ref": "#/components/schemas/Anchor"
+            },
+            "title": "Mentions",
+            "type": "array"
+          },
+          "terms": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Terms",
+            "type": "array"
+          }
+        },
+        "required": [
+          "criterion_id",
+          "terms",
+          "mentions"
+        ],
+        "title": "CriterionMentions",
         "type": "object"
       },
       "CriterionStatus": {
@@ -1750,6 +1982,52 @@
         "title": "FreshnessPolicy",
         "type": "object"
       },
+      "FullText": {
+        "additionalProperties": false,
+        "properties": {
+          "document_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "item_ref": {
+            "title": "Item Ref",
+            "type": "string"
+          },
+          "layer_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "licence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Licence"
+          },
+          "page_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Count"
+          }
+        },
+        "required": [
+          "item_ref",
+          "document_id",
+          "layer_id",
+          "page_count",
+          "licence"
+        ],
+        "title": "FullText",
+        "type": "object"
+      },
       "Gate": {
         "enum": [
           "human_verify",
@@ -1926,6 +2204,19 @@
         "title": "ImportSearchRequest",
         "type": "object"
       },
+      "IngestRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_id": {
+            "$ref": "#/components/schemas/Id"
+          }
+        },
+        "required": [
+          "actor_id"
+        ],
+        "title": "IngestRequest",
+        "type": "object"
+      },
       "Interval": {
         "additionalProperties": false,
         "description": "A point estimate with an interval.",
@@ -2015,6 +2306,32 @@
         "title": "LayerSummary",
         "type": "object"
       },
+      "LedgerSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "by_type": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Type",
+            "type": "object"
+          },
+          "events": {
+            "title": "Events",
+            "type": "integer"
+          },
+          "verify": {
+            "$ref": "#/components/schemas/VerifyReport"
+          }
+        },
+        "required": [
+          "verify",
+          "events",
+          "by_type"
+        ],
+        "title": "LedgerSummary",
+        "type": "object"
+      },
       "LinkProposal": {
         "additionalProperties": false,
         "properties": {
@@ -2050,6 +2367,15 @@
         ],
         "title": "LinkProposal",
         "type": "object"
+      },
+      "LinkRelation": {
+        "enum": [
+          "same_record",
+          "same_report",
+          "same_study",
+          "standalone"
+        ],
+        "type": "string"
       },
       "LocalizedText": {
         "additionalProperties": {
@@ -2112,6 +2438,41 @@
         "title": "Locate",
         "type": "object"
       },
+      "Member": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "roles": {
+            "items": {
+              "$ref": "#/components/schemas/MemberRole"
+            },
+            "title": "Roles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "actor_id",
+          "display_name",
+          "roles"
+        ],
+        "title": "Member",
+        "type": "object"
+      },
+      "MemberRole": {
+        "enum": [
+          "lead",
+          "reviewer",
+          "auditor",
+          "adjudicator"
+        ],
+        "type": "string"
+      },
       "MergeRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2144,6 +2505,78 @@
           "actor_id"
         ],
         "title": "MergeRequest",
+        "type": "object"
+      },
+      "Occurrence": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "provider_record_id": {
+            "title": "Provider Record Id",
+            "type": "string"
+          },
+          "search_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "source": {
+            "default": "",
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "search_id",
+          "provider_record_id"
+        ],
+        "title": "Occurrence",
+        "type": "object"
+      },
+      "OpenStageRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "reveal": {
+            "$ref": "#/components/schemas/RevealSetting",
+            "default": "on_disagreement"
+          },
+          "scope_id": {
+            "title": "Scope Id",
+            "type": "string"
+          },
+          "sentinels": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Sentinel"
+            },
+            "title": "Sentinels",
+            "type": "array"
+          },
+          "stage": {
+            "$ref": "#/components/schemas/Stage"
+          },
+          "topic_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topic Id"
+          }
+        },
+        "required": [
+          "scope_id",
+          "stage",
+          "actor_id"
+        ],
+        "title": "OpenStageRequest",
         "type": "object"
       },
       "Outcome-Input": {
@@ -2494,6 +2927,132 @@
         "title": "PrismaCounts",
         "type": "object"
       },
+      "Problem": {
+        "enum": [
+          "wrong_project",
+          "seq_gap",
+          "payload_mismatch",
+          "prev_hash_mismatch",
+          "event_hash_mismatch",
+          "untrusted_key",
+          "bad_signature",
+          "tail_cut",
+          "rewritten"
+        ],
+        "type": "string"
+      },
+      "Progress": {
+        "additionalProperties": false,
+        "properties": {
+          "full_texts": {
+            "title": "Full Texts",
+            "type": "integer"
+          },
+          "identification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PrismaCounts"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "identity_revision_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "searches": {
+            "title": "Searches",
+            "type": "integer"
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/StageProgress"
+            },
+            "title": "Stages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "identity_revision_id",
+          "identification",
+          "searches",
+          "full_texts",
+          "stages"
+        ],
+        "title": "Progress",
+        "type": "object"
+      },
+      "ProjectSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/Member"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "protocol": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProtocolRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/StageInfo"
+            },
+            "title": "Stages",
+            "type": "array"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "created_at",
+          "title",
+          "protocol",
+          "members",
+          "stages"
+        ],
+        "title": "ProjectSummary",
+        "type": "object"
+      },
       "Proposal": {
         "additionalProperties": false,
         "properties": {
@@ -2604,6 +3163,41 @@
         "title": "ProtocolIssue",
         "type": "object"
       },
+      "ProtocolRef": {
+        "additionalProperties": false,
+        "properties": {
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile"
+          },
+          "version_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "version_label": {
+            "title": "Version Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version_id",
+          "version_label",
+          "content_hash",
+          "profile"
+        ],
+        "title": "ProtocolRef",
+        "type": "object"
+      },
       "ProtocolVersion": {
         "additionalProperties": false,
         "properties": {
@@ -2705,6 +3299,28 @@
           "approved_by"
         ],
         "title": "PublishRequest",
+        "type": "object"
+      },
+      "PublishedProtocol": {
+        "additionalProperties": false,
+        "description": "The version every decision reads now, with the words the review uses for core concepts:\nthe profile's labels where it has them, the core's otherwise.",
+        "properties": {
+          "labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Labels",
+            "type": "object"
+          },
+          "stored": {
+            "$ref": "#/components/schemas/StoredProtocol"
+          }
+        },
+        "required": [
+          "stored",
+          "labels"
+        ],
+        "title": "PublishedProtocol",
         "type": "object"
       },
       "QuantitySpec": {
@@ -2945,6 +3561,74 @@
           "sections"
         ],
         "title": "QueueRecord",
+        "type": "object"
+      },
+      "RecordFacts": {
+        "additionalProperties": false,
+        "description": "Bibliographic facts shown above the abstract.",
+        "properties": {
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "journal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal"
+          },
+          "pmid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pmid"
+          },
+          "publication_types": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Publication Types",
+            "type": "array"
+          },
+          "registry_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Registry Ids",
+            "type": "array"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "title": "RecordFacts",
         "type": "object"
       },
       "ReferenceSet": {
@@ -3663,6 +4347,38 @@
         "title": "ScreeningMode",
         "type": "string"
       },
+      "ScreeningRecord": {
+        "additionalProperties": false,
+        "description": "One item to screen: a report at title and abstract, or its parsed full text.\n\n`item_ref` names the record across modules (the corpus report ID); the judge's verdicts are\nkeyed by it.",
+        "properties": {
+          "facts": {
+            "$ref": "#/components/schemas/RecordFacts",
+            "default": {
+              "publication_types": [],
+              "registry_ids": []
+            }
+          },
+          "item_ref": {
+            "title": "Item Ref",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_ref",
+          "title",
+          "text"
+        ],
+        "title": "ScreeningRecord",
+        "type": "object"
+      },
       "SealRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3995,6 +4711,29 @@
         "title": "SemanticKey",
         "type": "object"
       },
+      "Sentinel": {
+        "additionalProperties": false,
+        "description": "A record with a known label, seeded invisibly into every screener's queue.",
+        "properties": {
+          "expected_outcome": {
+            "default": "include",
+            "enum": [
+              "include",
+              "exclude"
+            ],
+            "title": "Expected Outcome",
+            "type": "string"
+          },
+          "record": {
+            "$ref": "#/components/schemas/ScreeningRecord"
+          }
+        },
+        "required": [
+          "record"
+        ],
+        "title": "Sentinel",
+        "type": "object"
+      },
       "Sha256": {
         "pattern": "^[0-9a-f]{64}$",
         "type": "string"
@@ -4250,6 +4989,75 @@
         ],
         "type": "string"
       },
+      "StageInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "adjudicators": {
+            "items": {
+              "$ref": "#/components/schemas/Id"
+            },
+            "title": "Adjudicators",
+            "type": "array"
+          },
+          "auditor_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "judge_config_id": {
+            "title": "Judge Config Id",
+            "type": "string"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/ScreeningMode"
+          },
+          "project_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "protocol_hash": {
+            "title": "Protocol Hash",
+            "type": "string"
+          },
+          "reveal": {
+            "$ref": "#/components/schemas/RevealSetting"
+          },
+          "scope_id": {
+            "title": "Scope Id",
+            "type": "string"
+          },
+          "screeners": {
+            "items": {
+              "$ref": "#/components/schemas/Id"
+            },
+            "title": "Screeners",
+            "type": "array"
+          },
+          "stage": {
+            "$ref": "#/components/schemas/Stage"
+          },
+          "stage_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "topic_id": {
+            "title": "Topic Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stage_id",
+          "project_id",
+          "scope_id",
+          "stage",
+          "topic_id",
+          "mode",
+          "reveal",
+          "protocol_hash",
+          "judge_config_id",
+          "screeners",
+          "auditor_id",
+          "adjudicators"
+        ],
+        "title": "StageInfo",
+        "type": "object"
+      },
       "StageMetrics": {
         "additionalProperties": false,
         "properties": {
@@ -4307,6 +5115,39 @@
           "stop_test"
         ],
         "title": "StageMetrics",
+        "type": "object"
+      },
+      "StageProgress": {
+        "additionalProperties": false,
+        "description": "One stage as the viewer may see it. `outcomes` counts records by their current outcome\n(`include`, `exclude`, `conflict`, `pending`) and is only filled in for the methods lead.",
+        "properties": {
+          "outcomes": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcomes"
+          },
+          "stage": {
+            "$ref": "#/components/schemas/StageInfo"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ScopeStatus"
+          }
+        },
+        "required": [
+          "stage",
+          "status",
+          "outcomes"
+        ],
+        "title": "StageProgress",
         "type": "object"
       },
       "StopStatus": {
@@ -4748,6 +5589,72 @@
         "title": "ValidatorResult",
         "type": "object"
       },
+      "VerifyReport": {
+        "additionalProperties": false,
+        "properties": {
+          "checked_through_seq": {
+            "title": "Checked Through Seq",
+            "type": "integer"
+          },
+          "checkpoint_seq": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checkpoint Seq"
+          },
+          "first_bad_seq": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Bad Seq"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Problem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "project_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "project_id",
+          "checked_through_seq",
+          "ok"
+        ],
+        "title": "VerifyReport",
+        "type": "object"
+      },
       "WordBox": {
         "additionalProperties": false,
         "properties": {
@@ -5072,7 +5979,7 @@
     },
     "/api/layers/{layer_id}/anchors": {
       "post": {
-        "description": "Anchor a verbatim quote. 404 if the layer does not contain it, 409 if it occurs more than\nonce and no `occurrence` is given.",
+        "description": "Anchor a verbatim quote. 404 if the layer does not contain it, 409 if it occurs more than\nonce and neither `occurrence` nor `start` is given.",
         "operationId": "createAnchor",
         "parameters": [
           {
@@ -5176,6 +6083,114 @@
         ]
       }
     },
+    "/api/projects": {
+      "get": {
+        "operationId": "listProjects",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProjectSummary"
+                  },
+                  "title": "Response Listprojects",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Projects Route",
+        "tags": [
+          "projects"
+        ]
+      },
+      "post": {
+        "description": "A project and its methods lead, who adds the other people.",
+        "operationId": "createProject",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProjectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Project Route",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/projects/{project_id}": {
+      "get": {
+        "operationId": "getProject",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Project",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
     "/api/projects/{project_id}/corpus/confirm": {
       "post": {
         "operationId": "confirmCorpusProposal",
@@ -5224,6 +6239,60 @@
           }
         },
         "summary": "Confirm Route",
+        "tags": [
+          "corpus"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/corpus/ingest": {
+      "post": {
+        "description": "Deduplicate every search of the project into the first identity revision.",
+        "operationId": "ingestCorpus",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorpusRevision"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ingest Route",
         "tags": [
           "corpus"
         ]
@@ -5284,6 +6353,7 @@
     },
     "/api/projects/{project_id}/corpus/proposals": {
       "get": {
+        "description": "The link proposals, for the project's methods lead only (403 otherwise).",
         "operationId": "listCorpusProposals",
         "parameters": [
           {
@@ -5327,6 +6397,16 @@
               ],
               "title": "Status"
             }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
           }
         ],
         "responses": {
@@ -5356,6 +6436,60 @@
           }
         },
         "summary": "List Proposals Route",
+        "tags": [
+          "corpus"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/corpus/revisions/latest": {
+      "get": {
+        "description": "Every record of the project, for its methods lead only (403 otherwise).",
+        "operationId": "getLatestCorpusRevision",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorpusView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Latest Route",
         "tags": [
           "corpus"
         ]
@@ -5927,6 +7061,288 @@
         "summary": "Get Review Route",
         "tags": [
           "extraction"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/full-texts/{item_ref}": {
+      "post": {
+        "description": "Upload a record's full text (the human end of the full-text waterfall).",
+        "operationId": "attachFullText",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "item_ref",
+            "required": true,
+            "schema": {
+              "title": "Item Ref",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actor_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "licence",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Licence"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/pdf": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FullText"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Attach Full Text Route",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/ledger/verify": {
+      "get": {
+        "description": "Recompute every event hash and link of the project's chain.",
+        "operationId": "verifyProjectLedger",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LedgerSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Ledger",
+        "tags": [
+          "ledger"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/members": {
+      "post": {
+        "operationId": "addProjectMember",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddMemberRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Member"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Member Route",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/progress": {
+      "get": {
+        "description": "Identification counts and every stage as the viewer may see it: a screener their own\ncounts, an adjudicator the progress and their conflicts, the methods lead everything.",
+        "operationId": "getProjectProgress",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Progress"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Progress",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/protocol": {
+      "get": {
+        "operationId": "getPublishedProtocol",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishedProtocol"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Published Protocol",
+        "tags": [
+          "protocol"
         ]
       }
     },
@@ -6616,6 +8032,70 @@
         ]
       }
     },
+    "/api/projects/{project_id}/screening/assignments/{assignment_id}/full-text": {
+      "get": {
+        "description": "The full text of one of the caller's full-text assignments, with the protocol-term\nmentions of each criterion in document order.",
+        "operationId": "getScreeningAssignmentFullText",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "assignment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Assignment Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssignmentFullText"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assignment Full Text",
+        "tags": [
+          "screening"
+        ]
+      }
+    },
     "/api/projects/{project_id}/screening/assignments/{assignment_id}/undo": {
       "post": {
         "operationId": "undoScreeningDecision",
@@ -6817,6 +8297,106 @@
         ]
       }
     },
+    "/api/projects/{project_id}/screening/stages": {
+      "get": {
+        "description": "Every open stage, with its mode, reveal setting, screeners, auditor, and adjudicators.",
+        "operationId": "listScreeningStages",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/StageInfo"
+                  },
+                  "title": "Response Listscreeningstages",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stages",
+        "tags": [
+          "screening"
+        ]
+      },
+      "post": {
+        "description": "Open a scope at a stage with the project's people and enqueue the AI judge. Title and\nabstract screens every report of the corpus; full text every record included at title and\nabstract that has a full text.",
+        "operationId": "openScreeningStage",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpenStageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StageInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Open Stage",
+        "tags": [
+          "screening"
+        ]
+      }
+    },
     "/api/projects/{project_id}/screening/status": {
       "get": {
         "description": "A screener's own counts, or the whole stage for anyone who does not screen it.",
@@ -6913,6 +8493,7 @@
     },
     "/api/projects/{project_id}/search/executions": {
       "get": {
+        "description": "Every execution with its records, for the project's methods lead only (403 otherwise):\na reviewer who could list every record could find the sentinels in their queue.",
         "operationId": "listSearchExecutions",
         "parameters": [
           {
@@ -6939,6 +8520,16 @@
                 }
               ],
               "title": "Topic Id"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
             }
           }
         ],
@@ -6996,6 +8587,16 @@
               "format": "uuid",
               "title": "Execution Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
             }
           }
         ],

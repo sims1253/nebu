@@ -213,6 +213,16 @@ def test_a_project_from_nothing_to_an_open_stage(database: Database, tmp_path: P
     assert theirs["stages"] == [] and theirs["identification"] is None
     unseen = client.get(f"/api/projects/{pid}/screening/status", params=queue, headers=outsider)
     assert unseen.status_code == 404
+    # Nor its reports, which hold every decision: those are the lead's too.
+    render = f"/api/projects/{pid}/reports/targets/prisma/render"
+    refused = client.post(render, json={"actor_id": people["Ola Berg"]})
+    assert refused.status_code == 403
+    rendered = ok(client.post(render, json={"actor_id": lead}))
+    flow = next(f for f in rendered["artifact"]["files"] if f["path"].endswith(".json"))
+    downloaded = ok(
+        client.get(f"/api/projects/{pid}/reports/artifacts/{flow['sha256']}", headers=as_lead)
+    )
+    assert downloaded["records_identified"] == 10 and downloaded["records_awaiting_screening"] == 10
 
     ledger = ok(client.get(f"/api/projects/{pid}/ledger/verify"))
     assert ledger["verify"]["ok"]

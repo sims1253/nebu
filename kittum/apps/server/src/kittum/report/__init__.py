@@ -35,6 +35,7 @@ from kittum.core import Id, KittumError, Record, Sha256, SystemClock, canonical_
 from kittum.ledger import EXPORTERS as LEDGER_EXPORTERS
 from kittum.ledger import EventDraft, PostgresLedger, register_exporter
 from kittum.ledger import seal as seal_ledger
+from kittum.people import is_lead
 from kittum.report.exporters import EXPORTERS as _EXPORTERS
 from kittum.report.prisma import (
     AiInvolvement,
@@ -238,11 +239,12 @@ def record_render(
 
 
 class NotTheLead(KittumError):
-    """The actor screens, audits, or adjudicates a stage of the project, or is not a human.
+    """The actor is not a methods lead of the project (`kittum.people`), or is one who also
+    screens, audits, or adjudicates a stage, or is not a human.
 
     Reports show every reviewer's decisions, the AI's readings, and its raw outputs, so only the
     methods lead may render, download, or seal them: the person `Screening.status` gives the
-    lead's view, a human who is none of a stage's screeners, auditor, and adjudicators.
+    lead's view. Anyone else, another reviewer of the project included, is refused.
     """
 
 
@@ -251,6 +253,8 @@ def require_lead(tx: Tx, project_id: Id, actor_id: Id) -> None:
     actor = tx.execute("select kind from actor where id = %s", (actor_id,)).fetchone()
     if actor is None or actor["kind"] != "human":
         raise NotTheLead(f"actor {actor_id} is not a human")
+    if not is_lead(tx, project_id, actor_id):
+        raise NotTheLead(f"actor {actor_id} is not a methods lead of this project")
     role = tx.execute(
         "select 1 from screening_stage where project_id = %s"
         " and (%s = any(screeners) or auditor_id = %s or %s = any(adjudicators)) limit 1",

@@ -31,6 +31,7 @@ from kittum.corpus import (
 from kittum.documents import PyMuPDFParser, derive, get_document, get_layer
 from kittum.documents import ingest as ingest_pdf
 from kittum.ledger import EventDraft
+from kittum.people import Member, MemberRole, is_lead, members, record_roles
 from kittum.protocol import StoredProtocol, compile, latest_published, publish, save_draft
 from kittum.screening import (
     NotAssigned,
@@ -54,8 +55,6 @@ if TYPE_CHECKING:
     from kittum.screening import RevealSetting, Screening
     from kittum.storage import ArtifactStore
 
-type MemberRole = Literal["lead", "reviewer", "auditor", "adjudicator"]
-
 PROJECT_CREATED = "project.created"
 MEMBER_ADDED = "project.member_added"
 FULL_TEXT_ATTACHED = "project.full_text_attached"
@@ -68,12 +67,6 @@ class LifecycleError(KittumError):
 
 class NotLead(KittumError):
     """The caller is not the project's methods lead. Reported as forbidden."""
-
-
-class Member(Record):
-    actor_id: Id
-    display_name: str
-    roles: tuple[MemberRole, ...]
 
 
 class ProtocolRef(Record):
@@ -186,28 +179,7 @@ def _add_roles(
     if event_id is None:
         payload = {"actor_id": str(actor_id), "display_name": display_name, "roles": list(roles)}
         event_id = ledger.append(tx, _event(project_id, MEMBER_ADDED, added_by, payload)).event_id
-    for role in roles:
-        tx.execute(
-            "insert into project_member (project_id, actor_id, role, display_name, event_id)"
-            " values (%s, %s, %s, %s, %s) on conflict do nothing",
-            (project_id, actor_id, role, display_name, event_id),
-        )
-
-
-def members(tx: Tx, project_id: Id) -> list[Member]:
-    rows = tx.execute(
-        "select actor_id, display_name, array_agg(role order by role) as roles,"
-        " min(event_id::text) as first_event from project_member where project_id = %s"
-        " group by actor_id, display_name order by first_event",
-        (project_id,),
-    ).fetchall()
-    order = ("lead", "reviewer", "auditor", "adjudicator")
-    people = [
-        Member(actor_id=r["actor_id"], display_name=r["display_name"], roles=tuple(r["roles"]))
-        for r in rows
-    ]
-    # The lead first, then the screeners in the order they joined, the auditor, the adjudicators.
-    return sorted(people, key=lambda m: min(order.index(r) for r in m.roles))
+    record_roles(tx, project_id, actor_id, display_name, roles, event_id=event_id)
 
 
 def _with_role(people: list[Member], role: MemberRole) -> list[Id]:
@@ -537,16 +509,6 @@ def open_screening(
 
 
 # Progress
-
-
-def is_lead(tx: Tx, project_id: Id, actor_id: Id) -> bool:
-    """Whether the actor is a methods lead of the project. The identity is the API's stand-in
-    (`X-Kittum-Reviewer`) until it has authentication."""
-    row = tx.execute(
-        "select 1 from project_member where project_id = %s and actor_id = %s and role = 'lead'",
-        (project_id, actor_id),
-    ).fetchone()
-    return row is not None
 
 
 def require_lead(tx: Tx, project_id: Id, actor_id: Id) -> None:
