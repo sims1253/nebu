@@ -370,16 +370,28 @@ Module `kittum.screening`. Needs: `protocol`, `corpus`, `judge`, `ledger`, `runs
   screened) for the lead and later stages.
 - Decoys, so that queue membership does not reveal the AI. A conflict only the AI raised (M1: the
   model includes, both humans exclude; M2: the AI disagrees with the lone human) shows only
-  agreeing human decisions. Each is matched by at least one decoy with the same visible outcome: a
-  fully screened record with no conflict (so humans and AI agreed), drawn in a seeded order, or,
-  if none is free yet, the next record completed with that outcome. A queue item with a given
-  visible outcome is then AI-driven with probability at most one half. The rate is this
-  one-to-one rule, not a protocol percentage. Decoys have the same fields, columns, revision, and
-  order logic as real conflicts; their adjudications are recorded but change no outcome and count
-  in no conflict total. The lead's view reports decoys, decoys adjudicated, and decoys decided as
-  the humans and the AI had. Residual: conflict IDs are UUIDv7, so a decoy drawn from the pool
-  shares its creation time with the conflict it accompanies (which of the two is the decoy stays
-  hidden).
+  agreeing human decisions, so it opens invisible to adjudicators. It is published, in one
+  transaction, together with a decoy of the same visible outcome: a fully screened record with no
+  conflict (so humans and AI agreed), drawn in a seeded order, or, if none is free, the next
+  record completed with that outcome. A queue item with a given visible outcome is therefore
+  AI-driven with probability at most one half; the rate is this one-to-one rule, not a protocol
+  percentage. If a decoy is withdrawn (undo) or turns into a real conflict, the conflict it
+  covered is hidden again until new cover arrives. Decoys have the same fields, columns, revision,
+  and order logic as real conflicts; conflict IDs are random (version 4) and the queue is ordered
+  by a hash of them; any new decision on an item with an open conflict or decoy bumps its
+  revision alike. A decoy's adjudication is recorded but changes no outcome and counts in no
+  conflict total.
+- Fallback when cover never arrives: once no assignment of the stage is left undecided, every
+  conflict only the AI raised that still waits is released (`screening.released_without_cover`
+  in the ledger) to one adjudicator, preferably one who did not review the record. The flag and
+  the count appear only in the lead's view (`decoys.released_without_cover`), for the AI
+  disclosure; the adjudicator's item looks like any other and shows no AI column before commit.
+- Stages name their adjudicators (`StageSpec.adjudicators`, human, not screeners); only they see
+  the adjudication queue and adjudicate. `status` gives an adjudicator of the stage one combined
+  count of the adjudications pending for them (decoys included), with no split, decoy figures,
+  or AI-driven counts. Only someone who neither screens, audits, nor adjudicates the stage sees
+  the lead's view: genuine conflicts (held ones included) and the decoy gauge (decoys,
+  adjudicated, decided as humans and AI agreed, held, released without cover).
 - Blinding below the service: reviewer reads go through the SQL functions
   `screening_reviewer_queue` and `screening_reviewer_progress`, which return only the reviewer's
   own assignments in one stage, no AI output (except their own reveal while it awaits the final
