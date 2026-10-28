@@ -249,6 +249,8 @@ def test_a_lead_retries_the_sources_that_were_down_without_a_new_run(
     plan = review.post("retrieval/retry")
     assert (plan["occurrences"], plan["sources"]) == (3, ["europepmc", "pmc"])
     assert plan["enrichment_run_id"] and plan["retrieval_run_id"] is None
+    # While the retry enriches, nobody can start a retrieval that would take its follow-up's place.
+    review.post("retrieval/open-access", 409)
     assert review.work() == 2  # the enrichment, then the retrieval it queued
 
     rerun = review.get("enrichment/runs/latest")

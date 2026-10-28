@@ -271,6 +271,16 @@ def request_open_access(
     active = _active_run(tx, project_id)
     if active is not None:
         return open_access_run(tx, project_id, active)
+    retrying = tx.execute(
+        "select 1 from enrichment_run r join job j on j.id = r.job_id where r.project_id = %s"
+        " and r.retrieve_after is not null and r.finished_at is null"
+        " and j.status in ('queued', 'running')",
+        (project_id,),
+    ).fetchone()
+    if retrying is not None:
+        # The retry queues its own retrieval when its enrichment is done; a run started now would
+        # take its place and leave the locations the retry finds untried.
+        raise LifecycleError("A retry is still enriching. Kittum fetches its reports after that.")
     wanted = without_full_text(tx, project_id, screening)
     if not wanted:
         raise LifecycleError("every report sought for retrieval has its full text already")
