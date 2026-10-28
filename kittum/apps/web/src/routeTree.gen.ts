@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PProjectIdRouteRouteImport } from './routes/p/$projectId/route'
 import { Route as PProjectIdIndexRouteImport } from './routes/p/$projectId/index'
+import { Route as PProjectIdAdjudicationRouteImport } from './routes/p/$projectId/adjudication'
 import { Route as PProjectIdExtractionRouteImport } from './routes/p/$projectId/extraction'
 import { Route as PProjectIdProgressRouteImport } from './routes/p/$projectId/progress'
 import { Route as PProjectIdProtocolRouteImport } from './routes/p/$projectId/protocol'
@@ -35,6 +36,11 @@ const PProjectIdRouteRoute = PProjectIdRouteRouteImport.update({
 const PProjectIdIndexRoute = PProjectIdIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => PProjectIdRouteRoute,
+} as any)
+const PProjectIdAdjudicationRoute = PProjectIdAdjudicationRouteImport.update({
+  id: '/adjudication',
+  path: '/adjudication',
   getParentRoute: () => PProjectIdRouteRoute,
 } as any)
 const PProjectIdExtractionRoute = PProjectIdExtractionRouteImport.update({
@@ -88,6 +94,7 @@ const PProjectIdScreeningTitleAbstractRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/p/$projectId': typeof PProjectIdRouteRouteWithChildren
+  '/p/$projectId/adjudication': typeof PProjectIdAdjudicationRoute
   '/p/$projectId/extraction': typeof PProjectIdExtractionRoute
   '/p/$projectId/progress': typeof PProjectIdProgressRoute
   '/p/$projectId/protocol': typeof PProjectIdProtocolRoute
@@ -101,6 +108,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/p/$projectId/adjudication': typeof PProjectIdAdjudicationRoute
   '/p/$projectId/extraction': typeof PProjectIdExtractionRoute
   '/p/$projectId/progress': typeof PProjectIdProgressRoute
   '/p/$projectId/protocol': typeof PProjectIdProtocolRoute
@@ -116,6 +124,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/p/$projectId': typeof PProjectIdRouteRouteWithChildren
+  '/p/$projectId/adjudication': typeof PProjectIdAdjudicationRoute
   '/p/$projectId/extraction': typeof PProjectIdExtractionRoute
   '/p/$projectId/progress': typeof PProjectIdProgressRoute
   '/p/$projectId/protocol': typeof PProjectIdProtocolRoute
@@ -132,6 +141,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/p/$projectId'
+    | '/p/$projectId/adjudication'
     | '/p/$projectId/extraction'
     | '/p/$projectId/progress'
     | '/p/$projectId/protocol'
@@ -145,6 +155,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/p/$projectId/adjudication'
     | '/p/$projectId/extraction'
     | '/p/$projectId/progress'
     | '/p/$projectId/protocol'
@@ -159,6 +170,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/p/$projectId'
+    | '/p/$projectId/adjudication'
     | '/p/$projectId/extraction'
     | '/p/$projectId/progress'
     | '/p/$projectId/protocol'
@@ -197,6 +209,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/p/$projectId/'
       preLoaderRoute: typeof PProjectIdIndexRouteImport
+      parentRoute: typeof PProjectIdRouteRoute
+    }
+    '/p/$projectId/adjudication': {
+      id: '/p/$projectId/adjudication'
+      path: '/adjudication'
+      fullPath: '/p/$projectId/adjudication'
+      preLoaderRoute: typeof PProjectIdAdjudicationRouteImport
       parentRoute: typeof PProjectIdRouteRoute
     }
     '/p/$projectId/extraction': {
@@ -266,6 +285,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface PProjectIdRouteRouteChildren {
+  PProjectIdAdjudicationRoute: typeof PProjectIdAdjudicationRoute
   PProjectIdExtractionRoute: typeof PProjectIdExtractionRoute
   PProjectIdProgressRoute: typeof PProjectIdProgressRoute
   PProjectIdProtocolRoute: typeof PProjectIdProtocolRoute
@@ -279,6 +299,7 @@ interface PProjectIdRouteRouteChildren {
 }
 
 const PProjectIdRouteRouteChildren: PProjectIdRouteRouteChildren = {
+  PProjectIdAdjudicationRoute: PProjectIdAdjudicationRoute,
   PProjectIdExtractionRoute: PProjectIdExtractionRoute,
   PProjectIdProgressRoute: PProjectIdProgressRoute,
   PProjectIdProtocolRoute: PProjectIdProtocolRoute,

@@ -187,6 +187,15 @@ def test_derive_is_idempotent_per_recipe_and_layers_are_immutable(
     assert again.id == first.id and again.output_hash == first.output_hash
     assert artifacts.exists(first.output_hash)
 
+    # Another process's store that lacks the layer gets its exact bytes back, from the parsed
+    # layer this process still holds: a store must never be left behind its database.
+    elsewhere = MemoryStore()
+    elsewhere.put(pdf)
+    restored = derive(pg, document, counting, artifacts=elsewhere)
+    assert restored.output_hash == first.output_hash
+    assert elsewhere.get(first.output_hash) == artifacts.get(first.output_hash)
+    assert counting.calls == 1
+
     other = derive(pg, document, pdfium_parser, artifacts=artifacts)
     assert other.id != first.id and other.recipe.engine == "pypdfium2"
 

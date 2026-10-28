@@ -39,6 +39,7 @@ pnpm install
 pnpm check                             # format, lint, typecheck, tests, knip, build
 pnpm contracts:generate                # after any API change; commit the result
 pnpm dev:web                           # with `uv run kittum serve` running
+pnpm --dir apps/web e2e                # the whole review on the real stack (KITTUM_DATABASE_URL)
 ```
 
 CI runs all of this, including Postgres 18 and a check that the generated contracts match the

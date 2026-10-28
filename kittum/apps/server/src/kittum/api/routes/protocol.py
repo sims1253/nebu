@@ -11,9 +11,12 @@ from kittum.protocol import (
     ProtocolError,
     ProtocolIssue,
     ProtocolStateError,
+    ReviewProtocol,
     StoredProtocol,
     compile,
+    get_profile,
     get_version,
+    latest_published,
     list_versions,
     publish,
     save_draft,
@@ -43,6 +46,40 @@ class ProtocolVersionSummary(Record):
     content_hash: str
     created_at: datetime
     published_at: datetime | None
+
+
+class PublishedProtocol(Record):
+    """The version every decision reads now, with the words the review uses for core concepts:
+    the profile's labels where it has them, the core's otherwise."""
+
+    stored: StoredProtocol
+    labels: dict[str, str]
+
+
+_CORE_LABELS = {
+    "question": "Question",
+    "comparator": "Comparator",
+    "outcome": "Outcome",
+    "search_topic": "Search topic",
+    "report": "Report",
+    "study": "Study",
+    "slot.population": "Population",
+    "slot.intervention": "Intervention",
+    "slot.comparator": "Comparator",
+    "slot.outcome": "Outcome",
+    "slot.study_type": "Study type",
+    "slot.other": "Other",
+}
+
+
+def _labels(protocol: ReviewProtocol) -> dict[str, str]:
+    if protocol.profile is None:
+        return dict(_CORE_LABELS)
+    profile = get_profile(protocol.profile)
+    language = protocol.default_language
+    return {k: profile.label_for(k, language) or v for k, v in _CORE_LABELS.items()} | {
+        k: profile.label_for(k, language) or k for k in profile.labels if k not in _CORE_LABELS
+    }
 
 
 def _invalid(e: ProtocolError) -> HTTPException:
@@ -101,6 +138,15 @@ def publish_protocol_version(
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from None
     except ProtocolStateError as e:
         raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from None
+
+
+@router.get("/projects/{project_id}/protocol", operation_id="getPublishedProtocol")
+def get_published_protocol(project_id: Id, ctx: Context) -> PublishedProtocol:
+    with ctx.db.transaction() as tx:
+        stored = latest_published(tx, project_id)
+    if stored is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "no protocol is published yet")
+    return PublishedProtocol(stored=stored, labels=_labels(stored.version.protocol))
 
 
 @router.get("/projects/{project_id}/protocol-versions", operation_id="listProtocolVersions")

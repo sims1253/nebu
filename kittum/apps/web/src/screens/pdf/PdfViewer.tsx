@@ -32,10 +32,10 @@ const MAX_WIDTH = 860;
 const PAGE_CACHE_SIZE = 16;
 const pageCaches = new WeakMap<Workbench, Map<string, Promise<PageLayer>>>();
 
-const loadPage = (workbench: Workbench, layerId: string, page: number) => {
+const loadPage = (workbench: Workbench, layer: LayerSummary, page: number) => {
   let cache = pageCaches.get(workbench);
   if (!cache) pageCaches.set(workbench, (cache = new Map()));
-  const key = `${layerId}/${page}`;
+  const key = `${layer.id}/${page}`;
   let pending = cache.get(key);
   if (pending) {
     cache.delete(key);
@@ -43,7 +43,7 @@ const loadPage = (workbench: Workbench, layerId: string, page: number) => {
     return pending;
   }
   const entries = cache;
-  pending = run(workbench.page(layerId, page));
+  pending = run(workbench.page(layer, page));
   const loading = pending;
   loading.catch(() => {
     if (entries.get(key) === loading) entries.delete(key);
@@ -131,7 +131,7 @@ export function PdfViewer({
   useEffect(() => {
     const around = target?.box.page ?? visiblePage;
     for (const page of [around - 1, around, around + 1, around + 2]) {
-      if (page >= 1 && page <= layer.pages.length) void loadPage(workbench, layer.id, page);
+      if (page >= 1 && page <= layer.pages.length) void loadPage(workbench, layer, page);
     }
   }, [workbench, layer, target?.box.page, visiblePage]);
 
@@ -236,14 +236,14 @@ function PageView({
 
   useEffect(() => {
     let live = true;
-    loadPage(workbench, layer.id, size.page).then(
+    loadPage(workbench, layer, size.page).then(
       (loaded) => live && setPage(loaded),
       () => live && setFailed(true),
     );
     return () => {
       live = false;
     };
-  }, [workbench, layer.id, size.page]);
+  }, [workbench, layer, size.page]);
 
   const boxes = highlights.flatMap((h) =>
     h.boxes.filter((b) => b.page === size.page).map((box, i) => ({ highlight: h, box, i })),

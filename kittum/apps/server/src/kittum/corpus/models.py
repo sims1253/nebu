@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import Field
 
 from kittum.core import Id, Record, new_id
+from kittum.search import SourceRecord
 
 type Relation = Literal["same_record", "same_report", "same_study"]
 type LinkRelation = Literal["same_record", "same_report", "same_study", "standalone"]
@@ -59,3 +60,16 @@ class PrismaCounts(Record):
     duplicates_removed: int
     unique_records: int
     studies_identified: int
+
+
+class CorpusReport(Record):
+    """One report of an identity revision with the source records that make it up.
+
+    `records` are in source order; a report found by several searches has one record per
+    occurrence. `relation` is the strongest link label among them.
+    """
+
+    report_id: Id
+    study_id: Id
+    relation: LinkRelation
+    records: tuple[SourceRecord, ...]

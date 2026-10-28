@@ -75,6 +75,7 @@ from kittum.report.review import (
     load_review,
 )
 from kittum.report.ris_format import one_line, ris_dumps, ris_entry
+from kittum.screening import sees_lead_data
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -238,11 +239,12 @@ def record_render(
 
 
 class NotTheLead(KittumError):
-    """The actor screens, audits, or adjudicates a stage of the project, or is not a human.
+    """The actor is not a methods lead of the project, or is one who also screens, audits, or
+    adjudicates a stage (`kittum.screening.sees_lead_data`), or is not a human.
 
     Reports show every reviewer's decisions, the AI's readings, and its raw outputs, so only the
     methods lead may render, download, or seal them: the person `Screening.status` gives the
-    lead's view, a human who is none of a stage's screeners, auditor, and adjudicators.
+    lead's view. Anyone else, another reviewer of the project included, is refused.
     """
 
 
@@ -251,15 +253,10 @@ def require_lead(tx: Tx, project_id: Id, actor_id: Id) -> None:
     actor = tx.execute("select kind from actor where id = %s", (actor_id,)).fetchone()
     if actor is None or actor["kind"] != "human":
         raise NotTheLead(f"actor {actor_id} is not a human")
-    role = tx.execute(
-        "select 1 from screening_stage where project_id = %s"
-        " and (%s = any(screeners) or auditor_id = %s or %s = any(adjudicators)) limit 1",
-        (project_id, actor_id, actor_id, actor_id),
-    ).fetchone()
-    if role is not None:
+    if not sees_lead_data(tx, project_id, actor_id):
         raise NotTheLead(
-            f"actor {actor_id} screens, audits, or adjudicates in this project; only the "
-            "methods lead sees its reports"
+            f"actor {actor_id} is not a methods lead of this project, or also screens, audits,"
+            " or adjudicates in it; only a lead who does neither sees its reports"
         )
 
 

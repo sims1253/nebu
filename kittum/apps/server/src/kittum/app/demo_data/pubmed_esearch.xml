@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE eSearchResult PUBLIC "-//NLM//DTD esearch 20060628//EN" "https://eutils.ncbi.nlm.nih.gov/eutils/dtd/20060628/esearch.dtd">
+<eSearchResult><Count>20</Count><RetMax>20</RetMax><RetStart>0</RetStart><QueryKey>1</QueryKey><WebEnv>MCID_6ae16b7926ebd00e1d041bf6</WebEnv><IdList>
+<Id>39462502</Id>
+<Id>38935378</Id>
+<Id>38898605</Id>
+<Id>38838477</Id>
+<Id>38752924</Id>
+<Id>38696203</Id>
+<Id>38683609</Id>
+<Id>38662017</Id>
+<Id>38482972</Id>
+<Id>38369951</Id>
+<Id>38354139</Id>
+<Id>38282258</Id>
+<Id>37977486</Id>
+<Id>37819741</Id>
+<Id>37742229</Id>
+<Id>37725265</Id>
+<Id>37474127</Id>
+<Id>37353970</Id>
+<Id>37141036</Id>
+<Id>36203394</Id>
+</IdList><TranslationSet/><QueryTranslation>("nicotine replacement"[Title/Abstract] OR "nicotine patch"[Title/Abstract] OR "nicotine gum"[Title/Abstract]) AND "smoking cessation"[Title/Abstract] AND "randomized controlled trial"[Publication Type] AND 2024/01/01:2024/06/30[Date - Publication]</QueryTranslation></eSearchResult>

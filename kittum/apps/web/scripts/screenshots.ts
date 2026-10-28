@@ -108,7 +108,14 @@ for (const theme of THEMES) {
       deviceScaleFactor: 1,
       colorScheme: theme,
     });
-    await context.addInitScript((t) => localStorage.setItem("kittum.theme", t), theme);
+    await context.addInitScript((t) => {
+      localStorage.setItem("kittum.theme", t);
+      // The mock's reviewer (src/data/mock/protocol.ts) is at the workbench.
+      localStorage.setItem(
+        "kittum.reviewer.ivosidenib-cca",
+        "0192f0c4-5a10-7d1e-9c3a-00000000000a",
+      );
+    }, theme);
     for (const shot of SHOTS) {
       const page = await context.newPage();
       await page.goto(base + shot.path);

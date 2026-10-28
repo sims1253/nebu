@@ -33,6 +33,7 @@ from kittum.judge import (
 from kittum.ledger import PostgresLedger
 from kittum.models import ModelRegistry
 from kittum.models.testing import RecordedBackend
+from kittum.people import record_roles
 from kittum.protocol import compile, publish, save_draft
 from kittum.runs import PostgresJobQueue, Worker
 from kittum.screening import (
@@ -124,7 +125,7 @@ def seed_people(tx: Tx) -> People:
         assert row is not None
         return row["id"]
 
-    return People(
+    people = People(
         project_id=project["id"],
         lead=actor("lead@example.org", "human"),
         a=actor("reviewer-a@example.org", "human"),
@@ -133,6 +134,16 @@ def seed_people(tx: Tx) -> People:
         auditor=actor("auditor@example.org", "human"),
         model=actor("model:qwen3.8-27b-bf16", "model"),
     )
+    # Their roles in the project: only the lead sees a whole stage or its reports.
+    for actor_id, name, role in (
+        (people.lead, "Lead", "lead"),
+        (people.a, "Reviewer A", "reviewer"),
+        (people.b, "Reviewer B", "reviewer"),
+        (people.auditor, "Auditor", "auditor"),
+        (people.adjudicator, "Adjudicator", "adjudicator"),
+    ):
+        record_roles(tx, people.project_id, actor_id, name, (role,), event_id=new_id())
+    return people
 
 
 def publish_protocol(tx: Tx, people: People, ledger: PostgresLedger, mode: str) -> StoredProtocol:
