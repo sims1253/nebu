@@ -36,7 +36,14 @@ from janus.extraction.parsing import parse_value
 from kittum.core import Span
 from kittum.documents import make_anchor
 from kittum.extraction.model import Proposal
-from kittum.extraction.numbers import NUMBER, ascii_minus, normalize, strip_label, well_formed
+from kittum.extraction.numbers import (
+    NUMBER,
+    ascii_minus,
+    normalize,
+    printed_in,
+    strip_label,
+    well_formed,
+)
 
 if TYPE_CHECKING:
     from janus.comparison.models import EvidenceLocation
@@ -70,6 +77,13 @@ class JanusEvidence:
     evidence: DocumentEvidence
     cells: dict[tuple[int, int, int, int], LayerCell]  # (page, table index, row, col) -> cell
     lines: dict[tuple[int, int], tuple[int, int]]  # (page, line ordinal) -> layer span
+    # (page, rounded x, y, width, height) -> layer span. A text label's value can sit on its own
+    # line beside the label; Janus then reports the label line's ordinal but the value's box.
+    line_boxes: dict[tuple[int, ...], tuple[int, int]]
+
+
+def _box_key(page: int, box: dict[str, float]) -> tuple[int, ...]:
+    return (page, *(round(box[k] * 100) for k in ("x", "y", "width", "height")))
 
 
 def _bbox(box: Box) -> BoundingBox:
@@ -152,6 +166,7 @@ def to_evidence(layer: Layer, document_hash: str) -> JanusEvidence:
     """Janus's `DocumentEvidence` contract for a layer."""
     cells: dict[tuple[int, int, int, int], LayerCell] = {}
     lines: dict[tuple[int, int], tuple[int, int]] = {}
+    line_boxes: dict[tuple[int, ...], tuple[int, int]] = {}
     pages: list[PageContent] = []
     for page in layer.pages:
         number = page.number - 1
@@ -163,9 +178,9 @@ def to_evidence(layer: Layer, document_hash: str) -> JanusEvidence:
             if not text:
                 continue
             lines[(number, len(elements))] = (line.start, line.end)
-            elements.append(
-                TextElement(text=text, confidence=1, element_type="line", bbox=_bbox(line.box))
-            )
+            box = _bbox(line.box)
+            line_boxes[_box_key(number, box.model_dump())] = (line.start, line.end)
+            elements.append(TextElement(text=text, confidence=1, element_type="line", bbox=box))
         tables, back = _tables(layer, page.number)
         cells.update({(number, *k): v for k, v in back.items()})
         pages.append(
@@ -186,7 +201,7 @@ def to_evidence(layer: Layer, document_hash: str) -> JanusEvidence:
         pages=pages,
         created_at=_EPOCH,
     )
-    return JanusEvidence(evidence=evidence, cells=cells, lines=lines)
+    return JanusEvidence(evidence=evidence, cells=cells, lines=lines, line_boxes=line_boxes)
 
 
 def field_path(field: SchemaField) -> str:
@@ -262,6 +277,8 @@ def _span(
     janus: JanusEvidence, field: SchemaField, source: EvidenceLocation
 ) -> tuple[int, int] | None:
     if field.locate is not None and field.locate.strategy == "text_label":
+        if source.cell_bbox is not None:
+            return janus.line_boxes.get(_box_key(source.page, source.cell_bbox))
         return janus.lines.get((source.page, source.row))
     cell = janus.cells.get((source.page, source.table_index, source.row, source.column))
     return (cell.start, cell.end) if cell is not None and cell.end > cell.start else None
@@ -318,6 +335,12 @@ def run(
             proposals.append(proposal(f, "invalid", message=problem, quote=raw))
             continue
         target = _narrow(layer, *span, value) if f.kind != "text" else Span(*span)
+        if printed_in(value, f.kind, layer.text[target.start : target.end]) is None:
+            # An anchor must print its value; never widen to a span that does not.
+            proposals.append(
+                proposal(f, "error", message="the located text does not print the value", quote=raw)
+            )
+            continue
         anchor = make_anchor(layer, target)
         anchors[str(anchor.id)] = anchor
         proposals.append(proposal(f, "extracted", value=value, anchor=anchor, quote=raw))

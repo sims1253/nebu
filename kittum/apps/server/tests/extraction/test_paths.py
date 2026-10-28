@@ -3,11 +3,15 @@
 import json
 from datetime import timedelta
 
+import pymupdf
+import pytest
+
 from kittum.core import FixedClock, new_id
-from kittum.documents import resolve
-from kittum.extraction import AgentConfig, extract, run_agent
+from kittum.documents import derive, ingest, resolve
+from kittum.extraction import AgentConfig, SchemaError, extract, load_schema, run_agent
 from kittum.models.testing import RecordedBackend
 from tests.documents.conftest import squash, text_under
+from tests.extraction.conftest import _PARSER
 from tests.extraction.support import AGENT, RECIPE_ID, recorded, recording_path, schema
 
 
@@ -185,3 +189,47 @@ def test_agent_stops_at_its_call_and_time_budgets(env):
     assert {(p.status, p.message) for p in proposals} == {
         ("error", "used the time budget of 600 s")
     }
+
+
+_TEXT_LABEL = """
+schema_version: 1
+name: Text labels
+analysis_set: itt
+arms:
+  - {id: intervention, label: Intervention}
+endpoints:
+  - id: hba1c
+    label: HbA1c
+    timepoints: [{id: m12, label: 12 months}]
+    locate: {strategy: text_label, rows: [Mean HbA1c]}
+    quantities:
+      - quantity: mean
+        arms: [intervention]
+"""
+
+
+def test_a_text_label_value_on_its_own_line_is_anchored_on_that_line(env):
+    """Planted: a two-column page where "Mean HbA1c:" ends a left-column line and its value
+    "6.7" is a separate line on the same baseline. The anchor must print the value, not the label.
+    A schema that names an arm twice is refused up front, not when its fields are stored."""
+    pdf = pymupdf.open()
+    page = pdf.new_page(width=595, height=842)
+    left = ["Follow-up lasted", "twelve months.", "Mean HbA1c:"]
+    right = ["values improved in both", "arms of the trial.", "6.7"]
+    for i, (a, b) in enumerate(zip(left, right, strict=True)):
+        page.insert_text((60, 100 + i * 14), a, fontsize=10)
+        page.insert_text((200, 100 + i * 14), b, fontsize=10)
+    document = ingest(env.tx, env.artifacts, pdf.tobytes())
+    layer = derive(env.tx, document, _PARSER, artifacts=env.artifacts)
+    assert "Mean HbA1c:\n6.7" in layer.text  # two lines, as the bug needs
+    schema = load_schema(_TEXT_LABEL)
+    result = extract(layer, document.artifact_hash, schema, schema.fields(new_id(), new_id()))
+    (proposal,) = result.proposals.proposals
+    assert (proposal.status, proposal.value) == ("extracted", "6.7")
+    (anchor_id,) = proposal.anchor_ids
+    assert result.anchors[str(anchor_id)].quote.exact == "6.7"
+
+    with pytest.raises(SchemaError, match="mean names intervention twice"):
+        load_schema(
+            _TEXT_LABEL.replace("arms: [intervention]", "arms: [intervention, intervention]")
+        )

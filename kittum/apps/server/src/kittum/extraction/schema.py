@@ -211,6 +211,7 @@ class ExtractionSchema(Record):
             if len({t.id for t in e.timepoints}) != len(e.timepoints):
                 raise ValueError(f"endpoint {e.id}: timepoint IDs must be unique")
             estimates: dict[str, list[str]] = {}
+            targets: set[tuple[str, str]] = set()
             for q in e.quantities:
                 spec = QUANTITIES.get(q.quantity)
                 if spec is None:
@@ -221,6 +222,10 @@ class ExtractionSchema(Record):
                     raise ValueError(f"endpoint {e.id}: {q.quantity} names an unknown arm")
                 if set(q.comparisons) - comparisons:
                     raise ValueError(f"endpoint {e.id}: {q.quantity} names an unknown comparison")
+                for target in (*q.arms, *q.comparisons):
+                    if (q.quantity, target) in targets:
+                        raise ValueError(f"endpoint {e.id}: {q.quantity} names {target} twice")
+                    targets.add((q.quantity, target))
                 if spec.per == "arm" and q.comparisons:
                     raise ValueError(f"endpoint {e.id}: {q.quantity} is per arm, not comparison")
                 if spec.per == "comparison" and q.arms:
