@@ -622,6 +622,19 @@ LOOKALIKE_TABLES = [
         ("extracted", 30),
         id="non-responder-is-not-responder",
     ),
+    pytest.param(
+        # A number keeps its decimal point: "Dose 1.0" is not "Dose 10".
+        [
+            ([["Outcome", "Dose 1.0"], ["Deaths", "1"]], None),
+            (
+                [["Outcome", "Cohort", ""], ["", "Dose 10", "Dose 20"], ["Deaths", "30", "40"]],
+                None,
+            ),
+        ],
+        table(["Deaths"], column_labels=["Dose 10"]),
+        ("extracted", 30),
+        id="dose-1-0-is-not-dose-10",
+    ),
 ]
 
 
@@ -635,10 +648,10 @@ def test_tables_that_only_look_like_trial_tables_keep_their_reading(tables, fiel
 
 def words(text: str) -> list[str]:
     """Words as the guards compare them: case and punctuation aside, English plurals folded,
-    anything else (a prefix, a number) as printed."""
+    anything else (a prefix, a number with its decimal point) as printed."""
     out = []
     for raw in text.casefold().split():
-        word = re.sub(r"[^a-z0-9]", "", raw)
+        word = raw if re.search(r"\d", raw) else re.sub(r"[^a-z0-9]", "", raw)
         if len(word) >= 4 and not re.search(r"\d", word):
             word = re.sub(r"ies$", "y", word)
             word = re.sub(r"(ch|sh|ss|x|z)es$", r"\1", word)
@@ -650,7 +663,7 @@ def words(text: str) -> list[str]:
 
 # Names that differ by a prefix or a few letters and must never be taken for each other.
 DISTINCT_NAMES = ["Male", "Female", "Treated", "Untreated", "Pre", "Post"]
-DISTINCT_NAMES += ["Responder", "Non-responder"]
+DISTINCT_NAMES += ["Responder", "Non-responder", "Dose 1.0", "Dose 10"]
 
 
 def distinct_names_evidence() -> DocumentEvidence:
@@ -667,6 +680,10 @@ def distinct_names_evidence() -> DocumentEvidence:
                 [None, None, "Female"],
             ),
             ([["Outcome", "Responder", "Male"], ["Deaths", "7", "8"]], [None, "Responder"]),
+            (
+                [["Outcome", "Dose 1.0", ""], ["", "Dose 10", "Dose 20"], ["Deaths", "9", "11"]],
+                [None, None, "Dose 1.0"],
+            ),
         ]
     )
 

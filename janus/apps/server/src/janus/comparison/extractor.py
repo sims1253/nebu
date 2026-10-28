@@ -1140,8 +1140,12 @@ def _singular(word: str) -> str:
 
 def _words(text: str) -> list[str]:
     """The words of a header or section as the guards compare them: case folded, punctuation
-    removed within each printed word ("Non-responder" is "nonresponder"), plurals folded."""
-    words = ("".join(c for c in raw if c.isalnum()) for raw in text.casefold().split())
+    removed within each printed word ("Non-responder" is "nonresponder") and plurals folded. A
+    token with a digit stays as printed ("1.0" is not "10", "2023-24" not "202324")."""
+    words = (
+        raw if any(c.isdigit() for c in raw) else "".join(c for c in raw if c.isalnum())
+        for raw in text.casefold().split()
+    )
     return [_singular(word) for word in words if word]
 
 

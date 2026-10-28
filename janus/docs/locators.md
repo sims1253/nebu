@@ -49,7 +49,8 @@ That reading, with row 0 as the column context and only the reader's sections, s
 it selects one cell whose header carries the requested column words. Words compare after case
 folding, removing punctuation within each word, and folding English plurals (`Controls` is
 `Control`); nothing else, so `Treated` is not `Untreated`, `Male` is not `Female`, and
-`Non-responder` is not `Responder`. Only when the reading selects nothing, ties, or selects a
+`Non-responder` is not `Responder`. A word with a digit stays as printed: `Dose 1.0` is not
+`Dose 10`. Only when the reading selects nothing, ties, or selects a
 cell whose header lacks those words does Janus infer more of the table's structure for the
 field. An inferred cell then replaces the original choice only if a spanning or continuation
 header above its column supplies the missing words, and never if its section is not a
