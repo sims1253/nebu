@@ -10,7 +10,7 @@ from janus.extraction.models import Scalar
 
 def parse_value(raw: str, rule: Scalar) -> str | int | bool:
     # Reuse compound syntax recognition without adding comparison behavior.
-    from janus.comparison.extractor import extract_component
+    from janus.comparison.extractor import ascii_minus, extract_component
 
     if rule.source_shape is not None:
         component, error = extract_component(rule, raw)
@@ -40,6 +40,7 @@ def parse_value(raw: str, rule: Scalar) -> str | int | bool:
             raise ValueError("Expected an ISO date (YYYY-MM-DD).") from exc
     if rule.type is ValueType.PERCENTAGE:
         text = text.removesuffix("%").strip()
+    text = ascii_minus(text)
     decimal = re.escape(rule.decimal_separator)
     integer = r"\d+"
     if rule.group_separator is not None:

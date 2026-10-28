@@ -30,6 +30,7 @@ from janus.comparison.models import (
     RowGeneratorRule,
     TextSpanLocator,
     ValueRule,
+    ValueType,
     field_identifier,
 )
 
@@ -699,10 +700,12 @@ def _folded(value: str) -> str:
     return " ".join(value.casefold().split())
 
 
-_NUMBER = r"[-+]?\d+(?:[.,]\d+)?"
+_MINUS = str.maketrans({"\u2212": "-", "\ufe63": "-", "\uff0d": "-"})
+_SIGN = r"[-+\u2212\ufe63\uff0d]?"
+_NUMBER = rf"{_SIGN}\d+(?:[.,]\d+)?"
 # A compared number inside a trailing annotation; unlike _NUMBER it also
 # accepts a bare decimal separator (".025" in "P=.025").
-_ANNOTATED_NUMBER = r"[-+]?(?:\d+(?:[.,]\d+)?|[.,]\d+)"
+_ANNOTATED_NUMBER = rf"{_SIGN}(?:\d+(?:[.,]\d+)?|[.,]\d+)"
 # Trailing annotations that share a cell with a statistic, as in
 # "0.26 [0.22, 0.31]; P<0.001; BF>100". Each repetition is one short token
 # (P, BF, d, ...) compared against a number.
@@ -874,6 +877,11 @@ def _rival_fields(rival: _Rival) -> dict[str, Any]:
     }
 
 
+def ascii_minus(text: str) -> str:
+    """Normalize numeric minus signs only; en/em dashes remain range separators."""
+    return text.translate(_MINUS)
+
+
 def extract_component(value_rule: ValueRule, raw: str) -> tuple[str | None, str | None]:
     shape = value_rule.source_shape
     if shape is None:
@@ -902,6 +910,8 @@ def extract_component(value_rule: ValueRule, raw: str) -> tuple[str | None, str 
                     f"The matched {shape.value} cell carries no {component}; it offers "
                     f"{', '.join(names)} only."
                 )
+            if value_rule.type in (ValueType.INTEGER, ValueType.DECIMAL, ValueType.PERCENTAGE):
+                value = ascii_minus(value)
             return value, None
     return None, (f"Value did not match the declared {shape.value} source shape")
 
