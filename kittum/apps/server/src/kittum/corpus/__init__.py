@@ -6,10 +6,11 @@ study; a human confirms the links. PRISMA counts come from a frozen identity rev
 Owner: WP-07.
 """
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from kittum.core import Id, new_id
+from kittum.core import Id, NotFoundError, new_id
 from kittum.corpus.dedupe import generate_link_proposals
+from kittum.corpus.identity import merge_links, split_links
 from kittum.corpus.models import (
     CorpusRevision,
     IdentityLink,
@@ -20,11 +21,15 @@ from kittum.corpus.models import (
     PrismaCounts,
     ProposalStatus,
     Relation,
+    SplitLevel,
 )
 from kittum.ledger import EventDraft, Ledger
 
 if TYPE_CHECKING:
+    from psycopg import Cursor
+
     from kittum.db import Tx
+    from kittum.ledger import AuditEvent
     from kittum.search import SearchExecution
 
 
@@ -96,39 +101,17 @@ def ingest(
                     prop.status,
                 ),
             )
-        cur.execute(
-            """
-            insert into identity_revision (id, project_id, parent_id, event_seq, event_id)
-            values (%s, %s, null, %s, %s)
-            """,
-            (identity_rev_id, project_id, event.seq, event.event_id),
-        )
-        for occ in occurrences:
-            report_id = new_id()
-            study_id = new_id()
-            cur.execute(
-                "insert into report (id, project_id) values (%s, %s)",
-                (report_id, project_id),
-            )
-            cur.execute(
-                "insert into study (id, project_id) values (%s, %s)",
-                (study_id, project_id),
-            )
-            cur.execute(
-                """
-                insert into identity_link (
-                    id, revision_id, occurrence_id, report_id, study_id, relation, source
-                ) values (%s, %s, %s, %s, %s, 'standalone', %s)
-                """,
-                (
-                    new_id(),
-                    identity_rev_id,
-                    occ.id,
-                    report_id,
-                    study_id,
-                    occ.source,
-                ),
-            )
+        links = [
+            {
+                "occurrence_id": occ.id,
+                "report_id": new_id(),
+                "study_id": new_id(),
+                "relation": "standalone",
+                "source": occ.source,
+            }
+            for occ in occurrences
+        ]
+        _write_revision(cur, project_id, identity_rev_id, None, event, [], links)
 
     return CorpusRevision(
         id=corpus_rev_id,
@@ -148,9 +131,10 @@ def confirm(
     *,
     ledger: Ledger,
 ) -> IdentityRevision:
-    """Human confirmation of a link proposal, creating a new identity revision and ledger event."""
-    effective_ledger = ledger
+    """Human confirmation of a link proposal, creating a new identity revision and ledger event.
 
+    The proposal's occurrences are merged with their complete groups (see `merge`).
+    """
     with tx.cursor() as cur:
         cur.execute(
             "select * from proposal where id = %s and project_id = %s",
@@ -158,36 +142,15 @@ def confirm(
         )
         prop_row = cur.fetchone()
         if not prop_row:
-            raise ValueError(f"Proposal {proposal_id} not found")
+            raise NotFoundError(f"Proposal {proposal_id} not found")
 
         relation: Relation = prop_row["relation"]
         occurrence_ids: list[Id] = prop_row["occurrence_ids"]
-
-        cur.execute(
-            """
-            select occurrence_id, report_id, study_id, relation, source
-            from identity_link
-            where revision_id = %s
-            """,
-            (parent_revision_id,),
-        )
-        links = cur.fetchall()
-        if not links:
-            raise ValueError(f"No identity links found for revision {parent_revision_id}")
-
-        link_map = {row["occurrence_id"]: row for row in links}
-        target_ids = set(occurrence_ids)
-        for oid in target_ids:
-            if oid not in link_map:
-                raise ValueError(f"Occurrence {oid} not found in revision {parent_revision_id}")
-
-        first_oid = occurrence_ids[0]
-        target_report_id = link_map[first_oid]["report_id"]
-        target_study_id = link_map[first_oid]["study_id"]
+        parent_links = _parent_links(cur, project_id, parent_revision_id)
+        links = merge_links(parent_links, occurrence_ids, relation)
 
         new_revision_id = new_id()
-
-        event = effective_ledger.append(
+        event = ledger.append(
             tx,
             EventDraft(
                 project_id=project_id,
@@ -203,65 +166,14 @@ def confirm(
                 },
             ),
         )
-
-        cur.execute(
-            """
-            insert into identity_revision (id, project_id, parent_id, event_seq, event_id)
-            values (%s, %s, %s, %s, %s)
-            """,
-            (
-                new_revision_id,
-                project_id,
-                parent_revision_id,
-                event.seq,
-                event.event_id,
-            ),
+        revision = _write_revision(
+            cur, project_id, new_revision_id, parent_revision_id, event, parent_links, links
         )
-
-        for row in links:
-            oid = row["occurrence_id"]
-            if oid in target_ids:
-                if relation in ("same_record", "same_report"):
-                    rep_id = target_report_id
-                    std_id = target_study_id
-                else:  # same_study
-                    rep_id = row["report_id"]
-                    std_id = target_study_id
-                link_rel = relation
-            else:
-                rep_id = row["report_id"]
-                std_id = row["study_id"]
-                link_rel = row["relation"]
-
-            cur.execute(
-                """
-                insert into identity_link (
-                    id, revision_id, occurrence_id, report_id, study_id, relation, source
-                ) values (%s, %s, %s, %s, %s, %s, %s)
-                """,
-                (
-                    new_id(),
-                    new_revision_id,
-                    oid,
-                    rep_id,
-                    std_id,
-                    link_rel,
-                    row["source"],
-                ),
-            )
-
         cur.execute(
             "update proposal set status = 'confirmed' where id = %s",
             (proposal_id,),
         )
-
-    return IdentityRevision(
-        id=new_revision_id,
-        project_id=project_id,
-        parent_id=parent_revision_id,
-        event_seq=event.seq,
-        event_id=event.event_id,
-    )
+    return revision
 
 
 def merge(
@@ -275,35 +187,17 @@ def merge(
     reason: str = "",
     ledger: Ledger,
 ) -> IdentityRevision:
-    """Human manual merge of occurrences, creating a new identity revision and ledger event."""
-    effective_ledger = ledger
+    """Human manual merge of occurrences, creating a new identity revision and ledger event.
 
+    `same_record` and `same_report` union the complete report groups of the occurrences (and so
+    their studies); `same_study` unions their complete study groups and keeps the report groups.
+    """
     with tx.cursor() as cur:
-        cur.execute(
-            """
-            select occurrence_id, report_id, study_id, relation, source
-            from identity_link
-            where revision_id = %s
-            """,
-            (parent_revision_id,),
-        )
-        links = cur.fetchall()
-        if not links:
-            raise ValueError(f"No identity links found for revision {parent_revision_id}")
-
-        link_map = {row["occurrence_id"]: row for row in links}
-        target_ids = set(occurrence_ids)
-        for oid in target_ids:
-            if oid not in link_map:
-                raise ValueError(f"Occurrence {oid} not found in revision {parent_revision_id}")
-
-        first_oid = next(iter(occurrence_ids))
-        target_report_id = link_map[first_oid]["report_id"]
-        target_study_id = link_map[first_oid]["study_id"]
+        parent_links = _parent_links(cur, project_id, parent_revision_id)
+        links = merge_links(parent_links, occurrence_ids, relation)
 
         new_revision_id = new_id()
-
-        event = effective_ledger.append(
+        event = ledger.append(
             tx,
             EventDraft(
                 project_id=project_id,
@@ -319,60 +213,9 @@ def merge(
                 },
             ),
         )
-
-        cur.execute(
-            """
-            insert into identity_revision (id, project_id, parent_id, event_seq, event_id)
-            values (%s, %s, %s, %s, %s)
-            """,
-            (
-                new_revision_id,
-                project_id,
-                parent_revision_id,
-                event.seq,
-                event.event_id,
-            ),
+        return _write_revision(
+            cur, project_id, new_revision_id, parent_revision_id, event, parent_links, links
         )
-
-        for row in links:
-            oid = row["occurrence_id"]
-            if oid in target_ids:
-                if relation in ("same_record", "same_report"):
-                    rep_id = target_report_id
-                    std_id = target_study_id
-                else:  # same_study
-                    rep_id = row["report_id"]
-                    std_id = target_study_id
-                link_rel = relation
-            else:
-                rep_id = row["report_id"]
-                std_id = row["study_id"]
-                link_rel = row["relation"]
-
-            cur.execute(
-                """
-                insert into identity_link (
-                    id, revision_id, occurrence_id, report_id, study_id, relation, source
-                ) values (%s, %s, %s, %s, %s, %s, %s)
-                """,
-                (
-                    new_id(),
-                    new_revision_id,
-                    oid,
-                    rep_id,
-                    std_id,
-                    link_rel,
-                    row["source"],
-                ),
-            )
-
-    return IdentityRevision(
-        id=new_revision_id,
-        project_id=project_id,
-        parent_id=parent_revision_id,
-        event_seq=event.seq,
-        event_id=event.event_id,
-    )
 
 
 def split(
@@ -380,36 +223,23 @@ def split(
     project_id: Id,
     parent_revision_id: Id,
     occurrence_ids: tuple[Id, ...] | list[Id],
+    level: SplitLevel,
     actor_id: Id,
     *,
     reason: str = "",
     ledger: Ledger,
 ) -> IdentityRevision:
-    """Human split of occurrences, undoing a previous merge without losing history."""
-    effective_ledger = ledger
+    """Human split of occurrences, undoing a previous merge without losing history.
 
+    A `report` split moves each occurrence into a new report and study of its own. A `study`
+    split moves the complete report group of each occurrence into a new study.
+    """
     with tx.cursor() as cur:
-        cur.execute(
-            """
-            select occurrence_id, report_id, study_id, relation, source
-            from identity_link
-            where revision_id = %s
-            """,
-            (parent_revision_id,),
-        )
-        links = cur.fetchall()
-        if not links:
-            raise ValueError(f"No identity links found for revision {parent_revision_id}")
-
-        link_map = {row["occurrence_id"]: row for row in links}
-        target_ids = set(occurrence_ids)
-        for oid in target_ids:
-            if oid not in link_map:
-                raise ValueError(f"Occurrence {oid} not found in revision {parent_revision_id}")
+        parent_links = _parent_links(cur, project_id, parent_revision_id)
+        links = split_links(parent_links, occurrence_ids, level)
 
         new_revision_id = new_id()
-
-        event = effective_ledger.append(
+        event = ledger.append(
             tx,
             EventDraft(
                 project_id=project_id,
@@ -419,75 +249,21 @@ def split(
                 payload={
                     "revision_id": str(new_revision_id),
                     "parent_revision_id": str(parent_revision_id),
+                    "level": level,
                     "occurrence_ids": [str(oid) for oid in occurrence_ids],
                     "reason": reason,
                 },
             ),
         )
-
-        cur.execute(
-            """
-            insert into identity_revision (id, project_id, parent_id, event_seq, event_id)
-            values (%s, %s, %s, %s, %s)
-            """,
-            (
-                new_revision_id,
-                project_id,
-                parent_revision_id,
-                event.seq,
-                event.event_id,
-            ),
+        return _write_revision(
+            cur, project_id, new_revision_id, parent_revision_id, event, parent_links, links
         )
 
-        for row in links:
-            oid = row["occurrence_id"]
-            if oid in target_ids:
-                # Assign fresh report and study
-                rep_id = new_id()
-                std_id = new_id()
-                cur.execute(
-                    "insert into report (id, project_id) values (%s, %s)",
-                    (rep_id, project_id),
-                )
-                cur.execute(
-                    "insert into study (id, project_id) values (%s, %s)",
-                    (std_id, project_id),
-                )
-                link_rel = "standalone"
-            else:
-                rep_id = row["report_id"]
-                std_id = row["study_id"]
-                link_rel = row["relation"]
 
-            cur.execute(
-                """
-                insert into identity_link (
-                    id, revision_id, occurrence_id, report_id, study_id, relation, source
-                ) values (%s, %s, %s, %s, %s, %s, %s)
-                """,
-                (
-                    new_id(),
-                    new_revision_id,
-                    oid,
-                    rep_id,
-                    std_id,
-                    link_rel,
-                    row["source"],
-                ),
-            )
-
-    return IdentityRevision(
-        id=new_revision_id,
-        project_id=project_id,
-        parent_id=parent_revision_id,
-        event_seq=event.seq,
-        event_id=event.event_id,
-    )
-
-
-def get_counts(tx: Tx, revision_id: Id) -> PrismaCounts:
+def get_counts(tx: Tx, project_id: Id, revision_id: Id) -> PrismaCounts:
     """Calculate PRISMA 2020 identification counts from a frozen identity revision."""
     with tx.cursor() as cur:
+        _require_revision(cur, project_id, revision_id)
         cur.execute(
             """
             select source, count(*) as cnt
@@ -580,6 +356,87 @@ def link(
     )
 
 
+def _require_revision(cur: Cursor[dict[str, Any]], project_id: Id, revision_id: Id) -> None:
+    cur.execute(
+        "select 1 from identity_revision where id = %s and project_id = %s",
+        (revision_id, project_id),
+    )
+    if cur.fetchone() is None:
+        raise NotFoundError(f"Identity revision {revision_id} not found in project {project_id}")
+
+
+def _parent_links(
+    cur: Cursor[dict[str, Any]], project_id: Id, revision_id: Id
+) -> list[dict[str, Any]]:
+    _require_revision(cur, project_id, revision_id)
+    cur.execute(
+        """
+        select occurrence_id, report_id, study_id, relation, source
+        from identity_link
+        where revision_id = %s
+        order by occurrence_id
+        """,
+        (revision_id,),
+    )
+    return cur.fetchall()
+
+
+def _write_revision(
+    cur: Cursor[dict[str, Any]],
+    project_id: Id,
+    revision_id: Id,
+    parent_id: Id | None,
+    event: AuditEvent,
+    parent_links: list[dict[str, Any]],
+    links: list[dict[str, Any]],
+) -> IdentityRevision:
+    """Write a revision with all its links, then mark it finalized; the database freezes it."""
+    cur.execute(
+        """
+        insert into identity_revision (id, project_id, parent_id, event_seq, event_id)
+        values (%s, %s, %s, %s, %s)
+        """,
+        (revision_id, project_id, parent_id, event.seq, event.event_id),
+    )
+    known_reports = {row["report_id"] for row in parent_links}
+    known_studies = {row["study_id"] for row in parent_links}
+    for report_id in dict.fromkeys(row["report_id"] for row in links):
+        if report_id not in known_reports:
+            cur.execute(
+                "insert into report (id, project_id) values (%s, %s)", (report_id, project_id)
+            )
+    for study_id in dict.fromkeys(row["study_id"] for row in links):
+        if study_id not in known_studies:
+            cur.execute(
+                "insert into study (id, project_id) values (%s, %s)", (study_id, project_id)
+            )
+    for row in links:
+        cur.execute(
+            """
+            insert into identity_link (
+                id, revision_id, occurrence_id, report_id, study_id, relation, source
+            ) values (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                new_id(),
+                revision_id,
+                row["occurrence_id"],
+                row["report_id"],
+                row["study_id"],
+                row["relation"],
+                row["source"],
+            ),
+        )
+    cur.execute("update identity_revision set finalized = true where id = %s", (revision_id,))
+    return IdentityRevision(
+        id=revision_id,
+        project_id=project_id,
+        parent_id=parent_id,
+        event_seq=event.seq,
+        event_id=event.event_id,
+    )
+
+
 __all__ = [
     "CorpusRevision",
     "IdentityLink",
@@ -590,6 +447,7 @@ __all__ = [
     "PrismaCounts",
     "ProposalStatus",
     "Relation",
+    "SplitLevel",
     "confirm",
     "get_counts",
     "ingest",

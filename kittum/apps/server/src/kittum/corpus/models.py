@@ -9,6 +9,7 @@ from kittum.core import Id, Record, new_id
 type Relation = Literal["same_record", "same_report", "same_study"]
 type LinkRelation = Literal["same_record", "same_report", "same_study", "standalone"]
 type ProposalStatus = Literal["pending", "confirmed", "rejected"]
+type SplitLevel = Literal["report", "study"]
 
 
 class Occurrence(Record):

@@ -3,11 +3,14 @@
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+import psycopg
 import pytest
 
-from kittum.core import Id, new_id
+from kittum.core import Id, NotFoundError, new_id
 from kittum.corpus import (
     IdentityRevision,
+    Relation,
+    SplitLevel,
     confirm,
     get_counts,
     ingest,
@@ -195,6 +198,62 @@ def test_trial_identifiers_drive_only_same_study_proposals() -> None:
     }
 
 
+@pytest.mark.parametrize(
+    ("title_a", "title_b"),
+    [
+        (
+            "Pembrolizumab versus chemotherapy in PD-L1 positive NSCLC KEYNOTE 024",
+            "Pembrolizumab versus chemotherapy in PD-L1 positive NSCLC KEYNOTE 042",
+        ),
+        (
+            "5-year outcomes of pembrolizumab versus chemotherapy in metastatic NSCLC",
+            "3-year outcomes of pembrolizumab versus chemotherapy in metastatic NSCLC",
+        ),
+        (
+            "Pembrolizumab plus chemotherapy in metastatic NSCLC: a randomized phase II trial",
+            "Pembrolizumab plus chemotherapy in metastatic NSCLC: a randomized phase 3 trial",
+        ),
+        (
+            "Atezolizumab plus chemotherapy in squamous NSCLC: overall survival of IMpower 131",
+            "Atezolizumab plus chemotherapy in squamous NSCLC: overall survival of IMbrave 131",
+        ),
+    ],
+)
+def test_titles_naming_different_trials_or_follow_ups_are_not_the_same_record(
+    title_a: str, title_b: str
+) -> None:
+    first = make_record(title=title_a, authors=("Reck M",), year=2019)
+    second = make_record(title=title_b, authors=("Reck M",), year=2019)
+    assert check_same_record(first, second) == (False, None)
+    assert generate_link_proposals([first, second]) == []
+
+    # The same number written differently is still the same record.
+    reformatted = make_record(
+        title=title_a.replace(" 024", "-024").replace("phase II", "Phase 2"),
+        authors=("Reck, Martin",),
+        year=2019,
+    )
+    assert check_same_record(first, reformatted)[0]
+
+
+def test_a_record_without_identifiers_never_bridges_conflicting_dois_or_pmids() -> None:
+    title = "Pembrolizumab versus chemotherapy for PD-L1-positive non-small-cell lung cancer"
+    doi_x = make_record(title=title, doi="10.1056/NEJMoa1606774")
+    bare = make_record(title=title)
+    doi_y = make_record(title=title, doi="10.1200/JCO.2016.34.15_suppl.9000")
+    pmid_1 = make_record(title=title, pmid="27718847")
+    pmid_2 = make_record(title=title, pmid="30955977", doi="10.1056/NEJMoa1606774")
+
+    proposals = generate_link_proposals([doi_x, bare, doi_y])
+    assert [set(p.occurrence_ids) for p in proposals] == [{doi_x.occurrence_id, bare.occurrence_id}]
+
+    # The same DOI does not join two records once their PMIDs disagree.
+    proposals = generate_link_proposals([pmid_1, doi_x, pmid_2])
+    groups = [set(p.occurrence_ids) for p in proposals]
+    assert {pmid_1.occurrence_id, pmid_2.occurrence_id} not in groups
+    assert all(not {pmid_1.occurrence_id, pmid_2.occurrence_id} <= g for g in groups)
+
+
 @pytest.mark.postgres
 def test_two_distinct_publications_same_nct_stay_separate_reports_linked_to_one_study(
     pg: Tx,
@@ -264,11 +323,115 @@ def test_two_distinct_publications_same_nct_stay_separate_reports_linked_to_one_
             assert r["relation"] == "same_study"
 
     # PRISMA counts
-    counts = get_counts(pg, new_rev.id)
+    counts = get_counts(pg, proj_id, new_rev.id)
     assert counts.total_records_identified == 2
     assert counts.duplicates_removed == 0
     assert counts.unique_records == 2
     assert counts.studies_identified == 1
+
+
+def links_of(tx: Tx, revision_id: Id) -> dict[Id, dict[str, object]]:
+    with tx.cursor() as cur:
+        cur.execute(
+            "select occurrence_id, report_id, study_id, relation from identity_link"
+            " where revision_id = %s",
+            (revision_id,),
+        )
+        return {row["occurrence_id"]: row for row in cur.fetchall()}
+
+
+@pytest.mark.postgres
+def test_human_merges_and_splits_move_whole_identity_groups(pg: Tx) -> None:
+    """Merges join complete report or study groups; a split names the level it separates."""
+    proj_id, actor_id = create_test_project_and_actor(pg)
+    ledger = InMemoryLedger()
+    a, b, c, d, e = (
+        make_record(title=title, authors=(author,), year=year)
+        for title, author, year in [
+            ("Pembrolizumab in NSCLC: primary analysis", "Reck M", 2016),
+            ("Pembrolizumab monotherapy in lung cancer (Embase copy)", "Reck M", 2016),
+            ("Pembrolizumab: updated overall survival", "Brahmer J", 2019),
+            ("Health-related quality of life with pembrolizumab", "Brahmer J", 2017),
+            ("Nivolumab in squamous NSCLC", "Brahmer J", 2015),
+        ]
+    )
+    corpus_rev = ingest(
+        pg, proj_id, [make_execution("pubmed", [a, b, c, d, e])], actor_id=actor_id, ledger=ledger
+    )
+    assert corpus_rev.proposals == ()
+    assert corpus_rev.identity_revision_id is not None
+
+    def do_merge(parent: Id, occurrences: tuple[Id, ...], relation: Relation) -> Id:
+        return merge(pg, proj_id, parent, occurrences, relation, actor_id, ledger=ledger).id
+
+    def do_split(parent: Id, occurrences: tuple[Id, ...], level: SplitLevel) -> Id:
+        return split(pg, proj_id, parent, occurrences, level, actor_id, ledger=ledger).id
+
+    def counts(revision_id: Id) -> tuple[int, int]:
+        got = get_counts(pg, proj_id, revision_id)
+        assert got.total_records_identified == 5  # every occurrence is kept
+        return got.unique_records, got.studies_identified
+
+    # A and B are one record; then C joins B's study. A goes along with its report.
+    rev1 = do_merge(
+        corpus_rev.identity_revision_id, (a.occurrence_id, b.occurrence_id), "same_record"
+    )
+    rev2 = do_merge(rev1, (c.occurrence_id, b.occurrence_id), "same_study")
+    links2 = links_of(pg, rev2)
+    assert links2[a.occurrence_id]["report_id"] == links2[b.occurrence_id]["report_id"]
+    assert links2[a.occurrence_id]["study_id"] == links2[c.occurrence_id]["study_id"]
+    assert links2[c.occurrence_id]["relation"] == "same_study"
+    assert counts(rev2) == (4, 3)
+
+    # D is the same record as B, so it joins the whole A-B report and its study.
+    rev3 = do_merge(rev2, (d.occurrence_id, b.occurrence_id), "same_record")
+    links3 = links_of(pg, rev3)
+    assert len({links3[o.occurrence_id]["report_id"] for o in (a, b, d)}) == 1
+    assert len({links3[o.occurrence_id]["study_id"] for o in (a, b, c, d)}) == 1
+    assert {links3[o.occurrence_id]["relation"] for o in (a, b, d)} == {"same_record"}
+    assert counts(rev3) == (3, 2)
+
+    # A study split moves the A-B-D report out of C's study and keeps the report whole.
+    rev4 = do_split(rev3, (a.occurrence_id,), "study")
+    links4 = links_of(pg, rev4)
+    assert len({links4[o.occurrence_id]["report_id"] for o in (a, b, d)}) == 1
+    assert links4[a.occurrence_id]["study_id"] != links4[c.occurrence_id]["study_id"]
+    assert links4[c.occurrence_id]["study_id"] == links3[c.occurrence_id]["study_id"]
+    assert links4[c.occurrence_id]["relation"] == "standalone"
+    assert counts(rev4) == (3, 3)
+
+    # A report split takes D out on its own; A and B keep their report and study.
+    rev5 = do_split(rev4, (d.occurrence_id,), "report")
+    links5 = links_of(pg, rev5)
+    for kept in (a, b, c, e):
+        oid = kept.occurrence_id
+        assert links5[oid]["report_id"] == links4[oid]["report_id"]
+        assert links5[oid]["study_id"] == links4[oid]["study_id"]
+    assert links5[d.occurrence_id]["report_id"] != links4[d.occurrence_id]["report_id"]
+    assert links5[d.occurrence_id]["study_id"] != links4[d.occurrence_id]["study_id"]
+    assert counts(rev5) == (4, 4)
+
+    # A merge needs two distinct occurrences of the revision.
+    for occurrences in [
+        (),
+        (a.occurrence_id,),
+        (a.occurrence_id, a.occurrence_id),
+        (a.occurrence_id, new_id()),
+    ]:
+        with pytest.raises(ValueError, match=r"at least two|not in this revision"):
+            do_merge(rev5, occurrences, "same_record")
+    with pytest.raises(ValueError, match="at least one"):
+        do_split(rev5, (), "report")
+
+    assert [event.type for event in ledger.events(pg, proj_id)] == [
+        "corpus.ingested",
+        "corpus.merged",
+        "corpus.merged",
+        "corpus.merged",
+        "corpus.split",
+        "corpus.split",
+    ]
+    assert ledger.events(pg, proj_id)[-1].payload["level"] == "report"
 
 
 @pytest.mark.postgres
@@ -370,7 +533,7 @@ def test_full_corpus_flow_and_prisma_counts_against_postgres(pg: Tx) -> None:
     assert corpus_rev.identity_revision_id is not None
 
     # Baseline counts before confirmation
-    counts_base = get_counts(pg, corpus_rev.identity_revision_id)
+    counts_base = get_counts(pg, proj_id, corpus_rev.identity_revision_id)
     assert counts_base.total_records_identified == 8
     assert counts_base.records_identified_per_source == {
         "pubmed": 5,
@@ -415,7 +578,7 @@ def test_full_corpus_flow_and_prisma_counts_against_postgres(pg: Tx) -> None:
         actor_id,
         ledger=ledger,
     )
-    counts1 = get_counts(pg, rev1.id)
+    counts1 = get_counts(pg, proj_id, rev1.id)
     assert counts1.total_records_identified == 8
     assert counts1.duplicates_removed == 1  # 1 duplicate removed!
     assert counts1.unique_records == 7  # 7 unique records!
@@ -436,7 +599,7 @@ def test_full_corpus_flow_and_prisma_counts_against_postgres(pg: Tx) -> None:
         actor_id,
         ledger=ledger,
     )
-    counts2 = get_counts(pg, rev2.id)
+    counts2 = get_counts(pg, proj_id, rev2.id)
     assert counts2.total_records_identified == 8
     assert counts2.duplicates_removed == 1
     assert counts2.unique_records == 7
@@ -459,7 +622,7 @@ def test_full_corpus_flow_and_prisma_counts_against_postgres(pg: Tx) -> None:
         reason="Mistaken merge",
         ledger=ledger,
     )
-    counts_wrong = get_counts(pg, rev_wrong.id)
+    counts_wrong = get_counts(pg, proj_id, rev_wrong.id)
     assert counts_wrong.unique_records == 6
     assert counts_wrong.duplicates_removed == 2
     assert counts_wrong.studies_identified == 3
@@ -470,11 +633,12 @@ def test_full_corpus_flow_and_prisma_counts_against_postgres(pg: Tx) -> None:
         proj_id,
         rev_wrong.id,
         (t3_p2.occurrence_id, t4_p3.occurrence_id),
+        "report",
         actor_id,
         reason="Undoing wrong merge",
         ledger=ledger,
     )
-    counts_fixed = get_counts(pg, rev_split.id)
+    counts_fixed = get_counts(pg, proj_id, rev_split.id)
     # The counts are restored to exactly what they were before the wrong merge!
     assert counts_fixed.total_records_identified == 8
     assert counts_fixed.duplicates_removed == 1
@@ -486,6 +650,44 @@ def test_full_corpus_flow_and_prisma_counts_against_postgres(pg: Tx) -> None:
     assert rev_wrong.parent_id == rev2.id
     assert rev2.parent_id == rev1.id
     assert rev1.parent_id == corpus_rev.identity_revision_id
+
+    # Another project can neither read nor clone this project's revisions.
+    other_proj, _ = create_test_project_and_actor(pg)
+    other_rev = ingest(
+        pg, other_proj, [exec_pubmed, exec_central], actor_id=actor_id, ledger=ledger
+    )
+    other_prop = next(p for p in other_rev.proposals if p.relation == "same_record")
+    pair = (t3_p2.occurrence_id, t4_p3.occurrence_id)
+    with pytest.raises(NotFoundError):
+        get_counts(pg, other_proj, rev2.id)
+    with pytest.raises(NotFoundError):
+        confirm(pg, other_proj, rev2.id, other_prop.id, actor_id, ledger=ledger)
+    with pytest.raises(NotFoundError):
+        merge(pg, other_proj, rev2.id, pair, "same_record", actor_id, ledger=ledger)
+    with pytest.raises(NotFoundError):
+        split(pg, other_proj, rev2.id, pair, "report", actor_id, ledger=ledger)
+
+    # The database freezes a revision and its links once it is written.
+    frozen = [
+        ("update identity_link set study_id = report_id where revision_id = %s", (rev1.id,)),
+        ("delete from identity_link where revision_id = %s", (rev1.id,)),
+        (
+            "insert into identity_link (revision_id, occurrence_id, report_id, study_id)"
+            " select revision_id, gen_random_uuid(), report_id, study_id"
+            " from identity_link where revision_id = %s limit 1",
+            (rev1.id,),
+        ),
+        ("update identity_revision set parent_id = null where id = %s", (rev2.id,)),
+        ("update identity_revision set finalized = false where id = %s", (rev2.id,)),
+        ("delete from identity_revision where id = %s", (rev_split.id,)),
+    ]
+    for sql, params in frozen:
+        with pytest.raises(psycopg.errors.RaiseException), pg.transaction():
+            pg.execute(sql, params)
+    with pytest.raises(psycopg.errors.RaiseException, match="not finalized"), pg.transaction():
+        pg.execute("insert into identity_revision (project_id) values (%s)", (proj_id,))
+        pg.execute("set constraints identity_revision_finalized immediate")
+    assert get_counts(pg, proj_id, rev1.id) == counts1
 
     # Ledger recorded every step
     all_events = ledger.events(pg, proj_id)

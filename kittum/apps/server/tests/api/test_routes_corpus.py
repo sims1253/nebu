@@ -145,6 +145,7 @@ def test_corpus_api_endpoints_e2e(api_client: TestClient) -> None:
     split_payload = {
         "revision_id": new_rev_id,
         "occurrence_ids": [str(rec1.occurrence_id), str(rec2.occurrence_id)],
+        "level": "report",
         "actor_id": str(actor_id),
         "reason": "Undo merge",
     }
@@ -159,3 +160,36 @@ def test_corpus_api_endpoints_e2e(api_client: TestClient) -> None:
     counts_split = resp.json()
     assert counts_split["unique_records"] == 2
     assert counts_split["duplicates_removed"] == 0
+
+    # 7. Another project's revision is not found; a merge needs two occurrences
+    other_proj = new_id()
+    with db.transaction() as tx:
+        tx.execute(
+            "insert into project (id, name, policy_version) values (%s, %s, %s)",
+            (other_proj, "Other API Test Project", "1.0"),
+        )
+    resp = api_client.get(f"/api/projects/{other_proj}/corpus/revisions/{split_rev_id}/counts")
+    assert resp.status_code == 404
+    merge_payload = {
+        "revision_id": split_rev_id,
+        "occurrence_ids": [str(rec1.occurrence_id), str(rec2.occurrence_id)],
+        "relation": "same_record",
+        "actor_id": str(actor_id),
+    }
+    resp = api_client.post(f"/api/projects/{other_proj}/corpus/merge", json=merge_payload)
+    assert resp.status_code == 404
+    for occurrence_ids in ([], [str(rec1.occurrence_id)] * 2):
+        resp = api_client.post(
+            f"/api/projects/{proj_id}/corpus/merge",
+            json={**merge_payload, "occurrence_ids": occurrence_ids},
+        )
+        assert resp.status_code == 400
+
+    # 8. A study split keeps a confirmed duplicate pair together as one record
+    resp = api_client.post(
+        f"/api/projects/{proj_id}/corpus/split",
+        json={**split_payload, "revision_id": new_rev_id, "level": "study"},
+    )
+    assert resp.status_code == 200
+    resp = api_client.get(f"/api/projects/{proj_id}/corpus/revisions/{resp.json()['id']}/counts")
+    assert resp.json()["unique_records"] == 1

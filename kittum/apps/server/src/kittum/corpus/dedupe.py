@@ -78,16 +78,33 @@ def normalize_title(title: str) -> str:
     return t
 
 
-def extract_distinguishing_tokens(title: str) -> set[str]:
-    """Extract tokens like phase numbers (phase 2, phase iii) or trial acronym numbers."""
-    norm = unicodedata.normalize("NFC", title).lower()
-    tokens: set[str] = set()
-    for m in re.finditer(r"\bphase\s+([0-9ivx]+)\b", norm):
-        val = m.group(1)
-        tokens.add(f"phase_{_ROMAN_TO_NUM.get(val, val)}")
-    for m in re.finditer(r"\b([a-z]+[-_][0-9]+)\b", norm):
-        tokens.add(m.group(1))
-    return tokens
+def extract_distinguishing_tokens(title: str) -> tuple[set[str], set[str]]:
+    """Numbers and acronym-number names (KEYNOTE 024, IMpower150) that tell trials apart.
+
+    Numbers cover trial numbers, phases (roman numerals too), years, and follow-up lengths.
+    """
+    text = unicodedata.normalize("NFC", title)
+    lowered = re.sub(
+        r"\bphase\s+(iv|v|i{1,3})\b",
+        lambda m: f"phase {_ROMAN_TO_NUM[m.group(1)]}",
+        text.lower(),
+    )
+    numbers = {str(int(n)) for n in re.findall(r"\d+", lowered)}
+    acronyms = {
+        f"{m.group(1).lower()} {int(m.group(2))}"
+        for m in re.finditer(r"\b([A-Za-z]{2,})[\s_-]?(\d+)\b", text)
+        if sum(c.isupper() for c in m.group(1)) >= 2
+    }
+    return numbers, acronyms
+
+
+def distinguishing_tokens_conflict(title_a: str, title_b: str) -> bool:
+    """Whether both titles name numbers or numbered acronyms and they differ."""
+    numbers_a, acronyms_a = extract_distinguishing_tokens(title_a)
+    numbers_b, acronyms_b = extract_distinguishing_tokens(title_b)
+    if numbers_a and numbers_b and numbers_a != numbers_b:
+        return True
+    return bool(acronyms_a and acronyms_b and acronyms_a != acronyms_b)
 
 
 def check_same_record(rec_a: SourceRecord, rec_b: SourceRecord) -> tuple[bool, str | None]:
@@ -109,9 +126,7 @@ def check_same_record(rec_a: SourceRecord, rec_b: SourceRecord) -> tuple[bool, s
             return True, f"exact PMID {pmid_a}"
         return False, None
 
-    dist_a = extract_distinguishing_tokens(rec_a.title)
-    dist_b = extract_distinguishing_tokens(rec_b.title)
-    if dist_a and dist_b and dist_a != dist_b:
+    if distinguishing_tokens_conflict(rec_a.title, rec_b.title):
         return False, None
 
     if rec_a.year is not None and rec_b.year is not None and abs(rec_a.year - rec_b.year) > 1:
@@ -145,8 +160,19 @@ def check_same_record(rec_a: SourceRecord, rec_b: SourceRecord) -> tuple[bool, s
 
 
 class _DisjointSet:
+    """Groups of occurrences that never hold two different DOIs or two different PMIDs."""
+
     def __init__(self) -> None:
         self.parent: dict[Id, Id] = {}
+        self.dois: dict[Id, set[str]] = defaultdict(set)
+        self.pmids: dict[Id, set[str]] = defaultdict(set)
+
+    def add(self, rec: SourceRecord) -> None:
+        root = self.find(rec.occurrence_id)
+        if doi := normalize_doi(rec.doi):
+            self.dois[root].add(doi)
+        if pmid := normalize_pmid(rec.pmid):
+            self.pmids[root].add(pmid)
 
     def find(self, item: Id) -> Id:
         if item not in self.parent:
@@ -156,11 +182,20 @@ class _DisjointSet:
             self.parent[item] = self.find(self.parent[item])
         return self.parent[item]
 
-    def union(self, a: Id, b: Id) -> None:
+    def union(self, a: Id, b: Id) -> bool:
+        """Join the groups of `a` and `b` unless the joined group would hold conflicting IDs."""
         root_a = self.find(a)
         root_b = self.find(b)
-        if root_a != root_b:
-            self.parent[root_b] = root_a
+        if root_a == root_b:
+            return True
+        dois = self.dois[root_a] | self.dois[root_b]
+        pmids = self.pmids[root_a] | self.pmids[root_b]
+        if len(dois) > 1 or len(pmids) > 1:
+            return False
+        self.parent[root_b] = root_a
+        self.dois[root_a] = dois
+        self.pmids[root_a] = pmids
+        return True
 
 
 def generate_link_proposals(records: list[SourceRecord]) -> list[LinkProposal]:
@@ -169,6 +204,8 @@ def generate_link_proposals(records: list[SourceRecord]) -> list[LinkProposal]:
 
     # 1. same_record proposals (report dedupe)
     dset = _DisjointSet()
+    for rec in records:
+        dset.add(rec)
     evidence_map: dict[Id, list[str]] = defaultdict(list)
 
     n = len(records)
@@ -177,8 +214,7 @@ def generate_link_proposals(records: list[SourceRecord]) -> list[LinkProposal]:
         for j in range(i + 1, n):
             rec_b = records[j]
             is_match, ev = check_same_record(rec_a, rec_b)
-            if is_match and ev:
-                dset.union(rec_a.occurrence_id, rec_b.occurrence_id)
+            if is_match and ev and dset.union(rec_a.occurrence_id, rec_b.occurrence_id):
                 evidence_map[rec_a.occurrence_id].append(ev)
                 evidence_map[rec_b.occurrence_id].append(ev)
 

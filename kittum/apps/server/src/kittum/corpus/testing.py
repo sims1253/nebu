@@ -2,7 +2,7 @@
 
 from typing import TYPE_CHECKING
 
-from kittum.core import Id, new_id
+from kittum.core import Id, NotFoundError, new_id
 from kittum.corpus import (
     CorpusRevision,
     IdentityRevision,
@@ -11,6 +11,7 @@ from kittum.corpus import (
     PrismaCounts,
 )
 from kittum.corpus.dedupe import generate_link_proposals
+from kittum.corpus.identity import merge_links
 from kittum.ledger import EventDraft, Ledger
 
 if TYPE_CHECKING:
@@ -95,14 +96,10 @@ class FakeCorpus:
     ) -> IdentityRevision:
         prop = self.proposals.get(proposal_id)
         if not prop:
-            raise ValueError(f"Proposal {proposal_id} not found")
+            raise NotFoundError(f"Proposal {proposal_id} not found")
 
-        current_links = self.links[parent_revision_id]
-        link_map = {row["occurrence_id"]: row for row in current_links}
-
-        first_oid = prop.occurrence_ids[0]
-        target_report_id = link_map[first_oid]["report_id"]
-        target_study_id = link_map[first_oid]["study_id"]
+        current_links = self._links(project_id, parent_revision_id)
+        merged = merge_links(current_links, prop.occurrence_ids, prop.relation)
 
         new_rev_id = new_id()
         effective_ledger = ledger or self._ledger
@@ -128,34 +125,7 @@ class FakeCorpus:
             seq = event.seq
             event_id = event.event_id
 
-        new_links: list[dict[str, object]] = []
-        target_ids = set(prop.occurrence_ids)
-        for row in current_links:
-            oid = row["occurrence_id"]
-            if oid in target_ids:
-                if prop.relation in ("same_record", "same_report"):
-                    rep_id = target_report_id
-                    std_id = target_study_id
-                else:
-                    rep_id = row["report_id"]
-                    std_id = target_study_id
-                rel = prop.relation
-            else:
-                rep_id = row["report_id"]
-                std_id = row["study_id"]
-                rel = str(row["relation"])
-
-            new_links.append(
-                {
-                    "id": new_id(),
-                    "occurrence_id": oid,
-                    "report_id": rep_id,
-                    "study_id": std_id,
-                    "relation": rel,
-                    "source": row["source"],
-                }
-            )
-
+        new_links: list[dict[str, object]] = [{"id": new_id(), **row} for row in merged]
         self.links[new_rev_id] = new_links
         rev = IdentityRevision(
             id=new_rev_id,
@@ -167,8 +137,8 @@ class FakeCorpus:
         self.revisions[new_rev_id] = rev
         return rev
 
-    def get_counts(self, tx: Tx, revision_id: Id) -> PrismaCounts:
-        current_links = self.links[revision_id]
+    def get_counts(self, tx: Tx, project_id: Id, revision_id: Id) -> PrismaCounts:
+        current_links = self._links(project_id, revision_id)
         per_source: dict[str, int] = {}
         for row in current_links:
             src = str(row["source"] or "unknown")
@@ -185,3 +155,11 @@ class FakeCorpus:
             unique_records=unique_reps,
             studies_identified=unique_studies,
         )
+
+    def _links(self, project_id: Id, revision_id: Id) -> list[dict[str, object]]:
+        revision = self.revisions.get(revision_id)
+        if revision is None or revision.project_id != project_id:
+            raise NotFoundError(
+                f"Identity revision {revision_id} not found in project {project_id}"
+            )
+        return self.links[revision_id]

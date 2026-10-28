@@ -1,15 +1,19 @@
 """Corpus routes for proposals, human confirmation, split, merge, and PRISMA counts."""
 
+from contextlib import contextmanager
+from typing import TYPE_CHECKING
+
 from fastapi import APIRouter, HTTPException, Query
 
 from kittum.api import AppContext, Context  # noqa: TC001
-from kittum.core import Id, Record
+from kittum.core import Id, NotFoundError, Record
 from kittum.corpus import (
     IdentityRevision,
     LinkProposal,
     PrismaCounts,
     ProposalStatus,
     Relation,
+    SplitLevel,
     confirm,
     get_counts,
     list_proposals,
@@ -17,6 +21,9 @@ from kittum.corpus import (
     split,
 )
 from kittum.ledger import Ledger  # noqa: TC001
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
 
 router = APIRouter(prefix="/api/projects/{project_id}/corpus", tags=["corpus"])
 
@@ -38,6 +45,7 @@ class MergeRequest(Record):
 class SplitRequest(Record):
     revision_id: Id
     occurrence_ids: tuple[Id, ...]
+    level: SplitLevel
     actor_id: Id
     reason: str = ""
 
@@ -64,18 +72,15 @@ def confirm_route(
     body: ConfirmRequest,
     ctx: Context,
 ) -> IdentityRevision:
-    try:
-        with ctx.db.transaction() as tx:
-            return confirm(
-                tx,
-                project_id,
-                body.revision_id,
-                body.proposal_id,
-                body.actor_id,
-                ledger=_ledger(ctx),
-            )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    with _errors(), ctx.db.transaction() as tx:
+        return confirm(
+            tx,
+            project_id,
+            body.revision_id,
+            body.proposal_id,
+            body.actor_id,
+            ledger=_ledger(ctx),
+        )
 
 
 @router.post("/merge", operation_id="mergeCorpusOccurrences")
@@ -84,20 +89,17 @@ def merge_route(
     body: MergeRequest,
     ctx: Context,
 ) -> IdentityRevision:
-    try:
-        with ctx.db.transaction() as tx:
-            return merge(
-                tx,
-                project_id,
-                body.revision_id,
-                body.occurrence_ids,
-                body.relation,
-                body.actor_id,
-                reason=body.reason,
-                ledger=_ledger(ctx),
-            )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    with _errors(), ctx.db.transaction() as tx:
+        return merge(
+            tx,
+            project_id,
+            body.revision_id,
+            body.occurrence_ids,
+            body.relation,
+            body.actor_id,
+            reason=body.reason,
+            ledger=_ledger(ctx),
+        )
 
 
 @router.post("/split", operation_id="splitCorpusOccurrences")
@@ -106,29 +108,37 @@ def split_route(
     body: SplitRequest,
     ctx: Context,
 ) -> IdentityRevision:
-    try:
-        with ctx.db.transaction() as tx:
-            return split(
-                tx,
-                project_id,
-                body.revision_id,
-                body.occurrence_ids,
-                body.actor_id,
-                reason=body.reason,
-                ledger=_ledger(ctx),
-            )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    with _errors(), ctx.db.transaction() as tx:
+        return split(
+            tx,
+            project_id,
+            body.revision_id,
+            body.occurrence_ids,
+            body.level,
+            body.actor_id,
+            reason=body.reason,
+            ledger=_ledger(ctx),
+        )
 
 
 @router.get("/revisions/{revision_id}/counts", operation_id="getCorpusPrismaCounts")
 def get_counts_route(
-    project_id: Id,  # noqa: ARG001
+    project_id: Id,
     revision_id: Id,
     ctx: Context,
 ) -> PrismaCounts:
-    with ctx.db.transaction() as tx:
-        return get_counts(tx, revision_id)
+    with _errors(), ctx.db.transaction() as tx:
+        return get_counts(tx, project_id, revision_id)
+
+
+@contextmanager
+def _errors() -> Generator[None]:
+    try:
+        yield
+    except NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 def _ledger(ctx: AppContext) -> Ledger:
