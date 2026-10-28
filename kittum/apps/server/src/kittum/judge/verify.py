@@ -22,9 +22,11 @@ A `not_met` stands only if all of these hold:
    a function word or negation of another language ("non", "sin", "pas").
 6. The quote's sentence has at most one negation cue, inside the quote, at most three tokens
    before a key term and in the same clause. A cue such as "excluded", "with or without", or
-   "not only" anywhere in the sentence makes the scope ambiguous. A key term the quote negates
-   does not also stand unnegated in the sentence ("adults who did not smoke tobacco and adults
-   who smoke tobacco").
+   "not only" anywhere in the sentence makes the scope ambiguous, as does an exclusion cue in the
+   sentence before or in the introduction of a list the quote belongs to ("The following were
+   exclusion criteria. No prior chemotherapy."). A key term the quote negates does not also
+   stand unnegated in the sentence ("adults who did not smoke tobacco and adults who smoke
+   tobacco").
 7. If the cue negates some of the quote's key terms and not others, the quote states the
    opposite of one requirement of an affirmative condition: "adults who did not smoke tobacco"
    against "Adults who smoke tobacco". Then the key terms it leaves unnegated come before the
@@ -34,9 +36,11 @@ A `not_met` stands only if all of these hold:
    the condition's own polarity. The condition's polarity is read the same way from each wording
    (at most one cue), and the wordings must agree.
 9. A negated quote that excludes is read with the whole sentence, or semicolon clause, that it
-   ends: the quote runs to its end, and nowhere in it does a word limit the negation to a time,
-   a frequency, or an age ("before age 18", "regularly", "every day", "aged 18 years") or
-   coordinate or compare another population ("and", "but", "compared with", "matched to").
+   ends: nothing but closing punctuation follows its last negated key term there (no "on
+   weekdays", "in adolescence", or "were enrolled"), and nowhere in it does a word limit the
+   negation to a time, a frequency, or an age ("before age 18", "regularly", "every day", "aged
+   18 years") or coordinate or compare another population ("and", "but", "compared with",
+   "matched to").
    Words of the criterion's own wording do not count. So a shorter quote hides nothing.
 10. On a study design inclusion criterion with an affirmative wording, a key term with a word
    the wording does not have names another design ("cohort" or "case-control" against
@@ -44,12 +48,15 @@ A `not_met` stands only if all of these hold:
    criterion only if the design is the record's own: the key term lies in the noun phrase of a
    sentence that says what the study is ("This was a ...", "This study was a ...", "We
    conducted a ...", "Design: ...", or the title's subtitle after its colon), and that phrase
-   ends in a design noun ("study", "analysis", "survey"). And the record names nothing of the
-   required design anywhere: no other word of the wording or a near spelling ("trials",
-   "randomised"), and for a randomized design no hint of random allocation in any language
-   ("RCT", "CRT", "randomly", "assigned by lottery", "Zufallsprinzip", "aleatorio"). A
-   prefixed "non-randomized" negates it and does not count. A negated other design ("not a
-   cohort study") is no evidence either way.
+   ends in a design noun ("study", "analysis") and is not placed in time or among people ("at
+   baseline", "among participants"). A survey, questionnaire, interview, or assessment is a
+   measurement: it names a design only if qualified ("a cross-sectional survey") and not
+   followed by a preposition ("of participants"). And the record names nothing of the required
+   design anywhere: no other word of the wording or a near spelling ("trials", "randomised"),
+   and for a randomized design no hint of random allocation in any language, accents folded
+   ("RCT", "CRT", "randomly", "by drawing lots", "Zufallsprinzip", "aleatória"). A prefixed
+   "non-randomized" negates it and does not count. A negated other design ("not a cohort
+   study") is no evidence either way.
 
 What the filter cannot catch, by design:
 
@@ -67,6 +74,7 @@ exclusion is a proposal, and disagreements, AI-only exclusions, and audits go to
 """
 
 import re
+import unicodedata
 from typing import TYPE_CHECKING, NamedTuple
 
 from kittum.core import Span, find_quote
@@ -201,19 +209,42 @@ _SELF_DESCRIPTION = re.compile(
     re.IGNORECASE,
 )
 _SUBTITLE = re.compile(r"\s*(?:an?\s+)?", re.IGNORECASE)
-_DESIGN_NOUNS = _vocabulary(
-    """study studies design analysis analyses survey surveys review reviews series"""
+# What a study measures with, not what it is: alone ("a survey") or placed in time or among
+# people ("a cross-sectional survey at baseline", "... of participants"), never another design.
+_MEASUREMENTS = _vocabulary(
+    """survey surveys questionnaire questionnaires interview interviews assessment assessments"""
 )
+_DESIGN_NOUNS = (
+    _vocabulary("""study studies design analysis analyses review reviews series""") | _MEASUREMENTS
+)
+_PLACED = _vocabulary("at among")  # "a cohort study at baseline" is a measurement too
+_MEASURED = _PLACED | _vocabulary("of in during with from for on to by")
 
 # Any hint that a record's allocation was random, in the languages abstracts come in. On a
 # randomized design criterion, it blocks every other design ("Randomization was not possible"
 # too: the filter stays conservative). A prefixed "non-randomized" is no such hint.
+# It matches accent-folded text (`_fold`): "aleatória" is "aleatoria".
 _RANDOM_ALLOCATION = re.compile(
     r"(?<!non-)(?<!nicht-)\b(?:c?rcts?|crts?|random\w*|quasi-?random\w*|lotter\w*|"
-    r"coin\s+(?:toss|flip)\w*|toss(?:ing)?\s+(?:of\s+)?a\s+coin|zufall\w*|aleatori\w*|"
-    r"al[eé]atoire\w*|al\s+azar|au\s+hasard|tirage\s+au\s+sort|sorteo|sorteggio)",
+    r"coin\s+(?:toss|flip)\w*|toss(?:ing)?\s+(?:of\s+)?a\s+coin|(?:draw\w*|drew)\s+(?:of\s+)?lots|"
+    r"by\s+lot\b|zufall\w*|aleatori\w*|aleatoire\w*|al\s+azar|au\s+hasard|tirage|sorte(?:o|io|ggio))",
     re.IGNORECASE,
 )
+
+# A cue that the quote's sentence lists who was left out. It may stand in the sentence before
+# ("The following were exclusion criteria. No prior chemotherapy.") or in the introduction of
+# a list that ends in a colon. Matches accent-folded text.
+_EXCLUSION_CONTEXT = re.compile(
+    r"\b(?:exclu\w*|esclu\w*|ineligib\w*|inelegib\w*|not\s+eligible|(?:were|was)\s+not\s+included"
+    r"|not\s+enrolled|ausgeschlossen|ausschluss\w*|nicht\s+eingeschlossen)",
+    re.IGNORECASE,
+)
+
+
+def _fold(text: str) -> str:
+    """Text without accents, for guards written in ASCII."""
+    return "".join(c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c))
+
 
 # A line break alone does not end a sentence: abstracts are often wrapped mid-sentence.
 # A sentence ends at . ! or ?, after any closing bracket or quote mark. A semicolon joins two
@@ -375,6 +406,7 @@ class _Reading(NamedTuple):
     partial: bool = False  # ... some of them, the last ones: one requirement of the condition
     keys: frozenset[tuple[str, ...]] = frozenset()  # the key terms the quote contains
     own_design: bool = False  # another design the quote names is the record's own
+    negated_end: int = 0  # where the last negated key term ends in the source
 
 
 def _related(word: str, terms: frozenset[str]) -> bool:
@@ -393,7 +425,7 @@ def _names_required_design(criterion: Criterion, source: str) -> bool:
     spelling, outside the other designs' own words, or for a randomized design any hint of
     random allocation ("RCT", "assigned by lottery", "Zufallsprinzip")."""
     own = _wording_terms(criterion)
-    if any(t.startswith("random") for t in own) and _RANDOM_ALLOCATION.search(source):
+    if any(t.startswith("random") for t in own) and _RANDOM_ALLOCATION.search(_fold(source)):
         return True
     tokens = _tokens(source)
     words = [_term(w) for w, *_ in tokens]
@@ -421,25 +453,34 @@ def _design_phrase(source: str, start: int, end: int) -> list[tuple[str, int, in
         frame = _SUBTITLE.match(sentence, sentence.rindex(":") + 1)
     if frame is None:
         return []
-    phrase = []
+    phrase: list[tuple[str, int, int]] = []
+    after = ""
     for w, s, e, _ in _tokens(sentence[frame.end() :], start + frame.end()):
         if w in _PUNCTUATION or w in _FUNCTION_WORDS:
             if subtitle and w not in ".!?":
                 return []  # a subtitle names the design only as a whole
+            after = w
             break
         phrase.append((w, s, e))
-    return phrase if phrase and phrase[-1][0] in _DESIGN_NOUNS else []
+    if not phrase or phrase[-1][0] not in _DESIGN_NOUNS or after in _PLACED:
+        return []
+    if phrase[-1][0] in _MEASUREMENTS and (
+        all(w in _MEASUREMENTS for w, *_ in phrase) or after in _MEASURED
+    ):
+        return []  # "a survey", "a population-based survey of participants"
+    return phrase
 
 
-def _reads_whole(criterion: Criterion, source: str, span: Span) -> bool:
+def _reads_whole(criterion: Criterion, source: str, span: Span, negated_end: int) -> bool:
     """Whether a negated quote can be read with the whole sentence, or semicolon clause, that it
-    ends: nothing follows it there, and nothing in it limits the negation to a time, a
-    frequency, or an age or brings in another population."""
+    ends: nothing but closing punctuation follows its last negated key term there ("on
+    weekdays", "in adolescence"), and nothing in it limits the negation to a time, a frequency,
+    or an age or brings in another population."""
     start, end = _sentence(source, span)
     start = source.rfind(";", start, span.start) + 1 or start
     if (semicolon := source.find(";", span.end, end)) >= 0:
         end = semicolon
-    if source[span.end : end].strip(" \t\n.!?" + _CLOSERS):
+    if source[negated_end:end].strip(" \t\n.!?" + _CLOSERS):
         return False
     unit = source[start:end]
     own = _wording_terms(criterion)
@@ -449,6 +490,19 @@ def _reads_whole(criterion: Criterion, source: str, span: Span) -> bool:
         if not all(_term(w) in own for w, *_ in _tokens(m.group()))  # "older" in "or older"
     ]
     return not limits and _COORDINATION.search(unit) is None
+
+
+def _exclusion_context(source: str, start: int) -> bool:
+    """Whether the sentence before the one at `start`, or the introduction of a list that the
+    sentence belongs to, says who was left out."""
+    starts = [0] + [m.end() for m in _SENTENCE_END.finditer(source, 0, start) if m.end() < start]
+    before = source[starts[-1] : start]
+    paragraph = source.rfind("\n\n", 0, start) + 1
+    colon = source.rfind(":", paragraph, start)
+    if colon >= 0:
+        intro = [0] + [m.end() for m in _SENTENCE_END.finditer(source, 0, colon)]
+        before += " " + source[intro[-1] : colon]
+    return _EXCLUSION_CONTEXT.search(_fold(before)) is not None
 
 
 def _anchored_negation(criterion: Criterion, source: str, span: Span) -> _Reading:
@@ -475,7 +529,7 @@ def _anchored_negation(criterion: Criterion, source: str, span: Span) -> _Readin
         return _Reading("negation")  # "non-smokers" against "smokers", or either way round
     if not anchors:
         return _Reading("off_criterion")
-    if _SCOPE_CUES.search(sentence):
+    if _SCOPE_CUES.search(sentence) or _exclusion_context(source, start):
         return _Reading("negation")
     raw = [w for w, *_ in tokens]
     cues = [i for i, w in enumerate(raw) if w in _NEGATION_WORDS]
@@ -501,6 +555,8 @@ def _anchored_negation(criterion: Criterion, source: str, span: Span) -> _Readin
         return reading
     if any(words[j] == words[a] for a in negated for j in range(len(words)) if j not in negated):
         return _Reading("negation")  # the sentence also states the negated term unnegated
+    last = max(i + len(key) - 1 for i, key in matches if i in negated)
+    reading = reading._replace(negated_end=tokens[last][2])
     if len(negated) == len(anchors):
         return reading._replace(negated=True)
     # Some key terms negated, some not: the quote negates one requirement of the condition only
@@ -558,7 +614,10 @@ def _check_not_met(
     fails = contradicts if criterion.polarity == "include" else not contradicts
     if not fails:
         return "polarity"
-    if quote_negated and not all(_reads_whole(criterion, source, span) for span in spans):
+    if quote_negated and not all(
+        _reads_whole(criterion, source, span, r.negated_end)
+        for span, r in zip(spans, readings, strict=True)
+    ):
         return "negation"  # "did not smoke tobacco" from "... every day", "... and smokers"
     return None
 

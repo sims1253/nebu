@@ -288,8 +288,11 @@ Modules `kittum.judge` and `kittum.models`. Needs: `protocol`, `core`.
   keyword as the object of the record's own description ("This was a prospective cohort study",
   or the title's "...: a prospective cohort study" against "Randomized controlled trial", in a
   record with no hint of random allocation) support `not_met`. Any negated quote that excludes
-  is read with its whole sentence: it runs to the sentence's end, and the sentence names no
-  time, frequency, or age and coordinates or compares no other population. `Verdict.excludes`
+  is read with its whole sentence: nothing but closing punctuation follows its last negated
+  term, the sentence names no time, frequency, or age and coordinates or compares no other
+  population, and neither it, the sentence before, nor a list introduction says who was
+  excluded. A bare survey, questionnaire, interview, or assessment is a measurement, not a
+  design. `Verdict.excludes`
   is a proposal for humans and adjudication, never a final exclusion. `judge_many` stores
   verdicts (migration `20261028120000_judge_verdicts.sql`), artifacts, and
   `judge.verdict_recorded` events, and skips records already judged under the same cache key.
@@ -322,7 +325,8 @@ Modules `kittum.judge` and `kittum.models`. Needs: `protocol`, `core`.
   "a cohort study" names its word "study"; nor does a record that mentions trials or
   randomization in passing. The whole-sentence reading of negations also turns base cases
   unclear: "patients without prior chemotherapy, aged 18 years or older, with ..." names an
-  age, and "Patients without prior chemotherapy were enrolled" excludes only if quoted whole.
+  age, and "Patients without prior chemotherapy were enrolled" has words after the negated
+  term (German verb-final sentences mostly do).
   Measure the work saved this costs on gold data before loosening any rule.
 - Accepted limitations of the filter, not to be chased with more patterns: foreign content words
   that carry negation ("Melanoma assente"); a negation in an intervening clause about another
