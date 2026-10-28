@@ -1,4 +1,4 @@
-"""HTTP transport for the workbench.
+"""HTTP transport for the reviewer workbench.
 
 Routes stay thin: decode the request, call one module function or service method, map errors.
 Each module that exposes HTTP adds `api/routes/<module>.py` with a `router` and registers it in
@@ -21,6 +21,7 @@ from kittum.storage import ArtifactStore, FilesystemStore
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
+    from kittum.gateway import Gateway
     from kittum.ledger import Ledger
 
 
@@ -32,6 +33,7 @@ class AppContext:
     db: Database
     artifacts: ArtifactStore
     clock: Clock = field(default_factory=SystemClock)
+    gateway: Gateway | None = None
     ledger: Ledger | None = None
 
     @classmethod
@@ -73,6 +75,8 @@ def create_app(context: AppContext | None = None) -> FastAPI:
                 app.state.context.db.close()
 
     app = FastAPI(title="Kittum", version="0.0.1", lifespan=lifespan)
+    if context is not None:
+        app.state.context = context
 
     @app.get("/api/health", operation_id="getHealth")
     def health() -> Health:

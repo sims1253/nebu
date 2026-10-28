@@ -46,6 +46,8 @@ export type ConfidencePercent = string
 export const ConfidencePercent = Schema.String.check(Schema.isPattern(new RegExp("^[0-9]{1,3}(\\.[0-9]+)?$", "u")).annotate({ "expected": "a string matching the RegExp ^[0-9]{1,3}(\\.[0-9]+)?$", "identifier": "ConfidencePercent" }))
 export type PositivePercent = string
 export const PositivePercent = Schema.String.check(Schema.isPattern(new RegExp("^[0-9]{1,3}(\\.[0-9]+)?$", "u")).annotate({ "expected": "a string matching the RegExp ^[0-9]{1,3}(\\.[0-9]+)?$", "identifier": "PositivePercent" }))
+export type SearchPlan = { readonly "limits"?: ReadonlyArray<string>, readonly "platform": string, readonly "source": string, readonly "strategy": string, readonly "topic_id": string }
+export const SearchPlan = Schema.Struct({ "limits": Schema.optionalKey(Schema.Array(Schema.String).annotate({ "title": "Limits", "default": [] })), "platform": Schema.String.annotate({ "title": "Platform" }), "source": Schema.String.annotate({ "title": "Source" }), "strategy": Schema.String.annotate({ "title": "Strategy" }), "topic_id": Schema.String.annotate({ "title": "Topic Id" }) }).annotate({ "title": "SearchPlan", "identifier": "SearchPlan" })
 export type ProtocolIssue = { readonly "message": string, readonly "path": string }
 export const ProtocolIssue = Schema.Struct({ "message": Schema.String.annotate({ "title": "Message" }), "path": Schema.String.annotate({ "title": "Path" }) }).annotate({ "title": "ProtocolIssue", "identifier": "ProtocolIssue" })
 export type ProtocolVersionSummary = { readonly "content_hash": string, readonly "created_at": string, readonly "id": Id, readonly "parent_id": Id | null, readonly "published_at": string | null, readonly "status": "draft" | "published", readonly "version_label": string }
@@ -54,6 +56,8 @@ export type PublishRequest = { readonly "approved_by": Id, readonly "reason"?: s
 export const PublishRequest = Schema.Struct({ "approved_by": Id, "reason": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Reason" })) }).annotate({ "title": "PublishRequest", "identifier": "PublishRequest" })
 export type HTTPValidationError = { readonly "detail"?: ReadonlyArray<ValidationError> } & { readonly [x: string]: Schema.Json }
 export const HTTPValidationError = Schema.StructWithRest(Schema.Struct({ "detail": Schema.optionalKey(Schema.Array(ValidationError).annotate({ "title": "Detail" })) }), [Schema.Record(Schema.String, Schema.Json.annotate({ "expected": "JSON value" }))]).annotate({ "title": "HTTPValidationError", "identifier": "HTTPValidationError" })
+export type SourceRecord = { readonly "abstract"?: string | null, readonly "authors"?: ReadonlyArray<string>, readonly "doi"?: string | null, readonly "journal"?: string | null, readonly "occurrence_id": Id, readonly "ordinal": number, readonly "pmid"?: string | null, readonly "provider_record_id": string, readonly "publication_types"?: ReadonlyArray<string>, readonly "raw_hash": Sha256, readonly "registry_ids"?: ReadonlyArray<string>, readonly "source": string, readonly "title": string, readonly "year"?: number | null }
+export const SourceRecord = Schema.Struct({ "abstract": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Abstract" })), "authors": Schema.optionalKey(Schema.Array(Schema.String).annotate({ "title": "Authors", "default": [] })), "doi": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Doi" })), "journal": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Journal" })), "occurrence_id": Id, "ordinal": Schema.Number.annotate({ "title": "Ordinal" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "pmid": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Pmid" })), "provider_record_id": Schema.String.annotate({ "title": "Provider Record Id" }), "publication_types": Schema.optionalKey(Schema.Array(Schema.String).annotate({ "title": "Publication Types", "default": [] })), "raw_hash": Sha256, "registry_ids": Schema.optionalKey(Schema.Array(Schema.String).annotate({ "title": "Registry Ids", "default": [] })), "source": Schema.String.annotate({ "title": "Source" }), "title": Schema.String.annotate({ "title": "Title" }), "year": Schema.optionalKey(Schema.Union([Schema.Int, Schema.Null]).annotate({ "title": "Year" })) }).annotate({ "title": "SourceRecord", "description": "One record as a source returned it, before dedupe.\n\n`occurrence_id` is assigned when the search module stores the execution; corpus and every\nlater stage refer to records by it.", "identifier": "SourceRecord" })
 export type LocalizedText = { readonly [x: string]: Text }
 export const LocalizedText = Schema.Record(Schema.String, Text).check(Schema.isMinProperties(1).annotate({ "expected": "a value with at least 1 entry" })).check(Schema.isPropertyNames(Schema.String.check(Schema.isPattern(new RegExp("^[a-z]{2,3}(-[A-Z]{2})?$", "u")).annotate({ "expected": "a string matching the RegExp ^[a-z]{2,3}(-[A-Z]{2})?$" }))).annotate({ "expected": "an object with property names matching the schema", "identifier": "LocalizedText" }))
 export type PressReview = { readonly "reviewed_on"?: string | null, readonly "reviewer"?: Text | null, readonly "status": "planned" | "done" }
@@ -68,8 +72,14 @@ export type Source = { readonly "id": Identifier, readonly "kind": SourceKind, r
 export const Source = Schema.Struct({ "id": Identifier, "kind": SourceKind, "name": Text, "platform": Schema.optionalKey(Schema.Union([Text, Schema.Null])), "study_filter": Schema.optionalKey(Schema.Union([Text, Schema.Null])) }).annotate({ "title": "Source", "identifier": "Source" })
 export type StoppingPlan = { readonly "confidence_percent": ConfidencePercent, readonly "method": "buscar", readonly "minimum_screened_percent": Percent, readonly "target_recall_percent": PositivePercent }
 export const StoppingPlan = Schema.Struct({ "confidence_percent": ConfidencePercent, "method": Schema.Literal("buscar").annotate({ "title": "Method" }), "minimum_screened_percent": Percent, "target_recall_percent": PositivePercent }).annotate({ "title": "StoppingPlan", "description": "When an M3 topic may stop screening in AI order.", "identifier": "StoppingPlan" })
+export type ImportSearchRequest = { readonly "actor_id": Id, readonly "data": string, readonly "format": string, readonly "plan": SearchPlan }
+export const ImportSearchRequest = Schema.Struct({ "actor_id": Id, "data": Schema.String.annotate({ "title": "Data" }), "format": Schema.String.annotate({ "title": "Format" }), "plan": SearchPlan }).annotate({ "title": "ImportSearchRequest", "identifier": "ImportSearchRequest" })
+export type RunSearchRequest = { readonly "actor_id": Id, readonly "plan": SearchPlan }
+export const RunSearchRequest = Schema.Struct({ "actor_id": Id, "plan": SearchPlan }).annotate({ "title": "RunSearchRequest", "identifier": "RunSearchRequest" })
 export type ValidationReport = { readonly "content_hash"?: string | null, readonly "issues"?: ReadonlyArray<ProtocolIssue>, readonly "ok": boolean }
 export const ValidationReport = Schema.Struct({ "content_hash": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Content Hash" })), "issues": Schema.optionalKey(Schema.Array(ProtocolIssue).annotate({ "title": "Issues", "default": [] })), "ok": Schema.Boolean.annotate({ "title": "Ok" }) }).annotate({ "title": "ValidationReport", "identifier": "ValidationReport" })
+export type SearchExecution = { readonly "ended_at": string, readonly "id": Id, readonly "kind": "live_api" | "file_import", readonly "plan": SearchPlan, readonly "query_translation": string | null, readonly "raw_artifact_hashes": ReadonlyArray<Sha256>, readonly "records": ReadonlyArray<SourceRecord>, readonly "reported_count": number, readonly "retrieved_count": number, readonly "skipped_record_ids"?: ReadonlyArray<string>, readonly "started_at": string }
+export const SearchExecution = Schema.Struct({ "ended_at": Schema.String.annotate({ "title": "Ended At", "format": "date-time" }), "id": Id, "kind": Schema.Literals(["live_api", "file_import"]).annotate({ "title": "Kind" }), "plan": SearchPlan, "query_translation": Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Query Translation" }), "raw_artifact_hashes": Schema.Array(Sha256).annotate({ "title": "Raw Artifact Hashes" }), "records": Schema.Array(SourceRecord).annotate({ "title": "Records" }), "reported_count": Schema.Number.annotate({ "title": "Reported Count" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "retrieved_count": Schema.Number.annotate({ "title": "Retrieved Count" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "skipped_record_ids": Schema.optionalKey(Schema.Array(Schema.String).annotate({ "title": "Skipped Record Ids", "default": [] })), "started_at": Schema.String.annotate({ "title": "Started At", "format": "date-time" }) }).annotate({ "title": "SearchExecution", "identifier": "SearchExecution" })
 export type EffectModifier = { readonly "categories"?: ReadonlyArray<Text>, readonly "id": Identifier, readonly "label": LocalizedText }
 export const EffectModifier = Schema.Struct({ "categories": Schema.optionalKey(Schema.Array(Text).annotate({ "title": "Categories", "default": [] })), "id": Identifier, "label": LocalizedText }).annotate({ "title": "EffectModifier", "identifier": "EffectModifier" })
 export type Outcome = { readonly "category": Identifier, readonly "definition"?: LocalizedText | null, readonly "extensions"?: Extensions, readonly "id": Identifier, readonly "name": LocalizedText, readonly "rationale"?: LocalizedText | null }
@@ -117,6 +127,28 @@ export type PublishProtocolVersion200 = StoredProtocol
 export const PublishProtocolVersion200 = StoredProtocol
 export type PublishProtocolVersion422 = HTTPValidationError
 export const PublishProtocolVersion422 = HTTPValidationError
+export type ListSearchExecutionsParams = { readonly "topic_id"?: string | null }
+export const ListSearchExecutionsParams = Schema.Struct({ "topic_id": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Topic Id" })) })
+export type ListSearchExecutions200 = ReadonlyArray<SearchExecution>
+export const ListSearchExecutions200 = Schema.Array(SearchExecution).annotate({ "title": "Response Listsearchexecutions" })
+export type ListSearchExecutions422 = HTTPValidationError
+export const ListSearchExecutions422 = HTTPValidationError
+export type GetSearchExecution200 = SearchExecution
+export const GetSearchExecution200 = SearchExecution
+export type GetSearchExecution422 = HTTPValidationError
+export const GetSearchExecution422 = HTTPValidationError
+export type ImportSearchFileRequestJson = ImportSearchRequest
+export const ImportSearchFileRequestJson = ImportSearchRequest
+export type ImportSearchFile200 = SearchExecution
+export const ImportSearchFile200 = SearchExecution
+export type ImportSearchFile422 = HTTPValidationError
+export const ImportSearchFile422 = HTTPValidationError
+export type RunSearchRequestJson = RunSearchRequest
+export const RunSearchRequestJson = RunSearchRequest
+export type RunSearch200 = SearchExecution
+export const RunSearch200 = SearchExecution
+export type RunSearch422 = HTTPValidationError
+export const RunSearch422 = HTTPValidationError
 export type ValidateProtocolRequestJson = { readonly [x: string]: Schema.Json }
 export const ValidateProtocolRequestJson = Schema.Record(Schema.String, Schema.Json.annotate({ "expected": "JSON value" })).annotate({ "title": "Source" })
 export type ValidateProtocol200 = ValidationReport
@@ -270,6 +302,45 @@ export const make = (
     }))
     ))
   ),
+    "listSearchExecutions": (projectId, options: Parameters<KittumApi["listSearchExecutions"]>[1]) => __makePathRequest(HttpClientRequest.get, [projectId], () => "/api/projects/" + __encodePathParam(projectId) + "/search/executions").pipe(
+    Effect.flatMap((request) => request.pipe(
+      HttpClientRequest.setUrlParams({ "topic_id": options?.params?.["topic_id"] as any }),
+      withResponse(options?.config)(HttpClientResponse.matchStatus({
+      "2xx": decodeSuccess(ListSearchExecutions200),
+      "422": decodeError("ListSearchExecutions422", ListSearchExecutions422),
+      orElse: unexpectedStatus
+    }))
+    ))
+  ),
+    "getSearchExecution": (projectId, executionId, options: Parameters<KittumApi["getSearchExecution"]>[2]) => __makePathRequest(HttpClientRequest.get, [projectId, executionId], () => "/api/projects/" + __encodePathParam(projectId) + "/search/executions/" + __encodePathParam(executionId) + "").pipe(
+    Effect.flatMap((request) => request.pipe(
+      withResponse(options?.config)(HttpClientResponse.matchStatus({
+      "2xx": decodeSuccess(GetSearchExecution200),
+      "422": decodeError("GetSearchExecution422", GetSearchExecution422),
+      orElse: unexpectedStatus
+    }))
+    ))
+  ),
+    "importSearchFile": (projectId, options: Parameters<KittumApi["importSearchFile"]>[1]) => __makePathRequest(HttpClientRequest.post, [projectId], () => "/api/projects/" + __encodePathParam(projectId) + "/search/import").pipe(
+    Effect.flatMap((request) => request.pipe(
+      HttpClientRequest.bodyJsonUnsafe(options.payload),
+      withResponse(options.config)(HttpClientResponse.matchStatus({
+      "2xx": decodeSuccess(ImportSearchFile200),
+      "422": decodeError("ImportSearchFile422", ImportSearchFile422),
+      orElse: unexpectedStatus
+    }))
+    ))
+  ),
+    "runSearch": (projectId, options: Parameters<KittumApi["runSearch"]>[1]) => __makePathRequest(HttpClientRequest.post, [projectId], () => "/api/projects/" + __encodePathParam(projectId) + "/search/run").pipe(
+    Effect.flatMap((request) => request.pipe(
+      HttpClientRequest.bodyJsonUnsafe(options.payload),
+      withResponse(options.config)(HttpClientResponse.matchStatus({
+      "2xx": decodeSuccess(RunSearch200),
+      "422": decodeError("RunSearch422", RunSearch422),
+      orElse: unexpectedStatus
+    }))
+    ))
+  ),
     "validateProtocol": (options: Parameters<KittumApi["validateProtocol"]>[0]) => HttpClientRequest.post("/api/protocol/validate").pipe(
       HttpClientRequest.bodyJsonUnsafe(options.payload),
       withResponse(options.config)(HttpClientResponse.matchStatus({
@@ -317,6 +388,34 @@ readonly "getProtocolVersion": {
 readonly "publishProtocolVersion": {
     <Config extends OperationConfig | undefined = undefined>(projectId: string, versionId: string, options: { readonly payload: typeof PublishProtocolVersionRequestJson.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<PublishProtocolVersion200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"PublishProtocolVersion422", PublishProtocolVersion422>>;
     <Config extends OperationConfig | undefined = undefined>(projectId: string, versionId: string, options: { readonly payload: typeof PublishProtocolVersionRequestJson.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<PublishProtocolVersion200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"PublishProtocolVersion422", PublishProtocolVersion422>>;
+  }
+  /**
+* List Search Executions
+*/
+readonly "listSearchExecutions": {
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly params?: typeof ListSearchExecutionsParams.Encoded | undefined; readonly config: Config }): Effect.Effect<WithOptionalResponse<ListSearchExecutions200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ListSearchExecutions422", ListSearchExecutions422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly params?: typeof ListSearchExecutionsParams.Encoded | undefined; readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<ListSearchExecutions200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ListSearchExecutions422", ListSearchExecutions422>>;
+  }
+  /**
+* Get Search Execution
+*/
+readonly "getSearchExecution": {
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, executionId: string, options: { readonly config: Config }): Effect.Effect<WithOptionalResponse<GetSearchExecution200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetSearchExecution422", GetSearchExecution422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, executionId: string, options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<GetSearchExecution200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetSearchExecution422", GetSearchExecution422>>;
+  }
+  /**
+* Import Search
+*/
+readonly "importSearchFile": {
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly payload: typeof ImportSearchFileRequestJson.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<ImportSearchFile200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ImportSearchFile422", ImportSearchFile422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly payload: typeof ImportSearchFileRequestJson.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<ImportSearchFile200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ImportSearchFile422", ImportSearchFile422>>;
+  }
+  /**
+* Run Search
+*/
+readonly "runSearch": {
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly payload: typeof RunSearchRequestJson.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<RunSearch200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"RunSearch422", RunSearch422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly payload: typeof RunSearchRequestJson.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<RunSearch200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"RunSearch422", RunSearch422>>;
   }
   /**
 * Validate Protocol
