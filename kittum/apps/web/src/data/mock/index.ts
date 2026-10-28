@@ -32,16 +32,19 @@ import recordsJson from "./fixtures/records.json";
 import { extractionFields, REPORT_ID, STUDY_ID } from "./extraction.ts";
 import { tag } from "./highlights.ts";
 import { verdictsFor } from "./judge.ts";
-import { CRITERIA, PROJECTS, PROTOCOL, SCOPE_A } from "./protocol.ts";
+import { CRITERIA, draftProtocol, PROJECTS, PROTOCOL, SCOPE_A } from "./protocol.ts";
 
 const pageImages = import.meta.glob<string>("./fixtures/abc06/pages/*.png", {
   eager: true,
   query: "?url",
   import: "default",
 });
-const pageWords = import.meta.glob<ReadonlyArray<readonly number[]>>("./fixtures/abc06/words/*.json", {
-  import: "default",
-});
+const pageWords = import.meta.glob<ReadonlyArray<readonly number[]>>(
+  "./fixtures/abc06/words/*.json",
+  {
+    import: "default",
+  },
+);
 
 export interface MockOptions {
   /** Milliseconds each kind of call waits, to exercise prefetching and loading states. */
@@ -60,6 +63,8 @@ export interface DecisionRecord {
   readonly revealed: boolean;
   readonly timing: DecisionTiming;
 }
+
+const FULL_TEXT_ASSIGNMENT = "asg-ft-abc06";
 
 const INLINE_LABEL = /(?:^|\s)([A-Z][A-Z &]{2,}[A-Z]):\s/g;
 
@@ -122,7 +127,9 @@ const RECORDS = recordsJson.records.map((record, index) => {
   return { order: index, pmid: record.pmid, item };
 });
 
-const TA_CRITERIA = CRITERIA.filter((c) => c.decidable_at.includes("title_abstract")).map((c) => c.id);
+const TA_CRITERIA = CRITERIA.filter((c) => c.decidable_at.includes("title_abstract")).map(
+  (c) => c.id,
+);
 
 /** The judge's verdicts with each quote checked against the record, as `kittum.core.find_quote` would. */
 const verdicts = (pmid: string, item: QueueItem): CriterionVerdict[] =>
@@ -147,7 +154,10 @@ const toReveal = (verdict: CriterionVerdict): Reveal => ({
  * The reveal rule from DESIGN.md: at title and abstract, `unclear` means include, so the AI
  * disagrees when exactly one side excludes. Returns null when they agree.
  */
-export const disagreement = (decision: Decision, judged: ReadonlyArray<CriterionVerdict>): Reveal | null => {
+const disagreement = (
+  decision: Decision,
+  judged: ReadonlyArray<CriterionVerdict>,
+): Reveal | null => {
   const exclusion = judged.find((v) => v.status === "not_met" && v.quote_verified);
   if (decision.outcome === "exclude") {
     if (exclusion) return null;
@@ -177,7 +187,9 @@ const report = {
 const valueAnchors = anchorsJson.values as Record<string, Anchor>;
 const mentionAnchors = anchorsJson.mentions as Record<string, Anchor[]>;
 
-export const makeMockWorkbench = (options: MockOptions = {}): Workbench & {
+export const makeMockWorkbench = (
+  options: MockOptions = {},
+): Workbench & {
   readonly decisions: ReadonlyArray<DecisionRecord>;
 } => {
   const decisions: DecisionRecord[] = [];
@@ -188,7 +200,12 @@ export const makeMockWorkbench = (options: MockOptions = {}): Workbench & {
     const ms = options.latency?.[kind] ?? 0;
     return ms > 0 ? Effect.sleep(ms) : Effect.void;
   };
-  const call = <A>(kind: keyof NonNullable<MockOptions["latency"]>, name: string, detail: unknown, body: () => A) =>
+  const call = <A>(
+    kind: keyof NonNullable<MockOptions["latency"]>,
+    name: string,
+    detail: unknown,
+    body: () => A,
+  ) =>
     Effect.gen(function* () {
       options.log?.(name, detail);
       yield* wait(kind);
@@ -210,30 +227,57 @@ export const makeMockWorkbench = (options: MockOptions = {}): Workbench & {
 
     projects: () => call("other", "projects", null, () => PROJECTS),
 
-    protocol: (projectId) =>
-      project(projectId) ? call("other", "protocol", projectId, () => PROTOCOL) : fail("not_found", `No project ${projectId}`),
+    protocol: (projectId) => {
+      const found = project(projectId);
+      if (!found) return fail("not_found", `No project ${projectId}`);
+      return call("other", "protocol", projectId, () =>
+        found.scope_id === SCOPE_A ? PROTOCOL : draftProtocol(found),
+      );
+    },
 
     queue: ({ scopeId, stage, after, limit }) =>
       call("queue", "queue", { scopeId, stage, after, limit }, () => {
-        const open = pending(scopeId, stage);
-        const from = after === null ? 0 : open.findIndex((r) => r.item.assignment_id === after) + 1;
-        return open.slice(from, from + limit).map((r) =>
-          Schema.decodeUnknownSync(QueueItemSchema)({
-            ...r.item,
-            revision: state.get(r.item.assignment_id)?.revision ?? 0,
-          }),
-        );
+        // `after` keeps its place in queue order even once it has been decided.
+        const cursor =
+          after === null ? -1 : (RECORDS.find((r) => r.item.assignment_id === after)?.order ?? -1);
+        return pending(scopeId, stage)
+          .filter((r) => r.order > cursor)
+          .slice(0, limit)
+          .map((r) =>
+            Schema.decodeUnknownSync(QueueItemSchema)({
+              ...r.item,
+              revision: state.get(r.item.assignment_id)?.revision ?? 0,
+            }),
+          );
       }),
 
     decide: ({ assignmentId, decision, phase, expectedRevision, timing }) =>
       Effect.gen(function* () {
         options.log?.("decide", { assignmentId, decision, phase });
         yield* wait("decide");
+        const current = state.get(assignmentId) ?? { revision: 0, revealed: false, final: null };
+        if (assignmentId === FULL_TEXT_ASSIGNMENT) {
+          // The full-text judge is not modelled; the decision settles.
+          state.set(assignmentId, {
+            revision: current.revision + 1,
+            revealed: false,
+            final: decision,
+          });
+          decisions.push({ assignmentId, decision, phase: "final", revealed: false, timing });
+          return {
+            phase: "final" as const,
+            reveal: null,
+            recorded_at: timing.decided_at,
+            revision: current.revision + 1,
+          };
+        }
         const record = RECORDS.find((r) => r.item.assignment_id === assignmentId);
         if (!record) return yield* fail("not_found", `No assignment ${assignmentId}`);
-        const current = state.get(assignmentId) ?? { revision: 0, revealed: false, final: null };
         if (current.revision !== expectedRevision) {
-          return yield* fail("conflict", "This record changed since it was loaded. Reload the queue.");
+          return yield* fail(
+            "conflict",
+            "This record changed since it was loaded. Reload the queue.",
+          );
         }
         const setting = revealSetting();
         let reveal: Reveal | null = null;
@@ -241,7 +285,8 @@ export const makeMockWorkbench = (options: MockOptions = {}): Workbench & {
           const judged = verdicts(record.pmid, record.item);
           reveal = disagreement(decision, judged);
           if (!reveal && setting === "always") {
-            const basis = judged.find((v) => v.status === "not_met" && v.quote_verified) ??
+            const basis =
+              judged.find((v) => v.status === "not_met" && v.quote_verified) ??
               judged.find((v) => v.status === "met" && v.quote_verified);
             reveal = basis ? toReveal(basis) : null;
           }
@@ -253,7 +298,13 @@ export const makeMockWorkbench = (options: MockOptions = {}): Workbench & {
           revealed,
           final: settled ? decision : current.final,
         });
-        decisions.push({ assignmentId, decision, phase: settled ? "final" : "provisional", revealed, timing });
+        decisions.push({
+          assignmentId,
+          decision,
+          phase: settled ? "final" : "provisional",
+          revealed,
+          timing,
+        });
         return {
           ...Schema.decodeUnknownSync(DecideResult)({
             phase: settled ? "final" : "provisional",
@@ -275,7 +326,7 @@ export const makeMockWorkbench = (options: MockOptions = {}): Workbench & {
       call("other", "fullText", projectId, () =>
         project(projectId)?.scope_id === SCOPE_A
           ? Schema.decodeUnknownSync(FullTextAssignment)({
-              assignment_id: "asg-ft-abc06",
+              assignment_id: FULL_TEXT_ASSIGNMENT,
               scope_id: SCOPE_A,
               revision: 0,
               report,
@@ -303,7 +354,11 @@ export const makeMockWorkbench = (options: MockOptions = {}): Workbench & {
         return Schema.decodeUnknownSync(PageLayer)({
           ...size,
           image_url: image,
-          words: rows.map(([start, end, x0, y0, x1, y1]) => ({ start, end, box: { page, x0, y0, x1, y1 } })),
+          words: rows.map(([start, end, x0, y0, x1, y1]) => ({
+            start,
+            end,
+            box: { page, x0, y0, x1, y1 },
+          })),
         });
       }),
 
