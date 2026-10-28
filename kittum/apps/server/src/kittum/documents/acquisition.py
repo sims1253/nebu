@@ -2,8 +2,9 @@
 
 `acquire` walks the caller's waterfall of locations in order (docs/sources.md, "Full-text
 waterfall") and keeps the first response that is a readable PDF. Every attempt goes into the
-ledger event, so a failed waterfall is as visible as a successful one. Run it as a job: it does
-network I/O.
+ledger event, so a failed waterfall is as visible as a successful one. A source that gives no
+response at all (out of budget, unreachable) is an attempt too, and the waterfall moves on. Run it
+as a job: it does network I/O.
 """
 
 from typing import TYPE_CHECKING
@@ -42,10 +43,23 @@ def acquire(
 ) -> AcquisitionOutcome:
     attempts: list[AcquisitionAttempt] = []
     for location in locations:
-        response = gateway.fetch(
-            location.source,
-            HttpRequest(url=location.url, headers=(("Accept", "application/pdf"),)),
-        )
+        try:
+            response = gateway.fetch(
+                location.source,
+                HttpRequest(url=location.url, headers=(("Accept", "application/pdf"),)),
+            )
+        except Exception as e:
+            attempts.append(
+                AcquisitionAttempt(
+                    source=location.source,
+                    url=location.url,
+                    status=None,
+                    outcome="unavailable",
+                    licence=location.licence,
+                    error=f"{type(e).__name__}: {e}",
+                )
+            )
+            continue
 
         def attempt(outcome, *, location=location, response=response) -> AcquisitionAttempt:
             return AcquisitionAttempt(
@@ -54,6 +68,7 @@ def acquire(
                 status=response.status,
                 outcome=outcome,
                 body_hash=response.body_hash if response.body else None,
+                licence=location.licence,
             )
 
         if response.status != 200:
