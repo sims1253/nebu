@@ -33,6 +33,9 @@ export const stackEnv = () => ({
   // Artifacts belong with their database: a store that lost them breaks every reader of it.
   KITTUM_ARTIFACT_DIR: process.env["KITTUM_ARTIFACT_DIR"] ?? join(tmpdir(), "kittum-e2e-artifacts"),
   KITTUM_JUDGE_BACKEND: "demo",
+  // The protocol assistant replays GLM-5.3-Flash's recorded answers; its hit counts come from
+  // the gateway recordings like every other source request.
+  KITTUM_ASSIST_BACKEND: "demo",
   KITTUM_WEB_DIST: DIST,
   KITTUM_GATEWAY_RECORDINGS: RECORDINGS,
   // Recordings replace the sources only in offline mode, with a response cache of each process's

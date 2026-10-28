@@ -67,6 +67,15 @@ export type ProtocolIssue = KittumApi.ProtocolIssue;
 export type ValidationReport = KittumApi.ValidationReport;
 export type DiffPreview = KittumApi.DiffPreview;
 export type StoredProtocol = KittumApi.StoredProtocol;
+export type ProtocolDiff = KittumApi.ProtocolDiff;
+
+// The protocol assistant: revisions a model or the lead wrote, and hit counts of a strategy.
+export type ProtocolRevision = KittumApi.ProtocolRevision;
+export type AssistOutcome = KittumApi.AssistOutcome;
+export type SuggestedChange = KittumApi.SuggestedChange;
+export type AiMark = KittumApi.AiMark;
+export type QueryCount = KittumApi.QueryCount;
+export type QueryDialect = KittumApi.QueryDialect;
 export type SearchPlan = KittumApi.SearchPlan;
 export type CorpusRevision = KittumApi.CorpusRevision;
 export type Sentinel = KittumApi.Sentinel;

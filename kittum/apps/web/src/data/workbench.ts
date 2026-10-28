@@ -38,7 +38,12 @@ import type {
   Member,
   OpenAccessRun,
   PageLayer,
+  AssistOutcome,
   ParsedSource,
+  ProtocolDiff,
+  ProtocolRevision,
+  QueryCount,
+  QueryDialect,
   Phase,
   Progress,
   ProjectSummary,
@@ -124,6 +129,44 @@ export interface Workbench {
   readonly publishProtocol: (
     request: Caller & { readonly source: ProtocolSource; readonly reason: string | null },
   ) => Call<StoredProtocol>;
+
+  // The protocol assistant, the methods lead's alone. A model drafts a protocol from a
+  // description or suggests changes to one part; every draft, suggestion, accepted selection,
+  // edit, and restore is a revision, and only the lead publishes one.
+
+  /** Every revision of the project, oldest first. */
+  readonly assistRevisions: (caller: Caller) => Call<ReadonlyArray<ProtocolRevision>>;
+  /** A first protocol from the lead's description; without a revision, the problems. */
+  readonly draftProtocol: (
+    request: Caller & { readonly description: string },
+  ) => Call<AssistOutcome>;
+  /** Suggested changes to one part of a revision, each with a reason, as a suggestion revision. */
+  readonly improvePart: (
+    request: Caller & { readonly revisionId: string; readonly part: string },
+  ) => Call<AssistOutcome>;
+  /** The suggestion's base with only the chosen changes. */
+  readonly acceptChanges: (
+    request: Caller & { readonly suggestionId: string; readonly changeIds: ReadonlyArray<string> },
+  ) => Call<ProtocolRevision>;
+  /** An earlier revision as the newest. */
+  readonly restoreRevision: (
+    request: Caller & { readonly revisionId: string },
+  ) => Call<ProtocolRevision>;
+  /** The lead's own text as a revision, edited from `baseId` or written anew. */
+  readonly saveRevision: (
+    request: Caller & { readonly source: ProtocolSource; readonly baseId: string | null },
+  ) => Call<ProtocolRevision>;
+  readonly compareRevisions: (
+    request: Caller & { readonly from: string; readonly to: string },
+  ) => Call<ProtocolDiff>;
+  readonly publishRevision: (
+    request: Caller & { readonly revisionId: string; readonly reason: string | null },
+  ) => Call<StoredProtocol>;
+  /** How many records a strategy finds today; informational, no search runs. */
+  readonly countHits: (
+    request: Caller & { readonly dialect: QueryDialect; readonly strategy: string },
+  ) => Call<QueryCount>;
+
   /** A live search (PubMed or ClinicalTrials.gov) through the server's gateway. */
   readonly runSearch: (request: Caller & { readonly plan: SearchPlan }) => Call<SearchExecution>;
   /** An export file: RIS, Cochrane, Embase, PubMed XML, or a registry's CSV. */

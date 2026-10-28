@@ -1,13 +1,16 @@
 // The published protocol (DESIGN.md, "Protocol"): the questions, the outcomes, and per search
 // topic its screening mode, audit plan, sources, and criteria. Every heading uses the profile's
 // words for core concepts. The methods lead writes and publishes versions in the editor.
-import { useState } from "react";
+import { useRouteContext } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
-import type { Criterion, ProfileLabels, SearchTopic } from "../../data/schema.ts";
+import type { Criterion, ProfileLabels, ProtocolRevision, SearchTopic } from "../../data/schema.ts";
+import { run } from "../../data/workbench.ts";
 import { KeyHint } from "../../ui/Key.tsx";
 import { useKeys } from "../../ui/keys.ts";
 import { useProject } from "../project.tsx";
+import { Assistant } from "./Assistant.tsx";
 import { ProtocolEditor } from "./ProtocolEditor.tsx";
 
 export const MODES: Record<SearchTopic["mode"], string> = {
@@ -26,11 +29,29 @@ const date = (iso: string | null) =>
     ? new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })
     : "Not published";
 
+type Writing =
+  | { readonly mode: "text"; readonly base: ProtocolRevision | null; readonly text: string | null }
+  | { readonly mode: "assistant" };
+
 export function ProtocolScreen() {
-  const { protocol, has } = useProject();
+  const { workbench } = useRouteContext({ from: "/p/$projectId" });
+  const { protocol, has, project, me } = useProject();
   const [editing, setEditing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [writing, setWriting] = useState<Writing | null>(null);
   const lead = has("lead");
+  // A project that has used the assistant opens on its revisions.
+  useEffect(() => {
+    if (!lead) return;
+    let live = true;
+    run(workbench.assistRevisions({ projectId: project.id, as: me.actor_id })).then(
+      (found) => live && setWriting((w) => w ?? (found.length ? { mode: "assistant" } : null)),
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [workbench, lead, project.id, me.actor_id]);
   useKeys((event) => {
     if (event.key !== "v" || !lead || editing || !protocol) return false;
     setEditing(true);
@@ -38,14 +59,66 @@ export function ProtocolScreen() {
     return true;
   });
   if (lead && (editing || !protocol)) {
+    const published = (message: string) => {
+      setEditing(false);
+      setWriting(null);
+      setNotice(message);
+    };
+    const current = writing ?? { mode: "text", base: null, text: null };
     return (
-      <ProtocolEditor
-        onCancel={protocol ? () => setEditing(false) : null}
-        onPublished={(message) => {
-          setEditing(false);
-          setNotice(message);
-        }}
-      />
+      <div className="flex h-full min-h-0 flex-col">
+        <div
+          className="flex items-center gap-1 border-b border-rule-strong bg-sheet-2 px-4 py-1.5 text-sm"
+          role="tablist"
+          aria-label="How to write"
+        >
+          {(
+            [
+              ["text", "Text"],
+              ["assistant", "With the assistant"],
+            ] as const
+          ).map(([mode, label]) => (
+            <button
+              key={mode}
+              type="button"
+              role="tab"
+              aria-selected={current.mode === mode}
+              onClick={() =>
+                setWriting(mode === "assistant" ? { mode } : { mode, base: null, text: null })
+              }
+              className={`rounded-[3px] px-2.5 py-1 ${current.mode === mode ? "bg-sheet font-semibold text-ink shadow-[inset_0_-2px_0_var(--petrol)]" : "text-ink-2 hover:text-ink"}`}
+            >
+              {label}
+            </button>
+          ))}
+          {protocol ? (
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              className="ml-auto text-sm text-ink-2 hover:text-ink"
+            >
+              Back to the published version
+            </button>
+          ) : null}
+        </div>
+        <div className="min-h-0 flex-1">
+          {current.mode === "assistant" ? (
+            <Assistant
+              onPublished={published}
+              onEditText={(text, base) => setWriting({ mode: "text", base, text })}
+            />
+          ) : (
+            <ProtocolEditor
+              key={current.base?.id ?? "text"}
+              initialText={current.text}
+              base={current.base}
+              onRevisionSaved={() => setWriting({ mode: "assistant" })}
+              onCancel={null}
+              onPublished={published}
+            />
+          )}
+        </div>
+      </div>
     );
   }
   if (!protocol) {
