@@ -53,12 +53,14 @@ const median = (values: ReadonlyArray<number>) => {
 };
 
 export function useQueue(workbench: Workbench, scopeId: string | null) {
-  // The current record and the buffer change together, so they are one state.
-  const [view, setView] = useState<{ current: Entry | null; ahead: ReadonlyArray<QueueItem> }>({
-    current: null,
-    ahead: [],
-  });
-  const { current, ahead } = view;
+  // The current record and the buffer change together, so they are one state. `forward` holds
+  // records that undo stepped back over, whole, so they return with their decision and revision.
+  const [view, setView] = useState<{
+    current: Entry | null;
+    forward: ReadonlyArray<Entry>;
+    ahead: ReadonlyArray<QueueItem>;
+  }>({ current: null, forward: [], ahead: [] });
+  const { current, forward, ahead } = view;
   const [history, setHistory] = useState<ReadonlyArray<Entry>>([]);
   const [exhausted, setExhausted] = useState(scopeId === null);
   const [busy, setBusy] = useState(false);
@@ -77,10 +79,11 @@ export function useQueue(workbench: Workbench, scopeId: string | null) {
   // Keep the current record and five more loaded.
   useEffect(() => {
     if (scopeId === null || exhausted || loading.current) return;
-    const buffered = (current ? 1 : 0) + ahead.length;
+    const buffered = (current ? 1 : 0) + forward.length + ahead.length;
     if (buffered > AHEAD) return;
     const last =
       ahead.at(-1)?.assignment_id ??
+      forward.at(-1)?.item.assignment_id ??
       current?.item.assignment_id ??
       history.at(-1)?.item.assignment_id ??
       null;
@@ -96,12 +99,16 @@ export function useQueue(workbench: Workbench, scopeId: string | null) {
       .then((items) => {
         if (items.length === 0) setExhausted(true);
         setView((v) => {
-          const known = new Set(v.ahead.map((q) => q.assignment_id));
+          const known = new Set([
+            ...v.ahead.map((q) => q.assignment_id),
+            ...v.forward.map((e) => e.item.assignment_id),
+            ...(v.current ? [v.current.item.assignment_id] : []),
+          ]);
           const queued = [...v.ahead, ...items.filter((i) => !known.has(i.assignment_id))];
           if (v.current) return { ...v, ahead: queued };
           // Nothing on screen yet: show the first record as soon as it arrives.
           const [next, ...rest] = queued;
-          return { current: next ? enter(next) : null, ahead: rest };
+          return { current: next ? enter(next) : null, forward: v.forward, ahead: rest };
         });
       })
       .catch((e: unknown) =>
@@ -110,7 +117,7 @@ export function useQueue(workbench: Workbench, scopeId: string | null) {
       .finally(() => {
         loading.current = false;
       });
-  }, [workbench, scopeId, exhausted, current, ahead, history]);
+  }, [workbench, scopeId, exhausted, current, forward, ahead, history]);
 
   const advance = useCallback((settled: Entry) => {
     setHistory((h) => [...h, settled]);
@@ -124,8 +131,11 @@ export function useQueue(workbench: Workbench, scopeId: string | null) {
       revealsFollowed: reveals.current.followed,
     });
     setView((v) => {
+      const [back, ...forward] = v.forward;
+      if (back)
+        return { current: { ...back, shownMs: performance.now() }, forward, ahead: v.ahead };
       const [next, ...rest] = v.ahead;
-      return { current: next ? enter(next) : null, ahead: rest };
+      return { current: next ? enter(next) : null, forward, ahead: rest };
     });
   }, []);
 
@@ -223,7 +233,8 @@ export function useQueue(workbench: Workbench, scopeId: string | null) {
     setHistory((h) => h.slice(0, -1));
     setView((v) => ({
       current: { ...previous, shownMs: performance.now() },
-      ahead: v.current ? [v.current.item, ...v.ahead] : v.ahead,
+      forward: v.current ? [v.current, ...v.forward] : v.forward,
+      ahead: v.ahead,
     }));
     setNotice("Reopened. Decide again, or press Space to keep the decision.");
   }, [busy, current, history]);
@@ -232,7 +243,7 @@ export function useQueue(workbench: Workbench, scopeId: string | null) {
     current,
     ahead,
     previous: history.at(-1) ?? null,
-    finished: exhausted && current === null && ahead.length === 0,
+    finished: exhausted && current === null && forward.length === 0 && ahead.length === 0,
     busy,
     notice,
     error,

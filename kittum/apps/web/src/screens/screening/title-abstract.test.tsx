@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 
-import { mount, press } from "../../test/app.tsx";
+import { hold, mount, press } from "../../test/app.tsx";
 
 const QUEUE = "/p/ivosidenib-cca/screening/title-abstract";
 
@@ -174,5 +174,53 @@ describe("title and abstract queue", () => {
       .toMatchTextContent("Cisplatin plus gemcitabine");
     // Each step asked for one more record behind the five.
     expect(requests.at(-1)?.limit).toBe(1);
+  });
+
+  test("undoing twice and moving forward again keeps each reopened record's decision", async () => {
+    const app = mount(QUEUE);
+    unmount = app.unmount;
+    await expectTitle("ClarIDHy");
+    await press("i");
+    await expectTitle("ABC-06");
+    await press("i");
+    await expectTitle("Cisplatin plus gemcitabine");
+
+    await press("Backspace");
+    await expectTitle("ABC-06");
+    await press("Backspace");
+    await expectTitle("ClarIDHy");
+
+    // Forward again: ABC-06 comes back with its decision, not as a fresh record.
+    await press(" ");
+    await expectTitle("ABC-06");
+    await expect.element(page.getByTestId("decision-note")).toMatchTextContent("Included");
+    // Re-deciding it uses its current revision, so the server accepts the change.
+    await press("u");
+    await expectTitle("Cisplatin plus gemcitabine");
+    expect(document.querySelector("[role=alert]")).toBeNull();
+    const abc06 = app.workbench.decisions.filter((d) => d.assignmentId === "asg-ta-33798493");
+    expect(abc06.map((d) => d.decision.outcome)).toEqual(["include", "unclear"]);
+  });
+
+  test("a held decision key decides one record, not the ones behind it", async () => {
+    const app = mount(QUEUE);
+    unmount = app.unmount;
+    await expectTitle("ClarIDHy");
+    await hold("i", 6);
+    await expectTitle("ABC-06");
+    await hold("u", 6);
+    await expectTitle("Cisplatin plus gemcitabine");
+    // Held `e` then held `2`: one exclusion, and the reveal waits for the reviewer.
+    await hold("e", 3);
+    await hold("2", 3);
+    await expect.element(banner()).toBeVisible();
+    // Let any queued repeat land before counting.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await expectTitle("Cisplatin plus gemcitabine");
+    expect(app.workbench.decisions.map((d) => d.assignmentId)).toEqual([
+      "asg-ta-32416072",
+      "asg-ta-33798493",
+      "asg-ta-20375404",
+    ]);
   });
 });

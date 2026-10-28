@@ -1,7 +1,7 @@
 // Mounts the whole workbench on the mock, at a route, for flow tests.
 import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 import { createRoot } from "react-dom/client";
-import { userEvent } from "vite-plus/test/browser";
+import { commands, userEvent } from "vite-plus/test/browser";
 
 import { makeMockWorkbench } from "../data/mock/index.ts";
 import type { MockOptions } from "../data/mock/index.ts";
@@ -32,3 +32,10 @@ export const press = (key: string) => {
   };
   return userEvent.keyboard(named[key] ?? key);
 };
+
+/** Holds a key long enough for the browser to auto-repeat it `repeats` times. */
+export const hold = (key: string, repeats = 4) =>
+  (commands as unknown as { holdKey: (key: string, repeats: number) => Promise<void> }).holdKey(
+    key,
+    repeats,
+  );
