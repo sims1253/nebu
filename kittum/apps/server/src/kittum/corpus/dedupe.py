@@ -57,6 +57,12 @@ def registry_evidence(reg_id: str) -> str:
 
 
 def extract_first_author_family(authors: tuple[str, ...]) -> str | None:
+    family = first_author_family(authors)
+    return family.lower() if family else None
+
+
+def first_author_family(authors: tuple[str, ...]) -> str | None:
+    """The first author's family name as the record spells it (McDonald, vanDellen)."""
     if not authors:
         return None
     first = authors[0].strip()
@@ -72,7 +78,7 @@ def extract_first_author_family(authors: tuple[str, ...]) -> str | None:
             family = parts[-1]
         else:
             family = parts[0]
-    clean = re.sub(r"[^\w]", "", family).lower()
+    clean = re.sub(r"[^\w]", "", family)
     return clean or None
 
 
@@ -259,7 +265,8 @@ def check_same_record(rec_a: SourceRecord, rec_b: SourceRecord) -> tuple[bool, s
             if has_year_match and rec_a.year is not None:
                 evidence_parts.append(f"same year {rec_a.year}")
             if has_author_match and auth_a is not None:
-                evidence_parts.append(f"same first author {auth_a.capitalize()}")
+                name = first_author_family(rec_a.authors) or auth_a
+                evidence_parts.append(f"same first author {name[:1].upper()}{name[1:]}")
             return True, ", ".join(evidence_parts)
 
     return False, None

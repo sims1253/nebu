@@ -179,6 +179,16 @@ def test_dedupe_same_record_fuzzy_title_and_author_and_year() -> None:
     assert ev.startswith("Titles ") and "% alike" in ev
     assert "year 2016" in ev
     assert "same first author Reck" in ev
+    # The evidence spells the name as the record does, inner capitals and all.
+    for pubmed_name, ris_name, shown in (
+        ("McDonald J", "McDonald, John", "McDonald"),
+        ("vanDellen MR", "vanDellen, Michelle", "VanDellen"),
+    ):
+        _, ev = check_same_record(
+            rec1.model_copy(update={"authors": (pubmed_name,)}),
+            rec2.model_copy(update={"authors": (ris_name,)}),
+        )
+        assert ev is not None and ev.endswith(f"same first author {shown}"), ev
 
 
 def test_near_identical_titles_different_trials_not_merged() -> None:
