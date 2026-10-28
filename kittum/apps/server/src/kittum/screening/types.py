@@ -20,6 +20,7 @@ type ConflictKind = Literal[
     "ai_include",  # M1: the AI includes, every human excludes
     "ai_disagreement",  # M2: the AI and the human disagree
     "audit_miss",  # an auditor includes a record the screeners excluded
+    "decoy",  # humans and AI agreed; mixed in so that membership does not reveal the AI
 ]
 type Highlight = tuple[int, int, str]
 """(start, end, tag): half-open code-point offsets; tags are `protocol:<criterion id>`."""
@@ -228,9 +229,13 @@ class AdjudicationResult(Record):
 
 
 class PairAgreement(Record):
-    """Agreement on include against exclude, from the blind provisional decisions."""
+    """Agreement on include against exclude, from the blind provisional decisions.
 
-    kind: Literal["human_human", "human_ai"]
+    `human_ai` compares with the model's own reading (no criterion it answered `not_met`);
+    `human_ai_verified` with the reading the judge's filter verified (`Verdict.excludes`).
+    """
+
+    kind: Literal["human_human", "human_ai", "human_ai_verified"]
     raters: tuple[str, str]  # reviewer IDs, or "ai"
     items: int
     kappa: float | None  # None when undefined: no items, or one label throughout
@@ -271,8 +276,21 @@ class StopStatus(Record):
     p_value: float
     minimum_screened_percent: str
     minimum_met: bool
-    stop: bool  # the test rejects and the minimum is met
+    pending_conflicts: int  # unresolved conflicts in the tested prefix
+    verdict: Literal["stop", "continue", "pending_conflicts"]
+    """`stop` when the test rejects, the minimum is met, and no conflict in the prefix is open;
+    `pending_conflicts` withholds certification until they are adjudicated."""
+    stop: bool  # verdict == "stop"
     method: str
+
+
+class DecoyGauge(Record):
+    """Decoys in the adjudication queue: how many, how many were adjudicated, and how many of
+    those the adjudicator decided as the humans and the AI had."""
+
+    cases: int
+    adjudicated: int
+    matching: int
 
 
 class StageMetrics(Record):
@@ -283,6 +301,7 @@ class StageMetrics(Record):
     revised_after_reveal: int
     agreement: tuple[PairAgreement, ...]
     audit: AuditGauge
+    decoys: DecoyGauge
     stop_test: StopStatus | None  # M3 only
 
 

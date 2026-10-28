@@ -45,6 +45,7 @@ Owner: WP-09.
 """
 
 from kittum.screening.jobs import JudgeRunner, judge_handler
+from kittum.screening.metrics import RecordOutcome, stop_status
 from kittum.screening.rules import criteria_for, topic_for
 from kittum.screening.service import (
     ADJUDICATED,
@@ -70,6 +71,7 @@ from kittum.screening.types import (
     DecideResult,
     Decision,
     DecisionTiming,
+    DecoyGauge,
     Highlight,
     InvalidDecision,
     NotAssigned,
@@ -114,6 +116,7 @@ __all__ = [
     "DecideResult",
     "Decision",
     "DecisionTiming",
+    "DecoyGauge",
     "Highlight",
     "InvalidDecision",
     "JudgeRunner",
@@ -124,6 +127,7 @@ __all__ = [
     "QueueItem",
     "QueueRecord",
     "RecordFacts",
+    "RecordOutcome",
     "Reveal",
     "RevealSetting",
     "ReviewerColumn",
@@ -139,5 +143,6 @@ __all__ = [
     "UndoResult",
     "criteria_for",
     "judge_handler",
+    "stop_status",
     "topic_for",
 ]

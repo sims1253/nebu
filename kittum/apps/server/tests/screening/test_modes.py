@@ -5,7 +5,8 @@ from typing import TYPE_CHECKING
 import pytest
 
 from kittum.core import new_id
-from kittum.screening import Decision
+from kittum.protocol import StoppingPlan
+from kittum.screening import Decision, stop_status
 from tests.screening.support import (
     NON_SMOKERS,
     OFF_TOPIC,
@@ -130,8 +131,20 @@ def test_m2_sends_every_ai_disagreement_to_adjudication(database: Database) -> N
         conflicts = world.screening.adjudication_queue(
             tx, world.project_id, world.people.adjudicator, SCOPE, STAGE
         )
+        # Three conflicts only the AI raised, and decoys with the same visible outcomes: the
+        # patch trial (included, the AI agreed) and one of the two exclusions the model agreed
+        # with. The third AI-driven case found no free decoy yet.
         titles = sorted(c.title[:20] for c in conflicts)
-        assert titles == ["GLPG2737 in lumacaft", "Rate and predictors ", "Transdermal nicotine"]
+        decoy_exclusion = next(t for t in titles if t.startswith(("Varenicline", "Use of")))
+        assert titles == sorted(
+            [
+                "GLPG2737 in lumacaft",
+                "Rate and predictors ",
+                "Transdermal nicotine",
+                "Nicotine patch versu",
+                decoy_exclusion,
+            ]
+        )
         assert all(len(c.columns) == 1 and c.columns[0].label == "A" for c in conflicts)
         colitis = next(c for c in conflicts if c.title.startswith("Transdermal"))
         result = world.screening.adjudicate(
@@ -147,10 +160,14 @@ def test_m2_sends_every_ai_disagreement_to_adjudication(database: Database) -> N
         status = world.screening.status(tx, world.project_id, world.people.lead, SCOPE, STAGE)
         assert (status.screened, status.remaining, status.conflicts) == (6, 0, 2)
         assert status.metrics is not None
-        assert [p.kind for p in status.metrics.agreement] == ["human_ai"]
-        # Agreement is reported against the verified reading: only the patch trial agrees.
-        assert status.metrics.agreement[0].items == 6
-        assert status.metrics.agreement[0].pabak == pytest.approx(-2 / 3)
+        assert status.metrics.decoys.cases == 2
+        own, verified = status.metrics.agreement
+        assert (own.kind, verified.kind) == ("human_ai", "human_ai_verified")
+        # The model's own reading agrees on the patch trial and the two exclusions it shares;
+        # the verified reading agrees only on the patch trial.
+        assert own.items == verified.items == 6
+        assert own.pabak == pytest.approx(0.0)
+        assert verified.pabak == pytest.approx(-2 / 3)
         assert world.ledger.verify(tx, world.project_id).ok
 
 
@@ -171,10 +188,15 @@ def test_m3_screens_in_ai_order_and_the_stop_test_fires(database: Database) -> N
     assert all(t.startswith(RELEVANT) for t in order_a[:8])
     assert all(t.startswith(NON_SMOKERS) for t in order_a[-30:])
 
+    slipped: list[str] = []
+
     def screen(n: int) -> None:
         for reviewer in (a, b):
             for item in queue(world, reviewer, limit=n):
                 relevant = item.title.startswith(RELEVANT) or "Nicotine" in item.title[:10]
+                if reviewer == b and not relevant and not slipped:  # B's one slip: a conflict
+                    slipped.append(item.title)
+                    relevant = True
                 decide(
                     world,
                     reviewer,
@@ -191,13 +213,57 @@ def test_m3_screens_in_ai_order_and_the_stop_test_fires(database: Database) -> N
 
     screen(60)
     early = stop()
-    assert early.screened >= 58 and early.relevant == 8
+    assert early.screened >= 58 and early.relevant == 9  # the open conflict counts as relevant
     assert not early.stop and not early.minimum_met
+    assert (early.verdict, early.pending_conflicts) == ("pending_conflicts", 1)
 
     screen(42)
     late = stop()
-    assert late.screened == 100 and late.relevant == 8
-    assert late.minimum_met and late.stop
+    # Sentinels sit among the unclear records in a seeded order, so 100 or a few more of the
+    # records are screened.
+    assert late.screened >= 100 and late.minimum_met
+    # The test would pass with the open conflict counted as relevant; certification waits.
     assert late.p_value < 0.05
+    assert (late.verdict, late.pending_conflicts, late.stop) == ("pending_conflicts", 1, False)
+    with world.db.transaction() as tx:
+        (conflict,) = world.screening.adjudication_queue(
+            tx, world.project_id, world.people.adjudicator, SCOPE, STAGE
+        )
+        assert conflict.title == slipped[0]
+        world.screening.adjudicate(
+            tx,
+            command_id=new_id(),
+            project_id=world.project_id,
+            adjudicator_id=world.people.adjudicator,
+            conflict_id=conflict.conflict_id,
+            expected_revision=conflict.revision,
+            decision=Decision(outcome="exclude", reason_criterion_id="POP"),
+        )
+    certified = stop()
+    assert certified.relevant == 8 and certified.pending_conflicts == 0
+    assert (certified.verdict, certified.stop) == ("stop", True)
+    assert certified.p_value < 0.05
     with world.db.transaction() as tx:
         assert world.ledger.verify(tx, world.project_id).ok
+
+
+def test_m3_stop_waits_for_conflicts_in_the_tested_prefix() -> None:
+    """The review's reproduction: 750 records, 500 screened, the first 40 in conflict.
+
+    Counted as relevant, the 40 open conflicts would let the test pass; resolved as the
+    exclusions they may turn out to be, it fails. So certification waits for them.
+    """
+    plan = StoppingPlan(
+        method="buscar",
+        target_recall_percent="95",
+        confidence_percent="95",
+        minimum_screened_percent="50",
+    )
+    in_conflict = stop_status(plan, ["conflict"] * 40 + ["exclude"] * 460 + [None] * 250)
+    assert in_conflict.p_value == pytest.approx(0.0433, abs=5e-5)  # would have passed
+    assert (in_conflict.verdict, in_conflict.pending_conflicts) == ("pending_conflicts", 40)
+    assert not in_conflict.stop
+
+    resolved = stop_status(plan, ["exclude"] * 500 + [None] * 250)
+    assert resolved.p_value == pytest.approx(1 / 3)
+    assert (resolved.verdict, resolved.pending_conflicts, resolved.stop) == ("continue", 0, False)

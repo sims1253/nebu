@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 from kittum.core import NotFoundError
 from kittum.judge import CriterionVerdict
 from kittum.protocol import ScreeningMode
-from kittum.screening.rules import Reading
+from kittum.screening.rules import Reading, sort_key
 from kittum.screening.types import (
     CriterionDecision,
     Decision,
@@ -134,3 +134,38 @@ def item(tx: Tx, stage_id: Id, item_ref: str) -> dict[str, Any]:
     ).fetchone()
     assert row is not None
     return row
+
+
+def decoy_state(tx: Tx, stage: dict[str, Any], item_ref: str) -> dict[str, dict[str, Any]]:
+    """Per visible outcome: how many conflicts the AI alone raised beyond the decoys (`debt`),
+    and the records free to become decoys (`pool`), in a seeded order. `item_ref` is left out of
+    the pool: it is being decided."""
+    debt: dict[str, int] = {}
+    for r in tx.execute(
+        "select pattern,"
+        " count(*) filter (where not decoy and kinds <@ array['ai_include', 'ai_disagreement'])"
+        " - count(*) filter (where decoy) as debt"
+        " from screening_conflict where stage_id = %s and state <> 'withdrawn'"
+        " and pattern is not null group by pattern",
+        (stage["id"],),
+    ).fetchall():
+        debt[r["pattern"]] = r["debt"]
+    pool: dict[str, list[str]] = {}
+    for r in tx.execute(
+        "select i.item_ref, case when bool_and(f.outcome = 'exclude') then 'exclude'"
+        " when bool_and(f.outcome <> 'exclude') then 'include' end as pattern"
+        " from screening_item i"
+        " join screening_assignment a on a.stage_id = i.stage_id and a.item_ref = i.item_ref"
+        " and a.role = 'screener'"
+        " left join screening_decision f on f.id = a.final_decision_id"
+        " where i.stage_id = %s and i.kind = 'record' and i.item_ref <> %s"
+        " and not exists (select 1 from screening_conflict c where c.stage_id = i.stage_id"
+        " and c.item_ref = i.item_ref and c.state <> 'withdrawn')"
+        " group by i.item_ref having bool_and(f.outcome is not null)",
+        (stage["id"], item_ref),
+    ).fetchall():
+        if r["pattern"] is not None:
+            pool.setdefault(r["pattern"], []).append(r["item_ref"])
+    for refs in pool.values():
+        refs.sort(key=lambda ref: sort_key(stage["seed"], ref, "decoy"))
+    return {"debt": debt, "pool": pool}

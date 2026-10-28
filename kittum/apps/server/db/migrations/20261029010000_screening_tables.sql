@@ -109,11 +109,16 @@ create table screening_ai_reading (
     foreign key (stage_id, item_ref) references screening_item (stage_id, item_ref)
 );
 
+-- A decoy is a record the humans and the AI agreed on, mixed into the adjudication queue so that
+-- membership does not reveal the AI. `pattern` is the screeners' shared outcome, which decoys
+-- match. Adjudicating a decoy changes no outcome.
 create table screening_conflict (
     id uuid primary key,
     stage_id uuid not null,
     item_ref text not null,
     kinds text[] not null,
+    pattern text check (pattern in ('include', 'exclude')),
+    decoy boolean not null default false,
     state text not null check (state in ('open', 'resolved', 'withdrawn')),
     revision integer not null default 0,
     opened_event_id uuid not null,
@@ -163,13 +168,11 @@ create trigger screening_adjudication_append_only
     before update or delete on screening_adjudication
     for each row execute function screening_is_append_only();
 
--- What a reviewer may read: their own assignments, ready once the AI has read the item, in queue
--- order. No sentinel or audit flag, no AI output, nothing of another reviewer. The reveal of the
+-- What a reviewer may read: their own assignments in one stage, ready once the AI has read the
+-- item, in queue order. No sentinel or audit flag, no AI output, nothing of another reviewer. The reveal of the
 -- reviewer's own provisional decision comes back only while that decision awaits its final
 -- phase. `position` is an ordinal: M3 orders by the AI's rank, M1 and M2 by a seeded key.
-create function screening_reviewer_queue(
-    p_project uuid, p_reviewer uuid, p_scope text, p_stage text
-) returns table (
+create function screening_reviewer_queue(p_stage_id uuid, p_reviewer uuid) returns table (
     assignment_id uuid,
     stage text,
     scope_id text,
@@ -192,21 +195,17 @@ language sql stable as $$
     join screening_item i on i.stage_id = a.stage_id and i.item_ref = a.item_ref
     join screening_ai_reading r on r.stage_id = a.stage_id and r.item_ref = a.item_ref
     left join screening_decision d on d.id = a.provisional_decision_id
-    where a.reviewer_id = p_reviewer and s.project_id = p_project
-        and s.scope_id = p_scope and s.stage = p_stage
+    where a.stage_id = p_stage_id and a.reviewer_id = p_reviewer
 $$;
 
 -- A reviewer's own progress: every assignment counts, ready or not, hidden items included, so
 -- the counts cannot single out a sentinel or an audit sample.
-create function screening_reviewer_progress(
-    p_project uuid, p_reviewer uuid, p_scope text, p_stage text
-) returns table (assigned bigint, decided bigint)
+create function screening_reviewer_progress(p_stage_id uuid, p_reviewer uuid)
+returns table (assigned bigint, decided bigint)
 language sql stable as $$
     select count(*), count(*) filter (where a.state = 'decided')
     from screening_assignment a
-    join screening_stage s on s.id = a.stage_id
-    where a.reviewer_id = p_reviewer and s.project_id = p_project
-        and s.scope_id = p_scope and s.stage = p_stage
+    where a.stage_id = p_stage_id and a.reviewer_id = p_reviewer
 $$;
 
 -- migrate:down

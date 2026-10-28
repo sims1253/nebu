@@ -294,13 +294,15 @@ def test_m1_blinds_reviewers_reveals_disagreement_and_adjudicates(
         2,
     )
 
-    # The adjudicator sees A and B side by side, pseudonymized, without the AI.
+    # The adjudicator sees A and B side by side, pseudonymized, without the AI. A decoy is mixed
+    # in: a record both humans excluded and the model agreed with, so the queue does not reveal
+    # that the AI argued for GLPG2737.
     queue = adjudicator.call("GET", "/adjudications", params={"scope_id": SCOPE, "stage": STAGE})
     conflicts = queue.json()
-    assert sorted(c["title"][:22] for c in conflicts) == [
-        "Efficacy and safety of",
-        "GLPG2737 in lumacaftor",
-    ]
+    agreed = {TITLES[k] for k in ("colitis", "varenicline", "cohort", "cf_review")}
+    genuine = [c for c in conflicts if c["title"].startswith((TITLES["cf_rct"], TITLES["glpg"]))]
+    (decoy,) = [c for c in conflicts if c not in genuine]
+    assert len(genuine) == 2 and decoy["title"].startswith(tuple(agreed))
     assert JUDGE_MARK not in queue.text
     assert str(world.people.a) not in queue.text and str(world.people.b) not in queue.text
     by_title = {c["title"]: c for c in conflicts}
@@ -336,6 +338,13 @@ def test_m1_blinds_reviewers_reveals_disagreement_and_adjudicates(
     # The AI-include case: the adjudicator decides on their own and confirms the exclusion.
     glpg = next(c for t, c in by_title.items() if t.startswith(TITLES["glpg"]))
     assert [col["outcome"] for col in glpg["columns"]] == ["exclude", "exclude"]
+    # The decoy looks the same: the same fields, revision, column labels, and outcomes.
+    for item in (glpg, decoy):
+        assert set(item) == set(cf) and item["revision"] == 0
+        assert [(col["label"], col["outcome"], set(col)) for col in item["columns"]] == [
+            ("A", "exclude", set(cf["columns"][0])),
+            ("B", "exclude", set(cf["columns"][0])),
+        ]
     own = adjudicator.call(
         "POST",
         f"/adjudications/{glpg['conflict_id']}/decide",
@@ -351,11 +360,28 @@ def test_m1_blinds_reviewers_reveals_disagreement_and_adjudicates(
     remaining = adjudicator.call(
         "GET", "/adjudications", params={"scope_id": SCOPE, "stage": STAGE}
     ).json()
-    assert remaining == []
+    assert [c["conflict_id"] for c in remaining] == [decoy["conflict_id"]]
+
+    # The adjudicator includes the decoy. Its adjudication is recorded but changes nothing.
+    adjudicator.call(
+        "POST",
+        f"/adjudications/{decoy['conflict_id']}/decide",
+        json={
+            "command_id": str(new_id()),
+            "expected_revision": 0,
+            "decision": {"outcome": "include"},
+        },
+    )
+    with world.db.transaction() as tx:
+        outcomes = world.screening.outcomes(tx, world.project_id, SCOPE, STAGE)
+    by_record = {r.title: outcomes[r.item_ref] for r in world.records}
+    assert by_record[decoy["title"]] == "exclude"
+    assert by_record[cf["title"]] == "exclude" and by_record[glpg["title"]] == "exclude"
 
     # The methods lead's metrics.
     metrics = lead.status()["metrics"]
     assert metrics["conflicts_resolved"] == 2
+    assert metrics["decoys"] == {"cases": 1, "adjudicated": 1, "matching": 0}
     # One reveal for A (GLPG2737), two for B (colitis, GLPG2737); B revised colitis.
     assert metrics["reveals_shown"] == 3 and metrics["revised_after_reveal"] == 1
     humans = next(p for p in metrics["agreement"] if p["kind"] == "human_human")

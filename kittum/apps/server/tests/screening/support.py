@@ -469,6 +469,10 @@ class World:
     def project_id(self) -> Id:
         return self.people.project_id
 
+    def criteria_of(self, topic_id: str, stage: Stage = STAGE) -> tuple[Criterion, ...]:
+        topic = topic_for(self.protocol.version.protocol, SCOPE, topic_id)
+        return criteria_for(topic, SCOPE, stage)
+
     def criteria(self, stage: Stage = STAGE) -> tuple[Criterion, ...]:
         topic = topic_for(self.protocol.version.protocol, SCOPE, None)
         return criteria_for(topic, SCOPE, stage)

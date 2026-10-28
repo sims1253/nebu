@@ -75,7 +75,7 @@ def test_sentinels_and_audits_are_invisible_but_count_in_the_gauge(
     backend = recorded_backend(
         world.records, world.criteria(), answers=simulated_answers(world.records)
     )
-    world.open(screeners=(a,), auditor=auditor, backend=backend)
+    stage = world.open(screeners=(a,), auditor=auditor, backend=backend)
 
     # The ledger names the draws; reviewers never learn them.
     with world.db.transaction() as tx:
@@ -123,8 +123,8 @@ def test_sentinels_and_audits_are_invisible_but_count_in_the_gauge(
     # Below the service: the reviewer's SQL function has no column that could leak.
     with world.db.transaction() as tx:
         cur = tx.execute(
-            "select * from screening_reviewer_queue(%s, %s, %s, %s) limit 0",
-            (world.project_id, a, SCOPE, STAGE),
+            "select * from screening_reviewer_queue(%s, %s) limit 0",
+            (stage.stage_id, a),
         )
         assert cur.description is not None
         assert {c.name for c in cur.description} == {
