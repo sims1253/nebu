@@ -1,6 +1,131 @@
 {
   "components": {
     "schemas": {
+      "AcceptBody": {
+        "additionalProperties": false,
+        "properties": {
+          "command_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "override_failed_checks": {
+            "default": false,
+            "title": "Override Failed Checks",
+            "type": "boolean"
+          },
+          "path": {
+            "$ref": "#/components/schemas/Path"
+          },
+          "reviewer_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "source_viewed_ms": {
+            "minimum": 0.0,
+            "title": "Source Viewed Ms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "command_id",
+          "reviewer_id",
+          "path",
+          "source_viewed_ms"
+        ],
+        "title": "AcceptBody",
+        "type": "object"
+      },
+      "Acceptance": {
+        "additionalProperties": false,
+        "description": "A human's acceptance of one field: the value, its source span, and how it was reached.",
+        "properties": {
+          "accepted_at": {
+            "format": "date-time",
+            "title": "Accepted At",
+            "type": "string"
+          },
+          "anchor_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "edited": {
+            "title": "Edited",
+            "type": "boolean"
+          },
+          "event_seq": {
+            "title": "Event Seq",
+            "type": "integer"
+          },
+          "field_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "group": {
+            "title": "Group",
+            "type": "boolean"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "key": {
+            "$ref": "#/components/schemas/SemanticKey"
+          },
+          "path": {
+            "$ref": "#/components/schemas/Path"
+          },
+          "recheck": {
+            "title": "Recheck",
+            "type": "boolean"
+          },
+          "reviewer_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "run_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "source_viewed_ms": {
+            "title": "Source Viewed Ms",
+            "type": "integer"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "id",
+          "field_id",
+          "run_id",
+          "key",
+          "path",
+          "edited",
+          "group",
+          "value",
+          "unit",
+          "anchor_id",
+          "reviewer_id",
+          "source_viewed_ms",
+          "accepted_at",
+          "recheck",
+          "event_seq"
+        ],
+        "title": "Acceptance",
+        "type": "object"
+      },
       "AdjudicateRequest": {
         "additionalProperties": false,
         "properties": {
@@ -135,6 +260,84 @@
         "title": "AdjudicationResult",
         "type": "object"
       },
+      "AgentConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "confidentiality": {
+            "$ref": "#/components/schemas/Confidentiality",
+            "default": "local_only"
+          },
+          "intro_chars": {
+            "default": 2500,
+            "title": "Intro Chars",
+            "type": "integer"
+          },
+          "max_calls": {
+            "default": 6,
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Max Calls",
+            "type": "integer"
+          },
+          "max_seconds": {
+            "default": 1800.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Max Seconds",
+            "type": "number"
+          },
+          "max_tokens": {
+            "default": 2048,
+            "title": "Max Tokens",
+            "type": "integer"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "page_chars": {
+            "default": 6000,
+            "title": "Page Chars",
+            "type": "integer"
+          },
+          "search_hits": {
+            "default": 8,
+            "title": "Search Hits",
+            "type": "integer"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 0,
+            "title": "Seed"
+          },
+          "temperature": {
+            "default": 0.0,
+            "title": "Temperature",
+            "type": "number"
+          }
+        },
+        "required": [
+          "model_id"
+        ],
+        "title": "AgentConfig",
+        "type": "object"
+      },
+      "Agreement": {
+        "enum": [
+          "agree",
+          "disagree",
+          "janus_only",
+          "llm_only",
+          "neither"
+        ],
+        "type": "string"
+      },
       "AiColumn": {
         "additionalProperties": false,
         "properties": {
@@ -236,6 +439,96 @@
           "quote"
         ],
         "title": "AnchorRequest",
+        "type": "object"
+      },
+      "Arm": {
+        "additionalProperties": false,
+        "properties": {
+          "columns": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "id": {
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "Arm",
+        "type": "object"
+      },
+      "Assertion": {
+        "additionalProperties": false,
+        "description": "An accepted value as reports use it: the latest acceptance per semantic key.",
+        "properties": {
+          "acceptance_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "anchor_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "document_hash": {
+            "$ref": "#/components/schemas/Sha256"
+          },
+          "key": {
+            "$ref": "#/components/schemas/SemanticKey"
+          },
+          "layer_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/Policy"
+          },
+          "run_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "key",
+          "value",
+          "unit",
+          "policy",
+          "anchor_id",
+          "acceptance_id",
+          "run_id",
+          "layer_id",
+          "document_hash"
+        ],
+        "title": "Assertion",
         "type": "object"
       },
       "AuditGauge": {
@@ -427,6 +720,18 @@
         "title": "CellRef",
         "type": "object"
       },
+      "CellShape": {
+        "enum": [
+          "count_percentage.count",
+          "count_percentage.percentage",
+          "estimate_interval.estimate",
+          "estimate_interval.lower",
+          "estimate_interval.upper",
+          "mean_standard_deviation.mean",
+          "mean_standard_deviation.standard_deviation"
+        ],
+        "type": "string"
+      },
       "Comparator": {
         "additionalProperties": false,
         "properties": {
@@ -447,8 +752,55 @@
         "title": "Comparator",
         "type": "object"
       },
+      "Comparison": {
+        "additionalProperties": false,
+        "properties": {
+          "columns": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "comparator": {
+            "title": "Comparator",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Id",
+            "type": "string"
+          },
+          "intervention": {
+            "title": "Intervention",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "intervention",
+          "comparator"
+        ],
+        "title": "Comparison",
+        "type": "object"
+      },
       "ConfidencePercent": {
         "pattern": "^[0-9]{1,3}(\\.[0-9]+)?$",
+        "type": "string"
+      },
+      "Confidentiality": {
+        "enum": [
+          "public",
+          "confidential",
+          "local_only"
+        ],
+        "title": "Confidentiality",
         "type": "string"
       },
       "ConfirmRequest": {
@@ -880,6 +1232,62 @@
         "title": "DocumentView",
         "type": "object"
       },
+      "EditBody": {
+        "additionalProperties": false,
+        "properties": {
+          "command_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "end": {
+            "exclusiveMinimum": 0.0,
+            "title": "End",
+            "type": "integer"
+          },
+          "path": {
+            "$ref": "#/components/schemas/Path"
+          },
+          "quote": {
+            "title": "Quote",
+            "type": "string"
+          },
+          "reviewer_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "source_viewed_ms": {
+            "minimum": 0.0,
+            "title": "Source Viewed Ms",
+            "type": "integer"
+          },
+          "start": {
+            "minimum": 0.0,
+            "title": "Start",
+            "type": "integer"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "command_id",
+          "reviewer_id",
+          "path",
+          "source_viewed_ms",
+          "value",
+          "start",
+          "end",
+          "quote"
+        ],
+        "title": "EditBody",
+        "type": "object"
+      },
       "EffectModifier": {
         "additionalProperties": false,
         "properties": {
@@ -905,8 +1313,267 @@
         "title": "EffectModifier",
         "type": "object"
       },
+      "Endpoint": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "locate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Locate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quantities": {
+            "items": {
+              "$ref": "#/components/schemas/QuantitySpec"
+            },
+            "minItems": 1,
+            "title": "Quantities",
+            "type": "array"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role",
+            "default": "outcome"
+          },
+          "timepoints": {
+            "items": {
+              "$ref": "#/components/schemas/Timepoint"
+            },
+            "minItems": 1,
+            "title": "Timepoints",
+            "type": "array"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "timepoints",
+          "quantities"
+        ],
+        "title": "Endpoint",
+        "type": "object"
+      },
       "Extensions": {
         "additionalProperties": true,
+        "type": "object"
+      },
+      "ExtractionReview": {
+        "additionalProperties": false,
+        "properties": {
+          "anchors": {
+            "items": {
+              "$ref": "#/components/schemas/Anchor"
+            },
+            "title": "Anchors",
+            "type": "array"
+          },
+          "document": {
+            "$ref": "#/components/schemas/Document"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewField"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "layer": {
+            "$ref": "#/components/schemas/ReviewLayer"
+          },
+          "report": {
+            "$ref": "#/components/schemas/ReportSummary"
+          },
+          "run": {
+            "$ref": "#/components/schemas/ExtractionRun"
+          }
+        },
+        "required": [
+          "run",
+          "report",
+          "document",
+          "layer",
+          "anchors",
+          "fields"
+        ],
+        "title": "ExtractionReview",
+        "type": "object"
+      },
+      "ExtractionRun": {
+        "additionalProperties": false,
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "document_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "janus_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Janus Version"
+          },
+          "layer_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "model_identity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Identity"
+          },
+          "project_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "report_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "schema_hash": {
+            "$ref": "#/components/schemas/Sha256"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunStatus"
+          },
+          "study_id": {
+            "$ref": "#/components/schemas/Id"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "layer_id",
+          "document_id",
+          "study_id",
+          "report_id",
+          "status",
+          "schema_hash",
+          "model_identity",
+          "janus_version",
+          "created_at",
+          "completed_at"
+        ],
+        "title": "ExtractionRun",
+        "type": "object"
+      },
+      "ExtractionSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "analysis_set": {
+            "default": "itt",
+            "title": "Analysis Set",
+            "type": "string"
+          },
+          "arms": {
+            "items": {
+              "$ref": "#/components/schemas/Arm"
+            },
+            "minItems": 1,
+            "title": "Arms",
+            "type": "array"
+          },
+          "comparisons": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Comparison"
+            },
+            "title": "Comparisons",
+            "type": "array"
+          },
+          "data_cut": {
+            "default": "primary",
+            "title": "Data Cut",
+            "type": "string"
+          },
+          "endpoints": {
+            "items": {
+              "$ref": "#/components/schemas/Endpoint"
+            },
+            "minItems": 1,
+            "title": "Endpoints",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "subpopulation": {
+            "default": "all",
+            "title": "Subpopulation",
+            "type": "string"
+          },
+          "total_columns": {
+            "default": [
+              "Total"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "title": "Total Columns",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "arms",
+          "endpoints"
+        ],
+        "title": "ExtractionSchema",
         "type": "object"
       },
       "FailedCheck": {
@@ -922,6 +1589,65 @@
           "invalid_output"
         ],
         "type": "string"
+      },
+      "FieldLabels": {
+        "additionalProperties": false,
+        "properties": {
+          "arm": {
+            "title": "Arm",
+            "type": "string"
+          },
+          "endpoint": {
+            "title": "Endpoint",
+            "type": "string"
+          },
+          "timepoint": {
+            "title": "Timepoint",
+            "type": "string"
+          }
+        },
+        "required": [
+          "endpoint",
+          "timepoint",
+          "arm"
+        ],
+        "title": "FieldLabels",
+        "type": "object"
+      },
+      "FieldSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/Policy"
+          },
+          "quantity": {
+            "title": "Quantity",
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "quantity",
+          "unit",
+          "policy",
+          "description"
+        ],
+        "title": "FieldSpec",
+        "type": "object"
       },
       "FreshnessPolicy": {
         "additionalProperties": false,
@@ -948,6 +1674,46 @@
           "max_age_months"
         ],
         "title": "FreshnessPolicy",
+        "type": "object"
+      },
+      "Gate": {
+        "enum": [
+          "human_verify",
+          "group_accept",
+          "human_review"
+        ],
+        "type": "string"
+      },
+      "GroupAcceptBody": {
+        "additionalProperties": false,
+        "properties": {
+          "command_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "field_ids": {
+            "items": {
+              "$ref": "#/components/schemas/Id"
+            },
+            "minItems": 1,
+            "title": "Field Ids",
+            "type": "array"
+          },
+          "list_viewed_ms": {
+            "minimum": 0.0,
+            "title": "List Viewed Ms",
+            "type": "integer"
+          },
+          "reviewer_id": {
+            "$ref": "#/components/schemas/Id"
+          }
+        },
+        "required": [
+          "command_id",
+          "reviewer_id",
+          "field_ids",
+          "list_viewed_ms"
+        ],
+        "title": "GroupAcceptBody",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -1199,7 +1965,7 @@
             "$ref": "#/components/schemas/Relation"
           },
           "status": {
-            "$ref": "#/components/schemas/ProposalStatus",
+            "$ref": "#/components/schemas/kittum__corpus__models__ProposalStatus",
             "default": "pending"
           }
         },
@@ -1219,6 +1985,57 @@
         "propertyNames": {
           "$ref": "#/components/schemas/LanguageCode"
         },
+        "type": "object"
+      },
+      "Locate": {
+        "additionalProperties": false,
+        "description": "Janus locator hints. `rows` are row labels (or text labels); `columns` column headers.",
+        "properties": {
+          "cell": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CellShape"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "columns": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Columns",
+            "type": "array"
+          },
+          "rows": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "sections": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Sections",
+            "type": "array"
+          },
+          "strategy": {
+            "default": "table_label",
+            "enum": [
+              "table_label",
+              "text_label"
+            ],
+            "title": "Strategy",
+            "type": "string"
+          }
+        },
+        "title": "Locate",
         "type": "object"
       },
       "MergeRequest": {
@@ -1263,6 +2080,30 @@
           "insufficient_information"
         ],
         "type": "string"
+      },
+      "PageSize": {
+        "additionalProperties": false,
+        "properties": {
+          "height": {
+            "title": "Height",
+            "type": "number"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "width": {
+            "title": "Width",
+            "type": "number"
+          }
+        },
+        "required": [
+          "page",
+          "width",
+          "height"
+        ],
+        "title": "PageSize",
+        "type": "object"
       },
       "PageTriage": {
         "additionalProperties": false,
@@ -1454,6 +2295,13 @@
         "title": "PairAgreement",
         "type": "object"
       },
+      "Path": {
+        "enum": [
+          "janus",
+          "llm"
+        ],
+        "type": "string"
+      },
       "Percent": {
         "pattern": "^[0-9]{1,3}(\\.[0-9]+)?$",
         "type": "string"
@@ -1480,6 +2328,14 @@
         "enum": [
           "include",
           "exclude"
+        ],
+        "type": "string"
+      },
+      "Policy": {
+        "enum": [
+          "critical",
+          "standard",
+          "descriptive"
         ],
         "type": "string"
       },
@@ -1564,7 +2420,90 @@
         "title": "PrismaCounts",
         "type": "object"
       },
-      "ProposalStatus": {
+      "Proposal": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor_ids": {
+            "items": {
+              "$ref": "#/components/schemas/Id"
+            },
+            "title": "Anchor Ids",
+            "type": "array"
+          },
+          "key": {
+            "$ref": "#/components/schemas/SemanticKey"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "path": {
+            "$ref": "#/components/schemas/Path"
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote"
+          },
+          "status": {
+            "$ref": "#/components/schemas/kittum__extraction__model__ProposalStatus"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "validators": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ValidatorResult"
+            },
+            "title": "Validators",
+            "type": "array"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "key",
+          "value",
+          "unit",
+          "status",
+          "path",
+          "anchor_ids"
+        ],
+        "title": "Proposal",
+        "type": "object"
+      },
+      "ProposalStatus-Input": {
         "enum": [
           "pending",
           "confirmed",
@@ -1692,6 +2631,78 @@
           "approved_by"
         ],
         "title": "PublishRequest",
+        "type": "object"
+      },
+      "QuantitySpec": {
+        "additionalProperties": false,
+        "properties": {
+          "arms": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Arms",
+            "type": "array"
+          },
+          "comparisons": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Comparisons",
+            "type": "array"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "locate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Locate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Policy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quantity": {
+            "title": "Quantity",
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "quantity"
+        ],
+        "title": "QuantitySpec",
         "type": "object"
       },
       "QueueItem": {
@@ -1904,6 +2915,71 @@
         ],
         "type": "string"
       },
+      "ReportInfo": {
+        "additionalProperties": false,
+        "description": "What the review screen shows about the report; the corpus owns the real record.",
+        "properties": {
+          "citation": {
+            "default": "",
+            "title": "Citation",
+            "type": "string"
+          },
+          "licence": {
+            "default": "",
+            "title": "Licence",
+            "type": "string"
+          },
+          "study_label": {
+            "default": "",
+            "title": "Study Label",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "title": "ReportInfo",
+        "type": "object"
+      },
+      "ReportSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "citation": {
+            "title": "Citation",
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "licence": {
+            "title": "Licence",
+            "type": "string"
+          },
+          "study_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "study_label": {
+            "title": "Study Label",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "study_id",
+          "study_label",
+          "title",
+          "citation",
+          "licence"
+        ],
+        "title": "ReportSummary",
+        "type": "object"
+      },
       "RescreenGauge": {
         "additionalProperties": false,
         "description": "Blind extra screens that AI-only disagreements sent to the auditor. Lead's view only.",
@@ -1970,6 +3046,119 @@
           "always"
         ],
         "type": "string"
+      },
+      "ReviewField": {
+        "additionalProperties": false,
+        "description": "One field to review: both paths' proposals for one semantic key, and the gate.",
+        "properties": {
+          "acceptance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Acceptance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "accepted": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Path"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "agreement": {
+            "$ref": "#/components/schemas/Agreement"
+          },
+          "gate": {
+            "$ref": "#/components/schemas/Gate"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "key": {
+            "$ref": "#/components/schemas/SemanticKey"
+          },
+          "labels": {
+            "$ref": "#/components/schemas/FieldLabels"
+          },
+          "proposals": {
+            "items": {
+              "$ref": "#/components/schemas/Proposal"
+            },
+            "title": "Proposals",
+            "type": "array"
+          },
+          "recheck": {
+            "title": "Recheck",
+            "type": "boolean"
+          },
+          "second_extractor": {
+            "title": "Second Extractor",
+            "type": "boolean"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/FieldSpec"
+          }
+        },
+        "required": [
+          "id",
+          "spec",
+          "key",
+          "proposals",
+          "accepted",
+          "labels",
+          "agreement",
+          "gate",
+          "second_extractor",
+          "recheck",
+          "acceptance"
+        ],
+        "title": "ReviewField",
+        "type": "object"
+      },
+      "ReviewLayer": {
+        "additionalProperties": false,
+        "description": "A layer without its words: the viewer loads words per page.",
+        "properties": {
+          "document_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "output_hash": {
+            "$ref": "#/components/schemas/Sha256"
+          },
+          "pages": {
+            "items": {
+              "$ref": "#/components/schemas/PageSize"
+            },
+            "title": "Pages",
+            "type": "array"
+          },
+          "recipe_hash": {
+            "$ref": "#/components/schemas/Sha256"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "document_id",
+          "recipe_hash",
+          "output_hash",
+          "text",
+          "pages"
+        ],
+        "title": "ReviewLayer",
+        "type": "object"
       },
       "ReviewProtocol": {
         "additionalProperties": false,
@@ -2155,6 +3344,66 @@
         "title": "ReviewerColumn",
         "type": "object"
       },
+      "Role": {
+        "enum": [
+          "outcome",
+          "baseline",
+          "descriptive"
+        ],
+        "type": "string"
+      },
+      "RunBody": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "agent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentConfig"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "command_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "extraction_schema": {
+            "$ref": "#/components/schemas/ExtractionSchema"
+          },
+          "layer_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "report": {
+            "$ref": "#/components/schemas/ReportInfo",
+            "default": {
+              "citation": "",
+              "licence": "",
+              "study_label": "",
+              "title": ""
+            }
+          },
+          "report_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "study_id": {
+            "$ref": "#/components/schemas/Id"
+          }
+        },
+        "required": [
+          "command_id",
+          "actor_id",
+          "layer_id",
+          "study_id",
+          "report_id",
+          "extraction_schema"
+        ],
+        "title": "RunBody",
+        "type": "object"
+      },
       "RunSearchRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2171,6 +3420,9 @@
         ],
         "title": "RunSearchRequest",
         "type": "object"
+      },
+      "RunStatus": {
+        "type": "string"
       },
       "Scope": {
         "additionalProperties": false,
@@ -2492,6 +3744,58 @@
           "freshness"
         ],
         "title": "SearchTopic",
+        "type": "object"
+      },
+      "SemanticKey": {
+        "additionalProperties": false,
+        "properties": {
+          "analysis_set": {
+            "title": "Analysis Set",
+            "type": "string"
+          },
+          "arm": {
+            "title": "Arm",
+            "type": "string"
+          },
+          "data_cut": {
+            "title": "Data Cut",
+            "type": "string"
+          },
+          "endpoint": {
+            "title": "Endpoint",
+            "type": "string"
+          },
+          "quantity": {
+            "title": "Quantity",
+            "type": "string"
+          },
+          "report_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "study_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "subpopulation": {
+            "title": "Subpopulation",
+            "type": "string"
+          },
+          "timepoint": {
+            "title": "Timepoint",
+            "type": "string"
+          }
+        },
+        "required": [
+          "study_id",
+          "report_id",
+          "subpopulation",
+          "analysis_set",
+          "data_cut",
+          "arm",
+          "endpoint",
+          "timepoint",
+          "quantity"
+        ],
+        "title": "SemanticKey",
         "type": "object"
       },
       "Sha256": {
@@ -3028,6 +4332,36 @@
         "title": "TextQuote",
         "type": "object"
       },
+      "Timepoint": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[a-z0-9][a-z0-9_]*$",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "locate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Locate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "Timepoint",
+        "type": "object"
+      },
       "UndoRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3156,6 +4490,36 @@
         "title": "ValidationReport",
         "type": "object"
       },
+      "ValidatorResult": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "validator": {
+            "title": "Validator",
+            "type": "string"
+          }
+        },
+        "required": [
+          "validator",
+          "passed"
+        ],
+        "title": "ValidatorResult",
+        "type": "object"
+      },
       "WordBox": {
         "additionalProperties": false,
         "properties": {
@@ -3199,6 +4563,24 @@
         ],
         "title": "WordBox",
         "type": "object"
+      },
+      "kittum__corpus__models__ProposalStatus": {
+        "enum": [
+          "pending",
+          "confirmed",
+          "rejected"
+        ],
+        "type": "string"
+      },
+      "kittum__extraction__model__ProposalStatus": {
+        "enum": [
+          "extracted",
+          "missing",
+          "ambiguous",
+          "invalid",
+          "error"
+        ],
+        "type": "string"
       },
       "kittum__protocol__model__Outcome": {
         "additionalProperties": false,
@@ -3709,7 +5091,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/ProposalStatus"
+                  "$ref": "#/components/schemas/ProposalStatus-Input"
                 },
                 {
                   "type": "null"
@@ -3854,6 +5236,469 @@
         "summary": "Split Route",
         "tags": [
           "corpus"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/extraction/assertions": {
+      "get": {
+        "description": "The project's accepted values, the latest acceptance per semantic key.",
+        "operationId": "listExtractionAssertions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Assertion"
+                  },
+                  "title": "Response Listextractionassertions",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assertions Route",
+        "tags": [
+          "extraction"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/extraction/fields/{field_id}/accept": {
+      "post": {
+        "description": "Accept one path's value as it stands. 409 with the reason if it cannot be accepted.",
+        "operationId": "acceptExtractionField",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "field_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Field Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Acceptance"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Accept Route",
+        "tags": [
+          "extraction"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/extraction/fields/{field_id}/edit": {
+      "post": {
+        "description": "Accept the reviewer's own value with the span it came from. The span must hold it.",
+        "operationId": "editAndAcceptExtractionField",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "field_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Field Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Acceptance"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Edit Route",
+        "tags": [
+          "extraction"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/extraction/runs": {
+      "post": {
+        "description": "Queue both paths over a layer. Retrying with the same `command_id` returns the same run.",
+        "operationId": "requestExtractionRun",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtractionRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Run Route",
+        "tags": [
+          "extraction"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/extraction/runs/{run_id}": {
+      "get": {
+        "operationId": "getExtractionRun",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtractionRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Run Route",
+        "tags": [
+          "extraction"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/extraction/runs/{run_id}/fields": {
+      "get": {
+        "description": "One entry per semantic key, in schema order, with both paths' proposals.",
+        "operationId": "listExtractionFields",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ReviewField"
+                  },
+                  "title": "Response Listextractionfields",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Fields Route",
+        "tags": [
+          "extraction"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/extraction/runs/{run_id}/group-accept": {
+      "post": {
+        "description": "Accept agreeing, validated standard fields together; 409 if any field may not be.",
+        "operationId": "groupAcceptExtractionFields",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GroupAcceptBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Acceptance"
+                  },
+                  "title": "Response Groupacceptextractionfields",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Group Accept Route",
+        "tags": [
+          "extraction"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/extraction/runs/{run_id}/review": {
+      "get": {
+        "description": "The extraction screen: the report, its layer, every anchor, and the fields.",
+        "operationId": "getExtractionReview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtractionReview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Review Route",
+        "tags": [
+          "extraction"
         ]
       }
     },
