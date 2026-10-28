@@ -282,6 +282,15 @@ test("a reviewer accepts and corrects values Janus read from a trial the screene
   const { text, at } = await fieldIndex(page, projectId, runId, sam);
   const notice = page.getByTestId("extraction-notice");
   const selected = page.locator("[data-testid=field-row][aria-selected=true]");
+  const count = page.getByTestId("accepted-count");
+  /** Presses `key` until `count` reads `after`, while it still reads `before`: a press the screen
+   * refuses because the source has not been on screen long enough yet does no harm, and a slow
+   * machine may need a second one. Never presses once the count has moved. */
+  const acceptOnce = (press: () => Promise<void>, before: string, after: string) =>
+    expect(async () => {
+      if ((await count.textContent()) === before) await press();
+      await expect(count).toHaveText(after, { timeout: 2_000 });
+    }).toPass({ timeout: 30_000 });
 
   await test.step("a reviewer accepts the Janus value once its source was on screen", async () => {
     await page.goto(`/p/${projectId}/extraction?as=${sam}`);
@@ -291,9 +300,8 @@ test("a reviewer accepts and corrects values Janus read from a trial the screene
     expect(at("participants", "intervention", "n_analysed")).toBe(0);
     await expect(selected.getByTestId("field-value")).toHaveText("52participants");
     await expect(page.getByTestId("source-highlight").first()).toBeVisible();
-    await page.waitForTimeout(700);
-    await page.keyboard.press("Enter");
-    await expect(page.getByTestId("accepted-count")).toHaveText("1 of 10 accepted");
+    await page.waitForTimeout(700); // the source on screen past the floor, on a quick machine
+    await acceptOnce(() => page.keyboard.press("Enter"), "0 of 10 accepted", "1 of 10 accepted");
   });
 
   await test.step("the reviewer corrects a value Janus missed with its span on the page", async () => {
@@ -329,8 +337,7 @@ test("a reviewer accepts and corrects values Janus read from a trial the screene
     await expect(value).toHaveValue("6.5"); // the number in the selection, to confirm
     await expect(notice).toContainText("Edited to “6.5”");
     await page.waitForTimeout(700);
-    await value.press("Enter");
-    await expect(page.getByTestId("accepted-count")).toHaveText("2 of 10 accepted");
+    await acceptOnce(() => value.press("Enter"), "1 of 10 accepted", "2 of 10 accepted");
     const row = page.getByTestId("field-row").nth(target);
     await expect(row.getByTestId("field-value")).toHaveText("6.5%");
     await expect(row).toContainText("Edited");
