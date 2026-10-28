@@ -53,6 +53,17 @@ if TYPE_CHECKING:
     from kittum.protocol import Criterion
 
 
+LIMITS: tuple[str, ...] = (
+    'Foreign content words that carry negation ("Melanoma assente").',
+    'A negation in an intervening clause about another condition, within the window ("Patients '
+    'with no diabetes received chemotherapy").',
+    "Evidence about another arm, cohort, or population than the one the criterion is about.",
+    'Partial matches of a condition ("skeletal metastases" against "brain metastases").',
+    "Anything else that needs understanding rather than structure.",
+)
+"""What the filter cannot catch, by design, as listed above; reports disclose them."""
+
+
 def _vocabulary(words: str) -> frozenset[str]:
     return frozenset(words.split())
 
