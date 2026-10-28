@@ -13,8 +13,10 @@ from typing import TYPE_CHECKING, Annotated
 from fastapi import APIRouter, Header, HTTPException, Query, status
 
 from kittum.api import AppContext, Context  # noqa: TC001 - FastAPI resolves it at runtime
+from kittum.app import AssignmentFullText, LifecycleError, full_text, mentions, open_screening
 from kittum.core import Id, NotFoundError, Record
-from kittum.protocol import Stage  # noqa: TC001
+from kittum.documents import get_layer
+from kittum.protocol import Stage
 from kittum.runs import CommandIdReused
 from kittum.screening import (
     AdjudicationItem,
@@ -26,8 +28,11 @@ from kittum.screening import (
     NotAssigned,
     Phase,
     QueueItem,
+    RevealSetting,
     ScopeStatus,
     Screening,
+    Sentinel,
+    StageInfo,
     StaleRevision,
     UndoResult,
 )
@@ -75,6 +80,18 @@ class AdjudicateRequest(Record):
     timing: DecisionTiming | None = None
 
 
+class OpenStageRequest(Record):
+    scope_id: str
+    stage: Stage
+    actor_id: Id
+    """The methods lead who opens the stage."""
+    reveal: RevealSetting = "on_disagreement"
+    topic_id: str | None = None
+    sentinels: tuple[Sentinel, ...] = ()
+    """Records with known labels for the queues; a full-text stage without any draws them from
+    the project's sentinel full texts."""
+
+
 def _screening(ctx: AppContext) -> Screening:
     if ctx.ledger is None:
         raise HTTPException(status_code=503, detail="no ledger is configured")
@@ -90,7 +107,59 @@ def _errors() -> Generator[None]:
     except (StaleRevision, CommandIdReused) as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
     except InvalidDecision as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e)) from e
+        # FastAPI's validation-error shape, so clients read one 422 format.
+        detail = [{"loc": [], "msg": str(e), "type": "invalid_decision"}]
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=detail) from e
+    except LifecycleError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
+
+@router.get("/stages", operation_id="listScreeningStages")
+def stages(project_id: Id, ctx: Context) -> list[StageInfo]:
+    """Every open stage, with its mode, reveal setting, screeners, auditor, and adjudicators."""
+    with ctx.db.transaction() as tx:
+        return _screening(ctx).stages(tx, project_id)
+
+
+@router.post("/stages", operation_id="openScreeningStage", status_code=201)
+def open_stage(project_id: Id, body: OpenStageRequest, ctx: Context) -> StageInfo:
+    """Open a scope at a stage with the project's people and enqueue the AI judge. Title and
+    abstract screens every report of the corpus; full text every record included at title and
+    abstract that has a full text."""
+    with _errors(), ctx.db.transaction() as tx:
+        return open_screening(
+            tx,
+            ctx,
+            project_id,
+            body.scope_id,
+            body.stage,
+            actor_id=body.actor_id,
+            reveal=body.reveal,
+            topic_id=body.topic_id,
+            sentinels=body.sentinels,
+        )
+
+
+@router.get("/assignments/{assignment_id}/full-text", operation_id="getScreeningAssignmentFullText")
+def assignment_full_text(
+    project_id: Id, assignment_id: Id, reviewer: Reviewer, ctx: Context
+) -> AssignmentFullText:
+    """The full text of one of the caller's full-text assignments, with the protocol-term
+    mentions of each criterion in document order."""
+    screening = _screening(ctx)
+    with _errors(), ctx.db.transaction() as tx:
+        ref, _, criteria = screening.assignment_source(tx, project_id, reviewer, assignment_id)
+        found = full_text(tx, project_id, ref)
+        if found is None:
+            raise NotFoundError("this assignment has no full text")
+        layer = get_layer(tx, found.layer_id, artifacts=ctx.artifacts)
+    return AssignmentFullText(
+        document_id=found.document_id,
+        layer_id=found.layer_id,
+        page_count=found.page_count,
+        licence=found.licence,
+        mentions=mentions(layer, criteria),
+    )
 
 
 @router.get("/queue", operation_id="getScreeningQueue")

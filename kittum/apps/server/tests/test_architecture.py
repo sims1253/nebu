@@ -44,7 +44,9 @@ ALLOWED: dict[str, set[str]] = {
         "appraisal",
         "stats",
     },
-    # Entry points may use every module's public surface.
+    # Entry points may use every module's public surface. `app` is the composition root and the
+    # project lifecycle that `api` and `cli` share.
+    "app": {"*"},
     "api": {"*"},
     "cli": {"*"},
     "settings": set(),

@@ -7,49 +7,18 @@ Each module that exposes HTTP adds `api/routes/<module>.py` with a `router` and 
 """
 
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
+from pathlib import Path  # noqa: TC003
 from typing import TYPE_CHECKING, Annotated
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse
 
-from kittum.core import Clock, Record, SystemClock
-from kittum.db import Database
-from kittum.ledger import PostgresLedger
-from kittum.runs import PostgresJobQueue, PostgresReceipts
+from kittum.app import AppContext
+from kittum.core import Record
 from kittum.settings import Settings
-from kittum.storage import ArtifactStore, FilesystemStore
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
-
-    from kittum.gateway import Gateway
-    from kittum.ledger import Ledger
-    from kittum.runs import JobQueue, ReceiptStore
-
-
-@dataclass
-class AppContext:
-    """What routes may use. Built once per process; tests build their own."""
-
-    settings: Settings
-    db: Database
-    artifacts: ArtifactStore
-    clock: Clock = field(default_factory=SystemClock)
-    gateway: Gateway | None = None
-    ledger: Ledger | None = None
-    queue: JobQueue | None = None
-    receipts: ReceiptStore | None = None
-
-    @classmethod
-    def from_settings(cls, settings: Settings) -> AppContext:
-        return cls(
-            settings=settings,
-            db=Database(settings.database_url),
-            artifacts=FilesystemStore(settings.artifact_dir),
-            ledger=PostgresLedger(),
-            queue=PostgresJobQueue(),
-            receipts=PostgresReceipts(),
-        )
 
 
 def get_context(request: Request) -> AppContext:
@@ -93,7 +62,30 @@ def create_app(context: AppContext | None = None) -> FastAPI:
 
     for router in ROUTERS:
         app.include_router(router)
+    web_dist = (context.settings if context else Settings.from_env()).web_dist
+    if web_dist is not None:
+        _serve_workbench(app, web_dist)
     return app
+
+
+def _serve_workbench(app: FastAPI, dist: Path) -> None:
+    """Serve the built workbench from the same process: its files, and `index.html` for every
+    other path outside `/api`, so the client router handles deep links."""
+    root = dist.resolve()
+    index = root / "index.html"
+    if not index.is_file():
+        raise RuntimeError(f"{dist} has no index.html; build the workbench with `pnpm build`")
+
+    @app.get("/{path:path}", include_in_schema=False)
+    def workbench(path: str) -> FileResponse:
+        if path.startswith("api/"):
+            raise HTTPException(status_code=404)
+        target = (root / path).resolve()
+        if path and target.is_file() and target.is_relative_to(root):
+            immutable = target.parent.name == "assets"
+            headers = {"Cache-Control": "max-age=31536000, immutable"} if immutable else None
+            return FileResponse(target, headers=headers)
+        return FileResponse(index, headers={"Cache-Control": "no-cache"})
 
 
 __all__ = ["AppContext", "Context", "Health", "create_app", "get_context"]

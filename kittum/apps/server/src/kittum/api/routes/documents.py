@@ -96,6 +96,8 @@ class AnchorRequest(Record):
     quote: str
     # 0-based, among whole-token occurrences; required when the quote occurs more than once.
     occurrence: Annotated[int, Field(ge=0)] | None = None
+    # Code-point offsets of a reviewer's selection or a mention; the quote must be the text there.
+    start: Annotated[int, Field(ge=0)] | None = None
 
 
 def _not_found(e: NotFoundError) -> HTTPException:
@@ -206,7 +208,7 @@ def get_page_words(layer_id: Id, page: int, ctx: Context) -> PageWords:
 @router.post("/layers/{layer_id}/anchors", operation_id="createAnchor", status_code=201)
 def create_anchor(layer_id: Id, body: AnchorRequest, ctx: Context) -> Anchor:
     """Anchor a verbatim quote. 404 if the layer does not contain it, 409 if it occurs more than
-    once and no `occurrence` is given."""
+    once and neither `occurrence` nor `start` is given."""
     with ctx.db.transaction() as tx:
         try:
             layer = get_layer(tx, layer_id, artifacts=ctx.artifacts)
@@ -214,6 +216,13 @@ def create_anchor(layer_id: Id, body: AnchorRequest, ctx: Context) -> Anchor:
             raise _not_found(e) from e
         # Whole tokens only, as `resolve` requires: an anchor must stay re-anchorable.
         spans = quote_spans(layer.text, body.quote)
+        if body.start is not None:
+            at = [s for s in spans if s.start == body.start]
+            if not at:
+                raise HTTPException(
+                    status_code=404, detail="the quote is not at that offset as whole words"
+                )
+            return save_anchor(tx, make_anchor(layer, at[0]))
         if not spans:
             raise HTTPException(
                 status_code=404, detail="quote not found in the layer as whole words"

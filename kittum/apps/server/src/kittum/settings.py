@@ -3,6 +3,7 @@
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
 
 @dataclass(frozen=True)
@@ -35,6 +36,14 @@ class Settings:
     # Ed25519 private key (PEM) that signs ledger checkpoints and bundles. Hold it apart from the
     # database administrator: `openssl genpkey -algorithm ed25519 -out checkpoint.pem`.
     checkpoint_key_path: Path | None = None
+    # The screening judge: a recipe ID from `kittum.models.ModelRegistry`, served by one of
+    # `llm_endpoints`. Defaults to the first endpoint's recipe.
+    judge_model: str | None = None
+    # `endpoint` calls the model server; `demo` replays the demo project's recorded answers, for
+    # the end-to-end test and a demo without a model server.
+    judge_backend: Literal["endpoint", "demo"] = "endpoint"
+    # The built workbench (`pnpm build` writes apps/web/dist). `kittum serve` serves it when set.
+    web_dist: Path | None = None
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -52,4 +61,13 @@ class Settings:
             checkpoint_key_path=(
                 Path(env["KITTUM_CHECKPOINT_KEY"]) if env.get("KITTUM_CHECKPOINT_KEY") else None
             ),
+            judge_model=env.get("KITTUM_JUDGE_MODEL") or None,
+            judge_backend=_judge_backend(env.get("KITTUM_JUDGE_BACKEND", "endpoint")),
+            web_dist=Path(env["KITTUM_WEB_DIST"]) if env.get("KITTUM_WEB_DIST") else None,
         )
+
+
+def _judge_backend(raw: str) -> Literal["endpoint", "demo"]:
+    if raw not in ("endpoint", "demo"):
+        raise ValueError(f"KITTUM_JUDGE_BACKEND must be endpoint or demo, not {raw!r}")
+    return raw
