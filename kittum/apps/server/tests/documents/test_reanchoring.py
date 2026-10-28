@@ -222,6 +222,16 @@ def test_a_changed_number_or_context_is_never_exact(pg, new_text, status):
         assert new.text[resolution.anchor.start : resolution.anchor.end] == "12"
 
 
+def test_whitespace_between_blocks_never_starves_the_context(pg):
+    # The same words, one engine putting each in its own block ("\n\n" between them).
+    letters = "A B C D E F G H I J K L M N O P"
+    blocks = "Total: 12\n\n" + "\n\n".join(letters.split()) + "\n\nend."
+    packed = "Total: 12\n\n" + letters + "\n\nend."
+    old, new = _text_layers(pg, blocks, packed)
+    (span,) = find_quote("12", old.text)
+    assert resolve(save_anchor(pg, make_anchor(old, span)), new).status == "exact"
+
+
 def test_a_changed_word_beside_the_quote_is_never_exact(pg):
     old, new = _text_layers(pg, "There were 12 nonfatal events.", "There were 12 fatal events.")
     (span,) = find_quote("12", old.text)

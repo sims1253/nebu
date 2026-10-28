@@ -106,6 +106,25 @@ def cells_for(layer: Layer, start: int, end: int) -> tuple[CellRef, ...]:
     )
 
 
+def _context_before(text: str, start: int) -> str:
+    """At least `CONTEXT_CHARS` characters and `_CONTEXT_PROBE` non-space characters before
+    `start`, or up to the start of the text, so whitespace never starves the comparison."""
+    i, seen = start, 0
+    while i > 0 and (start - i < CONTEXT_CHARS or seen < _CONTEXT_PROBE):
+        i -= 1
+        seen += not text[i].isspace()
+    return text[i:start]
+
+
+def _context_after(text: str, end: int) -> str:
+    """The same as `_context_before`, after `end`."""
+    i, seen = end, 0
+    while i < len(text) and (i - end < CONTEXT_CHARS or seen < _CONTEXT_PROBE):
+        seen += not text[i].isspace()
+        i += 1
+    return text[end:i]
+
+
 def make_anchor(layer: Layer, span: Span) -> Anchor:
     """An anchor for a `find_quote` span of `layer.text`."""
     if not 0 <= span.start < span.end <= len(layer.text):
@@ -117,8 +136,8 @@ def make_anchor(layer: Layer, span: Span) -> Anchor:
         document_id=layer.document_id,
         quote=TextQuote(
             exact=exact,
-            prefix=layer.text[max(0, span.start - CONTEXT_CHARS) : span.start],
-            suffix=layer.text[span.end : span.end + CONTEXT_CHARS],
+            prefix=_context_before(layer.text, span.start),
+            suffix=_context_after(layer.text, span.end),
         ),
         text_hash=sha256_hex(exact.encode()),
         start=span.start,
