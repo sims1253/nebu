@@ -98,4 +98,5 @@ def prisma_s_payload(execution: SearchExecution) -> dict[str, Any]:
         "started_at": execution.started_at.isoformat(),
         "ended_at": execution.ended_at.isoformat(),
         "raw_artifact_hashes": list(execution.raw_artifact_hashes),
+        "skipped_record_ids": list(execution.skipped_record_ids),
     }

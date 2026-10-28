@@ -15,6 +15,7 @@ create table search_execution (
     started_at timestamptz not null,
     ended_at timestamptz not null,
     raw_artifact_hashes jsonb not null default '[]'::jsonb,
+    skipped_record_ids jsonb not null default '[]'::jsonb,
     created_at timestamptz not null default now(),
     unique (id, project_id)
 );

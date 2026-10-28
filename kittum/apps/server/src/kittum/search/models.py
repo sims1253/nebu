@@ -48,6 +48,9 @@ class SearchExecution(Record):
     retrieved_count: int
     raw_artifact_hashes: tuple[Sha256, ...]
     records: tuple[SourceRecord, ...]
+    # Provider IDs the source returned but cannot map yet (PubMed book records), so that
+    # reported_count == retrieved_count + len(skipped_record_ids) for a complete search.
+    skipped_record_ids: tuple[str, ...] = ()
 
 
 class SourceError(Exception):

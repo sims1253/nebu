@@ -157,3 +157,42 @@ def test_pubmed_error_reply_writes_nothing(
 
     assert list_executions(pg, project_id) == []
     assert ledger.events(pg, project_id) == []
+
+
+def test_pubmed_reads_registry_ids_from_databanklist(
+    pg: Tx, project_id: uuid.UUID, actor_id: uuid.UUID
+) -> None:
+    # Recorded: PMID 40701924 names NCT03052283 in Article/DataBankList, nowhere in its text.
+    efetch_xml = (FIXTURES / "pubmed_efetch_databank_only.xml").read_bytes()
+    transport = FakeTransport(
+        {
+            "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?"
+            "db=pubmed&term=40701924%5Bpmid%5D&usehistory=y&retmode=xml&tool=kittum": (
+                FIXTURES / "pubmed_esearch_databank_only.xml"
+            ).read_bytes(),
+            "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?"
+            "db=pubmed&query_key=1&WebEnv=MCID_6ae14f1a4cb2c746e30b1a31"
+            "&retstart=0&retmax=1&retmode=xml&tool=kittum": efetch_xml,
+        }
+    )
+    artifacts = MemoryStore()
+    source = PubMedSource(PassThroughGateway(transport), artifacts)
+    plan = SearchPlan(topic_id="t", source="pubmed", platform="PubMed", strategy="40701924[pmid]")
+
+    execution = run(
+        pg,
+        project_id,
+        plan,
+        source,
+        ledger=InMemoryLedger(),
+        actor_id=actor_id,
+        artifacts=artifacts,
+    )
+
+    (record,) = execution.records
+    assert record.pmid == "40701924"
+    assert "NCT03052283" not in f"{record.title} {record.abstract}"
+    assert "NCT03052283" in record.registry_ids
+    loaded = get_execution(pg, project_id, execution.id)
+    assert loaded is not None
+    assert "NCT03052283" in loaded.records[0].registry_ids

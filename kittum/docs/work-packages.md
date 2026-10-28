@@ -202,9 +202,13 @@ Module `kittum.search`. Needs: `gateway`, `protocol`, `ledger`.
   assigned at persistence; every raw hash must be in the store before rows are written; the
   `search.executed` payload is built once (`prisma_s_payload`). Routes take `actor_id` in the body
   and answer 503 without a ledger or gateway.
+- PubMed date windows span 1000/01/01 to 3000/12/31 and must cover the original count; PMIDs are
+  deduplicated across windows, and unique articles plus skipped book records must equal ESearch's
+  `Count`, or the run fails. CSV imports parse strictly and reject rows wider or narrower than the
+  header.
 - Left: take the actor from the session once auth exists; run live searches as a job (the HTTP calls
   currently happen inside the route's transaction); map `PubmedBookArticle` records (today they are
-  skipped, so they show only as reported > retrieved).
+  skipped and listed in `skipped_record_ids`).
 
 ## WP-06 Enrichment
 

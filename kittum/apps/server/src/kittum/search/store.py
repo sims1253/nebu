@@ -17,11 +17,13 @@ def save_execution(tx: Tx, project_id: Id, execution: SearchExecution) -> None:
         insert into search_execution (
             id, project_id, topic_id, source, platform, kind,
             strategy, limits, query_translation, reported_count,
-            retrieved_count, started_at, ended_at, raw_artifact_hashes
+            retrieved_count, started_at, ended_at, raw_artifact_hashes,
+            skipped_record_ids
         ) values (
             %s, %s, %s, %s, %s, %s,
             %s, %s, %s, %s,
-            %s, %s, %s, %s
+            %s, %s, %s, %s,
+            %s
         )
         """,
         (
@@ -39,6 +41,7 @@ def save_execution(tx: Tx, project_id: Id, execution: SearchExecution) -> None:
             execution.started_at,
             execution.ended_at,
             json.dumps(list(execution.raw_artifact_hashes)),
+            json.dumps(list(execution.skipped_record_ids)),
         ),
     )
 
@@ -116,6 +119,7 @@ def _row_to_execution(row: dict[str, Any], records: tuple[SourceRecord, ...]) ->
         reported_count=row["reported_count"],
         retrieved_count=row["retrieved_count"],
         raw_artifact_hashes=tuple(row["raw_artifact_hashes"]),
+        skipped_record_ids=tuple(row["skipped_record_ids"]),
         records=records,
     )
 

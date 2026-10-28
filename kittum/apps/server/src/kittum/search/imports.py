@@ -123,17 +123,28 @@ def _get_col(norm: dict[str, str], *keys: str) -> str | None:
 
 def parse_csv(text: str, raw_hash: str, format_name: str) -> list[SourceRecord]:
     """Parse CTIS or EU-CTR CSV into SourceRecord models."""
-    reader = csv.DictReader(io.StringIO(text))
-    header = {_norm_key(k) for k in reader.fieldnames or ()}
-    if not header & set(CSV_ID_COLUMNS) or not header & set(CSV_TITLE_COLUMNS):
+    try:
+        # `strict` turns an unterminated quoted field into an error instead of swallowing the rest.
+        fieldnames, *rows = [row for row in csv.reader(io.StringIO(text), strict=True) if row] or [
+            []
+        ]
+    except csv.Error as exc:
+        raise ValueError(f"CSV file is malformed: {exc}") from exc
+    keys = [_norm_key(k) for k in fieldnames]
+    if not set(keys) & set(CSV_ID_COLUMNS) or not set(keys) & set(CSV_TITLE_COLUMNS):
         raise ValueError(
             f"CSV header needs a trial ID column ({', '.join(CSV_ID_COLUMNS)}) "
             f"and a title column ({', '.join(CSV_TITLE_COLUMNS)})"
         )
+    for number, row in enumerate(rows, start=1):
+        if len(row) != len(keys):
+            raise ValueError(
+                f"CSV record {number} has {len(row)} fields; the header has {len(keys)}"
+            )
     records: list[SourceRecord] = []
 
-    for ordinal, row in enumerate(reader):
-        norm = {_norm_key(k): v for k, v in row.items() if k}
+    for ordinal, row in enumerate(rows):
+        norm = {k: v for k, v in zip(keys, row, strict=True) if k}
 
         record_id = _get_col(norm, *CSV_ID_COLUMNS) or f"{format_name}-{ordinal}"
 

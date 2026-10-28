@@ -236,8 +236,29 @@ def test_list_executions(pg: Tx, project_id: uuid.UUID, actor_id: uuid.UUID) -> 
         ((FIXTURES / "ctis_export.csv").read_bytes(), "ris", "0 TY lines"),
         ((FIXTURES / "central_export.ris").read_bytes(), "ctis", "CSV header needs"),
         ("Trial Title,EU CT Number\nCaf\u00e9,1\n".encode("latin-1"), "ctis", "not valid UTF-8"),
+        # An unterminated quote would otherwise swallow the rest of the file into one field.
+        (
+            (FIXTURES / "ctis_export.csv").read_bytes() + b'"2024-500001-11-00","cut off\n',
+            "ctis",
+            "CSV file is malformed",
+        ),
+        # A row wider than the header would otherwise lose its extra fields.
+        (
+            (FIXTURES / "euctr_export.csv").read_bytes()
+            + b'"2016-1","x","2016","s","t","c","d","extra"\n',
+            "euctr",
+            "CSV record 3 has 8 fields; the header has 7",
+        ),
     ],
-    ids=["unknown-format", "truncated-ris", "csv-as-ris", "ris-as-csv", "latin-1"],
+    ids=[
+        "unknown-format",
+        "truncated-ris",
+        "csv-as-ris",
+        "ris-as-csv",
+        "latin-1",
+        "unterminated-quote",
+        "extra-column",
+    ],
 )
 def test_import_rejects_files_it_cannot_read_completely(
     pg: Tx, project_id: uuid.UUID, actor_id: uuid.UUID, data: bytes, format: str, error: str

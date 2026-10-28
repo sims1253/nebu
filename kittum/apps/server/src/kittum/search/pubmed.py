@@ -23,6 +23,9 @@ logger = logging.getLogger(__name__)
 
 EUTILS_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 DEFAULT_MAX_COUNT = 9999
+# Date windows span every date PubMed can hold, so splitting never narrows the query.
+EARLIEST_DATE = date(1000, 1, 1)
+LATEST_DATE = date(3000, 12, 31)
 BATCH_SIZE = 500
 
 NCT_PATTERN = re.compile(r"(?i)\b(NCT\d{8})\b")
@@ -130,13 +133,12 @@ def parse_pubmed_xml(
                     doi = art_id.text.strip()
                     break
 
-        # Registry IDs from DataBankList
-        databank_list = medline.find("DataBankList")
-        if databank_list is not None:
-            for db in databank_list.findall("DataBank"):
-                for acc in db.findall("AccessionNumberList/AccessionNumber"):
-                    if acc.text:
-                        registry_ids.append(acc.text.strip())
+        # Registry IDs from DataBankList, which sits under Article
+        for acc in medline.findall(
+            "Article/DataBankList/DataBank/AccessionNumberList/AccessionNumber"
+        ):
+            if acc.text:
+                registry_ids.append(acc.text.strip())
 
         # Registry IDs from abstract and title
         combined_text = f"{title} {abstract or ''}"
@@ -291,12 +293,18 @@ class PubMedSource:
                 initial.count,
                 self._max_count_per_window,
             )
-            split = self._split_date_windows(
-                plan.strategy, date(1900, 1, 1), self._clock.now().date(), raw_hashes
-            )
+            split = self._split_date_windows(plan.strategy, EARLIEST_DATE, LATEST_DATE, raw_hashes)
             windows = [result for _, _, result in split]
+            # A record with distinct electronic and print dates can sit in two windows, so the sum
+            # may exceed the original count, but it can never fall short of it.
+            if sum(w.count for w in windows) < initial.count:
+                raise SourceError(
+                    f"PubMed date windows hold {sum(w.count for w in windows)} records, "
+                    f"fewer than the {initial.count} the search reported"
+                )
 
-        all_records: list[SourceRecord] = []
+        records_by_pmid: dict[str, SourceRecord] = {}
+        book_pmids: dict[str, None] = {}
         for window in windows:
             retstart = 0
             while retstart < window.count:
@@ -310,13 +318,26 @@ class PubMedSource:
                     "retmode": "xml",
                 }
                 body, body_hash = self._fetch(self._url("efetch.fcgi", params), raw_hashes)
-                error = ET.fromstring(body).findtext("ERROR")
+                root = ET.fromstring(body)
+                error = root.findtext("ERROR")
                 if error:
                     raise SourceError(f"PubMed EFetch failed at retstart={retstart}: {error}")
-                all_records.extend(
-                    parse_pubmed_xml(body, body_hash, start_ordinal=len(all_records))
-                )
+                for record in parse_pubmed_xml(body, body_hash):
+                    records_by_pmid.setdefault(record.provider_record_id, record)
+                for book in root.findall("PubmedBookArticle"):
+                    book_pmids[book.findtext("BookDocument/PMID") or ""] = None
                 retstart += retmax
+
+        # Keep the first occurrence of each PMID; ordinals follow that order.
+        all_records = [
+            r.model_copy(update={"ordinal": i}) for i, r in enumerate(records_by_pmid.values())
+        ]
+        skipped = tuple(pmid for pmid in book_pmids if pmid not in records_by_pmid)
+        if len(all_records) + len(skipped) != initial.count:
+            raise SourceError(
+                f"PubMed reported {initial.count} records but returned {len(all_records)} "
+                f"unique articles and {len(skipped)} skipped book records"
+            )
 
         return SearchExecution(
             id=new_id(),
@@ -329,4 +350,5 @@ class PubMedSource:
             retrieved_count=len(all_records),
             raw_artifact_hashes=tuple(raw_hashes),
             records=tuple(all_records),
+            skipped_record_ids=skipped,
         )
