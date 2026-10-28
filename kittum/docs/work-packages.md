@@ -16,7 +16,7 @@ The two-week spike in [DESIGN.md](../DESIGN.md#two-week-spike) picks from these 
 | 02 | `runs` | Done: job queue, worker, receipts, decider helper, fakes; run manifests and `diff` open |
 | 03 | `protocol`, `profiles` | Done: schema, profiles, compile, diff, rendering, persistence, routes |
 | 04 | `gateway` | Done: httpx transport, policies, shared buckets, budgets, cache, attempts; AppContext wiring open |
-| 05 | `search` | Types done; open |
+| 05 | `search` | Done |
 | 06 | `enrich` | Clients, stored enrichment, and full-text waterfall done; local tagging open |
 | 07 | `corpus` | Types done; open |
 | 08 | `judge` and `models` | Types and recorded backend done; open |
@@ -191,12 +191,13 @@ Module `kittum.gateway`. Needs: `core`.
 Module `kittum.search`. Needs: `gateway`, `protocol`, `ledger`.
 
 - PubMed E-utilities: ESearch with history, date windows under the 10,000 cap, EFetch, query
-  translation capture.
-- ClinicalTrials.gov API v2.
-- File imports: RIS, Cochrane Library export, Embase and Ovid exports with search history, CTIS
-  and EU-CTR exports.
-- A `FakeSource` in `search/testing.py`.
-- Acceptance: recorded responses in `tests/search/fixtures/` reproduce counts and PRISMA-S fields.
+  translation capture, structured abstracts with labels kept, registry IDs from `DataBankList` and abstract.
+- ClinicalTrials.gov API v2 with Essie syntax, pagination across multiple pages, mapping to NCT ID, status, and phase.
+- File imports: RIS (Generic, Cochrane Library CENTRAL, Embase) and CSV (CTIS, EU-CTR).
+- Search execution and source occurrence persistence in Postgres with audit ledger event (`search.executed`).
+- HTTP API routes (`/api/projects/{project_id}/search/*`) registered and contract generated.
+- `FakeSource` in `search/testing.py`.
+- Acceptance: recorded real responses in `tests/search/fixtures/` reproduce counts, query translation, and PRISMA-S fields; tests pass end-to-end without network.
 
 ## WP-06 Enrichment
 
