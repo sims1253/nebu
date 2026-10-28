@@ -1,0 +1,208 @@
+// The published protocol, read only (DESIGN.md, "Protocol"): the questions, the outcomes, and per
+// search topic its screening mode, audit plan, sources, and criteria. Every heading uses the
+// profile's words for core concepts.
+import type { ReactNode } from "react";
+
+import type { Criterion, ProfileLabels, SearchTopic } from "../../data/schema.ts";
+import { useProject } from "../project.tsx";
+
+const MODES: Record<SearchTopic["mode"], string> = {
+  M1: "Two people screen every record; the AI reads beside them as a third screener.",
+  M2: "One person screens every record; the AI is the second screener, and every disagreement gets a blind extra screen.",
+  M3: "Two people screen in the AI's order and stop when a pre-specified statistical test passes.",
+};
+
+const STAGES: Record<string, string> = {
+  title_abstract: "Title and abstract",
+  full_text: "Full text",
+};
+
+const date = (iso: string | null) =>
+  iso
+    ? new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })
+    : "Not published";
+
+export function ProtocolScreen() {
+  const { protocol, labels } = useProject();
+  if (!protocol) {
+    return (
+      <section className="h-full overflow-y-auto bg-paper">
+        <div className="mx-auto max-w-[720px] px-8 py-14">
+          <h1 className="text-xl font-semibold">No protocol is published yet</h1>
+          <p className="mt-2 max-w-[62ch] text-md text-ink-2">
+            Every decision reads the published protocol, so screening waits for it. The methods lead
+            publishes one with <code>kittum project publish-protocol</code>, which records their
+            approval in the ledger.
+          </p>
+        </div>
+      </section>
+    );
+  }
+  const { protocol: review, profile } = protocol;
+  return (
+    <section className="h-full overflow-y-auto bg-paper">
+      <article className="mx-auto max-w-[980px] px-10 pt-10 pb-16" aria-label="Protocol">
+        <h1 className="max-w-[60ch] text-xl font-semibold tracking-[-0.01em] text-balance">
+          {review.title}
+        </h1>
+        <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
+          <dt className="text-ink-3">Version</dt>
+          <dd>{review.version_label}</dd>
+          <dt className="text-ink-3">Published</dt>
+          <dd>{date(protocol.published_at)}</dd>
+          <dt className="text-ink-3">Content hash</dt>
+          <dd title={protocol.content_hash} className="text-ink-2">
+            {protocol.content_hash.slice(0, 16)}
+          </dd>
+          <dt className="text-ink-3">Profile</dt>
+          <dd>{profile.id ?? "No profile: the core's words and rules"}</dd>
+        </dl>
+
+        <Section title={`${labels.scope}s`}>
+          <ol className="grid gap-5">
+            {review.questions.map((q) => (
+              <li key={q.id} className="border-l-2 border-petrol pl-4">
+                <h3 className="text-md font-semibold">{q.label}</h3>
+                <dl className="mt-1.5 grid grid-cols-[9rem_minmax(0,68ch)] gap-x-5 gap-y-1 text-md">
+                  <dt className="narrow pt-[2px] text-right text-xs font-semibold text-ink-2">
+                    {labels.population}
+                  </dt>
+                  <dd>{q.population}</dd>
+                  <dt className="narrow pt-[2px] text-right text-xs font-semibold text-ink-2">
+                    {labels.intervention}
+                  </dt>
+                  <dd>{q.intervention}</dd>
+                  {q.comparators.length > 0 ? (
+                    <>
+                      <dt className="narrow pt-[2px] text-right text-xs font-semibold text-ink-2">
+                        {labels.comparator}
+                      </dt>
+                      <dd>{q.comparators.join("; ")}</dd>
+                    </>
+                  ) : null}
+                </dl>
+              </li>
+            ))}
+          </ol>
+        </Section>
+
+        <Section title={`${labels.outcome}s`}>
+          <ul className="grid gap-1 text-md">
+            {review.outcomes.map((o) => (
+              <li key={o.id} className="flex gap-3">
+                <span>{o.name}</span>
+                <span className="text-sm text-ink-3">{o.category}</span>
+              </li>
+            ))}
+          </ul>
+        </Section>
+
+        {review.topics.map((topic) => (
+          <Topic key={topic.id} topic={topic} labels={labels} />
+        ))}
+      </article>
+    </section>
+  );
+}
+
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="mt-10 border-t border-rule-strong pt-4">
+      <h2 className="mb-4 text-lg font-semibold">{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+function Topic({ topic, labels }: { topic: SearchTopic; labels: ProfileLabels }) {
+  return (
+    <Section title={`${labels.search_topic}: ${topic.label}`}>
+      <dl className="grid grid-cols-[9rem_minmax(0,68ch)] gap-x-5 gap-y-1.5 text-md">
+        <dt className="narrow pt-[2px] text-right text-xs font-semibold text-ink-2">
+          Screening mode
+        </dt>
+        <dd>
+          <span className="font-semibold">{topic.mode}</span>{" "}
+          <span className="text-ink-2">{MODES[topic.mode]}</span>
+          {topic.mode_rationale ? (
+            <span className="mt-1 block text-sm text-ink-2">Why: {topic.mode_rationale}</span>
+          ) : null}
+        </dd>
+        <dt className="narrow pt-[2px] text-right text-xs font-semibold text-ink-2">Audit</dt>
+        <dd>
+          {topic.sentinel_percent}% of records as sentinels with known labels,{" "}
+          {topic.random_audit_percent}% re-screened by the auditor
+        </dd>
+        <dt className="narrow pt-[2px] text-right text-xs font-semibold text-ink-2">
+          {labels.scope}s
+        </dt>
+        <dd>{topic.scopes.map((s) => s.label).join("; ")}</dd>
+        <dt className="narrow pt-[2px] text-right text-xs font-semibold text-ink-2">Sources</dt>
+        <dd>
+          <ul>
+            {topic.sources.map((s) => (
+              <li key={s.id}>
+                {s.name} <span className="text-sm text-ink-3">{s.kind}</span>
+              </li>
+            ))}
+          </ul>
+        </dd>
+      </dl>
+      <h3 className="mt-6 text-md font-semibold">Criteria</h3>
+      <p className="mt-1 max-w-[70ch] text-sm text-ink-2">
+        Exclusion reasons are these criteria. At title and abstract a reviewer excludes on one with{" "}
+        <span className="font-medium">e</span> and its number in the queue&rsquo;s order.
+      </p>
+      <table className="narrow mt-3 w-full border-collapse text-sm">
+        <thead>
+          <tr className="border-b border-rule-strong text-left text-xs text-ink-2">
+            <th className="py-1.5 pr-3 font-semibold">No.</th>
+            <th className="py-1.5 pr-3 font-semibold">Slot</th>
+            <th className="py-1.5 pr-3 font-semibold">Criterion</th>
+            <th className="py-1.5 pr-3 font-semibold">Decided at</th>
+            <th className="py-1.5 font-semibold">Keywords</th>
+          </tr>
+        </thead>
+        <tbody>
+          {topic.criteria.map((c, index) => (
+            <CriterionRow key={c.id} criterion={c} index={index} labels={labels} />
+          ))}
+        </tbody>
+      </table>
+    </Section>
+  );
+}
+
+function CriterionRow({
+  criterion: c,
+  index,
+  labels,
+}: {
+  criterion: Criterion;
+  index: number;
+  labels: ProfileLabels;
+}) {
+  return (
+    <tr className="border-b border-rule align-baseline">
+      <td className="py-2 pr-3 text-ink-3">{index + 1}</td>
+      <td className="py-2 pr-3 whitespace-nowrap">
+        {labels[c.slot]}
+        <span className="block text-xs text-ink-3">
+          {c.polarity === "include" ? "Inclusion" : "Exclusion"}, {c.id}
+        </span>
+      </td>
+      <td className="max-w-[56ch] py-2 pr-3">
+        {c.text_en}
+        {c.text_de !== c.text_en ? (
+          <span className="mt-0.5 block text-ink-2" lang="de">
+            {c.text_de}
+          </span>
+        ) : null}
+      </td>
+      <td className="py-2 pr-3 whitespace-nowrap text-ink-2">
+        {c.decidable_at.map((s) => STAGES[s] ?? s).join(", ")}
+      </td>
+      <td className="py-2 text-ink-2">{c.keywords.length ? c.keywords.join(", ") : "None"}</td>
+    </tr>
+  );
+}
