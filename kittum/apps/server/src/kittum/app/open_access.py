@@ -405,6 +405,7 @@ class _Report:
                 clock=self.ctx.clock,
                 project_id=self.project_id,
                 actor_id=self.actor,
+                report_id=self.ref,
             )
             tx.execute(
                 "update retrieval_run_report set attempts = attempts || %s, acquisition_id = %s"

@@ -99,6 +99,7 @@ def _acquisition(
     location: FullTextLocation,
     document: Document,
     attempts: Sequence[AcquisitionAttempt],
+    report_id: str | None = None,
 ) -> Acquisition:
     acquisition = Acquisition(
         id=new_id(),
@@ -126,7 +127,8 @@ def _acquisition(
                 "licence": location.licence,
                 "terms_url": location.terms_url,
                 "attempts": [a.model_dump(mode="json") for a in attempts],
-            },
+            }
+            | ({"report_id": report_id} if report_id else {}),
         ),
     )
     tx.execute(
@@ -157,9 +159,11 @@ def record_location(
     clock: Clock,
     project_id: Id,
     actor_id: Id,
+    report_id: str | None = None,
 ) -> AcquisitionOutcome:
     """Record one fetched location: the acquisition when it is a readable PDF, else the failed
-    attempt, each with its ledger event in `tx`."""
+    attempt, each with its ledger event in `tx`. `report_id` names the report the full text is
+    sought for, in both events, so a record's audit trail shows every attempt for it."""
     attempt, document = _attempt(tx, artifacts, fetched)
     if document is None:
         ledger.append(
@@ -169,7 +173,8 @@ def record_location(
                 type=ATTEMPTED,
                 schema_version=1,
                 actor_id=actor_id,
-                payload={"attempt": attempt.model_dump(mode="json")},
+                payload={"attempt": attempt.model_dump(mode="json")}
+                | ({"report_id": report_id} if report_id else {}),
             ),
         )
         return AcquisitionOutcome(acquisition=None, attempts=(attempt,))
@@ -182,6 +187,7 @@ def record_location(
         location=fetched.location,
         document=document,
         attempts=(attempt,),
+        report_id=report_id,
     )
     return AcquisitionOutcome(acquisition=acquisition, attempts=(attempt,))
 

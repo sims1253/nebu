@@ -390,6 +390,15 @@ def _describe(
         summary = (
             f"{names.actor(e.actor_id)} adjudicated: {p.get('outcome')}{_criterion(p)}, {adopted}"
         )
+    elif t == "project.full_text_attached" and p.get("acquisition_id"):
+        kind = "full_text"
+        summary = f"Full text attached, fetched from {p.get('source')}"
+        facts += [
+            ("Licence", p.get("licence") or "Not stated"),
+            ("URL", p.get("url")),
+            ("Document", p.get("document_id")),
+        ]
+        artifacts.append(names.artifact(p.get("artifact_hash"), "Full text PDF"))
     elif t == "project.full_text_attached":
         kind = "full_text"
         summary = f"Full text uploaded by {names.actor(e.actor_id)}"
@@ -407,6 +416,22 @@ def _describe(
     elif t == "document.acquisition_failed":
         kind = "full_text"
         summary = "Full text not acquired"
+    elif t == "document.acquisition_attempted":
+        kind = "full_text"
+        attempt = p.get("attempt") or {}
+        summary = f"Full text not fetched from {attempt.get('source')}: {attempt.get('outcome')}"
+        facts += [
+            ("URL", attempt.get("url")),
+            ("HTTP status", attempt.get("status")),
+            ("Licence", attempt.get("licence")),
+            ("Error", attempt.get("error")),
+        ]
+    elif t == "retrieval.open_access_requested":
+        kind = "full_text"
+        summary = f"Open-access full texts requested for {len(p.get('report_ids', []))} reports"
+    elif t == "retrieval.no_open_access_location":
+        kind = "full_text"
+        summary = "No open-access location known"
     elif t == "extraction.run_requested":
         kind = "extraction"
         path = f"the LLM path with {p['model_id']}" if p.get("model_id") else "the Janus path"
@@ -546,6 +571,8 @@ class _Related:
         p = e.payload
         ref = self.ref
         if p.get("item_ref") == ref or p.get("report_id") == ref:
+            return True
+        if ref in map(str, p.get("report_ids", [])):  # an open-access retrieval run's reports
             return True
         if e.type == "screening.stage_opened":
             return p.get("stage_id") in self.stages
