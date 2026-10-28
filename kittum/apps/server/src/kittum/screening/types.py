@@ -138,9 +138,17 @@ class Reveal(Record):
     rationale: str
 
 
-class QueueRecord(RecordFacts):
-    title_highlights: tuple[Highlight, ...] = ()
-    sections: tuple[tuple[str, int, int], ...] = ()
+class QueueRecord(Record):
+    """The record's facts as the queue shows them, with title highlights and abstract sections."""
+
+    pmid: str | None
+    doi: str | None
+    journal: str | None
+    year: int | None
+    publication_types: tuple[str, ...]
+    registry_ids: tuple[str, ...]
+    title_highlights: tuple[Highlight, ...]
+    sections: tuple[tuple[str, int, int], ...]
     """Structured-abstract labels as (label, start, end) code-point ranges of `text`."""
 
 
@@ -153,13 +161,13 @@ class QueueItem(Record):
     scope_id: str
     title: str
     text: str
-    highlights: tuple[Highlight, ...] = ()
+    highlights: tuple[Highlight, ...]
     revision: int
     record: QueueRecord
-    phase: Phase = "provisional"
+    phase: Phase
     """The phase the next decision must have: `final` after a reveal of this reviewer's own
     provisional decision, which then comes back in `reveal`."""
-    reveal: Reveal | None = None
+    reveal: Reveal | None
 
 
 class DecideResult(Record):
@@ -280,4 +288,4 @@ class ScopeStatus(Record):
     screened: int
     remaining: int
     conflicts: int | None
-    metrics: StageMetrics | None = None
+    metrics: StageMetrics | None

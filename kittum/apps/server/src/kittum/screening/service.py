@@ -1145,6 +1145,7 @@ class Screening:
                 screened=own["decided"],
                 remaining=own["assigned"] - own["decided"],
                 conflicts=None,
+                metrics=None,
             )
         protocol = self._protocol(tx, project_id, row["protocol_version_id"])
         topic = topic_for(protocol, scope_id, row["topic_id"])
