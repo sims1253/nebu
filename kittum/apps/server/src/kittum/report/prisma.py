@@ -335,23 +335,27 @@ def _wrap(line: str) -> list[str]:
     # A count ("n = 3") never breaks: its spaces are no-break spaces while wrapping.
     kept = line.replace(" = ", "\u00a0=\u00a0")
     wrapped = textwrap.wrap(
-        kept, _CHARS, subsequent_indent=indent + "    ", break_on_hyphens=False
+        kept, _CHARS, subsequent_indent=indent + "  ", break_on_hyphens=False
     ) or [kept]
     return [part.replace("\u00a0", " ") for part in wrapped]
 
 
-def _box(x: int, y: int, given: list[str], *, bold_first: bool = True) -> tuple[str, int]:
+def _box(
+    x: int, y: int, given: list[str], *, bold_first: bool = True, min_height: int = 0
+) -> tuple[str, int]:
     lines = [part for line in given for part in _wrap(line)]
     first = len(_wrap(given[0])) if given else 0  # the heading line, wrapped, stays bold
-    height = _PAD * 2 + _LINE * len(lines)
+    height = max(_PAD * 2 + _LINE * len(lines), min_height)
     parts = [
         f"<rect x='{x}' y='{y}' width='{_W}' height='{height}' rx='4' fill='#ffffff' "
         "stroke='#1f2933' stroke-width='1.2'/>"
     ]
     for n, line in enumerate(lines):
         weight = " font-weight='600'" if bold_first and n < first else ""
+        # SVG drops leading spaces, so a line's indent is its position: 8 px a space.
+        indent = 8 * (len(line) - len(line.lstrip(" ")))
         parts.append(
-            f"<text x='{x + _PAD}' y='{y + _PAD + _LINE * (n + 1) - 4}' {_FONT}{weight}>"
+            f"<text x='{x + _PAD + indent}' y='{y + _PAD + _LINE * (n + 1) - 4}' {_FONT}{weight}>"
             f"{escape(line)}</text>"
         )
     return "".join(parts), height
@@ -454,7 +458,8 @@ def svg(f: PrismaFlow, title: str) -> str:
     spans: list[tuple[str, int, int]] = []  # (band, top, bottom)
     previous_bottom: int | None = None
     for band, main, side in rows:
-        main_svg, main_h = _box(left, y, main)
+        # A band's rotated label needs the height of its word: "Included" spans one short box.
+        main_svg, main_h = _box(left, y, main, min_height=96 if band == "Included" else 0)
         side_svg, side_h = _box(right, y, side) if side else ("", 0)
         height = max(main_h, side_h)
         body += [main_svg, side_svg]
