@@ -155,6 +155,9 @@ class InMemoryReceipts:
     def __init__(self) -> None:
         self._receipts: dict[Id, Receipt] = {}
 
+    def lock_project(self, tx: Tx, project_id: Id) -> None:
+        """A no-op: the fake has no commit to hold a lock until, so run commands one at a time."""
+
     def find(self, tx: Tx, command_id: Id) -> Receipt | None:
         return self._receipts.get(command_id)
 

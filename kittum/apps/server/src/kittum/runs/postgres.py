@@ -15,8 +15,10 @@ if TYPE_CHECKING:
     from kittum.core import Id
     from kittum.db import Tx
 
-# The first key of the two-key advisory lock on a command ID; the ledger uses another.
+# The first keys of the two-key advisory locks on a command ID and on a project's commands; the
+# ledger uses another.
 LOCK_NAMESPACE = 0x6B72756E  # "krun"
+PROJECT_LOCK_NAMESPACE = 0x6B70726A  # "kprj"
 
 _LEASED = "id = %s and status = 'running' and lease_owner = %s and attempt = %s"
 
@@ -161,6 +163,12 @@ class PostgresJobQueue:
 
 
 class PostgresReceipts:
+    def lock_project(self, tx: Tx, project_id: Id) -> None:
+        tx.execute(
+            "select pg_advisory_xact_lock(%s, hashtext(%s::text))",
+            (PROJECT_LOCK_NAMESPACE, project_id),
+        )
+
     def find(self, tx: Tx, command_id: Id) -> Receipt | None:
         tx.execute(
             "select pg_advisory_xact_lock(%s, hashtext(%s::text))", (LOCK_NAMESPACE, command_id)

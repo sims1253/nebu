@@ -127,6 +127,10 @@ class JobQueue(Protocol):
 
 
 class ReceiptStore(Protocol):
+    def lock_project(self, tx: Tx, project_id: Id) -> None:
+        """Hold off other commands for the project until commit."""
+        ...
+
     def find(self, tx: Tx, command_id: Id) -> Receipt | None:
         """Return the receipt, holding off other callers with the same command ID until commit."""
         ...

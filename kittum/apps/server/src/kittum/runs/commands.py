@@ -47,11 +47,14 @@ class Commands:
     ) -> Receipt:
         """Decide `command` and commit the outcome through `tx`.
 
-        `load` reads the state the decider needs (`lambda tx, command: None` if none). It runs
-        after the receipt check, which holds a lock on the command ID until commit, so two
-        concurrent retries decide only once. `apply` writes the module's rows and gets the
-        appended events, so rows can reference them.
+        Commands for one project run one at a time: a lock on the project is held from before
+        the receipt check until commit, so no other command can change the state between `load`
+        and the commit, and two concurrent retries decide only once.
+
+        `load` reads the state the decider needs (`lambda tx, command: None` if none). `apply`
+        writes the module's rows and gets the appended events, so rows can reference them.
         """
+        self._receipts.lock_project(tx, command.project_id)
         stored = self._receipts.find(tx, command.command_id)
         if stored is not None:
             if (stored.project_id, stored.type) != (command.project_id, command.type):

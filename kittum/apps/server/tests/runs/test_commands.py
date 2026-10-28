@@ -242,3 +242,62 @@ def test_concurrent_retries_of_one_command_decide_once(database: Database) -> No
     assert screening.decide_calls == 1
     with database.transaction() as tx:
         assert [e.seq for e in ledger.events(tx, project)] == [1, 2]
+
+
+@pytest.mark.postgres
+def test_conflicting_commands_with_different_ids_decide_one_after_the_other(
+    database: Database,
+) -> None:
+    """Two reviewers claim the one adjudication slot of a record at the same moment."""
+    ledger = PostgresLedger()
+    commands = Commands(ledger, PostgresJobQueue(), PostgresReceipts())
+    with database.transaction() as tx:
+        project, actor = seed_project(tx)
+
+    def load(tx: Tx, _command: Command) -> bool:
+        return any(e.type == "adjudication.claimed" for e in ledger.events(tx, project))
+
+    def decide(command: Command, claimed: bool) -> Decision:
+        time.sleep(0.05)  # Both would pass here if they had read the same state.
+        if claimed:
+            raise CommandRejected("the slot is taken")
+        return Decision(
+            events=(
+                EventDraft(
+                    project_id=command.project_id,
+                    type="adjudication.claimed",
+                    schema_version=1,
+                    actor_id=command.actor_id,
+                    payload=command.payload,
+                ),
+            )
+        )
+
+    start = threading.Barrier(2)
+    outcomes: list[str] = []
+
+    def claim(reviewer: str) -> None:
+        command = Command(
+            command_id=new_id(),
+            project_id=project,
+            type="adjudication.claim",
+            actor_id=actor,
+            payload={"record": "PMID:31562797", "reviewer": reviewer},
+        )
+        start.wait()
+        try:
+            with database.transaction() as tx:
+                commands.execute(tx, command, decide, load=load)
+            outcomes.append("claimed")
+        except CommandRejected:
+            outcomes.append("rejected")
+
+    threads = [threading.Thread(target=claim, args=(r,)) for r in ("anna", "ben")]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=5)
+
+    assert sorted(outcomes) == ["claimed", "rejected"]
+    with database.transaction() as tx:
+        assert [e.type for e in ledger.events(tx, project)] == ["adjudication.claimed"]
