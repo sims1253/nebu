@@ -131,9 +131,11 @@ def test_prisma_flow_reconciles_by_hand_with_screening_and_the_corpus(
     assert (ta.screened, ta.remaining, ta.conflicts) == (f.records_screened, 0, 0)
     assert (ft.screened, ft.remaining, ft.conflicts) == (f.reports_assessed, 0, 0)
 
-    # The AI removes no record; what it took part in is counted beside the human counts.
+    # The AI removes no record; what it took part in is counted beside the human counts. It
+    # proposed two of the exclusions on a verified quote: the colitis trial's non-smokers and the
+    # cohort study's design.
     assert f.ai_title_abstract.marked_ineligible_by_automation == 0
-    assert f.members["title_abstract:excluded_with_ai_proposal"] == refs(world, "colitis")
+    assert f.members["title_abstract:excluded_with_ai_proposal"] == refs(world, "colitis", "cohort")
     assert f.members["title_abstract:excluded_after_ai_rescreen"] == refs(
         world, "glpg", "predictors"
     )

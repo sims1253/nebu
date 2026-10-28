@@ -207,10 +207,11 @@ def test_m2_sends_every_ai_disagreement_to_adjudication(database: Database) -> N
         own, verified = status.metrics.agreement
         assert (own.kind, verified.kind) == ("human_ai", "human_ai_verified")
         # The model's own reading agrees on the patch trial and the two exclusions it shares;
-        # the verified reading agrees only on the patch trial.
+        # the verified reading agrees on the patch trial and the cohort study, whose design quote
+        # the filter verified, not on the varenicline trial, whose quote it could not.
         assert own.items == verified.items == 6
         assert own.pabak == pytest.approx(0.0)
-        assert verified.pabak == pytest.approx(-2 / 3)
+        assert verified.pabak == pytest.approx(-1 / 3)
         assert world.ledger.verify(tx, world.project_id).ok
 
 

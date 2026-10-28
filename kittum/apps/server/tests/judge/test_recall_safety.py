@@ -476,3 +476,178 @@ def test_structurally_unsupported_exclusions_are_unclear(
         check,
     )
     assert not verdict.excludes
+
+
+# Round 5: the negation and design checks read the criterion. A negation of one requirement of
+# an affirmative condition, and another design than the one required, support not_met.
+
+SMOKERS = Criterion(
+    id="C_CHEMO",  # the answer key `_judge_chemo` uses
+    slot="population",
+    text={
+        "en": "Adults (18 years or older) who smoke tobacco.",
+        "de": "Erwachsene (ab 18 Jahren), die Tabak rauchen.",
+    },
+    decidable_at=("title_abstract",),
+    applies_to=(SCOPE,),
+)
+RANDOMIZED = Criterion(
+    id="C_CHEMO",
+    slot="study_type",
+    text={"en": "Randomized or quasi-randomized controlled trial."},
+    decidable_at=("title_abstract",),
+    applies_to=(SCOPE,),
+    keywords=("cohort", "cross-sectional", "case-control", "observational", "review", "survey"),
+)
+
+
+@pytest.mark.parametrize(
+    ("criterion", "sentence", "quote"),
+    [
+        (
+            SMOKERS,
+            "We enrolled 64 adults with active ulcerative colitis who did not smoke tobacco.",
+            "adults with active ulcerative colitis who did not smoke tobacco",
+        ),
+        (
+            SMOKERS,
+            "Eingeschlossen wurden Erwachsene mit Colitis, die keinen Tabak rauchen.",
+            "Erwachsene mit Colitis, die keinen Tabak rauchen",
+        ),
+        (
+            RANDOMIZED,
+            "Quit success in the general population: a prospective cohort study.",
+            "a prospective cohort study",
+        ),
+        (
+            RANDOMIZED,
+            "This was a non-randomized observational study of 300 smokers.",
+            "a non-randomized observational study",
+        ),
+        (
+            RANDOMIZED,
+            "We conducted a matched case-control study in 12 hospitals.",
+            "a matched case-control study",
+        ),
+    ],
+    ids=[
+        "negated-requirement-en",
+        "negated-requirement-de",
+        "other-design",
+        "non-randomized",
+        "case-control",
+    ],
+)
+def test_evidence_against_the_criterions_own_requirement_excludes(
+    criterion: Criterion, sentence: str, quote: str
+) -> None:
+    verdict = _judge_chemo(_record("occ-round-5", sentence), criterion, quote)
+    (result,) = verdict.criteria
+    assert (result.status, result.failed_check, result.quote_verified) == ("not_met", None, True)
+    assert verdict.excludes
+
+
+@pytest.mark.parametrize(
+    ("criterion", "sentence", "quote", "check"),
+    [
+        # The negation is about another condition.
+        (
+            SMOKERS,
+            "We enrolled adults who smoke tobacco and did not have diabetes.",
+            "adults who smoke tobacco and did not have diabetes",
+            "negation",
+        ),
+        # "Not older than 25" does not say the participants were not adults.
+        (
+            SMOKERS,
+            "We enrolled adults not older than 25 who smoke tobacco.",
+            "adults not older than 25 who smoke tobacco",
+            "negation",
+        ),
+        # Another cohort in the same sentence meets the condition.
+        (
+            SMOKERS,
+            "Adults who did not smoke tobacco were compared with adults who smoke tobacco.",
+            "Adults who did not smoke tobacco",
+            "negation",
+        ),
+        # A clause after the negation adds people the negation does not cover.
+        (
+            SMOKERS,
+            "We enrolled adults who did not smoke tobacco and smokers of cigars.",
+            "adults who did not smoke tobacco and smokers of cigars",
+            "negation",
+        ),
+        (
+            SMOKERS,
+            "We enrolled adults who did not only smoke tobacco.",
+            "adults who did not only smoke tobacco",
+            "negation",
+        ),
+        # One negated requirement of a negative condition is not read.
+        (
+            _criterion("exclude", "No prior chemotherapy"),
+            "We enrolled patients with prior surgery and no chemotherapy.",
+            "patients with prior surgery and no chemotherapy",
+            "negation",
+        ),
+        # A negated other design says nothing about the design the criterion requires.
+        (
+            RANDOMIZED,
+            "This was not an observational study.",
+            "not an observational study",
+            "polarity",
+        ),
+        # The sentence names the required design too.
+        (
+            RANDOMIZED,
+            "We report a cohort study nested in a randomised controlled trial.",
+            "a cohort study",
+            "polarity",
+        ),
+        (
+            RANDOMIZED,
+            "A cohort of 300 smokers was randomly assigned to two groups.",
+            "A cohort of 300 smokers",
+            "polarity",
+        ),
+        (
+            RANDOMIZED,
+            "A case-control analysis within a controlled trial of 300 smokers.",
+            "A case-control analysis",
+            "polarity",
+        ),
+        # A design named in a language Kittum cannot read.
+        (
+            RANDOMIZED,
+            "Estudio de cohorte prospectivo (prospective cohort study).",
+            "Estudio de cohorte prospectivo (prospective cohort study)",
+            "language_unverifiable",
+        ),
+    ],
+    ids=[
+        "other-condition-negated",
+        "negated-age-bound",
+        "other-cohort-in-the-sentence",
+        "clause-after-the-negation",
+        "not-only",
+        "negative-condition",
+        "negated-other-design",
+        "nested-in-a-trial",
+        "cohort-randomized",
+        "case-control-in-a-trial",
+        "spanish-design",
+    ],
+)
+def test_evidence_that_does_not_contradict_the_criterions_requirement_is_unclear(
+    criterion: Criterion, sentence: str, quote: str, check: str
+) -> None:
+    verdict = _judge_chemo(_record("occ-round-5", sentence), criterion, quote)
+    (result,) = verdict.criteria
+    assert result.quote_verified
+    assert (result.status, result.downgraded_from, result.failed_check) == (
+        "unclear",
+        "not_met",
+        check,
+    )
+    assert not verdict.excludes

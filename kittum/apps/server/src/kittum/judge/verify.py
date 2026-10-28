@@ -21,12 +21,25 @@ A `not_met` stands only if all of these hold:
    made only of the condition's own terms and digits), and no token, in any case, that could be
    a function word or negation of another language ("non", "sin", "pas").
 6. The quote's sentence has at most one negation cue, inside the quote, at most three tokens
-   before a key term and in the same clause. A cue such as "excluded" or "with or without"
-   anywhere in the sentence makes the scope ambiguous.
-7. The quote fails the criterion in its polarity: it negates an affirmative inclusion condition,
+   before a key term and in the same clause. A cue such as "excluded", "with or without", or
+   "not only" anywhere in the sentence makes the scope ambiguous. A key term the quote negates
+   does not also stand unnegated in the sentence ("adults who did not smoke tobacco and adults
+   who smoke tobacco").
+7. If the cue negates some of the quote's key terms and not others, the quote states the
+   opposite of one requirement of an affirmative condition: "adults who did not smoke tobacco"
+   against "Adults who smoke tobacco". Then the key terms it leaves unnegated come before the
+   cue, every key term after it is negated, and no clause follows. A negative condition is not
+   read this way.
+8. The quote fails the criterion in its polarity: it negates an affirmative inclusion condition,
    states a negative inclusion condition's term unnegated, or states an exclusion condition with
    the condition's own polarity. The condition's polarity is read the same way from each wording
    (at most one cue), and the wordings must agree.
+9. On a study design inclusion criterion with an affirmative wording, a key term with a word
+   the wording does not have names another design ("cohort" or "case-control" against
+   "Randomized controlled trial"). A quote whose key terms all name another design fails the
+   criterion if it states the design unnegated and its sentence has no other word of the wording
+   ("randomised", "trials"; a prefixed "non-randomized" negates it and does not count). A
+   negated other design ("not a cohort study") is no evidence either way.
 
 What the filter cannot catch, by design:
 
@@ -34,6 +47,7 @@ What the filter cannot catch, by design:
 - A negation in an intervening clause about another condition, within the window ("Patients
   with no diabetes received chemotherapy").
 - Evidence about another arm, cohort, or population than the one the criterion is about.
+- A design named for another study than the record's own ("as in an earlier cohort study").
 - Partial matches of a condition ("skeletal metastases" against "brain metastases").
 - Anything else that needs understanding rather than structure.
 
@@ -42,7 +56,7 @@ exclusion is a proposal, and disagreements, AI-only exclusions, and audits go to
 """
 
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from kittum.core import Span, find_quote
 from kittum.judge.types import CriterionVerdict
@@ -58,6 +72,7 @@ LIMITS: tuple[str, ...] = (
     'A negation in an intervening clause about another condition, within the window ("Patients '
     'with no diabetes received chemotherapy").',
     "Evidence about another arm, cohort, or population than the one the criterion is about.",
+    'A design named for another study than the record\'s own ("as in an earlier cohort study").',
     'Partial matches of a condition ("skeletal metastases" against "brain metastases").',
     "Anything else that needs understanding rather than structure.",
 )
@@ -86,8 +101,8 @@ _NEGATION_WORDS = _vocabulary(
 _SCOPE_CUES = re.compile(
     r"\b(excluded|exclude|excluding|exclusion|ineligible|not eligible|were not included|"
     r"was not included|not enrolled|with or without|with and without|regardless of|"
-    r"irrespective of|whether or not|independent of|independently of|"
-    r"ausgeschlossen|ausschluss|mit oder ohne|unabhängig von)\b",
+    r"irrespective of|whether or not|independent of|independently of|not only|not just|"
+    r"ausgeschlossen|ausschluss|mit oder ohne|unabhängig von|nicht nur)\b",
     re.IGNORECASE,
 )
 
@@ -291,21 +306,35 @@ def _sentence(source: str, span: Span) -> tuple[int, int]:
     return starts[-1], end_match.start() if end_match else len(source)
 
 
-def _anchored_negation(
-    criterion: Criterion, source: str, span: Span
-) -> tuple[FailedCheck | None, bool]:
-    """Whether the quote's key term is negated, or the check that fails reading it."""
+class _Reading(NamedTuple):
+    """How one occurrence of a quote reads, or the check that fails reading it."""
+
+    failed: FailedCheck | None
+    negated: bool = False  # the cue negates the quote's key terms
+    partial: bool = False  # ... some of them, the last ones: one requirement of the condition
+    keys: frozenset[tuple[str, ...]] = frozenset()  # the key terms the quote contains
+    states_wording: bool = False  # the sentence has an unprefixed word of the wording elsewhere
+
+
+def _related(word: str, terms: frozenset[str]) -> bool:
+    """Whether a stem is a term or shares its first six letters ("randomised", "randomized")."""
+    return word in terms or (len(word) >= 6 and any(word[:6] == t[:6] for t in terms))
+
+
+def _anchored_negation(criterion: Criterion, source: str, span: Span) -> _Reading:
+    """Whether the quote's key terms are negated, or the check that fails reading it."""
     start, end = _sentence(source, span)
     sentence = source[start:end]
     tokens = _tokens(sentence, start)
     words = [_term(w) for w, *_ in tokens]
     inside = [span.start <= s and e <= span.end for _, s, e, _ in tokens]
-    anchors = [
-        i
+    matches = [
+        (i, key)
         for key in _key_terms(criterion)
         for i in range(len(words) - len(key) + 1)
         if all(inside[i : i + len(key)]) and tuple(words[i : i + len(key)]) == key
     ]
+    anchors = sorted({i for i, _ in matches})
     keys = {t for key in _key_terms(criterion) for t in key}
     quoted = {w for w, i in zip(words, inside, strict=True) if i}
     if any(
@@ -313,23 +342,45 @@ def _anchored_negation(
         for q in quoted
         for k in keys
     ):
-        return "negation", False  # "non-smokers" against "smokers", or either way round
+        return _Reading("negation")  # "non-smokers" against "smokers", or either way round
     if not anchors:
-        return "off_criterion", False
+        return _Reading("off_criterion")
     if _SCOPE_CUES.search(sentence):
-        return "negation", False
+        return _Reading("negation")
     raw = [w for w, *_ in tokens]
     cues = [i for i, w in enumerate(raw) if w in _NEGATION_WORDS]
     if len(cues) > 1:
-        return "negation", False  # "not without chemotherapy": a double negation is not read
+        return _Reading("negation")  # "not without chemotherapy": a double negation is not read
     if any(not inside[c] for c in cues):
-        return "negation", False  # a negation outside the quote may reverse it
+        return _Reading("negation")  # a negation outside the quote may reverse it
     if any(not any(_negates(raw, c, a) for a in anchors) for c in cues):
-        return "negation", False  # a negation the key term does not explain
-    states = {any(_negates(raw, c, a) for c in cues) for a in anchors}
-    if len(states) != 1:
-        return "negation", False
-    return None, states.pop()
+        return _Reading("negation")  # a negation the key term does not explain
+    own = _wording_terms(criterion)
+    matched = {i + k for i, key in matches for k in range(len(key))}
+    reading = _Reading(
+        None,
+        keys=frozenset(key for _, key in matches),
+        states_wording=any(
+            _related(w, own) and not _PREFIX.match(raw_w) and i not in matched
+            for i, (w, (raw_w, *_)) in enumerate(zip(words, tokens, strict=True))
+        ),
+    )
+    negated = [a for a in anchors if any(_negates(raw, c, a) for c in cues)]
+    if not negated:
+        return reading
+    if any(words[j] == words[a] for a in negated for j in range(len(words)) if j not in negated):
+        return _Reading("negation")  # the sentence also states the negated term unnegated
+    if len(negated) == len(anchors):
+        return reading._replace(negated=True)
+    # Some key terms negated, some not: the quote negates one requirement of the condition only
+    # if the cue comes after every term it leaves alone, and the quote ends in the cue's clause.
+    (cue,) = cues
+    rest = [w for w, i in zip(raw[cue + 1 :], inside[cue + 1 :], strict=True) if i]
+    while rest and rest[-1] in _PUNCTUATION:
+        rest.pop()
+    if any(a > cue for a in anchors if a not in negated) or any(w in _CLAUSE_BREAKS for w in rest):
+        return _Reading("negation")
+    return reading._replace(negated=True, partial=True)
 
 
 def _check_not_met(
@@ -340,20 +391,35 @@ def _check_not_met(
         return "language_unverifiable"
     if any(_SENTENCE_END.search(source, span.start, span.end) for span in spans):
         return "multiple_sentences"
-    readings = {(span, _anchored_negation(criterion, source, span)) for span in spans}
-    failures = [failed for _, (failed, _) in readings if failed]
+    readings = [_anchored_negation(criterion, source, span) for span in spans]
+    failures = [r.failed for r in readings if r.failed]
     if "off_criterion" in failures:
         return "off_criterion"
     if not _quote_readable(quote, criterion):
         return "language_unverifiable"
     if failures:
         return failures[0]
-    negated = {state for _, (_, state) in readings}
+    negated = {r.negated for r in readings}
     conditions = {_condition_negative(w) for w in wordings}
     if len(negated) != 1 or len(conditions) != 1 or None in conditions:
         return "polarity"
     (quote_negated,) = negated
     (condition_negative,) = conditions
+    if any(r.partial for r in readings) and condition_negative:
+        return "negation"  # one negated requirement of a negative condition is not read
+    if (
+        criterion.slot == "study_type"
+        and criterion.polarity == "include"
+        and not condition_negative
+    ):
+        own = _wording_terms(criterion)
+        designs = [all(any(not _related(t, own) for t in key) for key in r.keys) for r in readings]
+        if any(designs):
+            # Another design than the one required: stated, it fails the criterion; negated,
+            # it says nothing. A sentence that also names the required design is not read.
+            if not all(designs) or quote_negated or any(r.states_wording for r in readings):
+                return "polarity"
+            return None
     contradicts = quote_negated != condition_negative
     fails = contradicts if criterion.polarity == "include" else not contradicts
     return None if fails else "polarity"

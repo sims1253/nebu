@@ -23,7 +23,6 @@ if TYPE_CHECKING:
 pytestmark = pytest.mark.postgres
 
 DOWNGRADED = "Varenicline versus placebo"  # the model: INT not_met; the filter: unclear
-DOWNGRADED_TOO = "Use of nicotine replacement"  # the model: DESIGN not_met; the filter: unclear
 NO_FAILING = "GLPG2737 in lumacaftor"  # the model: every criterion met
 
 
@@ -132,16 +131,19 @@ def test_m1_model_seeing_no_failing_criterion_with_both_humans_excluding_gets_an
     assert rescreens(world) == ["ai_include"]
 
 
-def test_m2_downgraded_not_met_is_agreement_either_way(database: Database) -> None:
-    world = setup(database, "M2", (DOWNGRADED, DOWNGRADED_TOO))
-    assert model_said(world, DOWNGRADED_TOO)["DESIGN"] == ("unclear", "not_met")
-    a = world.people.a
-    # The human excludes: the model's own reading agrees.
-    exclusion = Decision(outcome="exclude", reason_criterion_id="INT")
-    assert screen(world, a, DOWNGRADED, exclusion).reveal is None
-    # The human includes: an exclusion the filter could not verify is not revealed, and agrees
-    # with the inclusion.
-    assert screen(world, a, DOWNGRADED_TOO, Decision(outcome="include")).reveal is None
+@pytest.mark.parametrize(
+    "decision",
+    # The human excludes: the model's own reading agrees. The human includes: an exclusion the
+    # filter could not verify is not revealed, and agrees with the inclusion.
+    [Decision(outcome="exclude", reason_criterion_id="INT"), Decision(outcome="include")],
+    ids=["exclude", "include"],
+)
+def test_m2_downgraded_not_met_is_agreement_either_way(
+    database: Database, decision: Decision
+) -> None:
+    world = setup(database, "M2", (DOWNGRADED,))
+    assert model_said(world, DOWNGRADED)["INT"] == ("unclear", "not_met")
+    assert screen(world, world.people.a, DOWNGRADED, decision).reveal is None
     assert adjudications(world) == []
     assert status(world).conflicts == 0
 
