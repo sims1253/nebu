@@ -122,6 +122,8 @@ function ConflictView({
   const [result, setResult] = useState<AdjudicationResult | null>(null);
   // The AI criterion in view once its column is open; its quote is marked in the record.
   const [aiIndex, setAiIndex] = useState(0);
+  // `q` brings the AI's quote back into view: each press is a new target, even the same quote.
+  const [showQuote, setShowQuote] = useState(0);
   const [shownAt] = useState(() => new Date().toISOString());
   const nameOf = (c: Criterion) => criterionLabel(c.id, criteria, labels);
 
@@ -258,6 +260,22 @@ function ConflictView({
       if (key === "," || key === ".") {
         const count = result.ai.criteria.length;
         if (count > 0) setAiIndex((i) => (i + (key === "." ? 1 : count - 1)) % count);
+        setNotice(null);
+        return true;
+      }
+      if (key === "q") {
+        const shown = result.ai.criteria[aiIndex]?.criterion_id ?? "";
+        const placed = fullText ? source?.aiQuotes[shown] : result.ai.quote_spans[shown];
+        if (placed) {
+          setShowQuote((n) => n + 1);
+          setNotice(null);
+        } else {
+          setNotice(
+            fullText
+              ? "The AI judge's quote for this criterion is not on the page."
+              : "The AI judge's quote for this criterion is not in the record.",
+          );
+        }
         return true;
       }
       return false;
@@ -332,7 +350,10 @@ function ConflictView({
   const pageBox = (aiQuote ?? evidence.currentMention)?.boxes[0];
   const pageTarget =
     pageBox && (aiQuote ?? evidence.currentMention)
-      ? { key: (aiQuote ?? evidence.currentMention)?.id ?? "", box: pageBox }
+      ? {
+          key: aiQuote ? `${aiQuote.id}-${showQuote}` : (evidence.currentMention?.id ?? ""),
+          box: pageBox,
+        }
       : null;
 
   return (
@@ -349,6 +370,7 @@ function ConflictView({
         {!fullText ? (
           <RecordPane
             item={item}
+            showQuote={showQuote}
             quote={
               result
                 ? (result.ai.quote_spans[result.ai.criteria[aiIndex]?.criterion_id ?? ""] ?? null)
@@ -434,7 +456,13 @@ function ConflictView({
             </Status>
             <span className="text-ink-2">The decision is final.</span>
             <span className="ml-auto flex items-center gap-4">
+              {notice ? (
+                <span className="text-ink-2" aria-live="polite" data-testid="adjudication-notice">
+                  {notice}
+                </span>
+              ) : null}
               <KeyHint keys={[",", "."]}>The AI&rsquo;s criteria</KeyHint>
+              <KeyHint keys={["q"]}>Show the quote</KeyHint>
               <KeyHint keys={[" "]}>Next conflict</KeyHint>
             </span>
           </div>
@@ -493,7 +521,16 @@ const criterionLabel = (
   return criterion ? `${index + 1} ${labels[criterion.slot] ?? criterion.slot}` : id;
 };
 
-function RecordPane({ item, quote }: { item: AdjudicationItem; quote: QuoteSpan | null }) {
+function RecordPane({
+  item,
+  quote,
+  showQuote,
+}: {
+  item: AdjudicationItem;
+  quote: QuoteSpan | null;
+  /** Changes on each `q`, to bring the marked quote back into view. */
+  showQuote: number;
+}) {
   const at = useMemo(() => codePointIndex(item.text), [item.text]);
   const sections = orderSections(item.record.sections);
   const facts = [item.record.journal, item.record.year].filter(Boolean).join(", ");
@@ -503,7 +540,7 @@ function RecordPane({ item, quote }: { item: AdjudicationItem; quote: QuoteSpan 
   useEffect(() => {
     if (!quote) return;
     document.querySelector("[data-reveal-quote]")?.scrollIntoView({ block: "center" });
-  }, [quote]);
+  }, [quote, showQuote]);
   return (
     <article className="overflow-y-auto bg-sheet px-10 pt-7 pb-10" aria-label="Record">
       <p className="text-xs text-ink-2">{facts}</p>

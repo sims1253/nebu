@@ -284,6 +284,7 @@ const KEYS: ReadonlyArray<{
       [["1", "2"], "Adopt reviewer A's or B's decision"],
       [["i", "e", "u"], "Your own decision. After e, press 1 to 9 for the criterion"],
       [[",", "."], "Previous or next criterion of the AI's reading, after you decide"],
+      [["q"], "Show the AI's quote again, after you decide"],
       [[" "], "Next conflict, after you decide"],
     ],
   },

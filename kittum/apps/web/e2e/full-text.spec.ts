@@ -303,6 +303,11 @@ test("one reason per full-text decision, the AI's reading after it, and a wrong 
     await expect(ai).toBeVisible();
     await expect(ai.getByTestId("ai-reading").first()).toBeVisible();
     await expect(page.getByTestId("your-evidence")).toHaveCount(0);
+    // The model verified no quote in this trial, so q says there is none on the page.
+    await page.keyboard.press("q");
+    await expect(page.getByTestId("adjudication-notice")).toHaveText(
+      "The AI judge's quote for this criterion is not on the page.",
+    );
     await page.waitForTimeout(300); // the column's entrance
     await shot(page, "09-adjudication-ai-reading.png");
     await page.context().close();

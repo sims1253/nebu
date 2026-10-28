@@ -320,6 +320,16 @@ test("a review from search to full text, blind, audited, adjudicated, and verifi
     await expect(page.getByTestId("ai-column")).toBeVisible();
     await page.waitForTimeout(300); // the column's entrance
     await shot(page, "11-adjudication-title-abstract.png");
+    // The AI's verified quote is marked in the record. Scrolled away, q brings it back.
+    const quote = page.locator("mark[data-reveal-quote]");
+    await expect(quote).toBeInViewport();
+    await page.setViewportSize({ width: 1440, height: 420 });
+    await page
+      .getByRole("article", { name: "Record" })
+      .evaluate((record) => record.scrollTo({ top: record.scrollHeight }));
+    await expect(quote).not.toBeInViewport();
+    await page.keyboard.press("q");
+    await expect(quote).toBeInViewport();
     await page.keyboard.press("Space");
     await expect(page.getByRole("heading", { name: "No open conflicts" })).toBeVisible();
     await page.context().close();
