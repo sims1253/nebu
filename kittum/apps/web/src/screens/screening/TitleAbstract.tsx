@@ -30,16 +30,18 @@ export function TitleAbstractQueue() {
   const [status, setStatus] = useState<ScopeStatus | null>(null);
   const [poll, setPoll] = useState(0);
   const { current } = queue;
-  // The queue ran dry but records remain: the AI judge has not read them yet. Ask again.
+  // The queue ran dry but records remain: the AI judge has not read them yet, or they joined
+  // behind the place the queue was read from. Ask again, from the start.
   const waiting = queue.finished && status !== null && status.remaining > 0;
+  const { retry } = queue;
   useEffect(() => {
     if (!waiting) return;
     const timer = window.setTimeout(() => {
-      queue.retry();
+      retry();
       setPoll((n) => n + 1);
     }, 3000);
     return () => window.clearTimeout(timer);
-  }, [waiting, queue, poll]);
+  }, [waiting, retry, poll]);
 
   useEffect(() => {
     if (!scopeId) return;
@@ -53,8 +55,14 @@ export function TitleAbstractQueue() {
   }, [workbench, caller, scopeId, queue.stats.decided, current?.item.assignment_id, poll]);
 
   useKeys((event) => {
-    if (!current || event.repeat) return event.repeat;
+    if (event.repeat) return true;
     const key = event.key;
+    if (!current) {
+      // Nothing on screen (finished, or waiting for the AI): the last decision can still reopen.
+      if (key !== "Backspace") return false;
+      queue.undo();
+      return true;
+    }
     if (armed) {
       setArmed(false);
       if (/^[1-9]$/.test(key)) {
@@ -119,7 +127,8 @@ export function TitleAbstractQueue() {
             The AI judge is still reading {status?.remaining} of your records. They appear here as
             soon as it has; it reads every record before anyone screens it.
           </p>
-        ) : queue.finished ? (
+        ) : queue.finished && status !== null ? (
+          // Finished only once the counts say nothing is left, not before they arrive.
           <Finished stats={queue.stats} />
         ) : queue.error ? null : (
           <p className="px-10 py-10 text-ink-3">Loading the queue.</p>

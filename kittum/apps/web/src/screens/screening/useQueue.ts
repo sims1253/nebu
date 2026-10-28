@@ -75,6 +75,9 @@ export function useQueue(
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const loading = useRef(false);
+  // After the queue ran dry, read it again from the start: items can join behind the cursor (an
+  // auditor's extra screen, a record the AI read after the reviewer passed its place).
+  const fromStart = useRef(false);
   const timings = useRef(new Map<string, number>());
   const reveals = useRef({ shown: 0, followed: 0 });
   const [stats, setStats] = useState<SessionStats>({
@@ -89,12 +92,14 @@ export function useQueue(
     if (scopeId === null || exhausted || loading.current) return;
     const buffered = (current ? 1 : 0) + forward.length + ahead.length;
     if (buffered > AHEAD) return;
-    const last =
-      ahead.at(-1)?.assignment_id ??
-      forward.at(-1)?.item.assignment_id ??
-      current?.item.assignment_id ??
-      history.at(-1)?.item.assignment_id ??
-      null;
+    const last = fromStart.current
+      ? null
+      : (ahead.at(-1)?.assignment_id ??
+        forward.at(-1)?.item.assignment_id ??
+        current?.item.assignment_id ??
+        history.at(-1)?.item.assignment_id ??
+        null);
+    fromStart.current = false;
     loading.current = true;
     run(
       workbench.queue({
@@ -109,6 +114,7 @@ export function useQueue(
         if (items.length === 0) setExhausted(true);
         setView((v) => {
           const known = new Set([
+            ...history.map((e) => e.item.assignment_id),
             ...v.ahead.map((q) => q.assignment_id),
             ...v.forward.map((e) => e.item.assignment_id),
             ...(v.current ? [v.current.item.assignment_id] : []),
@@ -264,7 +270,10 @@ export function useQueue(
   }, [busy, current, history]);
 
   /** Asks the server again after the queue ran dry, e.g. while the AI judge is still reading. */
-  const retry = useCallback(() => setExhausted(false), []);
+  const retry = useCallback(() => {
+    fromStart.current = true;
+    setExhausted(false);
+  }, []);
 
   return {
     current,
