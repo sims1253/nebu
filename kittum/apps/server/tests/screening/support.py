@@ -484,6 +484,7 @@ class World:
         stage: Stage = STAGE,
         screeners: tuple[Id, ...] | None = None,
         auditor: Id | None = None,
+        adjudicators: tuple[Id, ...] | None = None,
         reveal: str = "on_disagreement",
         backend: RecordedBackend | None = None,
     ) -> StageInfo:
@@ -502,6 +503,7 @@ class World:
                     records=tuple(records),
                     screeners=screeners or (self.people.a, self.people.b),
                     auditor_id=auditor,
+                    adjudicators=adjudicators or (self.people.adjudicator,),
                     sentinels=SENTINELS,
                     reveal=reveal,  # type: ignore[arg-type]
                     judge_config_id=CONFIG.id,

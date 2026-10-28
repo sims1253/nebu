@@ -68,6 +68,22 @@ def screen(world: World, reviewer: Id, title: str, decision: Decision) -> Decide
     return result
 
 
+def finish(world: World) -> None:
+    """Every remaining assignment decided: sentinels included, records excluded."""
+    reviewers = (world.people.a, world.people.b, world.people.auditor)
+    for reviewer in reviewers:
+        with world.db.transaction() as tx:
+            items = world.screening.queue(tx, world.project_id, reviewer, SCOPE, STAGE, limit=50)
+        for item in items:
+            sentinel = item.title.startswith("Nicotine")
+            decision = (
+                Decision(outcome="include")
+                if sentinel
+                else Decision(outcome="exclude", reason_criterion_id="POP")
+            )
+            screen(world, reviewer, item.title, decision)
+
+
 def model_said(world: World, title: str) -> dict[str, tuple[str, str | None]]:
     """Per criterion: (status after the filter, what the model said if it was downgraded)."""
     with world.db.transaction() as tx:
@@ -124,11 +140,16 @@ def test_m1_model_seeing_no_failing_criterion_with_both_humans_excluding_is_adju
     for reviewer in (world.people.a, world.people.b):
         result = screen(world, reviewer, NO_FAILING, exclusion)
         assert result.reveal is not None and result.reveal.status == "met"
+    # Escalated, but held back: no agreed record is free to cover it yet.
+    now = status(world)
+    assert now.conflicts == 1 and now.metrics is not None and now.metrics.decoys.held == 1
+    assert now.metrics.audit.excluded_population == 0
+    assert adjudications(world) == []
+    # Once screening ends without cover, it goes to the adjudicator, flagged for the lead.
+    finish(world)
     (title,) = adjudications(world)
     assert title.startswith(NO_FAILING)
-    now = status(world)
-    assert now.conflicts == 1
-    assert now.metrics is not None and now.metrics.audit.excluded_population == 0
+    assert status(world).metrics.decoys.released_without_cover == 1  # type: ignore[union-attr]
 
 
 def test_m2_downgraded_not_met_is_agreement_either_way(database: Database) -> None:
@@ -151,6 +172,8 @@ def test_m2_model_including_against_a_human_exclusion_is_adjudicated(database: D
         world, world.people.a, NO_FAILING, Decision(outcome="exclude", reason_criterion_id="POP")
     )
     assert result.reveal is not None and result.reveal.criterion_id == "POP"
+    assert adjudications(world) == []  # held until cover, or the end of screening
+    finish(world)
     (title,) = adjudications(world)
     assert title.startswith(NO_FAILING)
     with world.db.transaction() as tx:

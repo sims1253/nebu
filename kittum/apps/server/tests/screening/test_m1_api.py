@@ -310,14 +310,15 @@ def test_m1_blinds_reviewers_reveals_disagreement_and_adjudicates(
     assert sorted(col["outcome"] for col in cf["columns"]) == ["exclude", "include"]
     assert {col["label"] for col in cf["columns"]} == {"A", "B"}
 
-    # A screener of a record never adjudicates it.
-    assert a.call("GET", "/adjudications", params={"scope_id": SCOPE, "stage": STAGE}).json() == []
+    # Only the stage's adjudicators adjudicate; a screener has no adjudication queue.
+    listed = a.call("GET", "/adjudications", params={"scope_id": SCOPE, "stage": STAGE})
+    assert listed.status_code == 404
     refused = a.call(
         "POST",
         f"/adjudications/{cf['conflict_id']}/decide",
         json={"command_id": str(new_id()), "expected_revision": cf["revision"], "adopted": "A"},
     )
-    assert refused.status_code == 422
+    assert refused.status_code == 404
 
     # The adjudicator adopts the exclusion; the AI column opens after the commit.
     excluder = next(col["label"] for col in cf["columns"] if col["outcome"] == "exclude")
@@ -381,7 +382,13 @@ def test_m1_blinds_reviewers_reveals_disagreement_and_adjudicates(
     # The methods lead's metrics.
     metrics = lead.status()["metrics"]
     assert metrics["conflicts_resolved"] == 2
-    assert metrics["decoys"] == {"cases": 1, "adjudicated": 1, "matching": 0}
+    assert metrics["decoys"] == {
+        "cases": 1,
+        "adjudicated": 1,
+        "matching": 0,
+        "held": 0,
+        "released_without_cover": 0,
+    }
     # One reveal for A (GLPG2737), two for B (colitis, GLPG2737); B revised colitis.
     assert metrics["reveals_shown"] == 3 and metrics["revised_after_reveal"] == 1
     humans = next(p for p in metrics["agreement"] if p["kind"] == "human_human")

@@ -18,6 +18,7 @@ create table screening_stage (
     seed text not null,
     screeners uuid[] not null,
     auditor_id uuid references actor (id),
+    adjudicators uuid[] not null,
     opened_event_id uuid not null,
     opened_at timestamptz not null,
     unique (project_id, topic_id, scope_id, stage)
@@ -111,7 +112,10 @@ create table screening_ai_reading (
 
 -- A decoy is a record the humans and the AI agreed on, mixed into the adjudication queue so that
 -- membership does not reveal the AI. `pattern` is the screeners' shared outcome, which decoys
--- match. Adjudicating a decoy changes no outcome.
+-- match; `partner_id` is the conflict a decoy covers. Adjudicating a decoy changes no outcome.
+-- A conflict only the AI raised stays invisible to adjudicators until a decoy covers it, or until
+-- screening ends without cover (`released_without_cover`, then `assigned_to` one adjudicator).
+-- IDs are random (version 4), so their order says nothing about which conflict came first.
 create table screening_conflict (
     id uuid primary key,
     stage_id uuid not null,
@@ -119,6 +123,10 @@ create table screening_conflict (
     kinds text[] not null,
     pattern text check (pattern in ('include', 'exclude')),
     decoy boolean not null default false,
+    partner_id uuid references screening_conflict (id),
+    visible boolean not null default true,
+    released_without_cover boolean not null default false,
+    assigned_to uuid references actor (id),
     state text not null check (state in ('open', 'resolved', 'withdrawn')),
     revision integer not null default 0,
     opened_event_id uuid not null,

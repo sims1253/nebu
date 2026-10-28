@@ -108,7 +108,8 @@ class StageData:
         }
         conflicts: dict[str, list[dict[str, Any]]] = {}
         for c in tx.execute(
-            "select c.item_ref, c.state, c.kinds, c.decoy, c.pattern, j.outcome"
+            "select c.item_ref, c.state, c.kinds, c.decoy, c.pattern, c.visible,"
+            " c.released_without_cover, j.outcome"
             " from screening_conflict c left join screening_adjudication j on j.conflict_id = c.id"
             " where c.stage_id = %s order by c.opened_at, c.id",
             (stage_id,),
@@ -272,6 +273,12 @@ def stage_metrics(
         cases=len(decoys),
         adjudicated=len(adjudicated),
         matching=sum(_label(c["outcome"]) == c["pattern"] for c in adjudicated),
+        held=sum(
+            1 for r in records for c in data.genuine(r) if c["state"] == "open" and not c["visible"]
+        ),
+        released_without_cover=sum(
+            1 for r in records for c in data.genuine(r) if c["released_without_cover"]
+        ),
     )
 
     stop = None

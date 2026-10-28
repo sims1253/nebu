@@ -83,6 +83,8 @@ class StageSpec(Record):
     records: tuple[ScreeningRecord, ...] = Field(min_length=1)
     screeners: tuple[Id, ...] = Field(min_length=1)
     auditor_id: Id | None = None
+    adjudicators: tuple[Id, ...] = Field(min_length=1)
+    """Who adjudicates the stage's conflicts. They see the adjudicator's view of `status`."""
     sentinels: tuple[Sentinel, ...] = ()
     reveal: RevealSetting = "on_disagreement"
     judge_config_id: str
@@ -101,6 +103,7 @@ class StageInfo(Record):
     judge_config_id: str
     screeners: tuple[Id, ...]
     auditor_id: Id | None
+    adjudicators: tuple[Id, ...]
 
 
 # The reviewer's side
@@ -285,12 +288,15 @@ class StopStatus(Record):
 
 
 class DecoyGauge(Record):
-    """Decoys in the adjudication queue: how many, how many were adjudicated, and how many of
-    those the adjudicator decided as the humans and the AI had."""
+    """Decoys in the adjudication queue and the conflicts they cover. Lead's view only."""
 
-    cases: int
+    cases: int  # decoys
     adjudicated: int
-    matching: int
+    matching: int  # decoys the adjudicator decided as the humans and the AI had
+    held: int  # conflicts only the AI raised, still waiting for a decoy, invisible to adjudicators
+    released_without_cover: int
+    """Conflicts only the AI raised that were released to one adjudicator when screening ended
+    without a decoy for them. The AI disclosure reports them."""
 
 
 class StageMetrics(Record):
@@ -308,14 +314,15 @@ class StageMetrics(Record):
 class ScopeStatus(Record):
     """Progress of a scope and stage.
 
-    A reviewer who screens the stage sees only their own counts (`view == "reviewer"`, hidden
-    items included, no conflicts, no metrics). Anyone else, such as the methods lead or an
-    adjudicator, sees the whole stage.
+    A reviewer who screens or audits the stage sees only their own counts (`view == "reviewer"`,
+    hidden items included, no conflicts, no metrics). An adjudicator of the stage sees the
+    screening progress and, as `conflicts`, the adjudications pending for them, decoys included
+    and indistinguishable, without metrics. Anyone else (the methods lead) sees the whole stage.
     """
 
     scope_id: str
     stage: Stage
-    view: Literal["reviewer", "lead"]
+    view: Literal["reviewer", "adjudicator", "lead"]
     screened: int
     remaining: int
     conflicts: int | None

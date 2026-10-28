@@ -131,15 +131,14 @@ def test_m2_sends_every_ai_disagreement_to_adjudication(database: Database) -> N
         conflicts = world.screening.adjudication_queue(
             tx, world.project_id, world.people.adjudicator, SCOPE, STAGE
         )
-        # Three conflicts only the AI raised, and decoys with the same visible outcomes: the
-        # patch trial (included, the AI agreed) and one of the two exclusions the model agreed
-        # with. The third AI-driven case found no free decoy yet.
+        # Two conflicts only the AI raised, each published with a decoy of the same visible
+        # outcome: the patch trial (included, the AI agreed) and one of the two exclusions the
+        # model agreed with. The third AI-driven case found no free decoy, so it is held back.
         titles = sorted(c.title[:20] for c in conflicts)
         decoy_exclusion = next(t for t in titles if t.startswith(("Varenicline", "Use of")))
         assert titles == sorted(
             [
                 "GLPG2737 in lumacaft",
-                "Rate and predictors ",
                 "Transdermal nicotine",
                 "Nicotine patch versu",
                 decoy_exclusion,
@@ -160,7 +159,7 @@ def test_m2_sends_every_ai_disagreement_to_adjudication(database: Database) -> N
         status = world.screening.status(tx, world.project_id, world.people.lead, SCOPE, STAGE)
         assert (status.screened, status.remaining, status.conflicts) == (6, 0, 2)
         assert status.metrics is not None
-        assert status.metrics.decoys.cases == 2
+        assert (status.metrics.decoys.cases, status.metrics.decoys.held) == (2, 1)
         own, verified = status.metrics.agreement
         assert (own.kind, verified.kind) == ("human_ai", "human_ai_verified")
         # The model's own reading agrees on the patch trial and the two exclusions it shares;
