@@ -312,23 +312,44 @@ def test_one_reason_per_decision_and_a_wrong_document_is_missing_not_excluded(pg
     assert first["phase"] == "provisional"
     assert first["reveal"]["criterion_id"] == "POP"
     assert first["reveal"]["quote_span"] is None
-    # Having seen the AI disagree, Jun cannot take the report out instead of deciding.
+    # Having seen the AI disagree, Jun cannot take the report out instead of deciding: not while
+    # the decision waits for its final phase, and not after undoing it either.
     escaped = wrong_document("Jun", jun_trial, first["etag"])
     assert escaped.status_code == 422
     assert "You decided this report already" in escaped.json()["detail"][0]["msg"]
-    ok(
+    undone = ok(
+        client.post(
+            f"/api/projects/{pid}/screening/assignments/{jun_trial['assignment_id']}/undo",
+            json={"command_id": str(new_id()), "expected_etag": first["etag"]},
+            headers=as_("Jun"),
+        )
+    )
+    escaped = wrong_document("Jun", jun_trial, undone["etag"])
+    assert escaped.status_code == 422, escaped.text
+    assert "You decided this report already" in escaped.json()["detail"][0]["msg"]
+    assert (
+        next(
+            r
+            for r in ok(client.get(f"/api/projects/{pid}/full-texts", headers=as_("Morgan")))
+            if r["item_ref"] == trial["item_ref"]
+        )["full_text"]
+        is not None
+    )
+    # Jun decides again. The AI's reading was shown once, so the decision is final at once.
+    again = ok(
         client.post(
             decide_path,
             json={
                 "command_id": str(new_id()),
                 "decision": excluded,
-                "phase": "final",
-                "expected_etag": first["etag"],
+                "phase": "provisional",
+                "expected_etag": undone["etag"],
                 "timing": timing | {"reveal_shown_at": now},
             },
             headers=as_("Jun"),
         )
     )
+    assert again["phase"] == "final"
     revealed = ok(
         client.get(
             f"/api/projects/{pid}/screening/assignments/{jun_trial['assignment_id']}/full-text",

@@ -1095,9 +1095,9 @@ class Screening:
         document from the record in the same transaction, so the record is back to having no
         full text.
 
-        Only from an assignment the reviewer has not decided, not even provisionally (a reveal
-        must not be escaped this way), and only while nobody has decided the record in any of
-        those stages: a decision someone made stands.
+        Only from an assignment the reviewer has never decided, not even provisionally and not
+        if they undid it since (a reveal must not be escaped this way), and only while nobody has
+        ever decided the record in any of those stages: a decision someone made stands.
         """
         command = Command(
             command_id=command_id,
@@ -1120,16 +1120,26 @@ class Screening:
                 " and i.withdrawn_event_id is null order by s.opened_at, s.id",
                 (project_id, a["item_ref"]),
             ).fetchall()
+            found = {
+                r["stage_id"]: (
+                    store.item_assignments(tx, r["stage_id"], a["item_ref"]),
+                    store.conflicts(tx, r["stage_id"], a["item_ref"]),
+                )
+                for r in stages
+            }
+            ids = [p["id"] for peers, _ in found.values() for p in peers]
+            # Decisions are append-only and an undo keeps them: this is the history, not the
+            # current state, which an undo resets.
+            decided = tx.execute(
+                "select distinct assignment_id from screening_decision"
+                " where assignment_id = any(%s)",
+                (ids,),
+            ).fetchall()
             return {
                 "a": a,
                 "stage": store.stage_row(tx, project_id, a["stage_id"]),
-                "stages": {
-                    r["stage_id"]: (
-                        store.item_assignments(tx, r["stage_id"], a["item_ref"]),
-                        store.conflicts(tx, r["stage_id"], a["item_ref"]),
-                    )
-                    for r in stages
-                },
+                "stages": found,
+                "ever_decided": {r["assignment_id"] for r in decided},
             }
 
         def decide(_: Command, st: dict[str, Any]) -> RunDecision[_Withdrawal]:
@@ -1139,13 +1149,18 @@ class Screening:
             if row["stage"] != "full_text":
                 raise InvalidDecision("Only a full text can be the wrong document.")
             _refuse_withdrawn(a)
-            if a["state"] != "pending":
+
+            def touched(p: dict[str, Any]) -> bool:
+                """Decided at some point, or shown the AI's reading, even if undone since."""
+                return p["state"] != "pending" or p["revealed"] or p["id"] in st["ever_decided"]
+
+            if touched(a):
                 raise InvalidDecision(
                     "You decided this report already, so it stays in screening. Keep or change"
                     " your decision."
                 )
             for peers, conflicts in st["stages"].values():
-                if any(p["state"] != "pending" for p in peers) or any(
+                if any(touched(p) for p in peers) or any(
                     c["state"] != "withdrawn" for c in conflicts
                 ):
                     raise InvalidDecision(
