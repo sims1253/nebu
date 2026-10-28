@@ -183,24 +183,22 @@ def _project_step(args: argparse.Namespace) -> int:
                 )
                 _print({"execution_id": execution.id, "records": execution.retrieved_count})
             case "run-search":
-                from kittum.search import CtgovSource, PubMedSource, run
+                from kittum.search import LIVE_PLATFORMS, live_source, run
 
                 assert ctx.gateway is not None
-                source = (
-                    PubMedSource(
-                        ctx.gateway,
-                        ctx.artifacts,
-                        contact_email=ctx.settings.contact_email,
-                        ncbi_api_key=ctx.settings.ncbi_api_key,
-                        clock=ctx.clock,
-                    )
-                    if args.source == "pubmed"
-                    else CtgovSource(ctx.gateway, ctx.artifacts, clock=ctx.clock)
+                source = live_source(
+                    args.source,
+                    ctx.gateway,
+                    ctx.artifacts,
+                    contact_email=ctx.settings.contact_email,
+                    ncbi_api_key=ctx.settings.ncbi_api_key,
+                    clock=ctx.clock,
                 )
+                assert source is not None  # argparse allows only the live sources
                 plan = SearchPlan(
                     topic_id=args.topic,
                     source=args.source,
-                    platform="PubMed" if args.source == "pubmed" else "ClinicalTrials.gov",
+                    platform=LIVE_PLATFORMS[args.source],
                     strategy=args.strategy,
                 )
                 execution = run(
@@ -361,7 +359,7 @@ def main(argv: list[str] | None = None) -> int:
         imported.add_argument(flag, required=True)
     imported.add_argument("--format", default="ris")
     live = step("run-search")
-    live.add_argument("--source", choices=["pubmed", "ctgov"], required=True)
+    live.add_argument("--source", choices=["pubmed", "europepmc", "ctgov"], required=True)
     live.add_argument("--topic", required=True)
     live.add_argument("--strategy", required=True)
     step("ingest")

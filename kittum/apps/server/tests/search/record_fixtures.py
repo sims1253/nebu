@@ -1,6 +1,7 @@
-"""Script to record real API fixtures from PubMed and ClinicalTrials.gov."""
+"""Script to record real API fixtures from PubMed, Europe PMC, and ClinicalTrials.gov."""
 
 import json
+import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -80,7 +81,53 @@ def record_ctgov() -> None:
     print(f"Saved ctgov_page1.json and ctgov_page2.json (next_token={next_token})")
 
 
+# One review's searches on three sources (tests/corpus/test_duplicates.py and the workbench's
+# duplicates journey): PubMed and Europe PMC find the same papers, and two of PubMed's papers name
+# their ClinicalTrials.gov entries in their DataBankList.
+DUPLICATES_DIR = FIXTURES_DIR / "duplicates"
+DUPLICATES_PUBMED = (
+    '"nicotine replacement"[tiab] AND "smoking cessation"[tiab] AND randomized controlled trial[pt]'
+    " AND 2024/01/01:2024/03/31[dp]"
+)
+DUPLICATES_EUROPEPMC = (
+    'TITLE_ABS:"nicotine replacement" AND TITLE_ABS:"smoking cessation"'
+    ' AND PUB_TYPE:"Randomized Controlled Trial" AND FIRST_PDATE:[2024-01-01 TO 2024-03-31]'
+)
+DUPLICATES_CTGOV = "NCT03589989 OR NCT02564315"
+DUPLICATES_CONTACT = "test@kittum.dev"  # the stack's contact address (apps/web/e2e/stack.ts)
+
+
+def record_duplicates() -> None:
+    """Run the three searches as Kittum does, through `RecordingTransport`, so the gateway replays
+    them byte for byte. Europe PMC also runs with two records a page, to record its paging."""
+    from kittum.gateway import HttpxTransport, RecordingTransport
+    from kittum.gateway.testing import PassThroughGateway
+    from kittum.search import CtgovSource, EuropePmcSource, PubMedSource, SearchPlan
+    from kittum.storage import MemoryStore
+
+    transport = RecordingTransport(
+        HttpxTransport(contact_email=DUPLICATES_CONTACT),
+        DUPLICATES_DIR,
+        contact_email=DUPLICATES_CONTACT,
+    )
+    gateway = PassThroughGateway(transport)
+    artifacts = MemoryStore()
+    runs = [
+        (PubMedSource(gateway, artifacts, contact_email=DUPLICATES_CONTACT), DUPLICATES_PUBMED),
+        (EuropePmcSource(gateway, artifacts), DUPLICATES_EUROPEPMC),
+        (EuropePmcSource(gateway, artifacts, page_size=2), DUPLICATES_EUROPEPMC),
+        (CtgovSource(gateway, artifacts), DUPLICATES_CTGOV),
+    ]
+    for source, strategy in runs:
+        plan = SearchPlan(topic_id="t", source=source.name, platform="", strategy=strategy)
+        execution = source.run(plan)
+        print(f"{source.name}: {execution.reported_count} reported, {execution.retrieved_count}")
+
+
 if __name__ == "__main__":
+    if sys.argv[1:] == ["duplicates"]:
+        record_duplicates()
+        sys.exit()
     record_pubmed()
     record_pubmed_databank_only()
     record_ctgov()

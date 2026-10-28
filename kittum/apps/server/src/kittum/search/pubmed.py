@@ -154,12 +154,13 @@ def parse_pubmed_xml(
                     pt.text.strip() for pt in pt_list.findall("PublicationType") if pt.text
                 ]
 
-        # DOI from PubmedData if not yet found
-        if not doi:
-            for art_id in article.findall("PubmedData/ArticleIdList/ArticleId"):
-                if art_id.get("IdType") == "doi" and art_id.text:
-                    doi = art_id.text.strip()
-                    break
+        # DOI from PubmedData if not yet found, and the PubMed Central ID
+        pmcid: str | None = None
+        for art_id in article.findall("PubmedData/ArticleIdList/ArticleId"):
+            if art_id.get("IdType") == "doi" and art_id.text and not doi:
+                doi = art_id.text.strip()
+            if art_id.get("IdType") == "pmc" and art_id.text and not pmcid:
+                pmcid = art_id.text.strip()
 
         # Registry IDs from DataBankList, which sits under Article. It also lists sequence and
         # data repositories (GenBank, PDB, ...), so keep only trial registries.
@@ -192,6 +193,7 @@ def parse_pubmed_xml(
             journal=journal,
             doi=doi,
             pmid=pmid,
+            pmcid=pmcid,
             registry_ids=unique_reg_ids,
             publication_types=tuple(pub_types),
             raw_hash=raw_hash,

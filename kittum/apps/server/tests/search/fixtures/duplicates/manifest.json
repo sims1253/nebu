@@ -1,0 +1,44 @@
+{
+  "https://clinicaltrials.gov/api/v2/studies?query.term=NCT03589989+OR+NCT02564315&pageSize=100&countTotal=true": [
+    {
+      "content_type": "application/json",
+      "file": "92d0929f7af918e60ae309022368e6efc1433f7522bf21e44e05e2c32a5d2191.json",
+      "status": 200
+    }
+  ],
+  "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&query_key=1&WebEnv=MCID_6ae2704dd2a47cea8b0751db&retstart=0&retmax=10&retmode=xml&tool=kittum&email=contact%40example.invalid": [
+    {
+      "content_type": "text/xml",
+      "file": "625b10594f1bbcec911eebf63fa48c9f880c90418c6cb1b78b0883bf84d57eea",
+      "status": 200
+    }
+  ],
+  "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=%22nicotine+replacement%22%5Btiab%5D+AND+%22smoking+cessation%22%5Btiab%5D+AND+randomized+controlled+trial%5Bpt%5D+AND+2024%2F01%2F01%3A2024%2F03%2F31%5Bdp%5D&usehistory=y&retmode=xml&tool=kittum&email=contact%40example.invalid": [
+    {
+      "content_type": "text/xml",
+      "file": "2be4c5ddce38c579083cddb2afaa4285125af0d3d1ba55b1a4760f181f90eebc",
+      "status": 200
+    }
+  ],
+  "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=TITLE_ABS%3A%22nicotine+replacement%22+AND+TITLE_ABS%3A%22smoking+cessation%22+AND+PUB_TYPE%3A%22Randomized+Controlled+Trial%22+AND+FIRST_PDATE%3A%5B2024-01-01+TO+2024-03-31%5D&format=json&resultType=core&synonym=FALSE&pageSize=1000&cursorMark=%2A": [
+    {
+      "content_type": "application/json",
+      "file": "fef46a0e4b784dbcf72ada389d7dec6c6066b33f95ec27522cadf8dc4579b312.json",
+      "status": 200
+    }
+  ],
+  "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=TITLE_ABS%3A%22nicotine+replacement%22+AND+TITLE_ABS%3A%22smoking+cessation%22+AND+PUB_TYPE%3A%22Randomized+Controlled+Trial%22+AND+FIRST_PDATE%3A%5B2024-01-01+TO+2024-03-31%5D&format=json&resultType=core&synonym=FALSE&pageSize=2&cursorMark=%2A": [
+    {
+      "content_type": "application/json",
+      "file": "d72e13ed95e7035c8535aa624e3fe22c32c8c1179709a8f1f796109569e082fb.json",
+      "status": 200
+    }
+  ],
+  "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=TITLE_ABS%3A%22nicotine+replacement%22+AND+TITLE_ABS%3A%22smoking+cessation%22+AND+PUB_TYPE%3A%22Randomized+Controlled+Trial%22+AND+FIRST_PDATE%3A%5B2024-01-01+TO+2024-03-31%5D&format=json&resultType=core&synonym=FALSE&pageSize=2&cursorMark=AoIIQFq4cyg1MDMwNDg5OA%3D%3D": [
+    {
+      "content_type": "application/json",
+      "file": "031329cf858e9ecf054b274d58c4e40caec7a7da2058bb3d37b719ce56249ae2.json",
+      "status": 200
+    }
+  ]
+}

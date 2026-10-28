@@ -135,6 +135,7 @@ def _ctgov_count(body: bytes) -> int:
 SOURCE_NAMES = {
     "pubmed": "PubMed",
     "medline": "PubMed",
+    "europepmc": "Europe PMC",
     "clinicaltrials": "ClinicalTrials.gov",
     "ctgov": "ClinicalTrials.gov",
 }

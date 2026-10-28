@@ -32,6 +32,7 @@ class SourceRecord(Record):
     journal: str | None = None
     doi: str | None = None
     pmid: str | None = None
+    pmcid: str | None = None
     registry_ids: tuple[str, ...] = ()
     publication_types: tuple[str, ...] = ()
     raw_hash: Sha256
