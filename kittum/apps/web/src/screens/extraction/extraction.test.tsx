@@ -143,8 +143,12 @@ describe("extraction review", () => {
         () => document.querySelectorAll("[data-page='6'] [data-testid=source-highlight]").length,
       )
       .toBe(2);
+    // Every page image, not only page 6: the pages below give the viewer the height to scroll
+    // the source down to its bottom edge. Until they load, the scroll stops short.
     await expect
-      .poll(() => document.querySelector<HTMLImageElement>("[data-page='6'] img")?.complete)
+      .poll(() =>
+        [...document.querySelectorAll<HTMLImageElement>("[data-page] img")].every((i) => i.complete),
+      )
       .toBe(true);
     const [first, second] = [
       ...document.querySelectorAll<HTMLElement>("[data-page='6'] [data-testid=source-highlight]"),
@@ -153,9 +157,14 @@ describe("extraction review", () => {
 
     // The first line sits just above the bottom edge; at most a sliver of the second shows.
     const bottom = scroller.getBoundingClientRect().bottom;
-    scroller.scrollTop += first!.getBoundingClientRect().bottom - bottom + 2;
-    await pause(100);
-    expect(first!.getBoundingClientRect().bottom).toBeLessThanOrEqual(bottom);
+    // Scroll until the line lands there; a scroll that stops short fails here, not below.
+    await expect
+      .poll(() => {
+        scroller.scrollTop += first!.getBoundingClientRect().bottom - bottom + 2;
+        const gap = bottom - first!.getBoundingClientRect().bottom;
+        return gap >= 0 && gap < 4;
+      })
+      .toBe(true);
     const rest = second!.getBoundingClientRect();
     expect((bottom - rest.top) / rest.height).toBeLessThan(0.5);
     await pause(VIEW_MS + 300);
