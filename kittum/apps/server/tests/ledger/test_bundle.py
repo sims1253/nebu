@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 KEY = SigningKey.generate()
 TRIAL_PDF = b"%PDF-1.7\n% KEYNOTE-189 primary publication\n"
 CSR_PDF = b"%PDF-1.7\n% clinical study report, confidential\n"
+REPORT = b"# Screening\n\n1 record included.\n"
 
 
 @dataclass
@@ -56,6 +57,10 @@ class ScreeningExporter:
         bundle.artifact(
             self.csr, media_type="application/pdf", withheld_reason="CSR under confidentiality"
         )
+        bundle.file("reports/screening.md", REPORT)
+        for bad in ("../outside.md", "/abs.md", "reports//x.md", "artifacts/x", "manifest.json"):
+            with pytest.raises(ValueError):
+                bundle.file(bad, REPORT)
 
 
 def _seal(store: Harness, tmp_path: Path) -> tuple[Path, Id, ScreeningExporter]:
@@ -115,6 +120,14 @@ def test_sealed_bundle_verifies_offline(
     assert sorted(p.name for p in (out / "artifacts").iterdir()) == [exporter.pdf]
     manifest = json.loads((out / "manifest.json").read_text())
     assert (manifest["project_id"], manifest["checkpoint"]["seq"]) == (str(project), 4)
+    assert (out / "reports" / "screening.md").read_bytes() == REPORT
+    assert manifest["files"]["reports/screening.md"] == sha256_hex(REPORT)
+
+    # An exporter's file is checked like every other: a changed report fails.
+    (out / "reports" / "screening.md").write_bytes(REPORT.replace(b"1 record", b"2 records"))
+    assert main(["verify", str(out)]) == 1
+    assert "reports/screening.md does not match its hash" in capsys.readouterr().out
+    (out / "reports" / "screening.md").write_bytes(REPORT)
 
     # Without the sender's key the bundle still checks out, but the tool says so.
     assert main(["verify", str(out)]) == 0

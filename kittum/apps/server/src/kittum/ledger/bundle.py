@@ -5,10 +5,12 @@
     kittum.sqlite     the ledger through `cutoff_seq`, its checkpoints, the artifact index,
                       and every table that a registered exporter adds
     artifacts/<hash>  each artifact the exporters include
+    <other paths>     files the exporters add, such as rendered reports under `reports/`
     manifest.json     every file hash, the signed checkpoint, the public key, and a signature
                       over the manifest itself
 
-Modules add their own rows by registering an `Exporter`; the ledger code does not change.
+Modules add their own rows and files by registering an `Exporter`; the ledger code does not
+change.
 `verify_bundle` is the offline check behind `kittum verify`.
 """
 
@@ -48,6 +50,7 @@ ARTIFACT_DIR = "artifacts"
 SEALED_EVENT = "ledger.bundle_sealed"
 
 _RESERVED_TABLES = {"audit_event", "checkpoint", "artifact"}
+_RESERVED_PATHS = {SQLITE_NAME, MANIFEST_NAME, ARTIFACT_DIR}
 _NAME = re.compile(r"^[a-z][a-z0-9_]*$")
 _HASH = re.compile(r"^[0-9a-f]{64}$")
 
@@ -73,6 +76,7 @@ class BundleWriter:
         self._tables: set[str] = set()
         self._exporter = ""
         self.artifacts: dict[str, tuple[str | None, str | None, str]] = {}
+        self.files: dict[str, bytes] = {}
 
     def _begin(self, exporter: str) -> None:
         """Attribute the artifacts indexed from now on to `exporter`."""
@@ -117,6 +121,24 @@ class BundleWriter:
         if known is not None and known[1] is not None:
             return
         self.artifacts[sha256] = (media_type, withheld_reason, self._exporter)
+
+    def file(self, path: str, data: bytes) -> None:
+        """Add a file at a relative POSIX path, such as `reports/prisma.json`.
+
+        The manifest lists it with its hash like every other file, so `verify` checks it.
+        """
+        parts = path.split("/")
+        if (
+            not path
+            or path.startswith("/")
+            or any(p in ("", ".", "..") or "\\" in p or "\x00" in p for p in parts)
+        ):
+            raise ValueError(f"{path!r} is not a relative path inside the bundle")
+        if parts[0] in _RESERVED_PATHS:
+            raise ValueError(f"{path!r} is reserved for the ledger")
+        if path in self.files:
+            raise ValueError(f"{path!r} is already in the bundle")
+        self.files[path] = data
 
 
 def _sqlite_value(value: Any) -> Any:
@@ -258,6 +280,11 @@ def seal(
         conn.execute("commit")
     finally:
         db.close()
+    for rel, data in sorted(writer.files.items()):
+        target = out_dir / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+        files[rel] = sha256_hex(data)
     files[SQLITE_NAME] = sha256_hex((out_dir / SQLITE_NAME).read_bytes())
 
     manifest: dict[str, Any] = {
