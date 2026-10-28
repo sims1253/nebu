@@ -2,7 +2,12 @@
 
 Each field tries its sources in order. A source that errors, is out of budget, or has no record is
 skipped, and the next one answers, so one failing provider never blocks a review. The sources that
-did answer are recorded per field.
+did answer are recorded per field; the sources asked and the ones that failed are recorded per
+record. An answer whose identifiers contradict the record's (another DOI, PMID, or PMCID) is a
+failure of that source for that record, and none of it is used.
+
+`lookup` asks the sources and touches no database, so a caller can do the network work outside a
+transaction and `store` the result in one; `enrich` does both.
 """
 
 from dataclasses import dataclass, field
@@ -44,6 +49,8 @@ class _State:
     updates: list[WorkUpdate] = field(default_factory=list)
     clinical_trial_numbers: list[str] = field(default_factory=list)
     field_sources: dict[tuple[str, str], FieldSource] = field(default_factory=dict)
+    asked: list[str] = field(default_factory=list)
+    failures: list[SourceFailure] = field(default_factory=list)
 
     @classmethod
     def start(cls, record: SourceRecord) -> _State:
@@ -60,6 +67,34 @@ class _State:
         if record.abstract:
             state.note("abstract", record.source)
         return state
+
+    def ask(self, source: str) -> None:
+        if source not in self.asked:
+            self.asked.append(source)
+
+    def fail(self, source: str, reason: str) -> None:
+        failure = SourceFailure(source=source, reason=reason)
+        if failure not in self.failures:
+            self.failures.append(failure)
+
+    def conflict(
+        self,
+        source: str,
+        *,
+        doi: str | None = None,
+        pmid: str | None = None,
+        pmcid: str | None = None,
+    ) -> bool:
+        """Record a failure and return True when an answer names another work than this one."""
+        for name, mine, theirs in (
+            ("DOI", self.doi, doi),
+            ("PMID", self.pmid, pmid),
+            ("PMCID", self.pmcid, pmcid),
+        ):
+            if mine and theirs and mine.lower() != theirs.lower():
+                self.fail(source, f"answered for {name} {theirs.lower()}, not {mine.lower()}")
+                return True
+        return False
 
     def note(self, name: str, source: str) -> None:
         self.field_sources.setdefault((name, source), FieldSource(field=name, source=source))
@@ -106,6 +141,8 @@ class _State:
             clinical_trial_numbers=tuple(self.clinical_trial_numbers),
             field_sources=tuple(self.field_sources.values()),
             sources_used=sources_used,
+            sources_asked=tuple(self.asked),
+            failures=tuple(self.failures),
         )
 
 
@@ -113,29 +150,29 @@ SOURCES = (openalex.SOURCE, europepmc.SOURCE, crossref.SOURCE, unpaywall.SOURCE,
 """Every source `enrich` asks, in the order it asks them."""
 
 
-def sources_asked(record: RecordEnrichment, config: EnrichmentConfig) -> tuple[str, ...]:
-    """The sources `enrich` asks about an enriched record: OpenAlex and Europe PMC by DOI or PMID,
-    Crossref by DOI, Unpaywall by DOI when a contact address is configured, PubTator by PMID."""
-    asked = []
-    if record.doi or record.pmid:
-        asked += [openalex.SOURCE, europepmc.SOURCE]
-    if record.doi:
-        asked.append(crossref.SOURCE)
-        if config.contact_email:
-            asked.append(unpaywall.SOURCE)
-    if record.pmid:
-        asked.append(pubtator.SOURCE)
-    return tuple(asked)
-
-
-class _Failures:
-    def __init__(self) -> None:
-        self.items: list[SourceFailure] = []
-
-    def add(self, error: SourceUnavailable) -> None:
-        failure = SourceFailure(source=error.source, reason=error.reason)
-        if failure not in self.items:
-            self.items.append(failure)
+def lookup(
+    records: tuple[SourceRecord, ...],
+    gateway: Gateway,
+    *,
+    config: EnrichmentConfig | None = None,
+) -> Enrichment:
+    """Ask the sources about `records`. Network only: nothing is stored."""
+    if not records:
+        return Enrichment(records=())
+    config = config or EnrichmentConfig()
+    states = [_State.start(record) for record in records]
+    _from_openalex(states, gateway, config)
+    _from_europepmc(states, gateway, config)
+    _from_crossref(states, gateway, config)
+    _from_unpaywall(states, gateway, config)
+    _from_pubtator(states, gateway, config)
+    failures: list[SourceFailure] = []
+    for state in states:
+        failures += [f for f in state.failures if f not in failures]
+    return Enrichment(
+        records=tuple(state.finish() for state in states),
+        failures=tuple(failures),
+    )
 
 
 def enrich(
@@ -151,32 +188,24 @@ def enrich(
     Writes one `record_enrichment` row per occurrence in the caller's transaction, replacing an
     earlier row for the same occurrence, and returns the same values.
     """
-    if not records:
-        return Enrichment(records=())
-    config = config or EnrichmentConfig()
-    states = [_State.start(record) for record in records]
-    failures = _Failures()
-    _from_openalex(states, gateway, config, failures)
-    _from_europepmc(states, gateway, config, failures)
-    _from_crossref(states, gateway, config, failures)
-    _from_unpaywall(states, gateway, config, failures)
-    _from_pubtator(states, gateway, config, failures)
-
-    enrichment = Enrichment(
-        records=tuple(state.finish() for state in states),
-        failures=tuple(failures.items),
-    )
+    enrichment = lookup(records, gateway, config=config)
     store(tx, project_id, enrichment.records)
     return enrichment
 
 
-def _from_openalex(
-    states: list[_State], gateway: Gateway, config: EnrichmentConfig, failures: _Failures
-) -> None:
-    dois = [state.doi for state in states if state.doi]
-    pmids = [state.pmid for state in states if state.pmid]
-    if not dois and not pmids:
+def _batch_failed(states: list[_State], source: str, error: SourceUnavailable) -> None:
+    for state in states:
+        state.fail(source, error.reason)
+
+
+def _from_openalex(states: list[_State], gateway: Gateway, config: EnrichmentConfig) -> None:
+    asked = [state for state in states if state.doi or state.pmid]
+    dois = [state.doi for state in asked if state.doi]
+    pmids = [state.pmid for state in asked if state.pmid]
+    if not asked:
         return
+    for state in asked:
+        state.ask(openalex.SOURCE)
     try:
         works = openalex.works(
             gateway,
@@ -186,15 +215,15 @@ def _from_openalex(
             batch_size=config.batch_size,
         )
     except SourceUnavailable as error:
-        failures.add(error)
+        _batch_failed(asked, openalex.SOURCE, error)
         return
     by_doi = {work.doi: work for work in works if work.doi}
     by_pmid = {work.pmid: work for work in works if work.pmid}
-    for state in states:
+    for state in asked:
         work = (by_doi.get(state.doi) if state.doi else None) or (
             by_pmid.get(state.pmid) if state.pmid else None
         )
-        if work is None:
+        if work is None or state.conflict(openalex.SOURCE, doi=work.doi, pmid=work.pmid):
             continue
         state.identity(work.doi, work.pmid, openalex.SOURCE)
         if not state.abstract and work.abstract:
@@ -204,25 +233,28 @@ def _from_openalex(
         state.openalex_retracted = work.is_retracted
 
 
-def _from_europepmc(
-    states: list[_State], gateway: Gateway, config: EnrichmentConfig, failures: _Failures
-) -> None:
-    dois = [state.doi for state in states if state.doi]
-    pmids = [state.pmid for state in states if state.pmid]
-    if not dois and not pmids:
+def _from_europepmc(states: list[_State], gateway: Gateway, config: EnrichmentConfig) -> None:
+    asked = [state for state in states if state.doi or state.pmid]
+    dois = [state.doi for state in asked if state.doi]
+    pmids = [state.pmid for state in asked if state.pmid]
+    if not asked:
         return
+    for state in asked:
+        state.ask(europepmc.SOURCE)
     try:
         works = europepmc.works(gateway, dois=dois, pmids=pmids, batch_size=config.batch_size)
     except SourceUnavailable as error:
-        failures.add(error)
+        _batch_failed(asked, europepmc.SOURCE, error)
         return
     by_doi = {work.doi: work for work in works if work.doi}
     by_pmid = {work.pmid: work for work in works if work.pmid}
-    for state in states:
+    for state in asked:
         work = (by_doi.get(state.doi) if state.doi else None) or (
             by_pmid.get(state.pmid) if state.pmid else None
         )
-        if work is None:
+        if work is None or state.conflict(
+            europepmc.SOURCE, doi=work.doi, pmid=work.pmid, pmcid=work.pmcid
+        ):
             continue
         state.identity(work.doi, work.pmid, europepmc.SOURCE)
         if work.pmcid and not state.pmcid:
@@ -234,20 +266,21 @@ def _from_europepmc(
         state.add_locations(work.oa_locations, europepmc.SOURCE)
 
 
-def _from_crossref(
-    states: list[_State], gateway: Gateway, config: EnrichmentConfig, failures: _Failures
-) -> None:
-    works: dict[str, crossref.Work | None] = {}
+def _from_crossref(states: list[_State], gateway: Gateway, config: EnrichmentConfig) -> None:
+    works: dict[str, crossref.Work | SourceUnavailable | None] = {}
     for state in states:
         if not state.doi:
             continue
+        state.ask(crossref.SOURCE)
         if state.doi not in works:
             try:
                 works[state.doi] = crossref.work(gateway, state.doi, email=config.contact_email)
             except SourceUnavailable as error:
-                failures.add(error)
-                works[state.doi] = None
+                works[state.doi] = error
         work = works[state.doi]
+        if isinstance(work, SourceUnavailable):
+            state.fail(crossref.SOURCE, work.reason)
+            continue
         if work is None:
             continue
         if not state.abstract and work.abstract:
@@ -272,40 +305,41 @@ def _from_crossref(
                 state.note("retraction", openalex.SOURCE)
 
 
-def _from_unpaywall(
-    states: list[_State], gateway: Gateway, config: EnrichmentConfig, failures: _Failures
-) -> None:
+def _from_unpaywall(states: list[_State], gateway: Gateway, config: EnrichmentConfig) -> None:
     if not config.contact_email:
         return
-    seen: dict[str, OaLocation | None] = {}
+    seen: dict[str, OaLocation | SourceUnavailable | None] = {}
     for state in states:
         if not state.doi:
             continue
+        state.ask(unpaywall.SOURCE)
         if state.doi not in seen:
             try:
                 seen[state.doi] = unpaywall.best_oa_location(
                     gateway, state.doi, email=config.contact_email
                 )
             except SourceUnavailable as error:
-                failures.add(error)
-                seen[state.doi] = None
+                seen[state.doi] = error
         location = seen[state.doi]
-        if location is not None:
+        if isinstance(location, SourceUnavailable):
+            state.fail(unpaywall.SOURCE, location.reason)
+        elif location is not None:
             state.add_locations((location,), unpaywall.SOURCE)
 
 
-def _from_pubtator(
-    states: list[_State], gateway: Gateway, config: EnrichmentConfig, failures: _Failures
-) -> None:
-    pmids = [state.pmid for state in states if state.pmid]
-    if not pmids:
+def _from_pubtator(states: list[_State], gateway: Gateway, config: EnrichmentConfig) -> None:
+    asked = [state for state in states if state.pmid]
+    if not asked:
         return
+    for state in asked:
+        state.ask(pubtator.SOURCE)
+    pmids = [state.pmid for state in asked if state.pmid]
     try:
         annotations = pubtator.annotations(gateway, pmids, batch_size=config.batch_size)
     except SourceUnavailable as error:
-        failures.add(error)
+        _batch_failed(asked, pubtator.SOURCE, error)
         return
-    for state in states:
+    for state in asked:
         if not state.pmid:
             continue
         entities = _entities(state, annotations.get(state.pmid, ()))

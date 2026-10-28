@@ -9,7 +9,8 @@ Owner: WP-06. Shipped: OpenAlex, Crossref (including `update-to` retractions,
 OpenMed GLiNER models for documents that must stay local.
 """
 
-from kittum.enrich.service import SOURCES, enrich, sources_asked
+from kittum.enrich.service import SOURCES, enrich, lookup
+from kittum.enrich.store import store as save_enrichment
 from kittum.enrich.types import (
     Enrichment,
     EnrichmentConfig,
@@ -36,5 +37,6 @@ __all__ = [
     "WorkUpdate",
     "enrich",
     "full_text_candidates",
-    "sources_asked",
+    "lookup",
+    "save_enrichment",
 ]

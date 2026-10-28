@@ -57,4 +57,7 @@ def best_oa_location(gateway: Gateway, doi: str, *, email: str | None) -> OaLoca
         return None
     if not isinstance(body, dict):
         raise SourceUnavailable(SOURCE, "unexpected response shape")
+    answered = str(body.get("doi") or doi).lower()
+    if answered != doi.lower():
+        raise SourceUnavailable(SOURCE, f"answered for DOI {answered}, not {doi.lower()}")
     return _location(body.get("best_oa_location"))

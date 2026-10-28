@@ -3374,6 +3374,18 @@
             ],
             "title": "Licence"
           },
+          "licence_start": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Licence Start"
+          },
           "source": {
             "default": "",
             "title": "Source",

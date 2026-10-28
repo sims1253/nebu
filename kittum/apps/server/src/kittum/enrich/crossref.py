@@ -5,11 +5,16 @@ Crossref has no OR filter for DOIs, so lookups are one request per DOI. The poli
 the `mailto` parameter. See docs/sources.md.
 
 A publisher deposits text-mining links (`link`) and licences (`license`) per content version. A
-PDF link counts as a full-text location only under a Creative Commons licence for its version (or
-for text and data mining), so the waterfall's publisher step never fetches a closed article.
+PDF link counts as a full-text location only under a Creative Commons licence for exactly its
+version: a `tdm` licence lets a machine read the text, not anyone redistribute the published
+version. The licence's start date travels with the location; the waterfall skips it until then.
+
+A response that names another DOI than the one asked for (Crossref resolves aliases and can be
+wrong) is refused as a failure of the source, so one work's links never land on another.
 """
 
 import re
+from datetime import date
 from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import quote, urlencode
 
@@ -125,25 +130,36 @@ def _open_licence(url: Any) -> str | None:
     return f"cc-{found.group(1)}-{found.group(2)}"
 
 
+def _start(entry: dict[str, Any]) -> date | None:
+    parts = (entry.get("start") or {}).get("date-parts") or [[]]
+    try:
+        year, month, day = [*parts[0], 1, 1][:3]
+        return date(int(year), int(month), int(day))
+    except TypeError, ValueError:
+        return None
+
+
 def _pdf_links(message: dict[str, Any]) -> tuple[OaLocation, ...]:
-    licences: dict[str, str] = {}
+    licences: dict[str, tuple[str, date | None]] = {}
     for entry in message.get("license") or []:
         if isinstance(entry, dict) and (licence := _open_licence(entry.get("URL"))):
-            licences.setdefault(str(entry.get("content-version") or "unspecified"), licence)
+            version = str(entry.get("content-version") or "unspecified")
+            licences.setdefault(version, (licence, _start(entry)))
     found: dict[str, OaLocation] = {}
     for entry in message.get("link") or []:
         if not isinstance(entry, dict) or entry.get("content-type") != "application/pdf":
             continue
         url = entry.get("URL")
         version = str(entry.get("content-version") or "unspecified")
-        licence = licences.get(version) or licences.get("tdm") or licences.get("unspecified")
-        if not isinstance(url, str) or not url or licence is None:
+        matched = licences.get(version)
+        if not isinstance(url, str) or not url or matched is None:
             continue
         found.setdefault(
             url,
             OaLocation(
                 url=url,
-                licence=licence,
+                licence=matched[0],
+                licence_start=matched[1],
                 version=_VERSIONS.get(version),
                 source=SOURCE,
                 format="pdf",
@@ -159,9 +175,12 @@ def work(gateway: Gateway, doi: str, *, email: str | None = None) -> Work | None
     if not isinstance(body, dict) or not isinstance(body.get("message"), dict):
         raise SourceUnavailable(SOURCE, "response has no work")
     message = body["message"]
+    answered = str(message.get("DOI") or doi).lower()
+    if answered != doi.lower():
+        raise SourceUnavailable(SOURCE, f"answered for DOI {answered}, not {doi.lower()}")
     title = message.get("title")
     return Work(
-        doi=(message.get("DOI") or doi).lower(),
+        doi=answered,
         title=title[0] if isinstance(title, list) and title else None,
         abstract=strip_markup(message.get("abstract")),
         updates=_updates(message),
