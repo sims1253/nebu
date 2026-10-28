@@ -31,6 +31,7 @@ TITLES = {
     "cohort": "Use of nicotine replacement therapy",
     "cf_rct": "Efficacy and safety of lumacaftor and ivacaftor in patients aged 6-11",
     "cf_review": "Lumacaftor/Ivacaftor: A Review",
+    "glpg": "GLPG2737 in lumacaftor",
 }
 
 
@@ -142,7 +143,7 @@ def test_m1_blinds_reviewers_reveals_disagreement_and_adjudicates(
 
     # Every item of B's queue has the same shape; the sentinel among them is not marked.
     first = b.whole_queue()
-    assert len(first) == 9  # eight records and one sentinel (1% of eight, rounded up)
+    assert len(first) == 10  # nine records and one sentinel (1% of nine, rounded up)
     assert {frozenset(i) for i in first} == {
         frozenset(
             {
@@ -174,13 +175,14 @@ def test_m1_blinds_reviewers_reveals_disagreement_and_adjudicates(
         "cohort": ("exclude", "DESIGN"),
         "cf_rct": ("include", None),  # A's slip: the population is wrong
         "cf_review": ("exclude", "DESIGN"),
+        "glpg": ("exclude", "POP"),
     }
     for key, (outcome, reason) in plan.items():
         result = a.screen(key, outcome, reason, comment=note)
-        # Where the AI agrees, A's provisional decision is final at once. It confirms no
-        # exclusion but the colitis trial's, so A's other exclusions are revealed.
-        revealed = key in {"varenicline", "cohort", "cf_review"}
-        assert (result["reveal"] is not None) == revealed, key
+        # Where the AI agrees, A's provisional decision is final at once. The model answered
+        # not_met for A's other exclusions (the filter confirmed only the colitis one), so it
+        # agrees with them; only for GLPG2737 did it see no failing criterion.
+        assert (result["reveal"] is not None) == (key == "glpg"), key
     (sentinel,) = a.whole_queue()
     a.call(
         "POST",
@@ -196,13 +198,13 @@ def test_m1_blinds_reviewers_reveals_disagreement_and_adjudicates(
     assert a.whole_queue() == []
 
     # B still sees only B's own work: no A data, no AI output, no shared counts.
-    assert len(b.whole_queue()) == 9
+    assert len(b.whole_queue()) == 10
     assert b.status() == {
         "scope_id": SCOPE,
         "stage": STAGE,
         "view": "reviewer",
         "screened": 0,
-        "remaining": 9,
+        "remaining": 10,
         "conflicts": None,
         "metrics": None,
     }
@@ -243,16 +245,17 @@ def test_m1_blinds_reviewers_reveals_disagreement_and_adjudicates(
     assert waiting["phase"] == "final" and waiting["reveal"] == revealed["reveal"]
     assert b.decide("colitis", "exclude", "POP", phase="final")["phase"] == "final"
 
-    # B excludes the CF trial on the population; the AI could not confirm that, so B sees the
-    # AI's reading of B's own criterion and keeps the exclusion.
-    shown = b.decide("cf_rct", "exclude", "POP")
-    assert shown["phase"] == "provisional"
-    assert shown["reveal"]["criterion_id"] == "POP" and shown["reveal"]["status"] == "unclear"
-    b.decide("cf_rct", "exclude", "POP", phase="final")
+    # B excludes the CF trial on the population. The model said not_met too and only the filter
+    # downgraded it, so there is no disagreement to reveal.
+    settled = b.decide("cf_rct", "exclude", "POP")
+    assert (settled["phase"], settled["reveal"]) == ("final", None)
 
-    # Both humans exclude these; the AI includes them (it confirms no exclusion).
+    # The same for the records whose not_met the filter downgraded: no reveal, no escalation.
     for key, reason in (("varenicline", "INT"), ("cohort", "DESIGN"), ("cf_review", "DESIGN")):
-        assert b.screen(key, "exclude", reason)["phase"] == "provisional"
+        assert b.decide(key, "exclude", reason)["reveal"] is None
+    # GLPG2737: the model saw every criterion met, so B's exclusion is revealed.
+    shown = b.screen("glpg", "exclude", "POP")
+    assert shown["reveal"]["criterion_id"] == "POP" and shown["reveal"]["status"] == "met"
     (b_sentinel,) = b.whole_queue()
     b.call(
         "POST",
@@ -280,20 +283,24 @@ def test_m1_blinds_reviewers_reveals_disagreement_and_adjudicates(
             for item in body:
                 assert (JUDGE_MARK in json.dumps(item)) == (item["phase"] == "final")
 
-    # The lead sees four conflicts: one human disagreement and three records the AI includes
-    # while both humans exclude.
+    # The lead sees two conflicts: the human disagreement on the CF trial, and GLPG2737, which
+    # both humans exclude while the model saw no failing criterion. The records whose not_met
+    # the filter downgraded are not escalated: the model agrees with the humans.
     status = lead.status()
     assert (status["view"], status["screened"], status["remaining"], status["conflicts"]) == (
         "lead",
-        8,
+        9,
         0,
-        4,
+        2,
     )
 
     # The adjudicator sees A and B side by side, pseudonymized, without the AI.
     queue = adjudicator.call("GET", "/adjudications", params={"scope_id": SCOPE, "stage": STAGE})
     conflicts = queue.json()
-    assert len(conflicts) == 4
+    assert sorted(c["title"][:22] for c in conflicts) == [
+        "Efficacy and safety of",
+        "GLPG2737 in lumacaftor",
+    ]
     assert JUDGE_MARK not in queue.text
     assert str(world.people.a) not in queue.text and str(world.people.b) not in queue.text
     by_title = {c["title"]: c for c in conflicts}
@@ -323,38 +330,40 @@ def test_m1_blinds_reviewers_reveals_disagreement_and_adjudicates(
     ).json()
     assert resolved["outcome"] == "exclude" and resolved["reason_criterion_id"] == "POP"
     assert resolved["ai"]["excludes"] is False
-    assert {c["criterion_id"] for c in resolved["ai"]["criteria"]} == {"POP", "INT", "DESIGN"}
+    pop = next(c for c in resolved["ai"]["criteria"] if c["criterion_id"] == "POP")
+    assert (pop["status"], pop["downgraded_from"]) == ("unclear", "not_met")
 
     # The AI-include case: the adjudicator decides on their own and confirms the exclusion.
-    varenicline = next(c for t, c in by_title.items() if t.startswith(TITLES["varenicline"]))
+    glpg = next(c for t, c in by_title.items() if t.startswith(TITLES["glpg"]))
+    assert [col["outcome"] for col in glpg["columns"]] == ["exclude", "exclude"]
     own = adjudicator.call(
         "POST",
-        f"/adjudications/{varenicline['conflict_id']}/decide",
+        f"/adjudications/{glpg['conflict_id']}/decide",
         json={
             "command_id": str(new_id()),
-            "expected_revision": varenicline["revision"],
-            "decision": {"outcome": "exclude", "reason_criterion_id": "INT"},
+            "expected_revision": glpg["revision"],
+            "decision": {"outcome": "exclude", "reason_criterion_id": "POP"},
             "timing": json.loads(timing(0).model_dump_json()),
         },
     ).json()
     assert own["outcome"] == "exclude"
+    assert {c["status"] for c in own["ai"]["criteria"]} == {"met"}
     remaining = adjudicator.call(
         "GET", "/adjudications", params={"scope_id": SCOPE, "stage": STAGE}
     ).json()
-    assert len(remaining) == 2
+    assert remaining == []
 
     # The methods lead's metrics.
     metrics = lead.status()["metrics"]
     assert metrics["conflicts_resolved"] == 2
-    assert (
-        metrics["reveals_shown"] == 8 and metrics["revised_after_reveal"] == 1
-    )  # 3 for A, 5 for B
+    # One reveal for A (GLPG2737), two for B (colitis, GLPG2737); B revised colitis.
+    assert metrics["reveals_shown"] == 3 and metrics["revised_after_reveal"] == 1
     humans = next(p for p in metrics["agreement"] if p["kind"] == "human_human")
-    # Blind provisional decisions: they disagree on two of eight (colitis, CF trial).
-    assert humans["items"] == 8 and humans["pabak"] == pytest.approx(0.5)
-    assert humans["kappa"] == pytest.approx(0.5)
+    # Blind provisional decisions: they disagree on two of nine (colitis, CF trial).
+    assert humans["items"] == 9 and humans["pabak"] == pytest.approx(5 / 9)
+    assert humans["kappa"] == pytest.approx(0.55)
     to_ai = {p["raters"][0]: p for p in metrics["agreement"] if p["kind"] == "human_ai"}
-    assert to_ai[str(world.people.a)]["items"] == 8
+    assert to_ai[str(world.people.a)]["items"] == 9
     assert metrics["audit"]["sentinels"] == 2 and metrics["audit"]["sentinels_correct"] == 2
     assert metrics["stop_test"] is None
 

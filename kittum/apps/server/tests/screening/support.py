@@ -3,10 +3,11 @@ and a CENTRAL export, the corpus, and the AI judge on recorded completions.
 
 The PubMed search is the recorded lumacaftor search of the search tests, so its records are
 off-topic for this review, as a broad search's often are. The judge's answers are what a model
-says about them; the judge's filter decides what stands. On these records it never confirms an
-exclusion (no quote negates the population criterion), so the AI includes them, and M1 sends
-records both humans exclude to adjudication. One CENTRAL record states that its patients did not
-smoke, and that exclusion is verified.
+says about them; the judge's filter decides what stands. The model answers `not_met` for most of
+them, but the filter confirms none (no quote negates the population criterion), so the verified
+reading includes them while the model's own reading excludes them. Two PubMed records get no
+`not_met` at all. One CENTRAL record states that its patients did not smoke, and that exclusion
+is verified.
 """
 
 import functools
@@ -298,9 +299,29 @@ CENTRAL_ANSWERS = {
 }
 
 
+# Two PubMed records the model reads without finding any failing criterion: one it wrongly calls
+# met throughout, one it cannot judge. Both humans exclude them, so M1 adjudicates them.
+PUBMED_ANSWERS = {
+    "GLPG2737 in lumacaftor": answer(
+        POP=(
+            "met",
+            "CF subjects homozygous for the F508del mutation",
+            "Adult patients are enrolled.",
+        ),
+        INT=("met", "lumacaftor/ivacaftor-treated", "One arm receives a nicotine-free regimen."),
+        DESIGN=("met", "A randomized phase 2A trial", "A randomised trial."),
+    ),
+    "Rate and predictors of prescription": answer(
+        POP=("unclear", "", "Smoking status is not reported."),
+        INT=("unclear", "", "No nicotine replacement is mentioned."),
+        DESIGN=("unclear", "", "The design is not stated."),
+    ),
+}
+
+
 def ai_answer(record: ScreeningRecord) -> str:
     """The recorded completion for a record."""
-    for prefix, text in CENTRAL_ANSWERS.items():
+    for prefix, text in (CENTRAL_ANSWERS | PUBMED_ANSWERS).items():
         if record.title.startswith(prefix):
             return text
     source = f"{record.title}\n\n{record.text}"

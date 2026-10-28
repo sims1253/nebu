@@ -71,7 +71,14 @@ def by_title(items: list[QueueItem], prefix: str) -> QueueItem:
 
 def test_m2_sends_every_ai_disagreement_to_adjudication(database: Database) -> None:
     world = build_world(database, "M2")
-    keep = ("Nicotine patch versus", "Transdermal nicotine for active", "Varenicline", "Use of")
+    keep = (
+        "Nicotine patch versus",
+        "Transdermal nicotine for active",
+        "Varenicline",
+        "Use of",
+        "GLPG2737",
+        "Rate and predictors",
+    )
     world.records = [world.record(t) for t in keep]
     a = world.people.a
     # One screener; the audit plan samples 10% (one record) for the auditor.
@@ -84,18 +91,23 @@ def test_m2_sends_every_ai_disagreement_to_adjudication(database: Database) -> N
     # The human includes, the AI excludes on a verified quote, and the human keeps the inclusion.
     shown = decide(world, a, by_title(items, "Transdermal nicotine"), "include")
     assert shown.reveal is not None and shown.reveal.criterion_id == "POP"
-    # The human excludes, the AI does not confirm it; a disagreement too.
-    assert decide(world, a, by_title(items, "Varenicline"), "exclude", "INT").reveal is not None
-    # Census: the human excludes, sees the AI include, and revises to include. The provisional
-    # disagreement still goes to adjudication.
-    cohort = by_title(items, "Use of")
+    # The human excludes and the model answered not_met too; the filter's downgrade makes no
+    # disagreement.
+    assert decide(world, a, by_title(items, "Varenicline"), "exclude", "INT").reveal is None
+    assert decide(world, a, by_title(items, "Use of"), "exclude", "DESIGN").reveal is None
+    # The human excludes and the model saw every criterion met: a disagreement.
+    glpg = decide(world, a, by_title(items, "GLPG2737"), "exclude", "POP")
+    assert glpg.reveal is not None and glpg.reveal.status == "met"
+    # Census: the human excludes, sees that the model found no failing criterion, and revises
+    # to include. The provisional disagreement still goes to adjudication.
+    prescription = by_title(items, "Rate and predictors")
     with world.db.transaction() as tx:
         first = world.screening.decide(
             tx,
             command_id=new_id(),
             project_id=world.project_id,
             reviewer_id=a,
-            assignment_id=cohort.assignment_id,
+            assignment_id=prescription.assignment_id,
             decision=Decision(outcome="exclude", reason_criterion_id="DESIGN"),
             phase="provisional",
             expected_revision=0,
@@ -107,7 +119,7 @@ def test_m2_sends_every_ai_disagreement_to_adjudication(database: Database) -> N
             command_id=new_id(),
             project_id=world.project_id,
             reviewer_id=a,
-            assignment_id=cohort.assignment_id,
+            assignment_id=prescription.assignment_id,
             decision=Decision(outcome="include"),
             phase="final",
             expected_revision=first.revision,
@@ -118,8 +130,8 @@ def test_m2_sends_every_ai_disagreement_to_adjudication(database: Database) -> N
         conflicts = world.screening.adjudication_queue(
             tx, world.project_id, world.people.adjudicator, SCOPE, STAGE
         )
-        titles = sorted(c.title.split(":")[0][:20] for c in conflicts)
-        assert titles == ["Transdermal nicotine", "Use of nicotine repl", "Varenicline versus p"]
+        titles = sorted(c.title[:20] for c in conflicts)
+        assert titles == ["GLPG2737 in lumacaft", "Rate and predictors ", "Transdermal nicotine"]
         assert all(len(c.columns) == 1 and c.columns[0].label == "A" for c in conflicts)
         colitis = next(c for c in conflicts if c.title.startswith("Transdermal"))
         result = world.screening.adjudicate(
@@ -133,12 +145,12 @@ def test_m2_sends_every_ai_disagreement_to_adjudication(database: Database) -> N
         )
         assert result.ai.excludes is True
         status = world.screening.status(tx, world.project_id, world.people.lead, SCOPE, STAGE)
-        assert (status.screened, status.remaining, status.conflicts) == (4, 0, 2)
+        assert (status.screened, status.remaining, status.conflicts) == (6, 0, 2)
         assert status.metrics is not None
         assert [p.kind for p in status.metrics.agreement] == ["human_ai"]
-        # Blind provisional decisions against the AI: patch agrees, the other three do not.
-        assert status.metrics.agreement[0].items == 4
-        assert status.metrics.agreement[0].pabak == pytest.approx(-0.5)
+        # Agreement is reported against the verified reading: only the patch trial agrees.
+        assert status.metrics.agreement[0].items == 6
+        assert status.metrics.agreement[0].pabak == pytest.approx(-2 / 3)
         assert world.ledger.verify(tx, world.project_id).ok
 
 

@@ -177,16 +177,9 @@ def test_replay_is_a_noop_stale_revisions_fail_and_undo_redecides(world: World) 
             Decision(outcome="exclude", reason_criterion_id="POP"),
             0,
         )
-        assert b_first.reveal is not None  # the AI could not confirm B's exclusion
-        decide(
-            world,
-            tx,
-            b,
-            b_cf.assignment_id,
-            Decision(outcome="exclude", reason_criterion_id="POP"),
-            1,
-            phase="final",
-        )
+        # The model answered not_met on the population too (the filter downgraded it), so it
+        # agrees with B and nothing is revealed.
+        assert (b_first.phase, b_first.reveal) == ("final", None)
 
     def open_conflicts() -> list[tuple[str, ...]]:
         with world.db.transaction() as tx:
@@ -209,21 +202,25 @@ def test_replay_is_a_noop_stale_revisions_fail_and_undo_redecides(world: World) 
             expected_revision=1,
         )
     assert open_conflicts() == []
+    # A now excludes too. The model's own reading agrees, so nothing is escalated.
     with world.db.transaction() as tx:
         result = decide(
             world, tx, a, a_cf, Decision(outcome="exclude", reason_criterion_id="POP"), 2
         )
-        # A has seen no AI output for this record before, so the reveal follows.
-        decide(
-            world,
+    assert (result.phase, result.revision) == ("final", 3)
+    assert open_conflicts() == []
+    # A changes their mind again; the disagreement is back.
+    with world.db.transaction() as tx:
+        world.screening.undo(
             tx,
-            a,
-            a_cf,
-            Decision(outcome="exclude", reason_criterion_id="POP"),
-            result.revision,
-            phase="final",
+            command_id=new_id(),
+            project_id=world.project_id,
+            reviewer_id=a,
+            assignment_id=a_cf,
+            expected_revision=3,
         )
-    assert open_conflicts() == [("ai_include",)]
+        assert decide(world, tx, a, a_cf, include, 4).revision == 5
+    assert open_conflicts() == [("human_disagreement",)]
 
     # Once adjudicated, a decision stands.
     with world.db.transaction() as tx:
@@ -246,7 +243,7 @@ def test_replay_is_a_noop_stale_revisions_fail_and_undo_redecides(world: World) 
                 project_id=world.project_id,
                 reviewer_id=a,
                 assignment_id=a_cf,
-                expected_revision=4,
+                expected_revision=5,
             )
         assert world.ledger.verify(tx, world.project_id).ok
 
