@@ -241,6 +241,33 @@
         ],
         "type": "string"
       },
+      "ImportSearchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "data": {
+            "title": "Data",
+            "type": "string"
+          },
+          "format": {
+            "title": "Format",
+            "type": "string"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/SearchPlan"
+          }
+        },
+        "required": [
+          "plan",
+          "data",
+          "format",
+          "actor_id"
+        ],
+        "title": "ImportSearchRequest",
+        "type": "object"
+      },
       "KnownInclude": {
         "additionalProperties": false,
         "properties": {
@@ -673,6 +700,23 @@
         "title": "ReviewQuestion",
         "type": "object"
       },
+      "RunSearchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/SearchPlan"
+          }
+        },
+        "required": [
+          "plan",
+          "actor_id"
+        ],
+        "title": "RunSearchRequest",
+        "type": "object"
+      },
       "Scope": {
         "additionalProperties": false,
         "description": "One review question or search topic that decisions are keyed by.",
@@ -712,6 +756,127 @@
         ],
         "title": "ScreeningMode",
         "type": "string"
+      },
+      "SearchExecution": {
+        "additionalProperties": false,
+        "properties": {
+          "ended_at": {
+            "format": "date-time",
+            "title": "Ended At",
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "kind": {
+            "enum": [
+              "live_api",
+              "file_import"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/SearchPlan"
+          },
+          "query_translation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query Translation"
+          },
+          "raw_artifact_hashes": {
+            "items": {
+              "$ref": "#/components/schemas/Sha256"
+            },
+            "title": "Raw Artifact Hashes",
+            "type": "array"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/SourceRecord"
+            },
+            "title": "Records",
+            "type": "array"
+          },
+          "reported_count": {
+            "title": "Reported Count",
+            "type": "integer"
+          },
+          "retrieved_count": {
+            "title": "Retrieved Count",
+            "type": "integer"
+          },
+          "skipped_record_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Skipped Record Ids",
+            "type": "array"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "plan",
+          "kind",
+          "started_at",
+          "ended_at",
+          "query_translation",
+          "reported_count",
+          "retrieved_count",
+          "raw_artifact_hashes",
+          "records"
+        ],
+        "title": "SearchExecution",
+        "type": "object"
+      },
+      "SearchPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "limits": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Limits",
+            "type": "array"
+          },
+          "platform": {
+            "title": "Platform",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "strategy": {
+            "title": "Strategy",
+            "type": "string"
+          },
+          "topic_id": {
+            "title": "Topic Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic_id",
+          "source",
+          "platform",
+          "strategy"
+        ],
+        "title": "SearchPlan",
+        "type": "object"
       },
       "SearchTopic": {
         "additionalProperties": false,
@@ -900,6 +1065,123 @@
           "sources"
         ],
         "title": "SourcePlan",
+        "type": "object"
+      },
+      "SourceRecord": {
+        "additionalProperties": false,
+        "description": "One record as a source returned it, before dedupe.\n\n`occurrence_id` is assigned when the search module stores the execution; corpus and every\nlater stage refer to records by it.",
+        "properties": {
+          "abstract": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abstract"
+          },
+          "authors": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Authors",
+            "type": "array"
+          },
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "journal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal"
+          },
+          "occurrence_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "ordinal": {
+            "title": "Ordinal",
+            "type": "integer"
+          },
+          "pmid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pmid"
+          },
+          "provider_record_id": {
+            "title": "Provider Record Id",
+            "type": "string"
+          },
+          "publication_types": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Publication Types",
+            "type": "array"
+          },
+          "raw_hash": {
+            "$ref": "#/components/schemas/Sha256"
+          },
+          "registry_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Registry Ids",
+            "type": "array"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "required": [
+          "occurrence_id",
+          "source",
+          "provider_record_id",
+          "ordinal",
+          "title",
+          "raw_hash"
+        ],
+        "title": "SourceRecord",
         "type": "object"
       },
       "Stage": {
@@ -1343,6 +1625,228 @@
         "summary": "Publish Protocol Version",
         "tags": [
           "protocol"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/search/executions": {
+      "get": {
+        "operationId": "listSearchExecutions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "topic_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Topic Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SearchExecution"
+                  },
+                  "title": "Response Listsearchexecutions",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Search Executions",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/search/executions/{execution_id}": {
+      "get": {
+        "operationId": "getSearchExecution",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "execution_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Execution Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchExecution"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Search Execution",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/search/import": {
+      "post": {
+        "operationId": "importSearchFile",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchExecution"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Search",
+        "tags": [
+          "search"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/search/run": {
+      "post": {
+        "operationId": "runSearch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchExecution"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Search",
+        "tags": [
+          "search"
         ]
       }
     },
