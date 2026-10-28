@@ -31,7 +31,7 @@ from typing import TYPE_CHECKING, Literal, get_args
 from psycopg.types.json import Jsonb
 from pydantic import Field
 
-from kittum.core import Id, Record, Sha256, SystemClock, canonical_json, new_id
+from kittum.core import Id, KittumError, Record, Sha256, SystemClock, canonical_json, new_id
 from kittum.ledger import EXPORTERS as LEDGER_EXPORTERS
 from kittum.ledger import EventDraft, PostgresLedger, register_exporter
 from kittum.ledger import seal as seal_ledger
@@ -236,6 +236,32 @@ def record_render(
     return index_hash
 
 
+class NotTheLead(KittumError):
+    """The actor screens, audits, or adjudicates a stage of the project, or is not a human.
+
+    Reports show every reviewer's decisions, the AI's readings, and its raw outputs, so only the
+    methods lead may render, download, or seal them: the person `Screening.status` gives the
+    lead's view, a human who is none of a stage's screeners, auditor, and adjudicators.
+    """
+
+
+def require_lead(tx: Tx, project_id: Id, actor_id: Id) -> None:
+    """Raise `NotTheLead` unless the actor may see the whole review."""
+    actor = tx.execute("select kind from actor where id = %s", (actor_id,)).fetchone()
+    if actor is None or actor["kind"] != "human":
+        raise NotTheLead(f"actor {actor_id} is not a human")
+    role = tx.execute(
+        "select 1 from screening_stage where project_id = %s"
+        " and (%s = any(screeners) or auditor_id = %s or %s = any(adjudicators)) limit 1",
+        (project_id, actor_id, actor_id, actor_id),
+    ).fetchone()
+    if role is not None:
+        raise NotTheLead(
+            f"actor {actor_id} screens, audits, or adjudicates in this project; only the "
+            "methods lead sees its reports"
+        )
+
+
 def rendered_file(tx: Tx, project_id: Id, sha256: str) -> str | None:
     """The media type of a file or index rendered for the project, or None if it was not."""
     row = tx.execute(
@@ -387,6 +413,7 @@ __all__ = [
     "ItemResult",
     "JudgeInfo",
     "Link",
+    "NotTheLead",
     "PrismaFlow",
     "ReasonCount",
     "RenderedFile",
@@ -412,6 +439,7 @@ __all__ = [
     "render_files",
     "rendered_file",
     "representative",
+    "require_lead",
     "ris_dumps",
     "ris_entry",
     "safe_name",

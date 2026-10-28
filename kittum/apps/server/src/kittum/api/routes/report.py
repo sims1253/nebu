@@ -4,13 +4,17 @@ sealing the handover bundle.
 A render is stored by hash and recorded with a `report.rendered` event; downloads serve only
 files rendered for the project, never an arbitrary artifact by hash. Sealing needs the checkpoint
 key (`KITTUM_CHECKPOINT_KEY`) and writes the bundle under `bundles/` beside the artifact store.
-Until the API has authentication (WP-15), the caller names the actor in the body.
+
+Reports show every reviewer's decisions and the AI's output, so rendering, downloading, and
+sealing are for the methods lead only (`report.require_lead`): never a screener, auditor, or
+adjudicator of a stage. Until the API has authentication (WP-15), the caller names the actor in
+the body or in the `X-Kittum-Reviewer` header; that is a stand-in, not a security boundary.
 """
 
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Annotated, Literal
 
-from fastapi import APIRouter, HTTPException, Path, Response
+from fastapi import APIRouter, Header, HTTPException, Path, Response
 from pydantic import Field
 
 from kittum.api import AppContext, Context  # noqa: TC001 - FastAPI resolves it at runtime
@@ -20,11 +24,13 @@ from kittum.protocol import latest_published
 from kittum.report import (
     CORE_TARGETS,
     Artifact,
+    NotTheLead,
     RightsProfile,
     head_seq,
     record_render,
     render,
     rendered_file,
+    require_lead,
     seal_bundle,
     targets,
 )
@@ -37,6 +43,13 @@ if TYPE_CHECKING:
 router = APIRouter(prefix="/api/projects/{project_id}/reports", tags=["reports"])
 
 Sha256Path = Annotated[str, Path(pattern=r"^[0-9a-f]{64}$")]
+Reviewer = Annotated[
+    Id,
+    Header(
+        alias="X-Kittum-Reviewer",
+        description="The caller's actor ID. A stand-in until the API has authentication.",
+    ),
+]
 
 
 class TargetInfo(Record):
@@ -86,6 +99,8 @@ def _ledger(ctx: AppContext) -> Ledger:
 def _errors() -> Generator[None]:
     try:
         yield
+    except NotTheLead as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
     except NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except ValueError as e:
@@ -116,6 +131,7 @@ def render_target(
     """Render a target from the ledger, store its files by hash, and record the render."""
     ledger = _ledger(ctx)
     with _errors(), ctx.db.transaction() as tx:
+        require_lead(tx, project_id, body.actor_id)
         artifact = render(
             tx,
             target,
@@ -143,9 +159,10 @@ def render_target(
     response_class=Response,
     responses={200: {"content": {"application/octet-stream": {}}}},
 )
-def download(project_id: Id, sha256: Sha256Path, ctx: Context) -> Response:
-    """A rendered file, or an artifact's index, by hash."""
-    with ctx.db.transaction() as tx:
+def download(project_id: Id, sha256: Sha256Path, reviewer: Reviewer, ctx: Context) -> Response:
+    """A rendered file, or an artifact's index, by hash. For the methods lead only."""
+    with _errors(), ctx.db.transaction() as tx:
+        require_lead(tx, project_id, reviewer)
         media_type = rendered_file(tx, project_id, sha256)
     if media_type is None:
         raise HTTPException(
@@ -163,6 +180,7 @@ def seal(project_id: Id, body: SealRequest, ctx: Context) -> SealedBundle:
         raise HTTPException(status_code=503, detail="no checkpoint key is configured")
     signer = SigningKey.from_file(key_path)
     with _errors(), ctx.db.transaction() as tx:
+        require_lead(tx, project_id, body.actor_id)
         cutoff = head_seq(tx, project_id) if body.cutoff_seq is None else body.cutoff_seq
         out = ctx.settings.artifact_dir.parent / "bundles" / f"{project_id}-{cutoff}-{new_id()}"
         try:
