@@ -13,8 +13,15 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 from urllib.parse import quote, urlencode
 
+import httpx2
+
 from kittum.core import Clock, Record, Sha256, SystemClock
-from kittum.gateway import HttpRequest
+from kittum.gateway import (
+    GatewayError,
+    HttpRequest,
+    SourceBudgetExhausted,
+    SourceUnavailable,
+)
 from kittum.search.ctgov import CTGOV_BASE
 from kittum.search.models import SourceError
 from kittum.search.pubmed import EUTILS_BASE
@@ -51,7 +58,8 @@ def count_hits(
 ) -> QueryCount:
     """How many records `strategy` finds now: PubMed's ESearch count or ClinicalTrials.gov's
     `totalCount`. Asks the source every time, past the response cache. Raises `SourceError` when
-    the source refuses the query."""
+    the source refuses the query, and the gateway's `SourceUnavailable` when no answer came, a
+    connection that failed or timed out included."""
     clock = clock or SystemClock()
     if not strategy.strip():
         raise SourceError("an empty query finds nothing to count")
@@ -67,11 +75,16 @@ def count_hits(
         params = {"query.term": strategy, "pageSize": "1", "countTotal": "true"}
         url = f"{CTGOV_BASE}?{urlencode(params, quote_via=quote)}"
         source = "clinicaltrials"  # the gateway policy's name
-    response = gateway.fetch(source, HttpRequest(url=url), use_cache=False)
+    try:
+        response = gateway.fetch(source, HttpRequest(url=url), use_cache=False)
+    except TRANSPORT_ERRORS as e:
+        raise unreachable(source, e) from e
     raw_hash = artifacts.put(response.body)
     if not 200 <= response.status < 300:
         detail = response.body.decode(errors="replace")[:300]
-        raise SourceError(f"{source} returned HTTP {response.status} for the query: {detail}")
+        raise SourceError(
+            f"{SOURCE_NAMES[source]} refused the query with HTTP {response.status}. {detail}"
+        )
     if dialect == "pubmed":
         count, translation, warnings = _esearch_count(response.body)
     else:
@@ -102,7 +115,7 @@ def _esearch_count(body: bytes) -> tuple[int, str | None, tuple[str, ...]]:
     error = root.findtext("ERROR")
     count = root.findtext("Count")
     if error or count is None:
-        raise SourceError(f"PubMed could not count the query: {error or 'no count in the reply'}")
+        raise SourceError(f"PubMed could not count the query. {error or 'Its reply had no count.'}")
     warnings = [
         f"{_NOTES[e.tag]}: {(e.text or '').strip()}" if e.tag in _NOTES else (e.text or "").strip()
         for e in (*root.findall("ErrorList/*"), *root.findall("WarningList/*"))
@@ -115,4 +128,44 @@ def _ctgov_count(body: bytes) -> int:
         data = json.loads(body)
         return int(data["totalCount"])
     except (ValueError, KeyError, TypeError) as e:
-        raise SourceError(f"ClinicalTrials.gov did not report a count: {e}") from None
+        raise SourceError(f"ClinicalTrials.gov sent no count. {e}") from None
+
+
+SOURCE_NAMES = {
+    "pubmed": "PubMed",
+    "medline": "PubMed",
+    "clinicaltrials": "ClinicalTrials.gov",
+    "ctgov": "ClinicalTrials.gov",
+}
+"""The names people know the live sources by, keyed by gateway policy and search plan source."""
+
+TRANSPORT_ERRORS = (httpx2.TransportError, ConnectionError, TimeoutError)
+"""What a transport raises when no response came: a refused or dropped connection, a timeout."""
+
+
+def unreachable(source: str, error: BaseException) -> SourceUnavailable:
+    """A request that got no response at all, as the gateway's `SourceUnavailable`, so a route
+    answers it like every other unreachable source (502) and says why in plain words."""
+    if isinstance(error, httpx2.TimeoutException | TimeoutError):
+        reason = "it did not answer in time"
+    elif isinstance(error, httpx2.ConnectError | ConnectionRefusedError):
+        reason = "the connection failed"
+    else:
+        reason = "the connection broke off"
+    return SourceUnavailable(source, None, 1, f"{reason} ({type(error).__name__})")
+
+
+def failure_message(error: GatewayError | SourceError) -> str:
+    """What a person reads when a live source did not answer or refused a query."""
+    if isinstance(error, SourceUnavailable):
+        name = SOURCE_NAMES.get(error.source, error.source)
+        if error.reason:
+            return f"Kittum could not reach {name}. {error.reason[:1].upper()}{error.reason[1:]}."
+        return (
+            f"Kittum could not reach {name}. It answered HTTP {error.status}"
+            f" to {error.attempts} tries in a row."
+        )
+    if isinstance(error, SourceBudgetExhausted):
+        name = SOURCE_NAMES.get(error.source, error.source)
+        return f"Kittum has used today's {error.budget} requests to {name}. Try again tomorrow."
+    return str(error)

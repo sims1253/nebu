@@ -935,6 +935,43 @@
         "title": "AssignmentFullText",
         "type": "object"
       },
+      "AssistModel": {
+        "additionalProperties": false,
+        "description": "The model the assistant asks, so the lead knows who is answering and what they wait for.",
+        "properties": {
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "endpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endpoint"
+          },
+          "recipe_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recipe Id"
+          }
+        },
+        "required": [
+          "configured"
+        ],
+        "title": "AssistModel",
+        "type": "object"
+      },
       "AssistOutcome": {
         "additionalProperties": false,
         "description": "The result of asking the assistant. Without a revision, `issues` says why: the answer\nstill did not compile after the repair rounds (with the last raw answer), or it changed\nnothing.",
@@ -9302,6 +9339,59 @@
         ]
       }
     },
+    "/api/projects/{project_id}/assist/model": {
+      "get": {
+        "operationId": "getAssistModel",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistModel"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Model",
+        "tags": [
+          "assist"
+        ]
+      }
+    },
     "/api/projects/{project_id}/assist/revisions": {
       "get": {
         "description": "Every revision, oldest first.",
@@ -13931,6 +14021,50 @@
           }
         },
         "summary": "Validate Protocol",
+        "tags": [
+          "protocol"
+        ]
+      }
+    },
+    "/api/protocol/yaml": {
+      "post": {
+        "description": "A source as YAML, compiling or not, for the editor to open what the form holds.",
+        "operationId": "protocolAsYaml",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Source",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceText"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Protocol As Yaml",
         "tags": [
           "protocol"
         ]

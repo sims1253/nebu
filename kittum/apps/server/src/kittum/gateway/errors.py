@@ -45,6 +45,7 @@ class SourceUnavailable(GatewayError):
         self.source = source
         self.status = status
         self.attempts = attempts
+        self.reason = reason
 
 
 __all__ = ["GatewayError", "SourceBudgetExhausted", "SourceUnavailable", "UnknownSource"]

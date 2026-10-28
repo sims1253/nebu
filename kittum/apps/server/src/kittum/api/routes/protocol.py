@@ -16,6 +16,7 @@ from kittum.app import (
     parse_source,
     protocol_source,
     require_project_lead,
+    source_yaml,
 )
 from kittum.core import Id, NotFoundError, Record
 from kittum.protocol import (
@@ -159,6 +160,12 @@ def parse_protocol(body: SourceText) -> ParsedSource:
         issue = ProtocolIssue(path="", message="the protocol must be a mapping of fields")
         return ParsedSource(source=None, issues=(issue,))
     return ParsedSource(source=data)
+
+
+@router.post("/protocol/yaml", operation_id="protocolAsYaml")
+def protocol_as_yaml(source: ProtocolSource) -> SourceText:
+    """A source as YAML, compiling or not, for the editor to open what the form holds."""
+    return SourceText(text=source_yaml(source))
 
 
 @router.post("/protocol/validate", operation_id="validateProtocol")

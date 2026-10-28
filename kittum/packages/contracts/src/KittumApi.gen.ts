@@ -55,6 +55,8 @@ export type SuggestedChange = { readonly "after"?: Schema.Json, readonly "before
 export const SuggestedChange = Schema.Struct({ "after": Schema.optionalKey(Schema.Json.annotate({ "expected": "JSON value", "title": "After" })), "before": Schema.optionalKey(Schema.Json.annotate({ "expected": "JSON value", "title": "Before" })), "field": Schema.String.annotate({ "title": "Field" }), "id": Schema.String.annotate({ "title": "Id" }), "path": Schema.String.annotate({ "title": "Path" }), "rationale": Schema.String.annotate({ "title": "Rationale" }), "start": Schema.optionalKey(Schema.Union([Schema.Int, Schema.Null]).annotate({ "title": "Start" })) }).annotate({ "title": "SuggestedChange", "description": "One change the model suggests, which the lead accepts or not on its own. For a strategy,\n`before` is the passage it replaces at `start` and `after` its replacement; otherwise both are\nthe whole field.", "identifier": "SuggestedChange" })
 export type PartKind = "question" | "criterion" | "strategy"
 export const PartKind = Schema.Literals(["question", "criterion", "strategy"]).annotate({ "identifier": "PartKind" })
+export type AssistModel = { readonly "configured": boolean, readonly "endpoint"?: string | null, readonly "recipe_id"?: string | null }
+export const AssistModel = Schema.Struct({ "configured": Schema.Boolean.annotate({ "title": "Configured" }), "endpoint": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Endpoint" })), "recipe_id": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Recipe Id" })) }).annotate({ "title": "AssistModel", "description": "The model the assistant asks, so the lead knows who is answering and what they wait for.", "identifier": "AssistModel" })
 export type AcceptRequest = { readonly "change_ids": ReadonlyArray<string> }
 export const AcceptRequest = Schema.Struct({ "change_ids": Schema.Array(Schema.String).annotate({ "title": "Change Ids" }).check(Schema.isMinLength(1).annotate({ "expected": "a value with a length of at least 1" })) }).annotate({ "title": "AcceptRequest", "identifier": "AcceptRequest" })
 export type FieldChange = { readonly "after"?: Schema.Json, readonly "before"?: Schema.Json, readonly "path": string }
@@ -546,6 +548,12 @@ export type DraftProtocol200 = AssistOutcome
 export const DraftProtocol200 = AssistOutcome
 export type DraftProtocol422 = HTTPValidationError
 export const DraftProtocol422 = HTTPValidationError
+export type GetAssistModelParams = { readonly "X-Kittum-Reviewer": Id }
+export const GetAssistModelParams = Schema.Struct({ "X-Kittum-Reviewer": Schema.suspend((): Schema.Codec<Id> => Id).annotate({ "description": "The caller's actor ID. A stand-in until the API has authentication." }) })
+export type GetAssistModel200 = AssistModel
+export const GetAssistModel200 = AssistModel
+export type GetAssistModel422 = HTTPValidationError
+export const GetAssistModel422 = HTTPValidationError
 export type ListAssistRevisionsParams = { readonly "X-Kittum-Reviewer": Id }
 export const ListAssistRevisionsParams = Schema.Struct({ "X-Kittum-Reviewer": Schema.suspend((): Schema.Codec<Id> => Id).annotate({ "description": "The caller's actor ID. A stand-in until the API has authentication." }) })
 export type ListAssistRevisions200 = ReadonlyArray<ProtocolRevision>
@@ -980,6 +988,12 @@ export type ValidateProtocol200 = ValidationReport
 export const ValidateProtocol200 = ValidationReport
 export type ValidateProtocol422 = HTTPValidationError
 export const ValidateProtocol422 = HTTPValidationError
+export type ProtocolAsYamlRequestJson = { readonly [x: string]: Schema.Json }
+export const ProtocolAsYamlRequestJson = Schema.Record(Schema.String, Schema.Json.annotate({ "expected": "JSON value" })).annotate({ "title": "Source" })
+export type ProtocolAsYaml200 = SourceText
+export const ProtocolAsYaml200 = SourceText
+export type ProtocolAsYaml422 = HTTPValidationError
+export const ProtocolAsYaml422 = HTTPValidationError
 
 export interface OperationConfig {
   /**
@@ -1202,6 +1216,16 @@ export const make = (
       withResponse(options.config)(HttpClientResponse.matchStatus({
       "2xx": decodeSuccess(DraftProtocol200),
       "422": decodeError("DraftProtocol422", DraftProtocol422),
+      orElse: unexpectedStatus
+    }))
+    ))
+  ),
+    "getAssistModel": (projectId, options: Parameters<KittumApi["getAssistModel"]>[1]) => __makePathRequest(HttpClientRequest.get, [projectId], () => "/api/projects/" + __encodePathParam(projectId) + "/assist/model").pipe(
+    Effect.flatMap((request) => request.pipe(
+      HttpClientRequest.setHeaders({ "X-Kittum-Reviewer": options.params["X-Kittum-Reviewer"] ?? undefined }),
+      withResponse(options.config)(HttpClientResponse.matchStatus({
+      "2xx": decodeSuccess(GetAssistModel200),
+      "422": decodeError("GetAssistModel422", GetAssistModel422),
       orElse: unexpectedStatus
     }))
     ))
@@ -1955,6 +1979,14 @@ export const make = (
       "422": decodeError("ValidateProtocol422", ValidateProtocol422),
       orElse: unexpectedStatus
     }))
+    ),
+    "protocolAsYaml": (options: Parameters<KittumApi["protocolAsYaml"]>[0]) => HttpClientRequest.post("/api/protocol/yaml").pipe(
+      HttpClientRequest.bodyJsonUnsafe(options.payload),
+      withResponse(options.config)(HttpClientResponse.matchStatus({
+      "2xx": decodeSuccess(ProtocolAsYaml200),
+      "422": decodeError("ProtocolAsYaml422", ProtocolAsYaml422),
+      orElse: unexpectedStatus
+    }))
     )
   }
 }
@@ -2051,6 +2083,13 @@ readonly "countStrategyHits": {
 readonly "draftProtocol": {
     <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly params: typeof DraftProtocolParams.Encoded; readonly payload: typeof DraftProtocolRequestJson.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<DraftProtocol200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"DraftProtocol422", DraftProtocol422>>;
     <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly params: typeof DraftProtocolParams.Encoded; readonly payload: typeof DraftProtocolRequestJson.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<DraftProtocol200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"DraftProtocol422", DraftProtocol422>>;
+  }
+  /**
+* Model
+*/
+readonly "getAssistModel": {
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly params: typeof GetAssistModelParams.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<GetAssistModel200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetAssistModel422", GetAssistModel422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly params: typeof GetAssistModelParams.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<GetAssistModel200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetAssistModel422", GetAssistModel422>>;
   }
   /**
 * Every revision, oldest first.
@@ -2604,6 +2643,13 @@ readonly "parseProtocol": {
 readonly "validateProtocol": {
     <Config extends OperationConfig | undefined = undefined>(options: { readonly payload: typeof ValidateProtocolRequestJson.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<ValidateProtocol200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ValidateProtocol422", ValidateProtocol422>>;
     <Config extends OperationConfig | undefined = undefined>(options: { readonly payload: typeof ValidateProtocolRequestJson.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<ValidateProtocol200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ValidateProtocol422", ValidateProtocol422>>;
+  }
+  /**
+* A source as YAML, compiling or not, for the editor to open what the form holds.
+*/
+readonly "protocolAsYaml": {
+    <Config extends OperationConfig | undefined = undefined>(options: { readonly payload: typeof ProtocolAsYamlRequestJson.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<ProtocolAsYaml200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ProtocolAsYaml422", ProtocolAsYaml422>>;
+    <Config extends OperationConfig | undefined = undefined>(options: { readonly payload: typeof ProtocolAsYamlRequestJson.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<ProtocolAsYaml200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ProtocolAsYaml422", ProtocolAsYaml422>>;
   }
 }
 

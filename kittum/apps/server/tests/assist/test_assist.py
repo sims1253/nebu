@@ -414,7 +414,8 @@ def test_a_lead_drafts_improves_and_publishes_a_protocol_with_the_assistant(pg: 
     unrecorded = count("nicotine lozenge[tiab]")
     assert unrecorded.status_code == 502, unrecorded.text
     assert re.fullmatch(
-        r"pubmed is unreachable: no recorded response for https://eutils\.ncbi\.nlm\.nih\.gov/\S+",
+        r"Kittum could not reach PubMed\. No recorded response for"
+        r" https://eutils\.ncbi\.nlm\.nih\.gov/\S+\.",
         unrecorded.json()["detail"],
     )
 
