@@ -4,7 +4,7 @@
 import type { AiMark, ProtocolRevision, ProtocolSource, QueryDialect } from "../../data/schema.ts";
 
 export type Localized = Readonly<Record<string, string>>;
-export interface Comparator {
+interface Comparator {
   readonly id: string;
   readonly text: Localized;
 }
@@ -41,7 +41,7 @@ export interface Topic {
   readonly criteria: ReadonlyArray<Criterion>;
   readonly source_plan: { readonly sources: ReadonlyArray<Source> };
 }
-export interface Outcome {
+interface Outcome {
   readonly id: string;
   readonly category: string;
   readonly name: Localized;

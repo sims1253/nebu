@@ -154,7 +154,7 @@ Left:
 ## Protocol assistant
 
 A model helps the methods lead write the protocol: `kittum.assist`, `app/assist.py`,
-`api/routes/assist.py`, and the editor's **With the assistant** tab.
+`api/routes/assist.py`, and the protocol form (`screens/protocol/Assistant.tsx`).
 
 Done:
 
@@ -191,13 +191,26 @@ Done:
   `KITTUM_LLM_RECORD` notes the assistant's recipe as the `assist` role of its recordings; a
   `KITTUM_LLM_REPLAY` without `KITTUM_ASSIST_MODEL` uses it, and refuses recordings of several
   recipes that do not name it. `KITTUM_ASSIST_BACKEND=demo` is refused beside `KITTUM_LLM_REPLAY`.
+- The form: a lead without a model fills in an empty protocol or the published one, edits the
+  questions, criteria, sources, and queries in place, and saves each change as a revision under
+  their name (`save_edit`), with problems shown at their fields. A query counts before it is
+  saved. The YAML tab shows the same protocol (`POST /api/protocol/yaml`) and hands its edit back.
+  The history names each revision's author; `,` and `.` step through it and change nothing;
+  **Restore this revision** (`r`) adds a copy under the lead's name. `GET .../assist/model` names
+  the model, so the lead sees what Kittum waits for, and for how long.
+- A count or live search whose connection fails or times out is a 502 with a plain reason
+  (`kittum.search.unreachable`, `failure_message`), as an unreachable source is, never a 500. The
+  model client waits up to 15 minutes for one answer.
 - Tests: `tests/assist/test_assist.py` on GLM-5.3-Flash's recorded answers and PubMed's recorded
-  counts; `e2e/assist.spec.ts` in the browser.
+  counts; `tests/search/test_routes.py` for connections that fail; `e2e/assist.spec.ts` in the
+  browser, with the model and by hand.
 
 Left:
 
-- Model calls run in the request; a slow model holds the request for up to a minute. A job would
-  free it.
+- Model calls run in the request; a model that reasons at length holds it for minutes (no layer
+  times out before 15). A job would free it.
+- The form edits one search topic's sources and criteria as it finds them; adding a search topic,
+  outcome definitions, reference sets, and profile extensions are edited as YAML.
 - Strategies for platforms other than PubMed and ClinicalTrials.gov are not syntax-checked or
   counted.
 

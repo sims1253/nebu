@@ -558,6 +558,14 @@ function Start({
   );
 }
 
+const hostOf = (url: string) => {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+};
+
 /** What Kittum waits for while a model writes, and for how long so far. */
 function Waiting({
   seconds,
@@ -577,7 +585,7 @@ function Waiting({
     >
       <p>
         Waiting for {name}
-        {model?.endpoint ? ` at ${new URL(model.endpoint).host}` : ""} to write {what}.{" "}
+        {model?.endpoint ? ` at ${hostOf(model.endpoint)}` : ""} to write {what}.{" "}
         <span className="font-semibold tabular-nums" data-testid="waited">
           {elapsed(seconds)}
         </span>{" "}
@@ -773,6 +781,11 @@ function Rail({
         </span>
       </div>
       <ol className="min-h-0 flex-1 overflow-y-auto py-1" data-testid="revision-rail">
+        {revisions.length === 0 ? (
+          <li className="px-3 py-1.5 text-xs text-ink-3">
+            No revisions yet. Save to add the first.
+          </li>
+        ) : null}
         {[...revisions].reverse().map((r) => {
           const index = revisions.indexOf(r);
           const selected = index === at;

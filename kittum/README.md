@@ -120,10 +120,11 @@ export KITTUM_JUDGE_MODEL=example-provider-model
 uv run kittum demo seed --live
 ```
 
-The protocol editor's **With the assistant** tab lets a model draft the protocol from a few
-sentences and suggest changes to one part at a time, which the lead accepts change by change.
-`KITTUM_ASSIST_MODEL` names its recipe (by default the judge's), served by one of
-`KITTUM_LLM_ENDPOINTS`; **Count** asks PubMed and ClinicalTrials.gov through the gateway.
+The lead writes the protocol in a form, or as YAML, and every save is a revision under their name.
+A model can draft the protocol from a few sentences and suggest changes to one part at a time,
+which the lead accepts change by change. `KITTUM_ASSIST_MODEL` names its recipe (by default the
+judge's), served by one of `KITTUM_LLM_ENDPOINTS`. **Count hits** asks PubMed and
+ClinicalTrials.gov through the gateway.
 `KITTUM_ASSIST_BACKEND=demo` replays the answers recorded in `apps/server/src/kittum/app/demo_data/assist`
 instead; `uv run python -m tests.assist.record_fixtures <recipe>` records them again.
 
