@@ -54,6 +54,10 @@ export interface Handover {
   readonly selected: string | null;
 }
 
+/** What the form shows, and whether it may hand over to YAML: not while it loads its revisions,
+ * saves, or waits for a draft, since what it shows is about to change. */
+export type FormState = Handover & { readonly shown: Working | null; readonly ready: boolean };
+
 const KIND: Record<ProtocolRevision["kind"], string> = {
   draft: "Draft",
   suggestion: "Suggested changes",
@@ -154,16 +158,20 @@ type Mutable<T> = { -readonly [K in keyof T]: T[K] };
 
 export function Assistant({
   handover,
+  paused,
   onYaml,
   onCurrent,
   onPublished,
 }: {
+  /** True while the screen switches to YAML: the form's keys wait, so none acts on what it hands
+   * over. */
+  paused: boolean;
   /** Where to open: the form as the lead left it, or a protocol from the YAML view. */
   handover: Handover | null;
   onYaml: (doc: Doc, base: ProtocolRevision | null) => void;
   /** Where the form is and what it shows, so the YAML view opens the same protocol and the
    * form comes back to the same place. */
-  onCurrent: (current: (Handover & { readonly shown: Working | null }) | null) => void;
+  onCurrent: (current: FormState) => void;
   onPublished: (message: string) => void;
 }) {
   const { workbench } = useRouteContext({ from: "/p/$projectId" });
@@ -252,8 +260,9 @@ export function Assistant({
         working,
         selected: current?.id ?? null,
         shown: working ?? (current ? { doc: docOf(current), base: current } : null),
+        ready: revisions !== null && !saving && !drafting,
       }),
-    [onCurrent, working, current],
+    [onCurrent, working, current, revisions, saving, drafting],
   );
 
   const step = (by: number) => {
@@ -314,6 +323,7 @@ export function Assistant({
   // Ctrl+Enter saves the form from anywhere on the screen, a field included.
   const onSaveKey = useEffectEvent((event: KeyboardEvent) => {
     if (event.key !== "Enter" || !(event.ctrlKey || event.metaKey) || !working) return;
+    if (drafting || describing || paused) return; // the description's Ctrl+Enter asks for the draft
     event.preventDefault();
     void save();
   });
@@ -323,7 +333,7 @@ export function Assistant({
   }, []);
 
   useKeys((event) => {
-    if (drafting || describing || !current || working) return false;
+    if (paused || drafting || describing || !current || working) return false;
     if (event.key === ",") return (step(-1), true);
     if (event.key === ".") return (step(1), true);
     if (event.key === "r" && !newest) return (void restore(), true);
@@ -849,7 +859,11 @@ function Rail({
           );
         })}
       </ol>
-      {onDescribe ? (
+      {onDescribe && locked ? (
+        <p className="border-t border-rule p-3 text-xs text-ink-2" data-testid="draft-locked">
+          Save or discard your changes before you ask the model for a new draft.
+        </p>
+      ) : onDescribe ? (
         <div className="border-t border-rule p-3">
           <button
             type="button"
@@ -1046,7 +1060,12 @@ function FormView({
               </span>
             </>
           ) : null}
-          <button type="button" onClick={onYaml} className="text-ink-2 hover:text-ink">
+          <button
+            type="button"
+            onClick={onYaml}
+            disabled={saving}
+            className="text-ink-2 hover:text-ink disabled:opacity-50"
+          >
             Open as YAML
           </button>
         </div>

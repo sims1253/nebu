@@ -13,7 +13,7 @@ import { KeyHint } from "../../ui/Key.tsx";
 import { useKeys } from "../../ui/keys.ts";
 import { useProject } from "../project.tsx";
 import { Assistant } from "./Assistant.tsx";
-import type { Handover, Working } from "./Assistant.tsx";
+import type { FormState, Handover } from "./Assistant.tsx";
 import { forSaving, toDoc } from "./document.ts";
 import { ProtocolEditor } from "./ProtocolEditor.tsx";
 
@@ -50,15 +50,16 @@ export function ProtocolScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [writing, setWriting] = useState<Writing>({ mode: "form", handover: null });
   const [switching, setSwitching] = useState<string | null>(null);
+  // A switch between the views in progress: both are inert until it ends, so no key is lost.
+  const [moving, setMoving] = useState(false);
+  const [formReady, setFormReady] = useState(false);
   // What each view holds now, so the other one opens the same protocol.
-  const form = useRef<(Handover & { readonly shown: Working | null }) | null>(null);
+  const form = useRef<FormState | null>(null);
   const yaml = useRef<{ readonly text: string; readonly changed: boolean } | null>(null);
-  const onCurrent = useCallback(
-    (current: (Handover & { readonly shown: Working | null }) | null) => {
-      form.current = current;
-    },
-    [],
-  );
+  const onCurrent = useCallback((current: FormState) => {
+    form.current = current;
+    setFormReady(current.ready);
+  }, []);
   const lead = has("lead");
   useKeys((event) => {
     if (event.key !== "v" || !lead || editing || !protocol) return false;
@@ -73,25 +74,30 @@ export function ProtocolScreen() {
       setNotice(message);
     };
     const toYaml = async () => {
-      setSwitching(null);
       const current = form.current;
-      const back = current ? { working: current.working, selected: current.selected } : null;
-      if (!current?.shown) return setWriting({ mode: "yaml", base: null, text: null, back });
+      if (moving || !current?.ready) return;
+      setSwitching(null);
+      const back: Handover = { working: current.working, selected: current.selected };
+      if (!current.shown) return setWriting({ mode: "yaml", base: null, text: null, back });
+      setMoving(true);
       try {
         const text = await run(workbench.protocolYaml(forSaving(current.shown.doc)));
         setWriting({ mode: "yaml", base: current.shown.base, text, back });
       } catch (e) {
         setSwitching(failure(e, "Kittum could not turn the form into YAML."));
+      } finally {
+        setMoving(false);
       }
     };
     const toForm = async () => {
+      if (moving || writing.mode !== "yaml") return;
       setSwitching(null);
       const text = yaml.current;
-      if (writing.mode !== "yaml") return;
       // YAML left as it was: the form comes back as the lead left it, unsaved changes included.
       if (!text?.changed || !text.text.trim()) {
         return setWriting({ mode: "form", handover: writing.back });
       }
+      setMoving(true);
       try {
         const parsed = await run(workbench.parseProtocol(text.text));
         if (!parsed.source) {
@@ -114,6 +120,8 @@ export function ProtocolScreen() {
         });
       } catch (e) {
         setSwitching(failure(e, "Kittum could not read the YAML."));
+      } finally {
+        setMoving(false);
       }
     };
     return (
@@ -134,10 +142,11 @@ export function ProtocolScreen() {
               type="button"
               role="tab"
               aria-selected={writing.mode === mode}
+              disabled={moving || (mode === "yaml" && writing.mode === "form" && !formReady)}
               onClick={() =>
                 writing.mode === mode ? undefined : void (mode === "yaml" ? toYaml() : toForm())
               }
-              className={`rounded-[3px] px-2.5 py-1 ${writing.mode === mode ? "bg-sheet font-semibold text-ink shadow-[inset_0_-2px_0_var(--petrol)]" : "text-ink-2 hover:text-ink"}`}
+              className={`rounded-[3px] px-2.5 py-1 disabled:cursor-wait disabled:opacity-50 ${writing.mode === mode ? "bg-sheet font-semibold text-ink shadow-[inset_0_-2px_0_var(--petrol)]" : "text-ink-2 hover:text-ink"}`}
             >
               {label}
             </button>
@@ -162,10 +171,11 @@ export function ProtocolScreen() {
             </button>
           ) : null}
         </div>
-        <div className="min-h-0 flex-1">
+        <div className="min-h-0 flex-1" inert={moving}>
           {writing.mode === "form" ? (
             <Assistant
               handover={writing.handover}
+              paused={moving}
               onCurrent={onCurrent}
               onPublished={published}
               onYaml={() => void toYaml()}

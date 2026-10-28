@@ -289,6 +289,13 @@ test("a lead writes the protocol by hand in the form, counts a query, and edits 
     await expect(page.getByTestId("unsaved")).toHaveText(
       "Your changes to revision 1, not saved yet",
     );
+    // A new draft would replace the unsaved changes, so the history offers none until they are
+    // saved or discarded.
+    const newDraft = page.getByRole("button", { name: "Ask the model for a new draft" });
+    await expect(newDraft).toHaveCount(0);
+    await expect(page.getByTestId("draft-locked")).toHaveText(
+      "Save or discard your changes before you ask the model for a new draft.",
+    );
     await medline.getByRole("button", { name: "Count hits in PubMed" }).click();
     await expect(medline.getByTestId("hit-count")).toHaveText("35,484 hits in PubMed today");
     await expect(medline.getByTestId("strategy-notes")).toContainText(
@@ -310,6 +317,7 @@ test("a lead writes the protocol by hand in the form, counts a query, and edits 
     await query.fill(MISTYPED);
     await page.getByRole("button", { name: "Save as revision 2" }).first().click();
     await expect(page.getByText("Revision 2 of 2")).toBeVisible();
+    await expect(newDraft).toBeVisible();
     await expect(side.getByTestId("provenance")).toContainText(
       "Morgan Lee wrote this revision by hand, starting from revision 1.",
     );
