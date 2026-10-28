@@ -425,6 +425,8 @@ test("a review from search to full text, blind, audited, adjudicated, and verifi
     const diagram = flow.getByTestId("prisma-diagram");
     await expect(diagram).toBeVisible();
     expect((await diagram.boundingBox())?.width ?? 0).toBeGreaterThan(1000);
+    // Inlined, so its labels use the workbench's font rather than a system fallback.
+    await expect(diagram.locator("text").first()).toHaveCSS("font-family", /IBM Plex Sans/);
     await expect(flow.getByRole("link", { name: "Download as SVG" })).toHaveAttribute(
       "download",
       "prisma-nrt-vs-control.svg",

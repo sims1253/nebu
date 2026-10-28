@@ -376,6 +376,22 @@ test("a reviewer accepts and corrects values Janus read from a trial the screene
     await expect(edited).toContainText("Page 5.");
     await expect(edited).toContainText("Sam Okafor");
     await expect(values.locator("tbody tr").filter({ hasText: "52" })).toContainText("Janus");
+    // Rendering the disclosure next leaves the values' downloads working, and the other way round.
+    await lead.keyboard.press("a");
+    await expect(lead.getByTestId("disclosure")).toBeVisible();
+    const disclosureJson = lead.getByRole("link", { name: "ai_disclosure.json" });
+    await expect(disclosureJson).toBeVisible();
+    const fetched = (link: typeof disclosureJson) =>
+      link.evaluate((a: HTMLAnchorElement) =>
+        fetch(a.href).then(
+          (r) => r.ok,
+          () => false,
+        ),
+      );
+    expect(await fetched(lead.getByRole("link", { name: "extracted_values.json" }))).toBe(true);
+    await lead.keyboard.press("e");
+    await expect(values.locator("tbody tr")).toHaveCount(2);
+    expect(await fetched(disclosureJson)).toBe(true);
     const download = lead.waitForEvent("download");
     await lead.getByRole("link", { name: "extracted_values.csv" }).click();
     const csv = readFileSync((await (await download).path()) ?? "", "utf8").split("\n");

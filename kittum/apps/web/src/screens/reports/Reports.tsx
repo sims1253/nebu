@@ -3,7 +3,7 @@
 // the accepted extraction values, and seals the handover bundle; the server refuses anyone else.
 import { Dialog } from "@base-ui/react/dialog";
 import { useRouteContext } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import type { RenderedReport, SealedBundle } from "../../data/schema.ts";
@@ -37,6 +37,12 @@ const ROWS: ReadonlyArray<readonly [string, string]> = [
 interface Download {
   readonly name: string;
   readonly url: string;
+}
+
+/** A PRISMA diagram: its SVG to inline, and the file to download. */
+interface Diagram {
+  readonly download: Download;
+  readonly markup: string;
 }
 
 interface Agreement {
@@ -117,7 +123,7 @@ export function ReportsScreen() {
   const { project, me, seesLeadData, scopeLabel } = useProject();
   const lead = seesLeadData;
   const caller = { projectId: project.id, as: me.actor_id };
-  const [flows, setFlows] = useState<ReadonlyArray<{ flow: Flow; svg: Download | null }> | null>(
+  const [flows, setFlows] = useState<ReadonlyArray<{ flow: Flow; svg: Diagram | null }> | null>(
     null,
   );
   const [disclosure, setDisclosure] = useState<{
@@ -133,18 +139,25 @@ export function ReportsScreen() {
   const [error, setError] = useState<string | null>(null);
 
   // Object URLs for the rendered files live as long as the screen shows them.
+  // Each collection revokes only its own URLs, so rendering one report leaves the other's
+  // downloads working.
   useEffect(
     () => () => {
-      for (const f of flows ?? []) if (f.svg) URL.revokeObjectURL(f.svg.url);
+      for (const f of flows ?? []) if (f.svg) URL.revokeObjectURL(f.svg.download.url);
     },
     [flows],
   );
   useEffect(
     () => () => {
-      for (const f of [...(disclosure?.files ?? []), ...(extracted?.files ?? [])])
-        URL.revokeObjectURL(f.url);
+      for (const f of disclosure?.files ?? []) URL.revokeObjectURL(f.url);
     },
-    [disclosure, extracted],
+    [disclosure],
+  );
+  useEffect(
+    () => () => {
+      for (const f of extracted?.files ?? []) URL.revokeObjectURL(f.url);
+    },
+    [extracted],
   );
 
   const act = async <A,>(what: string, failed: string, task: () => Promise<A>) => {
@@ -184,10 +197,16 @@ export function ReportsScreen() {
       setFlows(
         files
           .filter((f) => f.path.endsWith(".json"))
-          .map((f) => ({
-            flow: json<Flow>(f.bytes),
-            svg: files.find((d) => d.path === f.path.replace(/\.json$/, ".svg"))?.download ?? null,
-          })),
+          .map((f) => {
+            URL.revokeObjectURL(f.download.url); // the counts show on screen, not as a file
+            const svg = files.find((d) => d.path === f.path.replace(/\.json$/, ".svg"));
+            return {
+              flow: json<Flow>(f.bytes),
+              svg: svg
+                ? { download: svg.download, markup: new TextDecoder().decode(svg.bytes) }
+                : null,
+            };
+          }),
       );
     });
 
@@ -325,9 +344,34 @@ function DownloadLink({ file, children }: { file: Download; children?: ReactNode
  * One scope's PRISMA flow: the diagram at the full width of the page, so its labels read at the
  * default zoom; a click enlarges it, and it downloads as SVG. The counts follow as a list.
  */
-function PrismaSection({ flow, svg, scope }: { flow: Flow; svg: Download | null; scope: string }) {
+/**
+ * The rendered SVG, inlined in the page so its text uses the workbench's font (an SVG shown as
+ * an image cannot reach the page's web fonts and falls back to whatever the system has).
+ */
+function InlineSvg({ markup, className }: { markup: string; className: string }) {
+  const host = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const parsed = new DOMParser().parseFromString(markup, "image/svg+xml").documentElement;
+    if (parsed.nodeName !== "svg") return;
+    host.current?.replaceChildren(document.importNode(parsed, true));
+  }, [markup]);
+  return (
+    <div
+      ref={host}
+      className={`${className} [&_text]:font-sans [&>svg]:h-auto [&>svg]:w-full`}
+      data-testid="prisma-diagram"
+    />
+  );
+}
+
+/**
+ * One scope's PRISMA flow: the diagram at the full width of the page, so its labels read at the
+ * default zoom; a click enlarges it, and it downloads as SVG. The counts follow as a list.
+ */
+function PrismaSection({ flow, svg, scope }: { flow: Flow; svg: Diagram | null; scope: string }) {
   const [large, setLarge] = useState(false);
   const alt = `PRISMA 2020 flow diagram for ${scope}`;
+  const file = svg ? { ...svg.download, name: `prisma-${flow.scope_id}.svg` } : null;
   return (
     <section
       className="mt-6 border-t border-rule pt-4"
@@ -337,33 +381,29 @@ function PrismaSection({ flow, svg, scope }: { flow: Flow; svg: Download | null;
       <div className="flex items-baseline gap-4">
         <h2 className="text-md font-semibold">PRISMA 2020 flow, {scope}</h2>
         <span className="text-xs text-ink-3">at ledger event {flow.cutoff_seq}</span>
-        {svg ? (
+        {file ? (
           <span className="ml-auto text-sm">
-            <DownloadLink file={{ ...svg, name: `prisma-${flow.scope_id}.svg` }}>
-              Download as SVG
-            </DownloadLink>
+            <DownloadLink file={file}>Download as SVG</DownloadLink>
           </span>
         ) : null}
       </div>
-      {svg ? (
+      {svg && file ? (
         <Dialog.Root open={large} onOpenChange={setLarge}>
           <Dialog.Trigger
             className="mt-3 block w-full cursor-zoom-in rounded-[3px] border border-rule bg-white p-2"
             aria-label={`Enlarge the ${alt}`}
           >
-            <img src={svg.url} alt={alt} className="w-full" data-testid="prisma-diagram" />
+            <InlineSvg markup={svg.markup} className="w-full" />
           </Dialog.Trigger>
           <Dialog.Portal>
             <Dialog.Backdrop className="fixed inset-0 bg-[rgb(10_20_24/0.5)]" />
             <Dialog.Popup className="fixed inset-4 overflow-auto rounded-[4px] bg-white p-4 outline-none">
               <Dialog.Title className="sr-only">{alt}</Dialog.Title>
               <div className="flex items-baseline justify-end gap-5 pb-2 text-sm">
-                <DownloadLink file={{ ...svg, name: `prisma-${flow.scope_id}.svg` }}>
-                  Download as SVG
-                </DownloadLink>
+                <DownloadLink file={file}>Download as SVG</DownloadLink>
                 <Dialog.Close className="text-ink-2 hover:text-ink">Close</Dialog.Close>
               </div>
-              <img src={svg.url} alt={alt} className="mx-auto min-w-[1400px]" />
+              <InlineSvg markup={svg.markup} className="mx-auto w-[1400px]" />
             </Dialog.Popup>
           </Dialog.Portal>
         </Dialog.Root>
