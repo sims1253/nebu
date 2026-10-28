@@ -8,7 +8,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Box, LayerSummary, PageLayer, PageSize } from "../../data/schema.ts";
 import { run } from "../../data/workbench.ts";
 import type { Workbench } from "../../data/workbench.ts";
-import { sliceCodePoints } from "../../lib/codepoints.ts";
+import { codePointIndex } from "../../lib/codepoints.ts";
 
 export interface PageHighlight {
   readonly id: string;
@@ -26,18 +26,34 @@ export interface TextSelection {
 }
 
 const GAP = 16;
+const VISIBLE_RATIO = 0.9;
 const MAX_WIDTH = 860;
-const pages = new Map<string, Promise<PageLayer>>();
+/** Pages kept per workbench, most recently used last; older ones are dropped and reloaded. */
+const PAGE_CACHE_SIZE = 16;
+const pageCaches = new WeakMap<Workbench, Map<string, Promise<PageLayer>>>();
 
 const loadPage = (workbench: Workbench, layerId: string, page: number) => {
+  let cache = pageCaches.get(workbench);
+  if (!cache) pageCaches.set(workbench, (cache = new Map()));
   const key = `${layerId}/${page}`;
-  let pending = pages.get(key);
-  if (!pending) {
-    pending = run(workbench.page(layerId, page));
-    pending.catch(() => pages.delete(key));
-    pages.set(key, pending);
+  let pending = cache.get(key);
+  if (pending) {
+    cache.delete(key);
+    cache.set(key, pending);
+    return pending;
   }
-  return pending;
+  const entries = cache;
+  pending = run(workbench.page(layerId, page));
+  const loading = pending;
+  loading.catch(() => {
+    if (entries.get(key) === loading) entries.delete(key);
+  });
+  entries.set(key, loading);
+  for (const oldest of entries.keys()) {
+    if (entries.size <= PAGE_CACHE_SIZE) break;
+    entries.delete(oldest);
+  }
+  return loading;
 };
 
 export function PdfViewer({
@@ -72,6 +88,8 @@ export function PdfViewer({
   }, []);
 
   const pageWidth = Math.max(0, Math.min(width - 2 * GAP, MAX_WIDTH));
+  // One code-point map per layer; every word and selection on every page reads from it.
+  const at = useMemo(() => codePointIndex(layer.text), [layer.text]);
   const heights = useMemo(
     () => layer.pages.map((p) => Math.round((p.height / p.width) * pageWidth) + GAP),
     [layer.pages, pageWidth],
@@ -120,7 +138,7 @@ export function PdfViewer({
     onSelection({
       start,
       end,
-      quote: sliceCodePoints(layer.text, start, end),
+      quote: layer.text.slice(at(start), at(end)),
       boxes: lineBoxes(
         words.map((w) => ({
           page: Number(w.dataset["p"]),
@@ -160,6 +178,7 @@ export function PdfViewer({
               <PageView
                 workbench={workbench}
                 layer={layer}
+                at={at}
                 size={item}
                 width={pageWidth}
                 highlights={highlights}
@@ -176,6 +195,7 @@ export function PdfViewer({
 function PageView({
   workbench,
   layer,
+  at,
   size,
   width,
   highlights,
@@ -183,6 +203,7 @@ function PageView({
 }: {
   workbench: Workbench;
   layer: LayerSummary;
+  at: (offset: number) => number;
   size: PageSize;
   width: number;
   highlights: ReadonlyArray<PageHighlight>;
@@ -190,6 +211,8 @@ function PageView({
 }) {
   const [page, setPage] = useState<PageLayer | null>(null);
   const [failed, setFailed] = useState(false);
+  // The source exists for the reviewer only once the page image has drawn.
+  const [imageReady, setImageReady] = useState(false);
   const current = useRef<HTMLDivElement>(null);
   const scale = width / size.width;
   const height = Math.round(size.height * scale);
@@ -212,19 +235,18 @@ function PageView({
 
   useEffect(() => {
     const element = current.current;
-    if (!element || !onCurrentVisible) return;
+    if (!element || !onCurrentVisible || !imageReady) return;
+    // `isIntersecting` is true for any overlap; the gate wants 90% of the source on screen.
     const observer = new IntersectionObserver(
-      ([entry]) => onCurrentVisible(entry?.isIntersecting ?? false),
-      {
-        threshold: 0.9,
-      },
+      ([entry]) => onCurrentVisible((entry?.intersectionRatio ?? 0) >= VISIBLE_RATIO),
+      { threshold: VISIBLE_RATIO },
     );
     observer.observe(element);
     return () => {
       observer.disconnect();
       onCurrentVisible(false);
     };
-  }, [hasCurrent, onCurrentVisible, page]);
+  }, [hasCurrent, onCurrentVisible, imageReady]);
 
   const current0 = boxes.find((b) => b.highlight.kind === "current")?.box;
 
@@ -246,8 +268,13 @@ function PageView({
               alt={`Page ${size.page}`}
               className="page-image absolute inset-0 h-full w-full select-none"
               draggable={false}
+              onLoad={() => setImageReady(true)}
+              onError={() => {
+                setImageReady(false);
+                setFailed(true);
+              }}
             />
-            <TextLayer page={page} text={layer.text} scale={scale} />
+            <TextLayer page={page} text={layer.text} at={at} scale={scale} />
           </>
         ) : null}
         {boxes.map(({ highlight, box, i }) => (
@@ -287,11 +314,21 @@ let canvas: CanvasRenderingContext2D | null | undefined;
 const measurer = () =>
   canvas === undefined ? (canvas = document.createElement("canvas").getContext("2d")) : canvas;
 
-function TextLayer({ page, text, scale }: { page: PageLayer; text: string; scale: number }) {
+function TextLayer({
+  page,
+  text,
+  at,
+  scale,
+}: {
+  page: PageLayer;
+  text: string;
+  at: (offset: number) => number;
+  scale: number;
+}) {
   const spans = useMemo(() => {
     const measure = measurer();
     return page.words.map((word) => {
-      const content = sliceCodePoints(text, word.start, word.end);
+      const content = text.slice(at(word.start), at(word.end));
       const height = (word.box.y1 - word.box.y0) * scale;
       const width = (word.box.x1 - word.box.x0) * scale;
       const size = height * 0.86;
@@ -303,7 +340,7 @@ function TextLayer({ page, text, scale }: { page: PageLayer; text: string; scale
       }
       return { word, content, size, stretch };
     });
-  }, [page, text, scale]);
+  }, [page, text, at, scale]);
   return (
     <div className="text-layer">
       {spans.map(({ word, content, size, stretch }) => (

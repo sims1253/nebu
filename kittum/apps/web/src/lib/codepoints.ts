@@ -31,9 +31,3 @@ export const utf16ToCodePoint = (text: string, index: number): number => {
   }
   return points;
 };
-
-/** `text.slice` over code-point offsets. */
-export const sliceCodePoints = (text: string, start: number, end: number): string => {
-  const at = codePointIndex(text);
-  return text.slice(at(start), at(end));
-};
