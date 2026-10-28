@@ -9,11 +9,12 @@ from psycopg.rows import dict_row
 from kittum.api import AppContext, create_app
 from kittum.core import new_id
 from kittum.db import Database
+from kittum.ledger import PostgresLedger
 from kittum.profiles import load_profiles
 from kittum.protocol import PUBLISHED_EVENT, compile
 from kittum.settings import Settings
 from kittum.storage import FilesystemStore
-from tests.protocol.support import SqlLedger, example_source, example_text, seed_project
+from tests.protocol.support import example_source, example_text, seed_project
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -58,7 +59,7 @@ def api(tmp_path: Path) -> Iterator[tuple[TestClient, dict[str, Any]]]:
         settings=Settings(database_url=url, artifact_dir=tmp_path),
         db=Database(url, max_size=2),
         artifacts=FilesystemStore(tmp_path),
-        ledger=SqlLedger(),
+        ledger=PostgresLedger(),
     )
     with TestClient(create_app(context)) as client:
         yield client, {"project": project, "approver": approver, "system": system, "url": url}

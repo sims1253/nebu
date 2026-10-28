@@ -10,6 +10,7 @@ from psycopg.rows import dict_row
 
 from kittum.core import FixedClock, Id, KittumError, NotFoundError, new_id
 from kittum.db.testing import null_tx
+from kittum.ledger import PostgresLedger
 from kittum.ledger.testing import InMemoryLedger
 from kittum.protocol import (
     PUBLISHED_EVENT,
@@ -23,7 +24,7 @@ from kittum.protocol import (
     save_draft,
 )
 from kittum.protocol.testing import InMemoryProtocolStore
-from tests.protocol.support import SqlLedger, example_source, example_text, seed_project
+from tests.protocol.support import example_source, example_text, seed_project
 
 if TYPE_CHECKING:
     from kittum.db import Tx
@@ -94,7 +95,7 @@ def test_in_memory_store_follows_the_publish_rules() -> None:
 @pytest.mark.postgres
 def test_example_publishes_into_postgres_with_a_ledger_event(pg: Tx) -> None:
     project, approver, _ = seed_project(pg)
-    ledger = SqlLedger()
+    ledger = PostgresLedger()
     _publish_flow(PostgresProtocolStore(ledger), ledger, pg, project, approver)
 
     row = pg.execute(
@@ -116,7 +117,7 @@ def test_published_versions_are_frozen(pg: Tx) -> None:
     draft = save_draft(pg, project, compile(example_text()))
     with pytest.raises(psycopg.errors.RaiseException, match="immutable"), pg.transaction():
         pg.execute("update protocol_version set document = '{}'::jsonb where id = %s", (draft.id,))
-    publish(pg, project, draft.id, approver, ledger=SqlLedger())
+    publish(pg, project, draft.id, approver, ledger=PostgresLedger())
     for statement in (
         "update protocol_version set publish_reason = 'x' where id = %s",
         "delete from protocol_version where id = %s",
@@ -144,9 +145,9 @@ def test_only_a_human_can_approve(pg: Tx) -> None:
     project, _, system = seed_project(pg)
     draft = save_draft(pg, project, compile(example_text()))
     with pytest.raises(ProtocolStateError, match="human actor"):
-        publish(pg, project, draft.id, system, ledger=SqlLedger())
+        publish(pg, project, draft.id, system, ledger=PostgresLedger())
     with pytest.raises(NotFoundError):
-        publish(pg, project, new_id(), system, ledger=SqlLedger())
+        publish(pg, project, new_id(), system, ledger=PostgresLedger())
 
 
 def test_returned_protocols_cannot_change_what_the_store_holds() -> None:
@@ -181,7 +182,7 @@ def test_concurrent_publications_cannot_skip_the_mode_change_reason(pg: Tx) -> N
     """B's draft keeps M1. Against the M2 version A is publishing, that is a mode change."""
     del pg  # skips without a database; the test needs its own committing connections
     url = os.environ["KITTUM_DATABASE_URL"]
-    ledger = SqlLedger()
+    ledger = PostgresLedger()
     with psycopg.connect(url, row_factory=dict_row) as setup:
         project, approver, _ = seed_project(setup)
         first = save_draft(setup, project, compile(example_text()))

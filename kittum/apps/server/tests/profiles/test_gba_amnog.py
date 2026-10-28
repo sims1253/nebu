@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
+from kittum.ledger import PostgresLedger
 from kittum.profiles import GBA_AMNOG, load_profiles
 from kittum.profiles.gba_amnog import GbaProtocol, GbaQuestion
 from kittum.protocol import (
@@ -18,7 +19,7 @@ from kittum.protocol import (
     render_question,
     save_draft,
 )
-from tests.protocol.support import SqlLedger, example_source, example_text, seed_project
+from tests.protocol.support import example_source, example_text, seed_project
 
 if TYPE_CHECKING:
     from kittum.db import Tx
@@ -250,7 +251,7 @@ def test_profile_labels_appear_in_the_reviewer_question() -> None:
 def test_example_publishes_into_postgres_with_a_ledger_event(pg: Tx) -> None:
     load_profiles()  # reading a stored version recompiles it with the registered profiles
     project, approver, _ = seed_project(pg)
-    ledger = SqlLedger()
+    ledger = PostgresLedger()
     version = _compile(example_text(NAME))
     draft = save_draft(pg, project, version)
     published = publish(pg, project, draft.id, approver, ledger=ledger)
