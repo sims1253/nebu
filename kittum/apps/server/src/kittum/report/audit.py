@@ -13,7 +13,7 @@ Everything here shows every reviewer's decisions and the AI's readings, so calle
 
 from collections import defaultdict
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 from uuid import UUID
 
 from kittum.core import Id, NotFoundError, Record, Sha256, content_hash
@@ -113,7 +113,8 @@ class RevealTiming(Record):
 
 class RecordTrace(Record):
     ref: str
-    report_id: Id
+    report_id: Id | None
+    """None for a search result that no identity revision holds yet: it has only its search."""
     study_id: Id | None
     title: str
     identity_revision_id: Id | None
@@ -483,11 +484,27 @@ def _describe(
 
 
 class _Related:
-    """Every ID through which a ledger event can concern one report."""
+    """Every ID through which a ledger event can concern one report, or one search result that
+    no identity revision holds yet (`report_id` None, `occurrence_id` set)."""
 
-    def __init__(self, tx: Tx, project_id: Id, report_id: Id) -> None:
-        ref = str(report_id)
+    def __init__(
+        self, tx: Tx, project_id: Id, report_id: Id | None, occurrence_id: Id | None = None
+    ) -> None:
+        ref = str(report_id or occurrence_id)
         self.ref = ref
+        if report_id is None:
+            self.occurrences = {ref}
+            self.executions = {
+                str(r["execution_id"])
+                for r in tx.execute(
+                    "select execution_id from source_occurrence where occurrence_id = %s",
+                    (occurrence_id,),
+                ).fetchall()
+            }
+            self.stages: set[str] = set()
+            self.runs: set[str] = set()
+            self.documents: set[str] = set()
+            return
         self.occurrences = {
             str(r["occurrence_id"])
             for r in tx.execute(
@@ -543,10 +560,18 @@ class _Related:
         return p.get("document_id") in self.documents or p.get("run_id") in self.runs
 
 
-def _report_of(tx: Tx, project_id: Id, ref: str) -> tuple[Id, Id | None, Id | None]:
-    """The report a reference names: a report, a search result, or a study (its first report).
+class _Target(NamedTuple):
+    report_id: Id | None
+    study_id: Id | None
+    revision_id: Id | None
+    occurrence_id: Id | None  # a search result outside every identity revision
 
-    Returns the report, its study, and the identity revision they were read from.
+
+def _resolve(tx: Tx, project_id: Id, ref: str) -> _Target:
+    """What a reference names: a report, a search result, or a study (its first report).
+
+    A search result that no finalized identity revision holds (a search imported after the
+    corpus was built) is still traced, by its search alone.
     """
     try:
         key = UUID(ref)
@@ -560,9 +585,15 @@ def _report_of(tx: Tx, project_id: Id, ref: str) -> tuple[Id, Id | None, Id | No
         " order by v.event_seq desc, v.id desc, (l.report_id = %s) desc, l.report_id limit 1",
         (project_id, key, key, key, key),
     ).fetchone()
-    if row is None:
+    if row is not None:
+        return _Target(row["report_id"], row["study_id"], row["revision_id"], None)
+    found = tx.execute(
+        "select occurrence_id from source_occurrence where project_id = %s and occurrence_id = %s",
+        (project_id, key),
+    ).fetchone()
+    if found is None:
         raise NotFoundError(f"{ref} is not a record of this review")
-    return row["report_id"], row["study_id"], row["revision_id"]
+    return _Target(None, None, None, found["occurrence_id"])
 
 
 def trace(
@@ -578,8 +609,8 @@ def trace(
     `ref` is what a PRISMA count lists: a corpus report, a search result (occurrence), or a study.
     """
     ledger = ledger or PostgresLedger()
-    report_id, study_id, revision_id = _report_of(tx, project_id, ref)
-    related = _Related(tx, project_id, report_id)
+    report_id, study_id, revision_id, occurrence_id = _resolve(tx, project_id, ref)
+    related = _Related(tx, project_id, report_id, occurrence_id)
     names = _Names(tx, project_id, store)
     events = [e for e in ledger.events(tx, project_id) if related.concerns(e)]
     seq_of_search = {
@@ -604,7 +635,7 @@ def trace(
     raw = {o.raw_hash for o in occurrences}
     title = tx.execute(
         "select title from screening_item where item_ref = %s and stage_id = any(%s) limit 1",
-        (str(report_id), [UUID(s) for s in related.stages]),
+        (related.ref, [UUID(s) for s in related.stages]),
     ).fetchone()
     return RecordTrace(
         ref=ref,
@@ -613,7 +644,7 @@ def trace(
         title=title["title"] if title else (occurrences[0].title if occurrences else ""),
         identity_revision_id=revision_id,
         occurrences=occurrences,
-        events=tuple(_describe(e, names, str(report_id), raw) for e in events),
+        events=tuple(_describe(e, names, related.ref, raw) for e in events),
         reveals=_reveals(events, names),
         head_seq=head_seq(tx, project_id),
     )
@@ -684,7 +715,8 @@ def events(
     if not 1 <= limit <= 500:
         raise ReportRequestError("limit must be between 1 and 500")
     wanted = tuple(types)
-    related = _Related(tx, project_id, _report_of(tx, project_id, ref)[0]) if ref else None
+    target = _resolve(tx, project_id, ref) if ref else None
+    related = _Related(tx, project_id, target.report_id, target.occurrence_id) if target else None
     names = _Names(tx, project_id, store)
 
     def keep(e: AuditEvent) -> bool:
@@ -813,6 +845,15 @@ def as_of(tx: Tx, project_id: Id, cutoff_seq: int | None, *, ledger: Ledger | No
                 str(r.occurrence_id), ItemLabel(title=r.title, trace_ref=str(r.occurrence_id))
             )
     if review.identity:
+        # Reports before (or outside) any stage: titled by a search result they hold.
+        by_occurrence = review.records_by_occurrence()
+        for link in review.identity.links:
+            hit = by_occurrence.get(link.occurrence_id)
+            if hit is not None:
+                titles.setdefault(
+                    str(link.report_id),
+                    ItemLabel(title=hit[1].title, trace_ref=str(link.report_id)),
+                )
         reports = defaultdict(list)
         for link in review.identity.links:
             reports[str(link.study_id)].append(str(link.report_id))

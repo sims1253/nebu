@@ -117,6 +117,7 @@ class ChainStore(ABC):
 
         Refuses to sign a chain that does not verify, or that contradicts an earlier checkpoint
         from the same key, so a checkpoint never launders tampering, even a fully re-hashed one.
+        A head this key already signed returns that checkpoint instead of a second row.
         """
         with self._atomic(tx):
             head = self._lock_head(tx, project_id)
@@ -138,6 +139,13 @@ class ChainStore(ABC):
                     raise LedgerIntegrityError(
                         verify_chain(project_id, events, checkpoint=earlier, key=signer.verify_key)
                     )
+            # Signing the same head again is a retry: return the checkpoint already stored.
+            same = next(
+                (c for c in own if c.seq == seq and c.head_hash == hashes[seq]),
+                None,
+            )
+            if same is not None:
+                return same
             checkpoint = signer.sign_checkpoint(
                 id=new_id(),
                 project_id=project_id,

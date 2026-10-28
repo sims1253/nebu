@@ -36,6 +36,7 @@ from tests.documents.conftest import savepoint_db
 from tests.extraction.support import schema
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
     from kittum.db import Tx
@@ -184,7 +185,10 @@ def exclude(criterion: str) -> dict[str, Any]:
     return include() | {"outcome": "exclude", "reason_criterion_id": criterion}
 
 
-def screened_review(pg: Tx, tmp_path: Path) -> Review:
+def screened_review(
+    pg: Tx, tmp_path: Path, before_screening: Callable[[Review], None] | None = None
+) -> Review:
+    """The review above; `before_screening` runs once the corpus is built, before any stage."""
     r = Review(pg, tmp_path)
     ok, client = r.ok, r.client
     project = ok(client.post("/api/projects", json={"name": "NRT", "lead_name": "Morgan"}), 201)
@@ -245,6 +249,8 @@ def screened_review(pg: Tx, tmp_path: Path) -> Review:
             },
         )
     )
+    if before_screening is not None:
+        before_screening(r)
     sentinels = ok(
         client.post(
             f"/api/projects/{pid}/screening/sentinels/parse", json={"text": SENTINELS.read_text()}
@@ -374,7 +380,51 @@ def screened_review(pg: Tx, tmp_path: Path) -> Review:
 def test_the_lead_traces_a_record_from_its_searches_to_an_accepted_value(
     pg: Tx, tmp_path: Path
 ) -> None:
-    r = screened_review(pg, tmp_path)
+    def unscreened(r: Review) -> None:
+        # The corpus is built and nothing is screened: every record behind a count is traceable.
+        now = r.audit("as-of")
+        (flow,) = [f for f in now["flows"] if f["scope_id"] == SCOPE]
+        unique = flow["members"]["unique_records"]
+        assert len(unique) == 3
+        assert [now["items"][ref]["trace_ref"] for ref in unique] == unique
+        (trial,) = [ref for ref in unique if now["items"][ref]["title"].startswith(TRIAL)]
+        early = r.audit(f"records/{trial}/trace")
+        assert early["report_id"] == trial and early["title"].startswith(TRIAL)
+        assert [e["type"] for e in early["events"]] == [
+            "search.executed",
+            "search.executed",
+            "corpus.ingested",
+            "corpus.confirmed",
+        ]
+        # A search imported after the corpus was built: its record is outside every identity
+        # revision, and is traced by its search alone.
+        plan = {
+            "topic_id": "TRIALS",
+            "source": "conference",
+            "platform": "Conference abstracts",
+            "strategy": "Abstract books, 2026",
+        }
+        hand = (DATA / "citation_search.ris").read_text()
+        body = {
+            "plan": plan,
+            "data": hand[: hand.index("ER  -") + len("ER  -")] + "\n",
+            "format": "ris",
+            "actor_id": r.people["Morgan"],
+        }
+        r.ok(r.client.post(f"/api/projects/{r.pid}/search/import", json=body))
+        now = r.audit("as-of")
+        (flow,) = [f for f in now["flows"] if f["scope_id"] == SCOPE]
+        (outside,) = flow["members"]["records_outside_identity"]
+        assert now["items"][outside]["trace_ref"] == outside
+        lone = r.audit(f"records/{outside}/trace")
+        assert lone["report_id"] is None and lone["title"].startswith(TRIAL)
+        assert [o["source"] for o in lone["occurrences"]] == ["conference"]
+        (search,) = lone["events"]
+        assert search["type"] == "search.executed" and search["actor_id"] == r.people["Morgan"]
+        assert search["seq"] == lone["occurrences"][0]["search_seq"]
+        assert [e["seq"] for e in r.audit("events", ref=outside)["events"]] == [search["seq"]]
+
+    r = screened_review(pg, tmp_path, unscreened)
     people = {v: k for k, v in r.people.items()}
 
     # From the PRISMA count: the trial is among the reports included at full text.
@@ -517,6 +567,27 @@ def test_a_tampered_decision_is_pinpointed_and_a_bundle_sealed_before_still_veri
     lead = {"actor_id": r.people["Morgan"]}
     assert r.audit("verify")["ok"]
     signed = r.ok(r.client.post(f"{base}/audit/checkpoints", json=lead), 201)
+    # Signing the unchanged head again is a retry: the same checkpoint, not a second row.
+    again = r.ok(r.client.post(f"{base}/audit/checkpoints", json=lead), 201)
+    assert again["checkpoint"] == signed["checkpoint"]
+    assert len(r.audit("checkpoints")) == 1
+    # A checkpoint relabelled with another key ID vouches for nothing: verification fails.
+    real = signed["checkpoint"]["key_id"]
+    forged_key = "f" * 64
+    pg.execute("set local session_replication_role = replica")
+    pg.execute(
+        "update checkpoint set key_id = %s where id = %s", (forged_key, signed["checkpoint"]["id"])
+    )
+    audit = r.audit("verify")
+    assert not audit["ok"]
+    assert [
+        (f["seq"], f["check"], f["problem"], f["stored"], f["expected"]) for f in audit["findings"]
+    ] == [(signed["checkpoint"]["seq"], "checkpoint", "untrusted_key", forged_key, real)]
+    assert audit["checkpoints"][0]["signature"] == "unknown_key"
+    pg.execute(
+        "update checkpoint set key_id = %s where id = %s", (real, signed["checkpoint"]["id"])
+    )
+    pg.execute("set local session_replication_role = origin")
     sealed = r.ok(r.client.post(f"{base}/reports/bundle", json=lead))
     checkpoint = signed["checkpoint"]
     assert sealed["cutoff_seq"] == checkpoint["seq"]

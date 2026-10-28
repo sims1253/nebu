@@ -238,6 +238,20 @@ def audit_chain(
                     reason=f"checkpoint {c.id} belongs to project {c.project_id}",
                 )
             )
+        if signature == "unknown_key":
+            # Not verifiable with the trusted key: it vouches for nothing, and a relabelled key ID
+            # must not pass as merely "another key".
+            findings.append(
+                Finding(
+                    seq=c.seq,
+                    check="checkpoint",
+                    problem="untrusted_key",
+                    stored=c.key_id,
+                    expected=key.key_id if key else None,
+                    reason=f"checkpoint {c.id} names key {c.key_id}, not the trusted key, so its"
+                    " signature cannot be verified",
+                )
+            )
         if signature == "invalid":
             findings.append(
                 Finding(

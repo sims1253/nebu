@@ -101,7 +101,8 @@ class Finding(Record):
 class CheckpointStatus(Record):
     checkpoint: Checkpoint
     signature: Literal["valid", "invalid", "unknown_key", "unchecked"]
-    """`unknown_key`: signed by another key than the trusted one; `unchecked`: no trusted key."""
+    """`unknown_key`: names another key than the trusted one, which fails verification (a key
+    rotated out needs its checkpoints re-signed); `unchecked`: no trusted key is configured."""
     head_matches: bool | None
     """Whether the stored event at its seq still has the signed hash; None if the event is gone."""
 

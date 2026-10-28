@@ -571,8 +571,9 @@ function Timeline({
         {trace.title}
       </h2>
       <p className="mt-1 text-xs text-ink-3 tabular-nums">
-        Report {trace.report_id}
-        {trace.study_id ? `, study ${trace.study_id}` : ""}
+        {trace.report_id
+          ? `Report ${trace.report_id}${trace.study_id ? `, study ${trace.study_id}` : ""}`
+          : "A search result not yet in the corpus: no identity revision holds it."}
       </p>
       <section className="mt-4" aria-label="Found by">
         <h3 className="text-sm font-semibold text-ink-2">
@@ -1015,7 +1016,7 @@ function IntegrityView({
                         {
                           valid: "Valid",
                           invalid: "Does not verify",
-                          unknown_key: "Another key",
+                          unknown_key: "Another key: not trusted",
                           unchecked: "No key to check",
                         }[c.signature]
                       }
