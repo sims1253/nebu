@@ -80,7 +80,9 @@ Several agents work at once, one work package each. The rules keep them out of e
 - Decimals stay exact strings with explicit units. Empty is not zero.
 - A state change writes its ledger event in the same transaction as its rows. Deciders do no I/O;
   side effects run as jobs (see `kittum.runs`).
-- All HTTP goes through `kittum.gateway`. All model calls go through `kittum.models.LlmBackend`.
+- HTTP to external sources (literature databases, registries, publishers) goes through
+  `kittum.gateway`, which owns rate limits, retries, and the response cache. Model servers are
+  reached only through `kittum.models.LlmBackend`.
 - A quote counts only if `kittum.core.find_quote` finds it in the source.
 - **Tests prove behaviour end to end.** Prefer a few tests that drive a realistic flow through
   your public interface against real Postgres and recorded real-world fixtures (a real PubMed
