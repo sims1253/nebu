@@ -67,7 +67,7 @@ from kittum.screening.service import (
     UNDONE,
     Screening,
 )
-from kittum.screening.store import sees_lead_data
+from kittum.screening.store import sees_lead_data, undecided_items
 from kittum.screening.types import (
     AdjudicationItem,
     AdjudicationResult,
@@ -157,4 +157,5 @@ __all__ = [
     "sees_lead_data",
     "stop_status",
     "topic_for",
+    "undecided_items",
 ]

@@ -4514,6 +4514,34 @@
         "title": "RunBody",
         "type": "object"
       },
+      "RunListing": {
+        "additionalProperties": false,
+        "description": "A run as the run list shows it: its report and how far review has come.",
+        "properties": {
+          "accepted": {
+            "title": "Accepted",
+            "type": "integer"
+          },
+          "fields": {
+            "title": "Fields",
+            "type": "integer"
+          },
+          "report": {
+            "$ref": "#/components/schemas/ReportInfo"
+          },
+          "run": {
+            "$ref": "#/components/schemas/ExtractionRun"
+          }
+        },
+        "required": [
+          "run",
+          "report",
+          "fields",
+          "accepted"
+        ],
+        "title": "RunListing",
+        "type": "object"
+      },
       "RunSearchRequest": {
         "additionalProperties": false,
         "properties": {
@@ -4533,6 +4561,20 @@
       },
       "RunStatus": {
         "type": "string"
+      },
+      "SchemaText": {
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "SchemaText",
+        "type": "object"
       },
       "Scope": {
         "additionalProperties": false,
@@ -6920,7 +6962,7 @@
     },
     "/api/projects/{project_id}/extraction/assertions": {
       "get": {
-        "description": "The project's accepted values, the latest acceptance per semantic key.",
+        "description": "The project's accepted values the viewer may see, the latest per semantic key.",
         "operationId": "listExtractionAssertions",
         "parameters": [
           {
@@ -6931,6 +6973,16 @@
               "format": "uuid",
               "title": "Project Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
             }
           }
         ],
@@ -7094,9 +7146,113 @@
         ]
       }
     },
+    "/api/projects/{project_id}/extraction/models": {
+      "get": {
+        "description": "The model recipes with a configured server, for the LLM path; empty means Janus only.",
+        "operationId": "listExtractionModels",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Response Listextractionmodels",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Models Route",
+        "tags": [
+          "extraction"
+        ]
+      }
+    },
     "/api/projects/{project_id}/extraction/runs": {
+      "get": {
+        "description": "The project's runs the viewer may see, newest first, with their report and review counts.",
+        "operationId": "listExtractionRuns",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RunListing"
+                  },
+                  "title": "Response Listextractionruns",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Runs Route",
+        "tags": [
+          "extraction"
+        ]
+      },
       "post": {
-        "description": "Queue both paths over a layer. Retrying with the same `command_id` returns the same run.",
+        "description": "Queue both paths over a layer of an included report's full text, for the methods lead\n(403 otherwise; 409 unless the report is included at full text and the layer is its full\ntext's). Retrying with the same `command_id` returns the same run.",
         "operationId": "requestExtractionRun",
         "parameters": [
           {
@@ -7171,6 +7327,16 @@
               "title": "Run Id",
               "type": "string"
             }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
           }
         ],
         "responses": {
@@ -7224,6 +7390,16 @@
               "format": "uuid",
               "title": "Run Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
             }
           }
         ],
@@ -7351,6 +7527,16 @@
               "title": "Run Id",
               "type": "string"
             }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
           }
         ],
         "responses": {
@@ -7376,6 +7562,60 @@
           }
         },
         "summary": "Get Review Route",
+        "tags": [
+          "extraction"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/extraction/schemas/parse": {
+      "post": {
+        "description": "Read and check a schema for `requestExtractionRun`; 422 with the problem.",
+        "operationId": "parseExtractionSchema",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SchemaText"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtractionSchema"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Parse Schema Route",
         "tags": [
           "extraction"
         ]

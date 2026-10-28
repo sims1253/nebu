@@ -5,27 +5,37 @@ import sqlite3
 from uuid import UUID
 
 from kittum.core import new_id
-from kittum.extraction import PROPOSALS_RECORDED, RUN_REQUESTED, VALUE_ACCEPTED
+from kittum.extraction import (
+    PROPOSALS_RECORDED,
+    RUN_REQUESTED,
+    VALUE_ACCEPTED,
+    ReportInfo,
+    RunRequest,
+    request_run,
+)
 from kittum.ledger import SigningKey, seal, verify_bundle
 from kittum.models.testing import RecordedBackend
-from tests.extraction.support import AGENT, recorded, recording_path, schema
+from tests.extraction.support import AGENT, FIXTURES, recorded, recording_path, schema
 
 STUDY = UUID("019a3c10-0000-7000-8000-000000000001")
 REPORT = UUID("019a3c10-0000-7000-8000-000000000002")
 
 
 def _run(env, name, command_id=None):
-    body = {
-        "command_id": str(command_id or new_id()),
-        "actor_id": str(env.requester),
-        "layer_id": str(env.stored[name].layer.id),
-        "study_id": str(STUDY),
-        "report_id": str(REPORT),
-        "extraction_schema": schema(name).model_dump(mode="json"),
-        "agent": AGENT.model_dump(mode="json"),
-        "report": {"study_label": name, "title": f"The {name} trial", "licence": "CC BY 4.0"},
-    }
-    return env.client.post(f"/api/projects/{env.project_id}/extraction/runs", json=body)
+    """A run requested through the service: the route also needs the report included at full
+    text, which tests/app/test_extraction_access.py covers."""
+    request = RunRequest(
+        command_id=command_id or new_id(),
+        project_id=env.project_id,
+        actor_id=env.requester,
+        layer_id=env.stored[name].layer.id,
+        study_id=STUDY,
+        report_id=REPORT,
+        extraction_schema=schema(name),
+        agent=AGENT,
+        report=ReportInfo(study_label=name, title=f"The {name} trial", licence="CC BY 4.0"),
+    )
+    return request_run(env.tx, env.commands, request, clock=env.clock).model_dump(mode="json")
 
 
 def _fields(env, run_id):
@@ -56,13 +66,9 @@ def test_a_run_reconciles_both_paths_and_humans_accept_each_value(env, tmp_path)
     base = f"/api/projects/{env.project_id}/extraction"
     command_id = new_id()
     with env.client:
-        requested = _run(env, "lesotho", command_id)
-        assert requested.status_code == 202
-        run = requested.json()
+        run = _run(env, "lesotho", command_id)
         assert run["status"] == "queued"
-        assert (
-            _run(env, "lesotho", command_id).json()["id"] == run["id"]
-        )  # a retry, not a second run
+        assert _run(env, "lesotho", command_id)["id"] == run["id"]  # a retry, not a second run
         assert [e["run_id"] for e in env.events(RUN_REQUESTED)] == [run["id"]]
 
         # The job runs through the worker, against the completions qwen3.5:4b gave on Ollama.
@@ -249,7 +255,7 @@ def test_only_agreeing_validated_standard_fields_are_accepted_as_a_group(env):
     answers[final] = json.dumps(answer)
     base = f"/api/projects/{env.project_id}/extraction"
     with env.client:
-        run = _run(env, "vitamin_c").json()
+        run = _run(env, "vitamin_c")
         assert env.worker(RecordedBackend(answers, model_identity="qwen3.5:4b")).run_once()
         fields = _fields(env, run["id"])
         female = [fields[("female_sex", arm, "events")] for arm in ("vitamin_c", "control")]
@@ -351,3 +357,65 @@ def test_only_agreeing_validated_standard_fields_are_accepted_as_a_group(env):
         assert all(
             a in anchors for f in view["fields"] for p in f["proposals"] for a in p["anchor_ids"]
         )
+
+
+def test_the_workbench_reads_a_schema_requests_a_janus_only_run_and_lists_it(env):
+    """The workbench's path to a run: the schema file read by the server (a broken one is
+    refused with the reason), no model server configured so the run takes the Janus path only,
+    and the run list showing its report and how many of its fields are accepted."""
+    base = f"/api/projects/{env.project_id}/extraction"
+    with env.client:
+        text = (FIXTURES / "lesotho_schema.yaml").read_text()
+        broken = env.client.post(
+            f"{base}/schemas/parse",
+            json={"text": text.replace("schema_version: 1", "schema_version: [")},
+        )
+        assert broken.status_code == 422 and "line" in broken.json()["detail"][0]["msg"]
+        unknown = env.client.post(f"{base}/schemas/parse", json={"text": text + "\nextra: 1\n"})
+        assert unknown.status_code == 422 and "extra" in unknown.json()["detail"][0]["msg"]
+        parsed = env.client.post(f"{base}/schemas/parse", json={"text": text})
+        assert parsed.status_code == 200 and parsed.json() == schema("lesotho").model_dump(
+            mode="json"
+        )
+        assert env.client.get(f"{base}/models").json() == []  # this context has no model server
+
+        assert env.client.get(f"{base}/runs").json() == []
+        body = {
+            "command_id": str(new_id()),
+            "actor_id": str(env.requester),
+            "layer_id": str(env.stored["lesotho"].layer.id),
+            "study_id": str(STUDY),
+            "report_id": str(REPORT),
+            "extraction_schema": parsed.json(),
+            "report": {"study_label": "NCT05596773", "title": "CHW-led care in Lesotho"},
+        }
+        # Through the route only the lead asks, and only for a report included at full text,
+        # which this project has none of (tests/app/test_extraction_access.py has one).
+        as_reviewer = env.client.post(f"{base}/runs", json=body | {"actor_id": str(env.reviewer)})
+        assert as_reviewer.status_code == 403
+        refused = env.client.post(f"{base}/runs", json=body)
+        assert refused.status_code == 409 and "has no full text" in refused.json()["detail"]
+        run = request_run(
+            env.tx,
+            env.commands,
+            RunRequest.model_validate(body | {"project_id": str(env.project_id)}),
+            clock=env.clock,
+        ).model_dump(mode="json")
+        (listed,) = env.client.get(f"{base}/runs").json()
+        assert (listed["run"]["id"], listed["run"]["status"], listed["fields"]) == (
+            run["id"],
+            "queued",
+            0,
+        )
+        assert listed["report"]["study_label"] == "NCT05596773"
+
+        assert env.worker().run_once() is True
+        (listed,) = env.client.get(f"{base}/runs").json()
+        assert (listed["run"]["status"], listed["run"]["model_identity"]) == ("succeeded", None)
+        assert (listed["fields"], listed["accepted"]) == (10, 0)
+        fields = _fields(env, run["id"])
+        assert {p["path"] for f in fields.values() for p in f["proposals"]} == {"janus"}
+        intervention = fields[("participants", "intervention", "n_analysed")]
+        assert _accept(env, intervention, "janus").json()["value"] == "52"
+        (listed,) = env.client.get(f"{base}/runs").json()
+        assert listed["accepted"] == 1

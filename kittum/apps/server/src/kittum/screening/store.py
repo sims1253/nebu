@@ -18,6 +18,8 @@ from kittum.screening.types import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from kittum.core import Id
     from kittum.db import Tx
 
@@ -35,6 +37,20 @@ def sees_lead_data(tx: Tx, project_id: Id, actor_id: Id) -> bool:
         (project_id, actor_id, actor_id, actor_id),
     ).fetchone()
     return takes_part is None
+
+
+def undecided_items(tx: Tx, project_id: Id, actor_id: Id, item_refs: Sequence[str]) -> set[str]:
+    """Which of `item_refs` the person still has to decide in some stage of the project, as a
+    screener or as the auditor (extra screens and audit samples included). Until they have,
+    nothing about the record that depends on others' decisions may reach them."""
+    rows = tx.execute(
+        "select distinct a.item_ref from screening_assignment a"
+        " join screening_stage s on s.id = a.stage_id"
+        " where s.project_id = %s and a.reviewer_id = %s and a.state <> 'decided'"
+        " and a.item_ref = any(%s)",
+        (project_id, actor_id, list(item_refs)),
+    ).fetchall()
+    return {r["item_ref"] for r in rows}
 
 
 def stage_info(row: dict[str, Any]) -> StageInfo:

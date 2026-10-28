@@ -78,14 +78,17 @@ from kittum.extraction.store import (
     ReportSummary,
     ReviewField,
     ReviewLayer,
+    RunListing,
     RunRequest,
     accept,
     assertions,
     get_run,
     group_accept,
     list_fields,
+    list_runs,
     request_run,
     review,
+    run_of_field,
 )
 from kittum.extraction.validators import validate
 
@@ -128,6 +131,7 @@ __all__ = [
     "ReportSummary",
     "ReviewField",
     "ReviewLayer",
+    "RunListing",
     "RunRequest",
     "SchemaError",
     "SchemaField",
@@ -142,6 +146,7 @@ __all__ = [
     "get_run",
     "group_accept",
     "list_fields",
+    "list_runs",
     "load_schema",
     "reconcile",
     "reconcile_all",
@@ -149,5 +154,6 @@ __all__ = [
     "review",
     "run_agent",
     "run_handler",
+    "run_of_field",
     "validate",
 ]

@@ -13,7 +13,6 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as PProjectIdRouteRouteImport } from './routes/p/$projectId/route'
 import { Route as PProjectIdIndexRouteImport } from './routes/p/$projectId/index'
 import { Route as PProjectIdAdjudicationRouteImport } from './routes/p/$projectId/adjudication'
-import { Route as PProjectIdExtractionRouteImport } from './routes/p/$projectId/extraction'
 import { Route as PProjectIdProgressRouteImport } from './routes/p/$projectId/progress'
 import { Route as PProjectIdProtocolRouteImport } from './routes/p/$projectId/protocol'
 import { Route as PProjectIdReportsRouteImport } from './routes/p/$projectId/reports'
@@ -22,6 +21,8 @@ import { Route as PProjectIdRiskOfBiasRouteImport } from './routes/p/$projectId/
 import { Route as PProjectIdSearchRouteImport } from './routes/p/$projectId/search'
 import { Route as PProjectIdSetupRouteImport } from './routes/p/$projectId/setup'
 import { Route as PProjectIdStudiesRouteImport } from './routes/p/$projectId/studies'
+import { Route as PProjectIdExtractionIndexRouteImport } from './routes/p/$projectId/extraction/index'
+import { Route as PProjectIdExtractionRunIdRouteImport } from './routes/p/$projectId/extraction/$runId'
 import { Route as PProjectIdScreeningFullTextRouteImport } from './routes/p/$projectId/screening/full-text'
 import { Route as PProjectIdScreeningTitleAbstractRouteImport } from './routes/p/$projectId/screening/title-abstract'
 
@@ -43,11 +44,6 @@ const PProjectIdIndexRoute = PProjectIdIndexRouteImport.update({
 const PProjectIdAdjudicationRoute = PProjectIdAdjudicationRouteImport.update({
   id: '/adjudication',
   path: '/adjudication',
-  getParentRoute: () => PProjectIdRouteRoute,
-} as any)
-const PProjectIdExtractionRoute = PProjectIdExtractionRouteImport.update({
-  id: '/extraction',
-  path: '/extraction',
   getParentRoute: () => PProjectIdRouteRoute,
 } as any)
 const PProjectIdProgressRoute = PProjectIdProgressRouteImport.update({
@@ -90,6 +86,18 @@ const PProjectIdStudiesRoute = PProjectIdStudiesRouteImport.update({
   path: '/studies',
   getParentRoute: () => PProjectIdRouteRoute,
 } as any)
+const PProjectIdExtractionIndexRoute =
+  PProjectIdExtractionIndexRouteImport.update({
+    id: '/extraction/',
+    path: '/extraction/',
+    getParentRoute: () => PProjectIdRouteRoute,
+  } as any)
+const PProjectIdExtractionRunIdRoute =
+  PProjectIdExtractionRunIdRouteImport.update({
+    id: '/extraction/$runId',
+    path: '/extraction/$runId',
+    getParentRoute: () => PProjectIdRouteRoute,
+  } as any)
 const PProjectIdScreeningFullTextRoute =
   PProjectIdScreeningFullTextRouteImport.update({
     id: '/screening/full-text',
@@ -107,7 +115,6 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/p/$projectId': typeof PProjectIdRouteRouteWithChildren
   '/p/$projectId/adjudication': typeof PProjectIdAdjudicationRoute
-  '/p/$projectId/extraction': typeof PProjectIdExtractionRoute
   '/p/$projectId/progress': typeof PProjectIdProgressRoute
   '/p/$projectId/protocol': typeof PProjectIdProtocolRoute
   '/p/$projectId/reports': typeof PProjectIdReportsRoute
@@ -117,13 +124,14 @@ export interface FileRoutesByFullPath {
   '/p/$projectId/setup': typeof PProjectIdSetupRoute
   '/p/$projectId/studies': typeof PProjectIdStudiesRoute
   '/p/$projectId/': typeof PProjectIdIndexRoute
+  '/p/$projectId/extraction/$runId': typeof PProjectIdExtractionRunIdRoute
   '/p/$projectId/screening/full-text': typeof PProjectIdScreeningFullTextRoute
   '/p/$projectId/screening/title-abstract': typeof PProjectIdScreeningTitleAbstractRoute
+  '/p/$projectId/extraction/': typeof PProjectIdExtractionIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/p/$projectId/adjudication': typeof PProjectIdAdjudicationRoute
-  '/p/$projectId/extraction': typeof PProjectIdExtractionRoute
   '/p/$projectId/progress': typeof PProjectIdProgressRoute
   '/p/$projectId/protocol': typeof PProjectIdProtocolRoute
   '/p/$projectId/reports': typeof PProjectIdReportsRoute
@@ -133,15 +141,16 @@ export interface FileRoutesByTo {
   '/p/$projectId/setup': typeof PProjectIdSetupRoute
   '/p/$projectId/studies': typeof PProjectIdStudiesRoute
   '/p/$projectId': typeof PProjectIdIndexRoute
+  '/p/$projectId/extraction/$runId': typeof PProjectIdExtractionRunIdRoute
   '/p/$projectId/screening/full-text': typeof PProjectIdScreeningFullTextRoute
   '/p/$projectId/screening/title-abstract': typeof PProjectIdScreeningTitleAbstractRoute
+  '/p/$projectId/extraction': typeof PProjectIdExtractionIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/p/$projectId': typeof PProjectIdRouteRouteWithChildren
   '/p/$projectId/adjudication': typeof PProjectIdAdjudicationRoute
-  '/p/$projectId/extraction': typeof PProjectIdExtractionRoute
   '/p/$projectId/progress': typeof PProjectIdProgressRoute
   '/p/$projectId/protocol': typeof PProjectIdProtocolRoute
   '/p/$projectId/reports': typeof PProjectIdReportsRoute
@@ -151,8 +160,10 @@ export interface FileRoutesById {
   '/p/$projectId/setup': typeof PProjectIdSetupRoute
   '/p/$projectId/studies': typeof PProjectIdStudiesRoute
   '/p/$projectId/': typeof PProjectIdIndexRoute
+  '/p/$projectId/extraction/$runId': typeof PProjectIdExtractionRunIdRoute
   '/p/$projectId/screening/full-text': typeof PProjectIdScreeningFullTextRoute
   '/p/$projectId/screening/title-abstract': typeof PProjectIdScreeningTitleAbstractRoute
+  '/p/$projectId/extraction/': typeof PProjectIdExtractionIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -160,7 +171,6 @@ export interface FileRouteTypes {
     | '/'
     | '/p/$projectId'
     | '/p/$projectId/adjudication'
-    | '/p/$projectId/extraction'
     | '/p/$projectId/progress'
     | '/p/$projectId/protocol'
     | '/p/$projectId/reports'
@@ -170,13 +180,14 @@ export interface FileRouteTypes {
     | '/p/$projectId/setup'
     | '/p/$projectId/studies'
     | '/p/$projectId/'
+    | '/p/$projectId/extraction/$runId'
     | '/p/$projectId/screening/full-text'
     | '/p/$projectId/screening/title-abstract'
+    | '/p/$projectId/extraction/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/p/$projectId/adjudication'
-    | '/p/$projectId/extraction'
     | '/p/$projectId/progress'
     | '/p/$projectId/protocol'
     | '/p/$projectId/reports'
@@ -186,14 +197,15 @@ export interface FileRouteTypes {
     | '/p/$projectId/setup'
     | '/p/$projectId/studies'
     | '/p/$projectId'
+    | '/p/$projectId/extraction/$runId'
     | '/p/$projectId/screening/full-text'
     | '/p/$projectId/screening/title-abstract'
+    | '/p/$projectId/extraction'
   id:
     | '__root__'
     | '/'
     | '/p/$projectId'
     | '/p/$projectId/adjudication'
-    | '/p/$projectId/extraction'
     | '/p/$projectId/progress'
     | '/p/$projectId/protocol'
     | '/p/$projectId/reports'
@@ -203,8 +215,10 @@ export interface FileRouteTypes {
     | '/p/$projectId/setup'
     | '/p/$projectId/studies'
     | '/p/$projectId/'
+    | '/p/$projectId/extraction/$runId'
     | '/p/$projectId/screening/full-text'
     | '/p/$projectId/screening/title-abstract'
+    | '/p/$projectId/extraction/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -240,13 +254,6 @@ declare module '@tanstack/react-router' {
       path: '/adjudication'
       fullPath: '/p/$projectId/adjudication'
       preLoaderRoute: typeof PProjectIdAdjudicationRouteImport
-      parentRoute: typeof PProjectIdRouteRoute
-    }
-    '/p/$projectId/extraction': {
-      id: '/p/$projectId/extraction'
-      path: '/extraction'
-      fullPath: '/p/$projectId/extraction'
-      preLoaderRoute: typeof PProjectIdExtractionRouteImport
       parentRoute: typeof PProjectIdRouteRoute
     }
     '/p/$projectId/progress': {
@@ -305,6 +312,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PProjectIdStudiesRouteImport
       parentRoute: typeof PProjectIdRouteRoute
     }
+    '/p/$projectId/extraction/': {
+      id: '/p/$projectId/extraction/'
+      path: '/extraction'
+      fullPath: '/p/$projectId/extraction/'
+      preLoaderRoute: typeof PProjectIdExtractionIndexRouteImport
+      parentRoute: typeof PProjectIdRouteRoute
+    }
+    '/p/$projectId/extraction/$runId': {
+      id: '/p/$projectId/extraction/$runId'
+      path: '/extraction/$runId'
+      fullPath: '/p/$projectId/extraction/$runId'
+      preLoaderRoute: typeof PProjectIdExtractionRunIdRouteImport
+      parentRoute: typeof PProjectIdRouteRoute
+    }
     '/p/$projectId/screening/full-text': {
       id: '/p/$projectId/screening/full-text'
       path: '/screening/full-text'
@@ -324,7 +345,6 @@ declare module '@tanstack/react-router' {
 
 interface PProjectIdRouteRouteChildren {
   PProjectIdAdjudicationRoute: typeof PProjectIdAdjudicationRoute
-  PProjectIdExtractionRoute: typeof PProjectIdExtractionRoute
   PProjectIdProgressRoute: typeof PProjectIdProgressRoute
   PProjectIdProtocolRoute: typeof PProjectIdProtocolRoute
   PProjectIdReportsRoute: typeof PProjectIdReportsRoute
@@ -334,13 +354,14 @@ interface PProjectIdRouteRouteChildren {
   PProjectIdSetupRoute: typeof PProjectIdSetupRoute
   PProjectIdStudiesRoute: typeof PProjectIdStudiesRoute
   PProjectIdIndexRoute: typeof PProjectIdIndexRoute
+  PProjectIdExtractionRunIdRoute: typeof PProjectIdExtractionRunIdRoute
   PProjectIdScreeningFullTextRoute: typeof PProjectIdScreeningFullTextRoute
   PProjectIdScreeningTitleAbstractRoute: typeof PProjectIdScreeningTitleAbstractRoute
+  PProjectIdExtractionIndexRoute: typeof PProjectIdExtractionIndexRoute
 }
 
 const PProjectIdRouteRouteChildren: PProjectIdRouteRouteChildren = {
   PProjectIdAdjudicationRoute: PProjectIdAdjudicationRoute,
-  PProjectIdExtractionRoute: PProjectIdExtractionRoute,
   PProjectIdProgressRoute: PProjectIdProgressRoute,
   PProjectIdProtocolRoute: PProjectIdProtocolRoute,
   PProjectIdReportsRoute: PProjectIdReportsRoute,
@@ -350,8 +371,10 @@ const PProjectIdRouteRouteChildren: PProjectIdRouteRouteChildren = {
   PProjectIdSetupRoute: PProjectIdSetupRoute,
   PProjectIdStudiesRoute: PProjectIdStudiesRoute,
   PProjectIdIndexRoute: PProjectIdIndexRoute,
+  PProjectIdExtractionRunIdRoute: PProjectIdExtractionRunIdRoute,
   PProjectIdScreeningFullTextRoute: PProjectIdScreeningFullTextRoute,
   PProjectIdScreeningTitleAbstractRoute: PProjectIdScreeningTitleAbstractRoute,
+  PProjectIdExtractionIndexRoute: PProjectIdExtractionIndexRoute,
 }
 
 const PProjectIdRouteRouteWithChildren = PProjectIdRouteRoute._addFileChildren(

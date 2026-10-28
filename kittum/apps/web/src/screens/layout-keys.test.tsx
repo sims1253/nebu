@@ -23,7 +23,7 @@ describe("layout keys", () => {
 
     await press("g");
     await press("x"); // extraction, not "insufficient information"
-    await expect.element(page.getByTestId("field-row").first()).toBeVisible();
+    await expect.element(page.getByTestId("extraction-run").first()).toBeVisible();
     await pause(200);
     expect(app.workbench.decisions).toHaveLength(0);
   });
