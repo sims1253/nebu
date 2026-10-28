@@ -1,0 +1,850 @@
+# Capivasertib (Truqap®) + fulvestrant: ER+/HER2- advanced breast cancer with PIK3CA/AKT1/PTEN
+# alterations after endocrine therapy. G-BA procedure D-1110.
+#
+# Sources (public, read on 28.10.2026):
+# - G-BA, Beschluss vom 03.04.2025 (BAnz AT 18.06.2025 B4): Anwendungsgebiet, Patientengruppen
+#   a1, a2, b1, b2, and their zVT, verbatim.
+#   https://g-ba.de/downloads/39-261-7143/2025-04-03_AM-RL-XII_Capivasertib_D-1110.pdf
+# - IQWiG, Dossierbewertung A24-105 (23.12.2024): zVT footnotes (off-label use, ovarian
+#   suppression), the zVT revision of 26.11.2024, and the study pool CAPItello-291 and FAKTION.
+#   https://www.iqwig.de/download/a24-105_capivasertib_nutzenbewertung-35a-sgb-v_v1-0.pdf
+# - AstraZeneca, Dossier Modul 4 A (Stand 30.09.2024): inclusion criteria E1 to E9 (Tabelle 4-3),
+#   endpoints and their operationalization (Abschnitt 4.2.5.2, Tabelle 4-18), subgroups
+#   (Abschnitt 4.2.5.5), and the searches of 31.07.2024 (Anhang 4-A1, 4-B1).
+#   https://g-ba.de/downloads/92-975-8035/2024_09_30_Modul4A_Capivasertib.pdf
+#
+# The file uses the gba_amnog profile: questions are the Teilpopulationen, their comparators are
+# the zVT options, and the dossier and Anwendungsgebiet live under the profile's extensions.
+#
+# Differences from the submitted dossier, so the file exercises every part of the schema:
+# - The Teilpopulationen follow the G-BA's final four groups. The dossier still used the six
+#   groups of the 24.04.2024 consultation (split by menopausal status).
+# - The source plan adds the EMA Clinical Data portal, which the Modul 4 template of 18.11.2025
+#   requires and the 2024 dossier did not search.
+# - Topic IC (indirect comparison via a fulvestrant bridge, mode M2) is illustrative. The dossier
+#   reported Abschnitt 4.3.2.1 as "nicht zutreffend".
+
+schema_version: 1
+version_label: "1.0"
+profile: gba_amnog
+default_language: de
+title:
+  de: Capivasertib (Truqap®) in Kombination mit Fulvestrant, Modul 4 A
+  en: Capivasertib (Truqap®) combined with fulvestrant, Modul 4 A
+extensions:
+  dossier:
+    active_substance: Capivasertib
+    trade_name: Truqap
+    version: Modul 4 A, Stand 30.09.2024
+    gba_procedure: D-1110
+  anwendungsgebiete:
+    - code: A
+      text_de:
+        Capivasertib in Kombination mit Fulvestrant ist indiziert zur Behandlung von erwachsenen
+        Patienten mit Östrogenrezeptor(ER)-positivem, HER2-negativem, lokal fortgeschrittenem oder metastasiertem
+        Mammakarzinom mit einer oder mehreren PIK3CA/AKT1/PTEN-Alterationen nach Rezidiv oder Progression
+        der Erkrankung während oder nach einer endokrinen Therapie.
+      questions:
+        - a1
+        - a2
+        - b1
+        - b2
+      search_topics:
+        - RCT
+        - IC
+questions:
+  - id: a1
+    label:
+      de: Frauen, (neo-)adjuvante endokrine Vortherapie
+      en: Women, prior (neo)adjuvant endocrine therapy
+    population:
+      de: Frauen mit Östrogenrezeptor(ER)-positivem, humanen epidermalen Wachstumsfaktor-Rezeptor-2
+        (HER2)-negativem, lokal fortgeschrittenem oder metastasiertem Mammakarzinom mit PIK3CA/AKT1/PTEN-Alteration(en),
+        nach Wiederauftreten der Erkrankung während oder nach einer (neo-)adjuvanten endokrinen Therapie,
+        bisher keine Behandlung im lokal fortgeschrittenen oder metastasierten Stadium
+      en:
+        Women with ER-positive, HER2-negative, locally advanced or metastatic breast cancer with PIK3CA/AKT1/PTEN
+        alteration(s), recurring during or after (neo)adjuvant endocrine therapy, with no treatment
+        yet in the locally advanced or metastatic setting
+    intervention:
+      de: Capivasertib in Kombination mit Fulvestrant
+      en: Capivasertib in combination with fulvestrant
+    comparators:
+      - id: tamoxifen
+        text:
+          de:
+            Tamoxifen (nur für prämenopausale Patientinnen, die in der vorausgegangenen (neo-)adjuvanten
+            endokrinen Therapie kein Tamoxifen erhalten haben; nur für postmenopausale Patientinnen,
+            wenn Aromatasehemmer nicht geeignet sind)
+      - id: letrozol
+        text:
+          de: Letrozol
+      - id: exemestan
+        text:
+          de: Exemestan (nur für Patientinnen mit Progress nach einer Antiöstrogen-Behandlung)
+      - id: anastrozol
+        text:
+          de: Anastrozol
+      - id: fulvestrant
+        text:
+          de: Fulvestrant
+      - id: ribociclib_nsai
+        text:
+          de: Ribociclib in Kombination mit einem nicht-steroidalen Aromatasehemmer (Anastrozol, Letrozol)
+      - id: abemaciclib_nsai
+        text:
+          de: Abemaciclib in Kombination mit einem nicht-steroidalen Aromatasehemmer (Anastrozol, Letrozol)
+      - id: palbociclib_nsai
+        text:
+          de: Palbociclib in Kombination mit einem nicht-steroidalen Aromatasehemmer (Anastrozol, Letrozol)
+      - id: ribociclib_fulvestrant
+        text:
+          de: Ribociclib in Kombination mit Fulvestrant
+      - id: abemaciclib_fulvestrant
+        text:
+          de: Abemaciclib in Kombination mit Fulvestrant
+      - id: palbociclib_fulvestrant
+        text:
+          de: Palbociclib in Kombination mit Fulvestrant
+    comparators_are_alternatives: true
+    extensions:
+      kind: teilpopulation
+      consultation_ref: 2024-B-043
+      zvt:
+        source_document: G-BA, zVT angepasst am 26.11.2024; Beschluss vom 03.04.2025 (D-1110)
+        qualifying_comparator_arms:
+          - Fulvestrant-Monotherapie bei postmenopausalen Frauen, einschließlich operativ oder medikamentös
+            (GnRH-Analogon) induzierter Menopause (IQWiG A24-105, I 3.1)
+  - id: a2
+    label:
+      de: Männer, (neo-)adjuvante endokrine Vortherapie
+      en: Men, prior (neo)adjuvant endocrine therapy
+    population:
+      de: Männer mit Östrogenrezeptor(ER)-positivem, humanen epidermalen Wachstumsfaktor-Rezeptor-2
+        (HER2)-negativem, lokal fortgeschrittenem oder metastasiertem Mammakarzinom mit PIK3CA/AKT1/PTEN-Alteration(en),
+        nach Wiederauftreten der Erkrankung während oder nach einer (neo-)adjuvanten endokrinen Therapie,
+        bisher keine Behandlung im lokal fortgeschrittenen oder metastasierten Stadium
+      en:
+        Men with ER-positive, HER2-negative, locally advanced or metastatic breast cancer with PIK3CA/AKT1/PTEN
+        alteration(s), recurring during or after (neo)adjuvant endocrine therapy, with no treatment
+        yet in the locally advanced or metastatic setting
+    intervention:
+      de: Capivasertib in Kombination mit Fulvestrant
+      en: Capivasertib in combination with fulvestrant
+    comparators:
+      - id: tamoxifen
+        text:
+          de: Tamoxifen
+      - id: palbociclib_nsai
+        text:
+          de: Palbociclib in Kombination mit einem nicht-steroidalen Aromatasehemmer (Anastrozol, Letrozol)
+    comparators_are_alternatives: true
+    extensions:
+      kind: teilpopulation
+      consultation_ref: 2024-B-043
+      zvt:
+        source_document: G-BA, zVT angepasst am 26.11.2024; Beschluss vom 03.04.2025 (D-1110)
+  - id: b1
+    label:
+      de: Frauen, endokrine Vortherapie im fortgeschrittenen Stadium
+      en: Women, prior endocrine therapy in the advanced setting
+    population:
+      de: Frauen mit Östrogenrezeptor(ER)-positivem, humanen epidermalen Wachstumsfaktor-Rezeptor-2
+        (HER2)-negativem, lokal fortgeschrittenem oder metastasiertem Mammakarzinom mit PIK3CA/AKT1/PTEN-Alteration(en),
+        mit einer Progression der Erkrankung während oder nach einer endokrinen Therapie, welche im
+        lokal fortgeschrittenen oder metastasierten Stadium erfolgte
+      en:
+        Women with ER-positive, HER2-negative, locally advanced or metastatic breast cancer with PIK3CA/AKT1/PTEN
+        alteration(s), progressing during or after endocrine therapy given in the locally advanced or
+        metastatic setting
+    intervention:
+      de: Capivasertib in Kombination mit Fulvestrant
+      en: Capivasertib in combination with fulvestrant
+    comparators:
+      - id: tamoxifen
+        text:
+          de: Tamoxifen
+      - id: letrozol
+        text:
+          de: Letrozol
+        extensions:
+          off_label: true
+      - id: exemestan
+        text:
+          de: Exemestan
+        extensions:
+          off_label: true
+      - id: anastrozol
+        text:
+          de: Anastrozol
+      - id: fulvestrant
+        text:
+          de: Fulvestrant
+        extensions:
+          off_label: true
+      - id: everolimus_exemestan
+        text:
+          de:
+            Everolimus in Kombination mit Exemestan (nur für Patientinnen ohne symptomatische viszerale
+            Metastasierung, nachdem es zu einer Progression nach einem nicht-steroidalen Aromatasehemmer
+            gekommen ist)
+      - id: ribociclib_nsai
+        text:
+          de: Ribociclib in Kombination mit einem nicht-steroidalen Aromatasehemmer (Anastrozol, Letrozol)
+      - id: abemaciclib_nsai
+        text:
+          de: Abemaciclib in Kombination mit einem nicht-steroidalen Aromatasehemmer (Anastrozol, Letrozol)
+      - id: palbociclib_nsai
+        text:
+          de: Palbociclib in Kombination mit einem nicht-steroidalen Aromatasehemmer (Anastrozol, Letrozol)
+      - id: ribociclib_fulvestrant
+        text:
+          de: Ribociclib in Kombination mit Fulvestrant
+      - id: abemaciclib_fulvestrant
+        text:
+          de: Abemaciclib in Kombination mit Fulvestrant
+      - id: palbociclib_fulvestrant
+        text:
+          de: Palbociclib in Kombination mit Fulvestrant
+    comparators_are_alternatives: true
+    extensions:
+      kind: teilpopulation
+      consultation_ref: 2024-B-043
+      zvt:
+        source_document: G-BA, zVT angepasst am 26.11.2024; Beschluss vom 03.04.2025 (D-1110)
+        nach_aerztlicher_massgabe: true
+        qualifying_comparator_arms:
+          - Fulvestrant-Monotherapie bei postmenopausalen Frauen, einschließlich operativ oder medikamentös
+            (GnRH-Analogon) induzierter Menopause (IQWiG A24-105, I 5.1)
+  - id: b2
+    label:
+      de: Männer, endokrine Vortherapie im fortgeschrittenen Stadium
+      en: Men, prior endocrine therapy in the advanced setting
+    population:
+      de: Männer mit Östrogenrezeptor(ER)-positivem, humanen epidermalen Wachstumsfaktor-Rezeptor-2
+        (HER2)-negativem, lokal fortgeschrittenem oder metastasiertem Mammakarzinom mit PIK3CA/AKT1/PTEN-Alteration(en),
+        mit einer Progression der Erkrankung während oder nach einer endokrinen Therapie, welche im
+        lokal fortgeschrittenen oder metastasierten Stadium erfolgte
+      en:
+        Men with ER-positive, HER2-negative, locally advanced or metastatic breast cancer with PIK3CA/AKT1/PTEN
+        alteration(s), progressing during or after endocrine therapy given in the locally advanced or
+        metastatic setting
+    intervention:
+      de: Capivasertib in Kombination mit Fulvestrant
+      en: Capivasertib in combination with fulvestrant
+    comparators:
+      - id: tamoxifen
+        text:
+          de: Tamoxifen
+      - id: ai_gnrh
+        text:
+          de: Aromatasehemmer in Kombination mit einem GnRH-Analogon
+        extensions:
+          off_label: true
+      - id: fulvestrant
+        text:
+          de: Fulvestrant
+        extensions:
+          off_label: true
+      - id: palbociclib_nsai
+        text:
+          de: Palbociclib in Kombination mit einem nicht-steroidalen Aromatasehemmer (Anastrozol, Letrozol)
+    comparators_are_alternatives: true
+    extensions:
+      kind: teilpopulation
+      consultation_ref: 2024-B-043
+      zvt:
+        source_document: G-BA, zVT angepasst am 26.11.2024; Beschluss vom 03.04.2025 (D-1110)
+        nach_aerztlicher_massgabe: true
+        qualifying_comparator_arms:
+          - Fulvestrant-Monotherapie (zulassungsüberschreitend, IQWiG A24-105 Fußnote f)
+outcomes:
+  - id: os
+    category: mortality
+    name:
+      de: Gesamtüberleben
+      en: Overall survival
+    definition:
+      de: Zeit von der Randomisierung bis zum Tod jeglicher Ursache.
+    rationale:
+      de: In der VerfO des G-BA ausdrücklich als patientenrelevant genannt.
+  - id: pfs
+    category: morbidity
+    name:
+      de: Progressionsfreies Überleben
+      en: Progression-free survival
+    definition:
+      de:
+        Zeit von der Randomisierung bis zur Progression nach RECIST 1.1 (Beurteilung durch Prüfärztin
+        oder Prüfarzt) oder bis zum Tod jeglicher Ursache.
+    rationale:
+      de:
+        Vom pU als patientenrelevant begründet. IQWiG und G-BA werten das PFS nicht als eigenständig
+        patientenrelevant; der Beschluss stellt es ergänzend dar.
+  - id: symptoms_qlq_c30
+    category: morbidity
+    name:
+      de: Symptomatik (EORTC QLQ-C30)
+      en: Symptoms (EORTC QLQ-C30)
+    definition:
+      de:
+        Symptomskalen und Einzelsymptome des EORTC QLQ-C30 Version 3.0; Zeit bis zur ersten Verschlechterung
+        um mindestens 10 Punkte.
+    rationale:
+      de: Patientenberichtete Symptomatik.
+  - id: symptoms_qlq_br23
+    category: morbidity
+    name:
+      de: Symptomatik (EORTC QLQ-BR23)
+      en: Symptoms (EORTC QLQ-BR23)
+    definition:
+      de:
+        Symptomskalen des EORTC QLQ-BR23 (Nebenwirkungen der systemischen Therapie, Symptome im Brust-
+        und Armbereich, Belastung durch Haarausfall); Zeit bis zur ersten Verschlechterung um mindestens
+        10 Punkte.
+    rationale:
+      de: Patientenberichtete, brustkrebsspezifische Symptomatik.
+  - id: health_status_eq5d_vas
+    category: morbidity
+    name:
+      de: Gesundheitszustand (EQ-5D-5L VAS)
+      en: Health status (EQ-5D-5L VAS)
+    definition:
+      de:
+        Visuelle Analogskala des EQ-5D-5L (0 bis 100); Zeit bis zur ersten Verschlechterung um mindestens
+        15 Punkte (15 % der Skalenspannweite).
+    rationale:
+      de: Patientenberichteter Gesundheitszustand.
+  - id: qol_qlq_c30
+    category: quality_of_life
+    name:
+      de: Gesundheitsbezogene Lebensqualität (EORTC QLQ-C30)
+      en: Health-related quality of life (EORTC QLQ-C30)
+    definition:
+      de:
+        Globaler Gesundheitsstatus und Funktionsskalen des EORTC QLQ-C30; Zeit bis zur ersten Verschlechterung
+        um mindestens 10 Punkte.
+    rationale:
+      de: Gesundheitsbezogene Lebensqualität ist eine eigene Nutzendimension.
+  - id: qol_qlq_br23
+    category: quality_of_life
+    name:
+      de: Gesundheitsbezogene Lebensqualität (EORTC QLQ-BR23)
+      en: Health-related quality of life (EORTC QLQ-BR23)
+    definition:
+      de:
+        Funktionsskalen des EORTC QLQ-BR23 (Körperbild, sexuelle Aktivität, Freude an Sex, Zukunftsperspektive);
+        Zeit bis zur ersten Verschlechterung um mindestens 10 Punkte.
+    rationale:
+      de: Brustkrebsspezifische Lebensqualität.
+  - id: sae
+    category: side_effects
+    name:
+      de: Schwerwiegende unerwünschte Ereignisse (SUE)
+      en: Serious adverse events
+    definition:
+      de: SUE ab der ersten Dosis bis 30 (+7) Tage nach Ende der Studienbehandlung; MedDRA 25.0.
+    rationale:
+      de: Schwerwiegende Schäden der Behandlung.
+  - id: severe_ae
+    category: side_effects
+    name:
+      de: Schwere unerwünschte Ereignisse (CTCAE-Grad ≥ 3)
+      en: Severe adverse events (CTCAE grade ≥ 3)
+    definition:
+      de: UE mit CTCAE-Grad ≥ 3 nach CTCAE Version 5.0.
+    rationale:
+      de: Schwere Schäden der Behandlung.
+  - id: discontinuation_ae
+    category: side_effects
+    name:
+      de: Therapieabbruch wegen unerwünschter Ereignisse
+      en: Treatment discontinuation due to adverse events
+    definition:
+      de: Abbruch mindestens einer Wirkstoffkomponente wegen eines UE.
+    rationale:
+      de: Abbrüche zeigen nicht tolerierbare Schäden.
+  - id: specific_ae
+    category: side_effects
+    name:
+      de: Spezifische unerwünschte Ereignisse
+      en: Specific adverse events
+    definition:
+      de:
+        "UE von speziellem Interesse nach Kategorie (Grouped Term): Ausschlag, Hyperglykämie, nicht-infektiöse
+        Diarrhö, Harnwegsinfektion, infektiöse Lungenentzündung, Verlängerung des QT-Intervalls; jeweils
+        als UE, SUE und schwere UE."
+    rationale:
+      de: Bekannte Schäden der AKT-Inhibition.
+effect_modifiers:
+  - id: sex
+    label:
+      de: Geschlecht
+      en: Sex
+  - id: age
+    label:
+      de: Alter bei Randomisierung
+      en: Age at randomization
+    categories:
+      - < 65 Jahre
+      - ≥ 65 Jahre
+  - id: liver_metastases
+    label:
+      de: Lebermetastasen (Krankheitsschwere)
+      en: Liver metastases (disease severity)
+    categories:
+      - ja
+      - nein
+  - id: region
+    label:
+      de: Region (anstelle von Zentrum oder Land)
+      en: Region (instead of centre or country)
+    categories:
+      - Asien
+      - USA, Kanada, Westeuropa, Australien und Israel
+      - Lateinamerika, Osteuropa und Russland
+  - id: prior_cdk46
+    label:
+      de: Vorherige Therapie mit CDK4/6-Inhibitor
+      en: Prior CDK4/6 inhibitor
+    categories:
+      - ja
+      - nein
+  - id: menopausal_status
+    label:
+      de: Menopausenstatus
+      en: Menopausal status
+    categories:
+      - prä-/perimenopausal
+      - postmenopausal
+search_topics:
+  - id: RCT
+    kind: rct_drug
+    label:
+      de: RCT mit Capivasertib + Fulvestrant
+      en: RCTs of capivasertib plus fulvestrant
+    mode: M1
+    scopes:
+      - a1
+      - a2
+      - b1
+      - b2
+    audit:
+      sentinel_percent: "1"
+      census_of_disagreements: true
+    freshness:
+      max_age_months: 3
+      deadline: 2024-10-01
+    source_plan:
+      limits: Keine Einschränkungen nach Sprache oder Zeitraum in der Suche.
+      sources:
+        - id: medline
+          kind: bibliographic
+          name: MEDLINE
+          platform: PubMed
+          study_filter: Wong 2006, RCT-Filter "minimizing difference between sensitivity and specificity"
+        - id: embase
+          kind: bibliographic
+          name: Embase
+          platform: embase.com
+          study_filter: Wong 2006, RCT-Filter "minimizing difference between sensitivity and specificity"
+        - id: central
+          kind: bibliographic
+          name: Cochrane Central Register of Controlled Trials
+          platform: Cochrane Library (Wiley)
+        - id: clinicaltrials_gov
+          kind: registry
+          name: ClinicalTrials.gov
+        - id: eu_ctr
+          kind: registry
+          name: EU Clinical Trials Register
+        - id: ctis
+          kind: registry
+          name: Clinical Trials Information System
+        - id: ictrp
+          kind: registry
+          name: WHO ICTRP Search Portal
+        - id: ema_clinical_data
+          kind: registry
+          name: EMA Clinical Data
+        - id: gba_website
+          kind: website
+          name: Internetseite des G-BA
+    reference_set:
+      development:
+        - kind: doi
+          value: 10.1056/NEJMoa2214131
+          note: Turner et al., N Engl J Med 2023 (CAPItello-291)
+        - kind: doi
+          value: 10.1016/s1470-2045(19)30817-4
+          note: Jones et al., Lancet Oncol 2020 (FAKTION)
+      validation:
+        - kind: doi
+          value: 10.1016/s1470-2045(22)00284-4
+          note: Howell et al., Lancet Oncol 2022 (FAKTION, Gesamtüberleben)
+        - kind: nct
+          value: NCT04305496
+          note: CAPItello-291
+        - kind: eudract
+          value: 2019-003629-78
+          note: CAPItello-291
+        - kind: euct
+          value: 2023-505042-25-00
+          note: CAPItello-291
+        - kind: nct
+          value: NCT01992952
+          note: FAKTION
+        - kind: eudract
+          value: 2013-000898-68
+          note: FAKTION
+      press:
+        status: planned
+    criteria:
+      - id: RCT-E1
+        slot: population
+        text:
+          de: Erwachsene mit Östrogenrezeptor(ER)-positivem, HER2-negativem, lokal fortgeschrittenem
+            oder metastasiertem Mammakarzinom nach Rezidiv oder Progression während oder nach einer
+            endokrinen Therapie.
+          en:
+            Adults with oestrogen receptor (ER)-positive, HER2-negative, locally advanced or metastatic
+            breast cancer that recurred or progressed during or after endocrine therapy.
+        decidable_at:
+          - title_abstract
+          - full_text
+        applies_to:
+          - RCT
+        positive_examples:
+          - Patients with HR-positive, HER2-negative advanced breast cancer that had relapsed or progressed
+            on an aromatase inhibitor.
+        negative_examples:
+          - Patients with HER2-positive metastatic breast cancer.
+          - Women with early breast cancer receiving adjuvant therapy.
+      - id: RCT-E1-ALT
+        slot: population
+        text:
+          de:
+            Ergebnisse liegen für Patientinnen und Patienten mit einer oder mehreren PIK3CA/AKT1/PTEN-Alterationen
+            vor (Gesamtpopulation oder Teilpopulation).
+          en: Results are reported for patients with one or more PIK3CA/AKT1/PTEN alterations (whole
+            population or subpopulation).
+        decidable_at:
+          - full_text
+        applies_to:
+          - RCT
+      - id: RCT-SEX-F
+        slot: population
+        text:
+          de: Ergebnisse liegen für Frauen vor.
+          en: Results are reported for women.
+        decidable_at:
+          - full_text
+        applies_to:
+          - a1
+          - b1
+      - id: RCT-SEX-M
+        slot: population
+        text:
+          de: Ergebnisse liegen für Männer vor.
+          en: Results are reported for men.
+        decidable_at:
+          - full_text
+        applies_to:
+          - a2
+          - b2
+      - id: RCT-LINE-ADJ
+        slot: population
+        text:
+          de:
+            Ergebnisse liegen für Patientinnen und Patienten mit Rezidiv während oder nach (neo-)adjuvanter
+            endokriner Therapie vor, die im lokal fortgeschrittenen oder metastasierten Stadium noch
+            keine Behandlung erhalten haben.
+          en: Results are reported for patients who recurred during or after (neo)adjuvant endocrine
+            therapy and had no treatment in the locally advanced or metastatic setting.
+        decidable_at:
+          - full_text
+        applies_to:
+          - a1
+          - a2
+      - id: RCT-LINE-MET
+        slot: population
+        text:
+          de:
+            Ergebnisse liegen für Patientinnen und Patienten mit Progression während oder nach einer
+            endokrinen Therapie im lokal fortgeschrittenen oder metastasierten Stadium vor.
+          en:
+            Results are reported for patients who progressed during or after endocrine therapy given
+            in the locally advanced or metastatic setting.
+        decidable_at:
+          - full_text
+        applies_to:
+          - b1
+          - b2
+      - id: RCT-E2
+        slot: intervention
+        text:
+          de: Capivasertib in Kombination mit Fulvestrant, entsprechend der Fachinformation.
+          en: Capivasertib combined with fulvestrant, as in the summary of product characteristics.
+        decidable_at:
+          - title_abstract
+          - full_text
+        applies_to:
+          - RCT
+        keywords:
+          - capivasertib
+          - AZD5363
+          - AZD-5363
+          - fulvestrant
+        negative_examples:
+          - Capivasertib plus paclitaxel in triple-negative breast cancer.
+      - id: RCT-E3-a1
+        slot: comparator
+        text:
+          de:
+            Der Vergleichsarm entspricht einer Option der zVT für Frauen mit (neo-)adjuvanter endokriner
+            Vortherapie, z. B. Fulvestrant bei postmenopausalen Frauen.
+          en: The control arm is one of the zVT options for women with prior (neo)adjuvant endocrine
+            therapy, e.g. fulvestrant in postmenopausal women.
+        decidable_at:
+          - full_text
+        applies_to:
+          - a1
+      - id: RCT-E3-a2
+        slot: comparator
+        text:
+          de: Der Vergleichsarm ist Tamoxifen oder Palbociclib mit einem nicht-steroidalen Aromatasehemmer.
+          en: The control arm is tamoxifen, or palbociclib with a non-steroidal aromatase inhibitor.
+        decidable_at:
+          - full_text
+        applies_to:
+          - a2
+      - id: RCT-E3-b1
+        slot: comparator
+        text:
+          de:
+            Der Vergleichsarm entspricht einer Option der zVT für Frauen mit endokriner Vortherapie
+            im fortgeschrittenen Stadium, z. B. Fulvestrant bei postmenopausalen Frauen.
+          en:
+            The control arm is one of the zVT options for women with prior endocrine therapy in the
+            advanced setting, e.g. fulvestrant in postmenopausal women.
+        decidable_at:
+          - full_text
+        applies_to:
+          - b1
+      - id: RCT-E3-b2
+        slot: comparator
+        text:
+          de:
+            Der Vergleichsarm ist Tamoxifen, ein Aromatasehemmer mit GnRH-Analogon, Fulvestrant oder
+            Palbociclib mit einem nicht-steroidalen Aromatasehemmer.
+          en:
+            The control arm is tamoxifen, an aromatase inhibitor with a GnRH analogue, fulvestrant,
+            or palbociclib with a non-steroidal aromatase inhibitor.
+        decidable_at:
+          - full_text
+        applies_to:
+          - b2
+      - id: RCT-E4
+        slot: outcome
+        text:
+          de: Ergebnisse zu mindestens einem patientenrelevanten Endpunkt der Kategorien Mortalität,
+            Morbidität, gesundheitsbezogene Lebensqualität oder Nebenwirkungen.
+          en:
+            Results for at least one patient-relevant outcome on mortality, morbidity, health-related
+            quality of life, or adverse effects.
+        decidable_at:
+          - full_text
+        applies_to:
+          - RCT
+      - id: RCT-E5
+        slot: study_type
+        text:
+          de: Randomisierte kontrollierte Studie (RCT).
+          en: Randomized controlled trial.
+        decidable_at:
+          - title_abstract
+          - full_text
+        applies_to:
+          - RCT
+        keywords:
+          - single-arm
+          - single arm
+          - non-randomized
+          - non-randomised
+          - retrospective
+          - real-world
+          - case report
+          - review
+          - einarmig
+        positive_examples:
+          - A phase 3, double-blind, randomized, placebo-controlled trial.
+        negative_examples:
+          - A single-arm phase 2 study of capivasertib.
+          - A retrospective real-world analysis.
+      - id: RCT-E6
+        slot: other
+        text:
+          de:
+            Für die Studie liegen Ergebnisse vor (Publikation, Registereintrag mit Ergebnissen oder
+            Studienbericht).
+          en: Results of the study are available (publication, registry entry with results, or study
+            report).
+        decidable_at:
+          - full_text
+        applies_to:
+          - RCT
+      - id: RCT-E8
+        slot: other
+        text:
+          de: Publikation in englischer oder deutscher Sprache.
+          en: Published in English or German.
+        decidable_at:
+          - title_abstract
+          - full_text
+        applies_to:
+          - RCT
+      - id: RCT-E9
+        slot: other
+        polarity: exclude
+        text:
+          de:
+            Nur Abstract, Kongressbeitrag, narrative Sekundärpublikation (z. B. Review) oder Registereintrag
+            ohne berichtete Ergebnisse.
+          en: Abstract only, congress contribution, narrative secondary publication (e.g. a review),
+            or registry entry without reported results.
+        decidable_at:
+          - title_abstract
+          - full_text
+        applies_to:
+          - RCT
+        keywords:
+          - abstract
+          - congress
+          - meeting
+          - review
+          - Kongress
+  - id: IC
+    kind: rct_indirect
+    label:
+      de: RCT für einen indirekten Vergleich über Fulvestrant (illustrativ)
+      en: RCTs for an indirect comparison via fulvestrant (illustrative)
+    mode: M2
+    mode_rationale:
+      de: Die Suche nach Brückenstudien mit Fulvestrant ergibt mehrere tausend Treffer. Eine Person
+        screent jeden Datensatz, das KI-Modell ersetzt die zweite Person; jede Abweichung geht in die
+        Adjudikation, und 10 % der Ausschlüsse prüft eine zweite Person.
+    validation_pack: kittum-validation-pack/2026-10
+    scopes:
+      - a1
+      - a2
+    audit:
+      sentinel_percent: "2"
+      random_audit_percent: "10"
+      census_of_disagreements: true
+    freshness:
+      max_age_months: 3
+      deadline: 2024-10-01
+    source_plan:
+      sources:
+        - id: medline
+          kind: bibliographic
+          name: MEDLINE
+          platform: PubMed
+          study_filter: Wong 2006, RCT-Filter "minimizing difference between sensitivity and specificity"
+        - id: embase
+          kind: bibliographic
+          name: Embase
+          platform: embase.com
+        - id: central
+          kind: bibliographic
+          name: Cochrane Central Register of Controlled Trials
+          platform: Cochrane Library (Wiley)
+        - id: clinicaltrials_gov
+          kind: registry
+          name: ClinicalTrials.gov
+        - id: eu_ctr
+          kind: registry
+          name: EU Clinical Trials Register
+        - id: ctis
+          kind: registry
+          name: Clinical Trials Information System
+        - id: ema_clinical_data
+          kind: registry
+          name: EMA Clinical Data
+        - id: gba_website
+          kind: website
+          name: Internetseite des G-BA
+    criteria:
+      - id: IC-E1
+        slot: population
+        text:
+          de: Erwachsene mit Hormonrezeptor-positivem, HER2-negativem, lokal fortgeschrittenem oder
+            metastasiertem Mammakarzinom ohne Vorbehandlung im fortgeschrittenen Stadium, mit Rezidiv
+            während oder nach (neo-)adjuvanter endokriner Therapie.
+          en:
+            Adults with hormone receptor-positive, HER2-negative, locally advanced or metastatic breast
+            cancer without prior treatment in the advanced setting, recurring during or after (neo)adjuvant
+            endocrine therapy.
+        decidable_at:
+          - title_abstract
+          - full_text
+        applies_to:
+          - IC
+      - id: IC-E2
+        slot: intervention
+        text:
+          de: Ein Studienarm erhält Fulvestrant als Monotherapie (Brückenkomparator).
+          en: One arm receives fulvestrant monotherapy (the bridge comparator).
+        decidable_at:
+          - title_abstract
+          - full_text
+        applies_to:
+          - IC
+        keywords:
+          - fulvestrant
+      - id: IC-E3-a1
+        slot: comparator
+        text:
+          de: Der andere Studienarm ist eine Option der zVT für Frauen (Teilpopulation a1).
+          en: The other arm is a zVT option for women (Teilpopulation a1).
+        decidable_at:
+          - full_text
+        applies_to:
+          - a1
+      - id: IC-E3-a2
+        slot: comparator
+        text:
+          de: Der andere Studienarm ist Tamoxifen oder Palbociclib mit einem nicht-steroidalen Aromatasehemmer.
+          en: The other arm is tamoxifen, or palbociclib with a non-steroidal aromatase inhibitor.
+        decidable_at:
+          - full_text
+        applies_to:
+          - a2
+      - id: IC-E5
+        slot: study_type
+        text:
+          de: Randomisierte kontrollierte Studie (RCT).
+          en: Randomized controlled trial.
+        decidable_at:
+          - title_abstract
+          - full_text
+        applies_to:
+          - IC
+        keywords:
+          - single-arm
+          - single arm
+          - non-randomized
+          - non-randomised
+          - retrospective
+          - review
+      - id: IC-E9
+        slot: other
+        polarity: exclude
+        text:
+          de: Nur Abstract, Kongressbeitrag oder narrative Sekundärpublikation.
+          en: Abstract only, congress contribution, or narrative secondary publication.
+        decidable_at:
+          - title_abstract
+          - full_text
+        applies_to:
+          - IC
