@@ -9,12 +9,20 @@ from pydantic import Field, model_validator
 
 from janus.comparison.models import EvidenceLocation, FieldLocator, StrictModel, ValueRule
 
+# What tables print for a value that was not reported, does not apply, or was not estimable.
+# Matched against the whole value after case folding.
+DEFAULT_NOT_REPORTED = ("-", "\u2013", "\u2014", "NA", "N/A", "NR", "NE", "not reported")
+
 
 class Scalar(ValueRule):
     decimal_separator: Literal[".", ","] = "."
     group_separator: Literal[".", ",", " "] | None = None
     strip_prefix: str = ""
     strip_suffix: str = ""
+    # Values that mean "not reported" and yield a missing field. None uses the defaults above
+    # for numbers and compound cells and none for other types; an empty list reads every
+    # value as printed.
+    not_reported: list[str] | None = None
 
     @model_validator(mode="after")
     def distinct_separators(self) -> Scalar:

@@ -5,27 +5,60 @@ from datetime import date
 from decimal import Decimal
 
 from janus.comparison.models import ValueType
-from janus.extraction.models import Scalar
+from janus.extraction.models import DEFAULT_NOT_REPORTED, Scalar
+
+_NUMERIC = frozenset({ValueType.INTEGER, ValueType.DECIMAL, ValueType.PERCENTAGE})
+# An estimator or count label printed in front of a number: "RR:1.124 (0.978, 1.290)",
+# "N = 355", "MD=-0.4". Only these labels, followed by a number, are removed; any other prefix
+# (a unit, "kg:12") needs strip_prefix.
+_VALUE_LABEL = re.compile(r"^(?:RR|OR|HR|MD|SMD|RD|IRR|N|n|P|p)\s*[:=]\s*(?=[-+]?\.?\d)")
+
+
+class NotReported(ValueError):
+    """The document prints no value: a not-reported mark, or a compound cell without the
+    declared component. Extraction reports the field as missing rather than invalid."""
+
+
+def _fold(text: str) -> str:
+    return " ".join(text.casefold().split())
 
 
 def parse_value(raw: str, rule: Scalar) -> str | int | bool:
     # Reuse compound syntax recognition without adding comparison behavior.
-    from janus.comparison.extractor import extract_component
+    from janus.comparison.extractor import MINUS_SIGNS, match_component
 
-    if rule.source_shape is not None:
-        component, error = extract_component(rule, raw)
-        if error or component is None:
-            raise ValueError(error)
-        raw = component
     text = raw.strip()
-    if rule.strip_prefix:
-        if not text.startswith(rule.strip_prefix):
-            raise ValueError(f"Expected prefix {rule.strip_prefix!r}.")
-        text = text[len(rule.strip_prefix) :].strip()
-    if rule.strip_suffix:
-        if not text.endswith(rule.strip_suffix):
-            raise ValueError(f"Expected suffix {rule.strip_suffix!r}.")
-        text = text[: -len(rule.strip_suffix)].strip()
+    numeric = rule.type in _NUMERIC or rule.source_shape is not None
+    # By default only numbers have not-reported marks: "NA" or "NE" can be a text value.
+    default_marks = DEFAULT_NOT_REPORTED if numeric else ()
+    marks = default_marks if rule.not_reported is None else rule.not_reported
+    if text and _fold(text) in {_fold(mark) for mark in marks}:
+        raise NotReported(f"The document prints {text!r}, which marks the value as not reported.")
+    if numeric:
+        text = text.translate(MINUS_SIGNS)
+    prefix, suffix = rule.strip_prefix, rule.strip_suffix
+    if rule.source_shape is not None:
+        # Affixes around the whole cell ("RR:1.124 (0.978, 1.290)") go before the shape match;
+        # otherwise they belong to the component, as before.
+        if prefix and text.startswith(prefix):
+            text, prefix = text[len(prefix) :].strip(), ""
+        if suffix and text.endswith(suffix):
+            text, suffix = text[: -len(suffix)].strip(), ""
+    if numeric and not prefix:
+        text = _VALUE_LABEL.sub("", text, count=1)
+    if rule.source_shape is not None:
+        component, error, absent = match_component(rule, text)
+        if component is None:
+            raise (NotReported if absent else ValueError)(error)
+        text = component.strip()
+    if prefix:
+        if not text.startswith(prefix):
+            raise ValueError(f"Expected prefix {prefix!r}.")
+        text = text[len(prefix) :].strip()
+    if suffix:
+        if not text.endswith(suffix):
+            raise ValueError(f"Expected suffix {suffix!r}.")
+        text = text[: -len(suffix)].strip()
     if rule.type is ValueType.TEXT:
         return text
     if rule.type is ValueType.BOOLEAN:

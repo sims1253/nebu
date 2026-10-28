@@ -32,7 +32,7 @@ T = TypeVar("T", bound=BaseModel)
 ARTIFACT_SCHEMA_VERSION = "2"
 # Bump when reader/extractor behavior or their dependency configuration changes.
 # One revision invalidates both stages because extraction depends on evidence.
-MACHINE_CACHE_REVISION = "1"
+MACHINE_CACHE_REVISION = "2"
 
 
 class ArtifactVersionError(ValueError):

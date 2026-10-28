@@ -100,14 +100,15 @@ For a cell containing several numbers, set both `value.source_shape` and `value.
 Choose the shape by the printed format, then declare one field per required component.
 Without these keys, the operator receives the whole cell.
 
-| Shape                     | Printed form                                                          | Components                                                                |
-| ------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `count_percentage`        | `12 (34%)`, with optional `%`                                         | `count`, `percentage`                                                     |
-| `mean_standard_deviation` | `5.2 (0.8)`, optionally with `[4.0, 6.4]`                             | `mean`, `standard_deviation`, `p_value`, `bayes_factor`                   |
-| `range`                   | `10-20`, also accepting en/em dashes                                  | `minimum`, `maximum`                                                      |
-| `estimate_interval`       | `0.261 (0.025) [0.213, 0.310]`, `0.26 [0.22, 0.31]`, or `50 (45, 55)` | `estimate`, `standard_error`, `lower`, `upper`, `p_value`, `bayes_factor` |
+| Shape                     | Printed form                                                                 | Components                                                                |
+| ------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `count_percentage`        | `12 (34%)`, with optional `%`; a bare integer such as `0` gives only `count` | `count`, `percentage`                                                     |
+| `mean_standard_deviation` | `5.2 (0.8)`, optionally with `[4.0, 6.4]`                                    | `mean`, `standard_deviation`, `p_value`, `bayes_factor`                   |
+| `range`                   | `10-20`, also accepting en/em dashes                                         | `minimum`, `maximum`                                                      |
+| `estimate_interval`       | `0.261 (0.025) [0.213, 0.310]`, `0.26 [0.22, 0.31]`, or `50 (45, 55)`        | `estimate`, `standard_error`, `lower`, `upper`, `p_value`, `bayes_factor` |
 
-Parenthesized intervals accept commas, semicolons, or dashes. Numbers accept signs and either
+Parenthesized intervals accept commas, semicolons, or dashes. Numbers accept signs, including the
+typeset minus `−` (U+2212, U+FE63, U+FF0D), and either
 `.` or `,` as the decimal separator. A space after the separator, such as `0. 261`, is tolerated.
 `standard_error` requires the printed error before the interval. A bare interval has only the
 estimate and bounds. A shape mismatch or absent requested component produces `not_extracted`.

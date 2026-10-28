@@ -16,7 +16,7 @@ from typing import Any
 
 from rapidfuzz import fuzz
 
-from janus.comparison.content import BoundingBox, PageContent
+from janus.comparison.content import BoundingBox, PageContent, TableCell, TableStructure
 from janus.comparison.models import (
     ComparisonPlan,
     CompoundShape,
@@ -48,6 +48,9 @@ class _Candidate:
     column_context: str | None
     row_context: str | None
     kind: str  # "table" or "text"
+    # The column-context words the table's inferred structure supplied (an inherited spanning
+    # header, continuation header rows), as opposed to the column's own row-0 cell.
+    inferred_column_context: str | None = None
 
 
 def _bbox(value: Any) -> dict[str, float] | None:
@@ -56,7 +59,127 @@ def _bbox(value: Any) -> dict[str, float] | None:
     return {key: float(getattr(value, key)) for key in ("x", "y", "width", "height")}
 
 
-def _table_candidates(evidence: DocumentEvidence) -> list[_Candidate]:
+# A per-group N printed in a header or group row: "N = 355", "n=51".
+_GROUP_N = re.compile(r"^[Nn]\s*=\s*\d[\d,]*$")
+# A year that labels a column under a spanning header ("2023 | 2024" under "Revenue").
+_YEAR = re.compile(r"^(?:19\d\d|20\d\d|2100)$")
+# Values that carry letters: an amount with an ISO 4217 code ("USD 10"), or a date with a month
+# name ("5 Jan 2024"). A currency symbol carries no letters, so "$10.00" is a value already.
+_CURRENCY_CODES = (
+    "USD|EUR|GBP|CHF|JPY|CNY|AUD|CAD|NZD|SEK|NOK|DKK|PLN|CZK|HUF|INR|BRL|ZAR|MXN|KRW|SGD|HKD"
+)
+_CODED_AMOUNT = re.compile(
+    rf"^(?:(?:{_CURRENCY_CODES})\s*[-+]?\d[\d.,\s]*|[-+]?\d[\d.,\s]*\s*(?:{_CURRENCY_CODES}))$"
+)
+_MONTH = (
+    r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?"
+    r"|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?"
+)
+_NAMED_DATE = re.compile(
+    rf"^(?:\d{{1,2}}\.?\s+{_MONTH},?\s+\d{{2,4}}|{_MONTH}\s+(?:\d{{1,2}},?\s+)?\d{{4}})$",
+    re.IGNORECASE,
+)
+
+
+def _prints_value(text: str) -> bool:
+    """Whether a cell prints a value rather than a name: a number, an amount, a percentage,
+    or a date. Digits beside words name things ("Dose 10 mg", "Week 12")."""
+    if not any(c.isdigit() for c in text):
+        return False
+    if not any(c.isalpha() for c in text):
+        return True
+    return bool(_CODED_AMOUNT.match(text) or _NAMED_DATE.match(text))
+
+
+def _spanned_columns(
+    cells: dict[tuple[int, int], TableCell], row: int, columns: list[int]
+) -> set[int]:
+    """The columns a spanning header cell covers in `row`: the cell itself and the empty,
+    boxless positions to its right."""
+    covered: set[int] = set()
+    start: int | None = None
+    for column in columns:
+        cell = cells.get((row, column))
+        text = cell.text.strip() if cell is not None else ""
+        if not column:
+            start = None
+        elif text:
+            start = column
+        elif start is not None and (cell is None or cell.bbox is None):
+            covered.update({start, column})
+        else:
+            start = None
+    return covered
+
+
+def _header_rows(
+    cells: dict[tuple[int, int], TableCell], rows: list[int], columns: list[int]
+) -> list[int]:
+    """Row 0 and the rows that continue the header below it.
+
+    A continuation row has an empty first cell, and its other cells hold names or group
+    sizes: the leaf headers under a spanning one ("Control | Dose 10 mg" under "Primary
+    analysis set"), or the per-arm "N = 355" printed under "Vitamin C group". A cell that
+    prints a value (a number, an amount, a percentage, a date) makes the row a data row,
+    unless every cell is a year in the columns a spanning header covers ("2023 | 2024"
+    under "Revenue")."""
+    header = [rows[0]]
+    for row in rows[1:]:
+        label = cells.get((row, 0))
+        texts = {
+            column: cell.text.strip()
+            for column in columns
+            if column and (cell := cells.get((row, column))) is not None and cell.text.strip()
+        }
+        if (label is not None and label.text.strip()) or not texts:
+            break
+        names = not any(_prints_value(text) for text in texts.values())
+        years = all(_YEAR.match(text) for text in texts.values()) and set(texts) <= (
+            _spanned_columns(cells, header[-1], columns)
+        )
+        if not (names or years):
+            break
+        header.append(row)
+    return header
+
+
+def _header_paths(
+    cells: dict[tuple[int, int], TableCell], header: list[int], columns: list[int]
+) -> tuple[dict[int, list[str]], dict[int, list[str]]]:
+    """Each column's header names from top to bottom ("Primary analysis set", "Control"),
+    and the part of them the structure supplied rather than the column's own row-0 cell.
+
+    Above the leaf row, an empty cell the detector reports without a box is a spanned
+    position: it takes the name of the spanning cell to its left. Group sizes ("N = 355")
+    are values, not names, and stay out of the path."""
+    paths: dict[int, list[str]] = {column: [] for column in columns}
+    structural: dict[int, list[str]] = {column: [] for column in columns}
+    for depth, row in enumerate(header):
+        spanning = ""
+        for column in columns:
+            cell = cells.get((row, column))
+            text = cell.text.strip() if cell is not None else ""
+            if column == 0:
+                spanning = ""
+            elif text:
+                spanning = "" if _GROUP_N.match(text) else text
+            elif depth < len(header) - 1 and (cell is None or cell.bbox is None):
+                text = spanning
+                if text:
+                    structural[column].append(text)
+            if text and not _GROUP_N.match(text):
+                paths[column].append(text)
+                if depth and (cell is not None and cell.text.strip()):
+                    structural[column].append(text)
+    return paths, structural
+
+
+def _table_candidates(evidence: DocumentEvidence, *, inferred: bool) -> list[_Candidate]:
+    """Label/value cells of every table.
+
+    Without `inferred`, the reading Janus has always made: row 0 is the column context and
+    sections come only from the reader. With it, column context is the whole header path,
+    group sizes in header rows are candidates, and "N = x" rows head sections."""
     candidates: list[_Candidate] = []
     for raw_page in evidence.pages:
         page = (
@@ -66,12 +189,77 @@ def _table_candidates(evidence: DocumentEvidence) -> list[_Candidate]:
             cells = {(cell.row, cell.column): cell for cell in table.cells}
             rows = sorted({cell.row for cell in table.cells})
             columns = sorted({cell.column for cell in table.cells})
-            headers = {
-                column: cells[(0, column)].text.strip()
-                for column in columns
-                if table.header_row and (0, column) in cells
-            }
+            if inferred:
+                header = _header_rows(cells, rows, columns) if table.header_row and rows else []
+                paths, structural = _header_paths(cells, header, columns)
+                headers = {column: " ".join(paths[column]) for column in columns}
+                supplied = {column: " ".join(structural[column]) for column in columns}
+            else:
+                header = []
+                headers = {
+                    column: cells[(0, column)].text.strip()
+                    for column in columns
+                    if table.header_row and (0, column) in cells
+                }
+                supplied = {}
+
+            def candidate(
+                label: str,
+                value_cell: TableCell,
+                confidence: float,
+                row_context: str | None,
+                table_index: int = table_index,
+                table: TableStructure = table,
+                page: PageContent = page,
+                headers: dict[int, str] = headers,
+                supplied: dict[int, str] = supplied,
+            ) -> _Candidate:
+                return _Candidate(
+                    label=label,
+                    value=value_cell.text.strip(),
+                    page=(
+                        value_cell.bbox.page if value_cell.bbox is not None else page.page_number
+                    ),
+                    table_index=table_index,
+                    row=value_cell.row,
+                    column=value_cell.column,
+                    confidence=confidence,
+                    cell_bbox=_bbox(value_cell.bbox),
+                    table_bbox=_bbox(table.bbox),
+                    column_context=headers.get(value_cell.column) or None,
+                    row_context=row_context,
+                    kind="table",
+                    inferred_column_context=supplied.get(value_cell.column) or None,
+                )
+
+            # A header row below row 0 has no row label; its group sizes ("N = 355") take the
+            # names above them in their column as their label.
+            for depth, row in enumerate(header[1:], start=1):
+                for column in columns:
+                    value_cell = cells.get((row, column))
+                    if not column or value_cell is None:
+                        continue
+                    if not _GROUP_N.match(value_cell.text.strip()):
+                        continue
+                    above = [
+                        text
+                        for r in header[:depth]
+                        if (cell := cells.get((r, column))) is not None
+                        and (text := cell.text.strip())
+                        and not _GROUP_N.match(text)
+                    ]
+                    if above:
+                        candidates.append(
+                            candidate(" ".join(above), value_cell, value_cell.confidence, None)
+                        )
+            # A body row whose values are all group sizes ("Primary analysis set | N = 51 |
+            # N = 52") heads the rows below it, up to the next such row; a row with a label
+            # and no values inside it ("Women") narrows it.
+            group: str | None = None
+            subgroup: str | None = None
             for row in rows:
+                if row in header[1:]:
+                    continue
                 # Row 0 supplies column_context, but it is also a data
                 # candidate: headerless tables (invoices, statements) put
                 # real values in their first row, and a genuine header row
@@ -80,32 +268,36 @@ def _table_candidates(evidence: DocumentEvidence) -> list[_Candidate]:
                 label_cell = cells.get((row, 0))
                 if label_cell is None or not label_cell.text.strip():
                     continue
-                for column in columns:
-                    if column == 0:
-                        continue
-                    value_cell = cells.get((row, column))
-                    if value_cell is None or not value_cell.text.strip():
-                        continue
+                values = [
+                    value_cell
+                    for column in columns
+                    if column
+                    and (value_cell := cells.get((row, column))) is not None
+                    and value_cell.text.strip()
+                ]
+                # A section the reader stamped is a boundary of its own: it ends a different
+                # inferred group, and the two are never merged.
+                section = label_cell.section
+                if section and group and _folded(section) != _folded(group):
+                    group = subgroup = None
+                context = section if section or not inferred else None
+                if not section and inferred:
+                    context = " / ".join(part for part in (group, subgroup) if part) or None
+                for value_cell in values:
                     candidates.append(
-                        _Candidate(
-                            label=label_cell.text.strip(),
-                            value=value_cell.text.strip(),
-                            page=(
-                                value_cell.bbox.page
-                                if value_cell.bbox is not None
-                                else page.page_number
-                            ),
-                            table_index=table_index,
-                            row=row,
-                            column=column,
-                            confidence=min(label_cell.confidence, value_cell.confidence),
-                            cell_bbox=_bbox(value_cell.bbox),
-                            table_bbox=_bbox(table.bbox),
-                            column_context=headers.get(column) or None,
-                            row_context=label_cell.section,
-                            kind="table",
+                        candidate(
+                            label_cell.text.strip(),
+                            value_cell,
+                            min(label_cell.confidence, value_cell.confidence),
+                            context,
                         )
                     )
+                if not inferred:
+                    continue
+                if row and values and all(_GROUP_N.match(c.text.strip()) for c in values):
+                    group, subgroup = label_cell.text.strip(), None
+                elif not values and group:
+                    subgroup = label_cell.text.strip()
     return candidates
 
 
@@ -225,6 +417,8 @@ def _text_candidates(evidence: DocumentEvidence) -> list[_Candidate]:
         paired: set[int] = {i for i, line in enumerate(lines) if _split_label_value(line.text)}
         for row, line in enumerate(lines):
             pair = _split_label_value(line.text)
+            # The line that prints the value: this one, or the one beside a label line.
+            value_row = row
             if pair is not None:
                 label, value = pair
                 cell_bbox, confidence = line.bbox, line.confidence
@@ -238,7 +432,7 @@ def _text_candidates(evidence: DocumentEvidence) -> list[_Candidate]:
                 if not _label_like(label):
                     continue
                 values = [
-                    other
+                    (index, other)
                     for index, other in enumerate(lines)
                     if index != row
                     and index not in paired
@@ -253,7 +447,9 @@ def _text_candidates(evidence: DocumentEvidence) -> list[_Candidate]:
                 ]
                 if not values:
                     continue
-                value_line = min(values, key=lambda other: other.bbox.x if other.bbox else 0)
+                value_row, value_line = min(
+                    values, key=lambda item: item[1].bbox.x if item[1].bbox else 0
+                )
                 label, value, cell_bbox, confidence = (
                     label,
                     value_line.text,
@@ -265,10 +461,12 @@ def _text_candidates(evidence: DocumentEvidence) -> list[_Candidate]:
                     label=label,
                     value=value,
                     page=cell_bbox.page if cell_bbox is not None else page.page_number,
-                    # A text line is no table: row is the line's ordinal and
-                    # column 1 the value side, column 0 being the label.
+                    # A text line is no table: row is the ordinal of the line
+                    # that prints the value (with raw_text and cell_bbox, so
+                    # all three name the same line), column 1 the value side,
+                    # column 0 being the label.
                     table_index=0,
-                    row=row,
+                    row=value_row,
                     column=1,
                     confidence=confidence,
                     cell_bbox=_bbox(cell_bbox),
@@ -699,6 +897,10 @@ def _folded(value: str) -> str:
     return " ".join(value.casefold().split())
 
 
+# Typeset minus signs (U+2212, and its small and fullwidth forms). No locale
+# uses them for anything but a sign, so number matching reads them as "-".
+# The en and em dashes stay out: in "0.98\u20131.29" they are range separators.
+MINUS_SIGNS = str.maketrans({"\u2212": "-", "\ufe63": "-", "\uff0d": "-"})
 _NUMBER = r"[-+]?\d+(?:[.,]\d+)?"
 # A compared number inside a trailing annotation; unlike _NUMBER it also
 # accepts a bare decimal separator (".025" in "P=.025").
@@ -728,6 +930,8 @@ _DECIMAL_GAP = re.compile(r"(?<=[.,])\s+(?=\d)")
 _COMPOUND_PATTERNS: dict[CompoundShape, tuple[tuple[re.Pattern[str], tuple[str, ...]], ...]] = {
     CompoundShape.COUNT_PERCENTAGE: (
         (re.compile(rf"^\s*({_NUMBER})\s*\(\s*({_NUMBER})\s*%?\s*\)\s*$"), ("count", "percentage")),
+        # a count printed without its percentage, as a zero often is: 0
+        (re.compile(r"^\s*(\d+)\s*$"), ("count",)),
     ),
     CompoundShape.MEAN_STANDARD_DEVIATION: (
         # mean with its error, as in: 0.261 (0.025)
@@ -875,20 +1079,30 @@ def _rival_fields(rival: _Rival) -> dict[str, Any]:
 
 
 def extract_component(value_rule: ValueRule, raw: str) -> tuple[str | None, str | None]:
+    component, error, _absent = match_component(value_rule, raw)
+    return component, error
+
+
+def match_component(value_rule: ValueRule, raw: str) -> tuple[str | None, str | None, bool]:
+    """The declared component of a compound cell, or why there is none.
+
+    The third item is True when the cell has the declared shape but does not
+    print the component (a bare count has no percentage): the value is absent
+    from the document, not malformed."""
     shape = value_rule.source_shape
     if shape is None:
-        return raw, None
-    text = _DECIMAL_GAP.sub("", raw)
+        return raw, None, False
+    text = _DECIMAL_GAP.sub("", raw).translate(MINUS_SIGNS)
     component = value_rule.component or ""
     if component in _ANNOTATION_COMPONENTS:
         # An annotation component rides a cell that still matches the declared
         # shape; the shape patterns tolerate (and skip) the annotation tail.
         if not any(pattern.match(text) for pattern, _ in _COMPOUND_PATTERNS[shape]):
-            return None, f"Value did not match the declared {shape.value} source shape"
+            return None, f"Value did not match the declared {shape.value} source shape", False
         annotation = _ANNOTATION_COMPONENTS[component].search(text)
         if annotation is None:
-            return None, f"The cell carries no {component} annotation to extract."
-        return annotation.group(1), None
+            return None, f"The cell carries no {component} annotation to extract.", True
+        return annotation.group(1), None, False
     for pattern, names in _COMPOUND_PATTERNS[shape]:
         match = pattern.match(text)
         if match is not None:
@@ -898,12 +1112,78 @@ def extract_component(value_rule: ValueRule, raw: str) -> tuple[str | None, str 
                 # The cell matched a variant of the shape that does not carry
                 # the requested component (a bare interval offers no standard
                 # error): loud, not a KeyError.
-                return None, (
-                    f"The matched {shape.value} cell carries no {component}; it offers "
-                    f"{', '.join(names)} only."
+                return (
+                    None,
+                    (
+                        f"The matched {shape.value} cell carries no {component}; it offers "
+                        f"{', '.join(names)} only."
+                    ),
+                    True,
                 )
-            return value, None
-    return None, (f"Value did not match the declared {shape.value} source shape")
+            return value, None, False
+    return None, f"Value did not match the declared {shape.value} source shape", False
+
+
+def _singular(word: str) -> str:
+    """An English plural as its singular ("controls", "weeks", "studies", "boxes"); any other
+    word unchanged. Only plurals fold: "untreated" stays apart from "treated"."""
+    if any(c.isdigit() for c in word) or len(word) < 4:
+        return word
+    if word.endswith("ies"):
+        return word[:-3] + "y"
+    if word.endswith(("ches", "shes", "sses", "xes", "zes")):
+        return word[:-2]
+    if word.endswith("s") and not word.endswith(("ss", "us", "is")):
+        return word[:-1]
+    return word
+
+
+def _words(text: str) -> list[str]:
+    """The words of a header or section as the guards compare them: case folded, punctuation
+    removed within each printed word ("Non-responder" is "nonresponder") and plurals folded. A
+    token with a digit stays as printed ("1.0" is not "10", "2023-24" not "202324")."""
+    words = (
+        raw if any(c.isdigit() for c in raw) else "".join(c for c in raw if c.isalnum())
+        for raw in text.casefold().split()
+    )
+    return [_singular(word) for word in words if word]
+
+
+def _missing_words(aliases: list[str], context: str | None) -> list[set[str]]:
+    """Per alias, the words of the alias the context does not carry."""
+    present = set(_words(context or ""))
+    return [set(_words(alias)) - present for alias in aliases]
+
+
+def _missing_column_words(field: ExtractionField, candidate: _Candidate) -> bool:
+    """Whether every requested column alias has words the candidate's column header lacks."""
+    aliases = _column_labels(field)
+    return bool(aliases) and all(_missing_words(aliases, candidate.column_context))
+
+
+def _explains_missing_columns(
+    field: ExtractionField, original: _Candidate, inferred: _Candidate
+) -> bool:
+    """Whether the inferred pick may replace the original pick of the row-0 reading: it carries
+    every word of a requested column alias, and the words the original pick lacked come from
+    the structure the inference found (a spanning header above the column, a continuation
+    header row), not merely from a longer header."""
+    aliases = _column_labels(field)
+    lacking = _missing_words(aliases, original.column_context)
+    carried = _missing_words(aliases, inferred.column_context)
+    supplied = set(_words(inferred.inferred_column_context or ""))
+    return any(not carry and lack <= supplied for lack, carry in zip(lacking, carried, strict=True))
+
+
+def _carries_sections(field: ExtractionField, candidate: _Candidate) -> bool:
+    """Whether the candidate's section is a requested section: the whole context, or one level
+    of an inferred "group / subgroup" path, equals an alias word for word."""
+    sections = field.locate.section_labels
+    if not sections:
+        return True
+    context = candidate.row_context or ""
+    levels = [context, *context.split(" / ")]
+    return any(_words(alias) == _words(level) for alias in sections for level in levels)
 
 
 _CANDIDATE_NOUN = {"table_label": "table label", "text_label": "text label"}
@@ -936,9 +1216,11 @@ class SchemaExtractor:
             if field.rows is not None:
                 # A rows field is not one static definition: generate one
                 # extraction per matching row label, in document order.
+                # Rows generators read tables as Janus always has; the inferred structure
+                # only resolves static fields.
                 if field.locate.strategy not in pools:
                     pools[field.locate.strategy] = (
-                        _table_candidates(evidence)
+                        _table_candidates(evidence, inferred=False)
                         if field.locate.strategy == "table_label"
                         else _text_candidates(evidence)
                     )
@@ -957,198 +1239,225 @@ class SchemaExtractor:
                     self._extract_text_span(field, field.locate, document_lines, table_zones)
                 )
                 continue
-            if field.locate.strategy not in pools:
-                pools[field.locate.strategy] = (
-                    _table_candidates(evidence)
-                    if field.locate.strategy == "table_label"
-                    else _text_candidates(evidence)
-                )
-            pool = pools[field.locate.strategy]
-            noun = _CANDIDATE_NOUN[field.locate.strategy]
-            ranked = sorted(
-                ((_detailed_score(field, candidate), candidate) for candidate in pool),
-                key=lambda item: item[0].final,
-                reverse=True,
-            )
-            if not ranked or ranked[0][0].final < field.locate.minimum_confidence:
-                best_breakdown = ranked[0][0] if ranked else None
-                extractions.append(
-                    FieldExtraction(
-                        field_id=field.id,
-                        field_key=field.key,
-                        section_key=field.section_key,
-                        status=ExtractionStatus.NOT_EXTRACTED,
-                        explanation=(
-                            f"No {noun} candidate met the configured confidence threshold"
-                            + (
-                                f"; best {best_breakdown.sentence(field.locate.minimum_confidence)}."
-                                if best_breakdown is not None
-                                else "."
-                            )
-                        ),
-                        **(
-                            self._score_fields(best_breakdown, field)
-                            if best_breakdown is not None
-                            else {}
-                        ),
-                    )
-                )
+            if field.locate.strategy == "text_label":
+                if "text_label" not in pools:
+                    pools["text_label"] = _text_candidates(evidence)
+                extractions.append(self._extract_static(field, pools["text_label"])[0])
                 continue
-            best_breakdown, best = ranked[0]
-            best_score = best_breakdown.final
-            agreed_tie = False
-            if len(ranked) > 1:
-                second_breakdown, second = ranked[1]
-                second_score = second_breakdown.final
-                same_score = second_score >= best_score - self.ambiguity_gap
-                distinct_location = (best.page, best.table_index, best.row, best.column) != (
-                    second.page,
-                    second.table_index,
-                    second.row,
-                    second.column,
-                )
-                # A near tie is only a real tie when the runner-up matches the
-                # requested label and column as completely as the winner. Rows
-                # that differ by one token ("H2: ..." against "H4: ...") sit
-                # inside the gap on similarity alone — and so does a subset
-                # rival, a shorter line whose tokens all sit inside the alias.
-                # The tie resolves toward whichever of the two carries the
-                # alias completely: equal scores keep document order, so the
-                # complete carrier can sit below its subset rival.
-                resolved = False
-                best_complete = _is_complete_match(field, best)
-                second_complete = _is_complete_match(field, second)
-                if same_score and distinct_location and best_complete != second_complete:
-                    resolved = True
-                    if second_complete:
-                        best_breakdown, best = second_breakdown, second
-                        best_score = best_breakdown.final
-                        second_breakdown, second = ranked[0]
-                        second_score = second_breakdown.final
-                if same_score and distinct_location and not resolved and best.kind == "text":
-                    # Running text repeats a header on every page by design.
-                    # Tied text lines that print the same value agree, so the
-                    # value is not a guess; duplicated table rows stay
-                    # ambiguous.
-                    tied = [
-                        candidate
-                        for breakdown, candidate in ranked
-                        if breakdown.final >= best_score - self.ambiguity_gap
-                    ]
-                    agreed_tie = len(tied) > 1 and all(
-                        _folded(candidate.value) == _folded(best.value) for candidate in tied
-                    )
-                    resolved = agreed_tie
-                if same_score and distinct_location and not resolved:
-                    # Name the rival, not just its score: the tied scores say
-                    # how close the race was, the identifying text and
-                    # location say which label to disambiguate against.
-                    rival = _Rival(second_breakdown, second, second.label)
-                    extractions.append(
-                        FieldExtraction(
-                            field_id=field.id,
-                            field_key=field.key,
-                            section_key=field.section_key,
-                            status=ExtractionStatus.AMBIGUOUS,
-                            confidence=best_score,
-                            explanation=(
-                                f"Multiple {_LOCATION_NOUN[field.locate.strategy]}s have equally "
-                                f"strong label evidence; best "
-                                f"{best_breakdown.sentence(field.locate.minimum_confidence)}, "
-                                f"runner-up {rival.clause()} at {second_score:.2f} inside the "
-                                f"{self.ambiguity_gap:.2f} ambiguity gap — column_labels or "
-                                "section_labels must separate them."
-                            ),
-                            **self._score_fields(best_breakdown, field, rival),
-                        )
-                    )
-                    continue
-            # A known shape (id, url, date) is part of the locate contract: a
-            # best candidate whose value breaks the shape is a wrong match,
-            # and rejecting it here is loud instead of silent.
-            if field.locate.value_pattern is not None and (
-                _compiled_value_pattern(field.locate.value_pattern).search(best.value) is None
-            ):
-                # `second` names the runner-up — after a token-set promotion it
-                # is the demoted subset rival, not the score-ranked number two.
-                rival = _Rival(second_breakdown, second, second.label) if len(ranked) > 1 else None
-                extractions.append(
-                    FieldExtraction(
-                        field_id=field.id,
-                        field_key=field.key,
-                        section_key=field.section_key,
-                        status=ExtractionStatus.NOT_EXTRACTED,
-                        raw_document_value=best.value,
-                        confidence=best_score,
-                        explanation=(
-                            f"The best {noun} candidate's value {best.value!r} does not "
-                            f"match locate.value_pattern {field.locate.value_pattern!r}; "
-                            f"{best_breakdown.sentence(field.locate.minimum_confidence)}"
-                            + (
-                                f", runner-up {rival.clause()} at {rival.breakdown.final:.2f}."
-                                if rival
-                                else "."
-                            )
-                        ),
-                        **self._score_fields(best_breakdown, field, rival),
-                    )
-                )
-                continue
-            component, component_error = extract_component(field.value, best.value)
-            if component is None:
-                extractions.append(
-                    FieldExtraction(
-                        field_id=field.id,
-                        field_key=field.key,
-                        section_key=field.section_key,
-                        status=ExtractionStatus.NOT_EXTRACTED,
-                        raw_document_value=best.value,
-                        confidence=best_score,
-                        explanation=(
-                            f"{component_error or 'The document value could not be parsed.'} "
-                            f"{best_breakdown.sentence(field.locate.minimum_confidence)}."
-                        ),
-                        **self._score_fields(best_breakdown, field),
-                    )
-                )
-                continue
-            location = EvidenceLocation(
-                page=best.page,
-                table_index=best.table_index,
-                row=best.row,
-                column=best.column,
-                raw_text=best.value,
-                cell_bbox=best.cell_bbox,
-                table_bbox=best.table_bbox,
-            )
-            explanation = (
-                f"Selected {_LOCATION_NOUN[field.locate.strategy]} using {field.locate.strategy} "
-                f"with confidence {best_score:.3f} "
-                f"({best_breakdown.sentence(field.locate.minimum_confidence)})."
-            )
-            if agreed_tie:
-                explanation += " Tied lines carried the same value."
-            extractions.append(
-                FieldExtraction(
-                    field_id=field.id,
-                    field_key=field.key,
-                    section_key=field.section_key,
-                    status=ExtractionStatus.EXTRACTED,
-                    raw_document_value=best.value,
-                    normalized_document_value=component,
-                    location=location,
-                    confidence=best_score,
-                    explanation=explanation,
-                    column_context=best.column_context,
-                    row_context=best.row_context,
-                    **self._score_fields(best_breakdown, field),
-                )
-            )
+            # First do no harm: read the table as Janus always has (row 0 as column context,
+            # sections only from the reader). Only when that reading selects nothing, or
+            # selects a cell whose header lacks the requested column words, does the inferred
+            # structure (header paths, header-row group sizes, "N = x" sections) decide.
+            if "table_label" not in pools:
+                pools["table_label"] = _table_candidates(evidence, inferred=False)
+            extraction, best = self._extract_static(field, pools["table_label"])
+            if best is None or _missing_column_words(field, best):
+                if "table_label:inferred" not in pools:
+                    pools["table_label:inferred"] = _table_candidates(evidence, inferred=True)
+                inferred, inferred_best = self._extract_static(field, pools["table_label:inferred"])
+                # An inferred pick outside a requested section never replaces anything, not
+                # even a tie: the inference may not trade the section for a column.
+                if (
+                    inferred_best is not None
+                    and _carries_sections(field, inferred_best)
+                    and (best is None or _explains_missing_columns(field, best, inferred_best))
+                ):
+                    extraction = inferred
+            extractions.append(extraction)
         return ExtractionResult(
             specification_id=plan.specification_id,
             extraction_hash=plan.extraction_hash,
             document_hash=evidence.document_hash,
             fields=extractions,
+        )
+
+    def _extract_static(
+        self, field: ExtractionField, pool: list[_Candidate]
+    ) -> tuple[FieldExtraction, _Candidate | None]:
+        """One field's extraction from a candidate pool, and the candidate it selected: None
+        when no candidate reached the threshold or the best ones tie."""
+        noun = _CANDIDATE_NOUN[field.locate.strategy]
+        # text_span fields have their own path; the other locators carry a value_pattern.
+        value_pattern = getattr(field.locate, "value_pattern", None)
+        ranked = sorted(
+            ((_detailed_score(field, candidate), candidate) for candidate in pool),
+            key=lambda item: item[0].final,
+            reverse=True,
+        )
+        if not ranked or ranked[0][0].final < field.locate.minimum_confidence:
+            best_breakdown = ranked[0][0] if ranked else None
+            return (
+                FieldExtraction(
+                    field_id=field.id,
+                    field_key=field.key,
+                    section_key=field.section_key,
+                    status=ExtractionStatus.NOT_EXTRACTED,
+                    explanation=(
+                        f"No {noun} candidate met the configured confidence threshold"
+                        + (
+                            f"; best {best_breakdown.sentence(field.locate.minimum_confidence)}."
+                            if best_breakdown is not None
+                            else "."
+                        )
+                    ),
+                    **(
+                        self._score_fields(best_breakdown, field)
+                        if best_breakdown is not None
+                        else {}
+                    ),
+                ),
+                None,
+            )
+        best_breakdown, best = ranked[0]
+        best_score = best_breakdown.final
+        agreed_tie = False
+        if len(ranked) > 1:
+            second_breakdown, second = ranked[1]
+            second_score = second_breakdown.final
+            same_score = second_score >= best_score - self.ambiguity_gap
+            distinct_location = (best.page, best.table_index, best.row, best.column) != (
+                second.page,
+                second.table_index,
+                second.row,
+                second.column,
+            )
+            # A near tie is only a real tie when the runner-up matches the
+            # requested label and column as completely as the winner. Rows
+            # that differ by one token ("H2: ..." against "H4: ...") sit
+            # inside the gap on similarity alone — and so does a subset
+            # rival, a shorter line whose tokens all sit inside the alias.
+            # The tie resolves toward whichever of the two carries the
+            # alias completely: equal scores keep document order, so the
+            # complete carrier can sit below its subset rival.
+            resolved = False
+            best_complete = _is_complete_match(field, best)
+            second_complete = _is_complete_match(field, second)
+            if same_score and distinct_location and best_complete != second_complete:
+                resolved = True
+                if second_complete:
+                    best_breakdown, best = second_breakdown, second
+                    best_score = best_breakdown.final
+                    second_breakdown, second = ranked[0]
+                    second_score = second_breakdown.final
+            if same_score and distinct_location and not resolved and best.kind == "text":
+                # Running text repeats a header on every page by design.
+                # Tied text lines that print the same value agree, so the
+                # value is not a guess; duplicated table rows stay
+                # ambiguous.
+                tied = [
+                    candidate
+                    for breakdown, candidate in ranked
+                    if breakdown.final >= best_score - self.ambiguity_gap
+                ]
+                agreed_tie = len(tied) > 1 and all(
+                    _folded(candidate.value) == _folded(best.value) for candidate in tied
+                )
+                resolved = agreed_tie
+            if same_score and distinct_location and not resolved:
+                # Name the rival, not just its score: the tied scores say
+                # how close the race was, the identifying text and
+                # location say which label to disambiguate against.
+                rival = _Rival(second_breakdown, second, second.label)
+                return (
+                    FieldExtraction(
+                        field_id=field.id,
+                        field_key=field.key,
+                        section_key=field.section_key,
+                        status=ExtractionStatus.AMBIGUOUS,
+                        confidence=best_score,
+                        explanation=(
+                            f"Multiple {_LOCATION_NOUN[field.locate.strategy]}s have equally "
+                            f"strong label evidence; best "
+                            f"{best_breakdown.sentence(field.locate.minimum_confidence)}, "
+                            f"runner-up {rival.clause()} at {second_score:.2f} inside the "
+                            f"{self.ambiguity_gap:.2f} ambiguity gap — column_labels or "
+                            "section_labels must separate them."
+                        ),
+                        **self._score_fields(best_breakdown, field, rival),
+                    ),
+                    None,
+                )
+        # A known shape (id, url, date) is part of the locate contract: a
+        # best candidate whose value breaks the shape is a wrong match,
+        # and rejecting it here is loud instead of silent.
+        if value_pattern is not None and (
+            _compiled_value_pattern(value_pattern).search(best.value) is None
+        ):
+            # `second` names the runner-up — after a token-set promotion it
+            # is the demoted subset rival, not the score-ranked number two.
+            rival = _Rival(second_breakdown, second, second.label) if len(ranked) > 1 else None
+            return (
+                FieldExtraction(
+                    field_id=field.id,
+                    field_key=field.key,
+                    section_key=field.section_key,
+                    status=ExtractionStatus.NOT_EXTRACTED,
+                    raw_document_value=best.value,
+                    confidence=best_score,
+                    explanation=(
+                        f"The best {noun} candidate's value {best.value!r} does not "
+                        f"match locate.value_pattern {value_pattern!r}; "
+                        f"{best_breakdown.sentence(field.locate.minimum_confidence)}"
+                        + (
+                            f", runner-up {rival.clause()} at {rival.breakdown.final:.2f}."
+                            if rival
+                            else "."
+                        )
+                    ),
+                    **self._score_fields(best_breakdown, field, rival),
+                ),
+                best,
+            )
+        component, component_error = extract_component(field.value, best.value)
+        if component is None:
+            return (
+                FieldExtraction(
+                    field_id=field.id,
+                    field_key=field.key,
+                    section_key=field.section_key,
+                    status=ExtractionStatus.NOT_EXTRACTED,
+                    raw_document_value=best.value,
+                    confidence=best_score,
+                    explanation=(
+                        f"{component_error or 'The document value could not be parsed.'} "
+                        f"{best_breakdown.sentence(field.locate.minimum_confidence)}."
+                    ),
+                    **self._score_fields(best_breakdown, field),
+                ),
+                best,
+            )
+        location = EvidenceLocation(
+            page=best.page,
+            table_index=best.table_index,
+            row=best.row,
+            column=best.column,
+            raw_text=best.value,
+            cell_bbox=best.cell_bbox,
+            table_bbox=best.table_bbox,
+        )
+        explanation = (
+            f"Selected {_LOCATION_NOUN[field.locate.strategy]} using {field.locate.strategy} "
+            f"with confidence {best_score:.3f} "
+            f"({best_breakdown.sentence(field.locate.minimum_confidence)})."
+        )
+        if agreed_tie:
+            explanation += " Tied lines carried the same value."
+        return (
+            FieldExtraction(
+                field_id=field.id,
+                field_key=field.key,
+                section_key=field.section_key,
+                status=ExtractionStatus.EXTRACTED,
+                raw_document_value=best.value,
+                normalized_document_value=component,
+                location=location,
+                confidence=best_score,
+                explanation=explanation,
+                column_context=best.column_context,
+                row_context=best.row_context,
+                **self._score_fields(best_breakdown, field),
+            ),
+            best,
         )
 
     def _extract_rows(

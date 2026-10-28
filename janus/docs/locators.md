@@ -45,6 +45,33 @@ the group name as section context. For example, `Group\nSub A\nSub B` becomes tw
 `Group` when the value lines align. Borderless tables rebuilt from word geometry also use
 indentation to identify parent groups. A section mismatch can lower the score by 30 percent.
 
+That reading, with row 0 as the column context and only the reader's sections, stands whenever
+it selects one cell whose header carries the requested column words. Words compare after case
+folding, removing punctuation within each word, and folding English plurals (`Controls` is
+`Control`); nothing else, so `Treated` is not `Untreated`, `Male` is not `Female`, and
+`Non-responder` is not `Responder`. A word with a digit stays as printed: `Dose 1.0` is not
+`Dose 10`. Only when the reading selects nothing, ties, or selects a
+cell whose header lacks those words does Janus infer more of the table's structure for the
+field. An inferred cell then replaces the original choice only if a spanning or continuation
+header above its column supplies the missing words, and never if its section is not a
+requested section word for word:
+
+- Rows below row 0 with an empty first cell, and only names or group sizes in their other cells,
+  continue the header. Digits beside words name things (`Dose 10 mg`, `ARM 10`, `Week 2024`); a
+  cell that prints a number, an amount (with a currency symbol or an ISO 4217 code such as
+  `USD 10`), a percentage, or a date (digits, or a month name) makes the row a data row, unless
+  every cell is a year in the columns a spanning header covers (`2023 | 2024` under `Revenue`).
+- A column's context is then its whole header path: under `Primary analysis set` spanning
+  `Control | Intervention | Total`, the first column's context is `Primary analysis set Control`.
+- A group size printed in a header row (`N = 355` under `Vitamin C group`) is a candidate whose
+  label is the header above it: locate it with `labels: ["Vitamin C group"]`.
+- A row whose values are all group sizes (`Primary analysis set | N = 51 | N = 52`) is the
+  section of the rows below it, up to the next such row or a section the reader stamped. A row
+  with a label and no values inside it narrows it (`Primary analysis set / Women`). A section the
+  reader stamped is never combined with an inferred one.
+
+Rows generators use only the first reading.
+
 Tables continued across pages can inherit the preceding header. The reader also rebuilds
 borderless tables from text alignment and word positions; these inferred cells may have no
 bounding box. Values can still compare, but missing boxes cannot support exact highlighting.
@@ -53,7 +80,9 @@ bounding box. Values can still compare, but missing boxes cannot support exact h
 
 `text_label` uses the nearest preceding heading as section context and has no column labels.
 It reads only the first value line. Wrapped values truncate, and a value below its label does
-not pair. Labels that exist only as pixels cannot match. Lower thresholds can admit unrelated
+not pair. A location's `row` is the ordinal of the line that prints the value, among the page's
+lines in reader order; when the value is a line of its own beside the label, that is the value's
+line, which `raw_text` and `cell_bbox` also describe. Labels that exist only as pixels cannot match. Lower thresholds can admit unrelated
 labels, so check the candidate's text and location before changing the threshold.
 
 ## Prose spans
