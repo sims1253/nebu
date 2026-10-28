@@ -24,7 +24,7 @@ The two-week spike in [DESIGN.md](../DESIGN.md#two-week-spike) picks from these 
 | 10 | `documents` | Types done; open |
 | 11 | `extraction` | Types done; open |
 | 12 | `appraisal` | Types done; open |
-| 13 | `stats` | Signatures done; open |
+| 13 | `stats` | Done: intervals, stopping, capture-recapture, conformal threshold, agreement |
 | 14 | `report` | Types done; open |
 | 15 | `api` | Health route done; open |
 | 16 | Workbench | Shell done; open |
@@ -251,9 +251,23 @@ Module `kittum.appraisal`. Needs: `documents`, `extraction`.
 
 Module `kittum.stats`. Needs: nothing.
 
-- Every function in the module, with scipy where it helps.
-- Acceptance: tests against published worked examples, including 10 of 10 giving a one-sided 95%
-  lower bound of 0.741 (0.692 two-sided) and the 119-record case from DESIGN.md.
+- Every function in the module, with scipy where it helps. Done.
+- `clopper_pearson` defaults to one-sided bounds, as Kittum states every bound: 10 of 10 gives
+  a lower bound of 0.741, and the two-sided 0.692 figure remains available with `sided="two"`.
+- `elusion_estimate` is a stratified Horvitz-Thompson total with simultaneous one-sided
+  Clopper-Pearson bounds (Bonferroni over strata, exact on census strata).
+- `stop_test` implements Callaghan and Müller-Hansen (2020) with the suffix-minimum p-value from
+  the reference implementation. Pass `order` for the exact reference result; without it the
+  test uses the whole sequence and is conservative.
+- `capture_recapture` uses Chapman for two sources and a Poisson log-linear model without a
+  three-way interaction for three sources.
+- `conformal_threshold` is a split-conformal order statistic with a binomial coverage guarantee;
+  `recall_needed` gives its calibration size for zero misses.
+- `cohen_kappa`, `fleiss_kappa`, and `pabak` cover two raters and three or more runs.
+- Acceptance: tests against published worked examples, including 10 of 10 giving a 0.741
+  one-sided (0.692 two-sided) lower bound, the 119-record case from DESIGN.md, the buscarpy
+  stopping reference, and seeded simulations for every interval. Done.
+- Open: the evaluation harness (WP-17) still has to pool these bounds across topics.
 
 ## WP-14 Reports
 
