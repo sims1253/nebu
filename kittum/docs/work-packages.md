@@ -165,8 +165,9 @@ Module `kittum.stats`. Needs: nothing.
 
 Module `kittum.report`. Needs: most modules.
 
-- PRISMA 2020 flow per scope, Anhang 4-A to 4-D, the Anlage II.1 tree with RIS files, the
-  §4.2.3.5 justification, the AI disclosure.
+- The core targets: PRISMA 2020 flow per scope, RIS exports, the handover bundle, and the AI
+  disclosure. Profile targets register through `report.register_target`; the `gba_amnog`
+  targets are listed in docs/profiles/gba-amnog.md.
 - Acceptance: golden files for a small fixture project.
 
 ## WP-15 API
