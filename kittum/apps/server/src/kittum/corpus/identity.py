@@ -21,6 +21,7 @@ type Link = dict[str, Any]
 """`occurrence_id`, `report_id`, `study_id`, `relation`, and `source` of one occurrence."""
 
 _REPORT_LEVEL = ("same_record", "same_report")
+_STRENGTH = {"standalone": 0, "same_study": 1, "same_report": 2, "same_record": 3}
 
 
 def merge_links(
@@ -32,6 +33,7 @@ def merge_links(
     if len(selected) < 2:
         raise ValueError("a merge needs at least two distinct occurrences")
 
+    chosen = set(selected)
     target = by_occurrence[selected[0]]
     reports = {by_occurrence[o]["report_id"] for o in selected}
     # A report belongs to one study, so merging reports also merges their studies.
@@ -45,8 +47,10 @@ def merge_links(
             new["study_id"] = target["study_id"]
         if merges_reports and row["report_id"] in reports:
             new["report_id"] = target["report_id"]
-            if row["relation"] not in _REPORT_LEVEL:
-                new["relation"] = relation
+            # The chosen occurrences take the stronger label; the rest of their groups keep a
+            # report-level label they already have.
+            if row["occurrence_id"] in chosen or row["relation"] not in _REPORT_LEVEL:
+                new["relation"] = max(row["relation"], relation, key=_STRENGTH.__getitem__)
         merged.append(new)
     return _relabel(merged)
 
@@ -56,9 +60,9 @@ def split_links(
 ) -> list[Link]:
     """Split occurrences out of their reports, or their report groups out of their studies.
 
-    A report split gives each named occurrence a new report and a new study; the other
-    occurrences keep their links. A study split gives each named occurrence's complete report
-    group a new study and keeps the report group intact.
+    A report split gives each named occurrence a new report in its current study; the other
+    occurrences keep their links. Only a study split changes study membership: it gives each
+    named occurrence's complete report group a new study and keeps the report group intact.
     """
     by_occurrence = _index(links)
     selected = set(_select(by_occurrence, occurrence_ids))
@@ -71,7 +75,6 @@ def split_links(
             new = _copy(row)
             if row["occurrence_id"] in selected:
                 new["report_id"] = new_id()
-                new["study_id"] = new_id()
             split.append(new)
         return _relabel(split)
 

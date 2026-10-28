@@ -231,7 +231,7 @@ def split(
 ) -> IdentityRevision:
     """Human split of occurrences, undoing a previous merge without losing history.
 
-    A `report` split moves each occurrence into a new report and study of its own. A `study`
+    A `report` split moves each occurrence into a new report of its current study. A `study`
     split moves the complete report group of each occurrence into a new study.
     """
     with tx.cursor() as cur:

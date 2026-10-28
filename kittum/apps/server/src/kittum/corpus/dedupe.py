@@ -78,33 +78,66 @@ def normalize_title(title: str) -> str:
     return t
 
 
-def extract_distinguishing_tokens(title: str) -> tuple[set[str], set[str]]:
-    """Numbers and acronym-number names (KEYNOTE 024, IMpower150) that tell trials apart.
+# Numbers that tell trials or reports apart: trial names and numbers, phases, follow-up lengths.
+_MEANINGFUL = (
+    ("phase", re.compile(r"\bphase\s*(?P<n>iv|v|i{1,3}|\d+)\b", re.I)),
+    ("follow-up", re.compile(r"\b(?P<n>\d+)[\s-]*(?P<w>year|yr|month|week|day)s?\b", re.I)),
+    ("follow-up", re.compile(r"\b(?P<w>year|month|week|day)s?\s+(?P<n>\d+)\b", re.I)),
+    ("trial", re.compile(r"\b(?P<w>trial|study|id)\s*(?:no\.?|number|#)?\s*(?P<n>\d+)\b", re.I)),
+    ("trial", re.compile(r"\b(?P<w>[A-Za-z]*[A-Z][A-Za-z]*[A-Z][A-Za-z]*)[\s_-]?(?P<n>\d+)\b")),
+)
+# Numbers a citation adds to a title: bracketed years, volume(issue), vol:page, page ranges.
+_CITATION = re.compile(
+    r"[(\[]\s*(?:19|20)\d{2}[a-z]?\s*[)\]]"
+    r"|\b\d+\s*\(\s*\d+(?:\s*[-\u2013]\s*\d+)?\s*\)"
+    r"|\b\d+\s*:\s*\d+"
+    r"|\b\d+\s*[-\u2013\u2014]\s*\d+\b"
+)
+_YEAR_LIKE = re.compile(r"(?:19|20)\d{2}")
 
-    Numbers cover trial numbers, phases (roman numerals too), years, and follow-up lengths.
+
+def _number(token: str) -> str:
+    token = token.lower()
+    return _ROMAN_TO_NUM.get(token) or str(int(token))
+
+
+def extract_distinguishing_tokens(title: str, year: int | None = None) -> tuple[set[str], set[str]]:
+    """Meaningful numbered tokens of a title, and its other numbers minus citation numbers.
+
+    Meaningful tokens are trial names and numbers (KEYNOTE 024, study 302), phases, and
+    follow-up lengths (5-year, week 24). Bracketed years, the record's own year, page ranges, and
+    volume or issue numbers are incidental and dropped.
     """
     text = unicodedata.normalize("NFC", title)
-    lowered = re.sub(
-        r"\bphase\s+(iv|v|i{1,3})\b",
-        lambda m: f"phase {_ROMAN_TO_NUM[m.group(1)]}",
-        text.lower(),
-    )
-    numbers = {str(int(n)) for n in re.findall(r"\d+", lowered)}
-    acronyms = {
-        f"{m.group(1).lower()} {int(m.group(2))}"
-        for m in re.finditer(r"\b([A-Za-z]{2,})[\s_-]?(\d+)\b", text)
-        if sum(c.isupper() for c in m.group(1)) >= 2
-    }
-    return numbers, acronyms
+    meaningful: set[str] = set()
+    for kind, pattern in _MEANINGFUL:
+
+        def take(m: re.Match[str], kind: str = kind) -> str:
+            word = (m.groupdict().get("w") or "").lower()
+            meaningful.add(f"{kind}:{'year' if word == 'yr' else word} {_number(m['n'])}")
+            return " "
+
+        text = pattern.sub(take, text)
+    text = _CITATION.sub(" ", text)
+    others = {str(int(n)) for n in re.findall(r"\d+", text)}
+    others.discard(str(year))
+    return meaningful, others
 
 
-def distinguishing_tokens_conflict(title_a: str, title_b: str) -> bool:
-    """Whether both titles name numbers or numbered acronyms and they differ."""
-    numbers_a, acronyms_a = extract_distinguishing_tokens(title_a)
-    numbers_b, acronyms_b = extract_distinguishing_tokens(title_b)
-    if numbers_a and numbers_b and numbers_a != numbers_b:
+def distinguishing_tokens_conflict(
+    title_a: str, title_b: str, year_a: int | None = None, year_b: int | None = None
+) -> bool:
+    """Whether the titles differ in a number that is not incidental to a citation.
+
+    Meaningful tokens must match exactly. Other numbers must match too, except a year-like
+    number only one side has.
+    """
+    meaningful_a, others_a = extract_distinguishing_tokens(title_a, year_a)
+    meaningful_b, others_b = extract_distinguishing_tokens(title_b, year_b)
+    if meaningful_a != meaningful_b:
         return True
-    return bool(acronyms_a and acronyms_b and acronyms_a != acronyms_b)
+    one_sided = {n for n in others_a ^ others_b if not _YEAR_LIKE.fullmatch(n)}
+    return bool(one_sided)
 
 
 def check_same_record(rec_a: SourceRecord, rec_b: SourceRecord) -> tuple[bool, str | None]:
@@ -126,7 +159,7 @@ def check_same_record(rec_a: SourceRecord, rec_b: SourceRecord) -> tuple[bool, s
             return True, f"exact PMID {pmid_a}"
         return False, None
 
-    if distinguishing_tokens_conflict(rec_a.title, rec_b.title):
+    if distinguishing_tokens_conflict(rec_a.title, rec_b.title, rec_a.year, rec_b.year):
         return False, None
 
     if rec_a.year is not None and rec_b.year is not None and abs(rec_a.year - rec_b.year) > 1:

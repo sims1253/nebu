@@ -236,6 +236,19 @@ def test_titles_naming_different_trials_or_follow_ups_are_not_the_same_record(
     assert check_same_record(first, reformatted)[0]
 
 
+@pytest.mark.parametrize(
+    "citation_suffix",
+    [" (2016)", " [2016]", " 1540-1550", " 375(19)"],
+)
+def test_citation_numbers_in_a_title_do_not_hide_a_true_duplicate(citation_suffix: str) -> None:
+    title = "Pembrolizumab versus chemotherapy for PD-L1-positive NSCLC: KEYNOTE 024"
+    pubmed = make_record(title=title, authors=("Reck M",), year=2016)
+    embase = make_record(title=title + citation_suffix, authors=("Reck, Martin",), year=2016)
+    assert check_same_record(pubmed, embase)[0]
+    proposals = generate_link_proposals([pubmed, embase])
+    assert [p.relation for p in proposals] == ["same_record"]
+
+
 def test_a_record_without_identifiers_never_bridges_conflicting_dois_or_pmids() -> None:
     title = "Pembrolizumab versus chemotherapy for PD-L1-positive non-small-cell lung cancer"
     doi_x = make_record(title=title, doi="10.1056/NEJMoa1606774")
@@ -372,44 +385,53 @@ def test_human_merges_and_splits_move_whole_identity_groups(pg: Tx) -> None:
         assert got.total_records_identified == 5  # every occurrence is kept
         return got.unique_records, got.studies_identified
 
-    # A and B are one record; then C joins B's study. A goes along with its report.
+    # A and B are one report; then C joins B's study. A goes along with its report.
     rev1 = do_merge(
-        corpus_rev.identity_revision_id, (a.occurrence_id, b.occurrence_id), "same_record"
+        corpus_rev.identity_revision_id, (a.occurrence_id, b.occurrence_id), "same_report"
     )
     rev2 = do_merge(rev1, (c.occurrence_id, b.occurrence_id), "same_study")
     links2 = links_of(pg, rev2)
     assert links2[a.occurrence_id]["report_id"] == links2[b.occurrence_id]["report_id"]
     assert links2[a.occurrence_id]["study_id"] == links2[c.occurrence_id]["study_id"]
     assert links2[c.occurrence_id]["relation"] == "same_study"
+    # A weaker identity never downgrades a stronger label.
+    assert links2[b.occurrence_id]["relation"] == "same_report"
     assert counts(rev2) == (4, 3)
 
-    # D is the same record as B, so it joins the whole A-B report and its study.
+    # D is the same record as B, so it joins the whole A-B report and its study. B's label is
+    # upgraded to the stronger identity; A was not part of it and keeps its own.
     rev3 = do_merge(rev2, (d.occurrence_id, b.occurrence_id), "same_record")
     links3 = links_of(pg, rev3)
     assert len({links3[o.occurrence_id]["report_id"] for o in (a, b, d)}) == 1
     assert len({links3[o.occurrence_id]["study_id"] for o in (a, b, c, d)}) == 1
-    assert {links3[o.occurrence_id]["relation"] for o in (a, b, d)} == {"same_record"}
+    assert {o.occurrence_id: links3[o.occurrence_id]["relation"] for o in (a, b, d)} == {
+        a.occurrence_id: "same_report",
+        b.occurrence_id: "same_record",
+        d.occurrence_id: "same_record",
+    }
     assert counts(rev3) == (3, 2)
 
-    # A study split moves the A-B-D report out of C's study and keeps the report whole.
-    rev4 = do_split(rev3, (a.occurrence_id,), "study")
+    # A report split takes D out of the A-B-D report into a new report of the same study.
+    rev4 = do_split(rev3, (d.occurrence_id,), "report")
     links4 = links_of(pg, rev4)
-    assert len({links4[o.occurrence_id]["report_id"] for o in (a, b, d)}) == 1
-    assert links4[a.occurrence_id]["study_id"] != links4[c.occurrence_id]["study_id"]
-    assert links4[c.occurrence_id]["study_id"] == links3[c.occurrence_id]["study_id"]
-    assert links4[c.occurrence_id]["relation"] == "standalone"
-    assert counts(rev4) == (3, 3)
-
-    # A report split takes D out on its own; A and B keep their report and study.
-    rev5 = do_split(rev4, (d.occurrence_id,), "report")
-    links5 = links_of(pg, rev5)
     for kept in (a, b, c, e):
         oid = kept.occurrence_id
-        assert links5[oid]["report_id"] == links4[oid]["report_id"]
-        assert links5[oid]["study_id"] == links4[oid]["study_id"]
-    assert links5[d.occurrence_id]["report_id"] != links4[d.occurrence_id]["report_id"]
-    assert links5[d.occurrence_id]["study_id"] != links4[d.occurrence_id]["study_id"]
-    assert counts(rev5) == (4, 4)
+        assert links4[oid]["report_id"] == links3[oid]["report_id"]
+        assert links4[oid]["study_id"] == links3[oid]["study_id"]
+    assert links4[d.occurrence_id]["report_id"] != links3[d.occurrence_id]["report_id"]
+    assert links4[d.occurrence_id]["study_id"] == links3[d.occurrence_id]["study_id"]
+    assert links4[d.occurrence_id]["relation"] == "same_study"
+    assert counts(rev4) == (4, 2)
+
+    # A study split moves the A-B report out of the study and keeps the report whole.
+    rev5 = do_split(rev4, (a.occurrence_id,), "study")
+    links5 = links_of(pg, rev5)
+    assert links5[a.occurrence_id]["report_id"] == links5[b.occurrence_id]["report_id"]
+    assert links5[a.occurrence_id]["study_id"] == links5[b.occurrence_id]["study_id"]
+    assert links5[a.occurrence_id]["study_id"] != links4[a.occurrence_id]["study_id"]
+    for kept in (c, d, e):
+        assert links5[kept.occurrence_id]["study_id"] == links4[kept.occurrence_id]["study_id"]
+    assert counts(rev5) == (4, 3)
 
     # A merge needs two distinct occurrences of the revision.
     for occurrences in [
@@ -431,7 +453,10 @@ def test_human_merges_and_splits_move_whole_identity_groups(pg: Tx) -> None:
         "corpus.split",
         "corpus.split",
     ]
-    assert ledger.events(pg, proj_id)[-1].payload["level"] == "report"
+    assert [event.payload.get("level") for event in ledger.events(pg, proj_id)[-2:]] == [
+        "report",
+        "study",
+    ]
 
 
 @pytest.mark.postgres
@@ -627,8 +652,9 @@ def test_full_corpus_flow_and_prisma_counts_against_postgres(pg: Tx) -> None:
     assert counts_wrong.duplicates_removed == 2
     assert counts_wrong.studies_identified == 3
 
-    # Now human splits them to undo the wrong merge
-    rev_split = split(
+    # Now human splits them to undo the wrong merge: a report split separates the records but
+    # keeps them in one study, and a study split then separates the trials.
+    rev_reports = split(
         pg,
         proj_id,
         rev_wrong.id,
@@ -636,6 +662,19 @@ def test_full_corpus_flow_and_prisma_counts_against_postgres(pg: Tx) -> None:
         "report",
         actor_id,
         reason="Undoing wrong merge",
+        ledger=ledger,
+    )
+    counts_reports = get_counts(pg, proj_id, rev_reports.id)
+    assert counts_reports.unique_records == 7
+    assert counts_reports.studies_identified == 3
+    rev_split = split(
+        pg,
+        proj_id,
+        rev_reports.id,
+        (t4_p3.occurrence_id,),
+        "study",
+        actor_id,
+        reason="Different trials",
         ledger=ledger,
     )
     counts_fixed = get_counts(pg, proj_id, rev_split.id)
@@ -646,7 +685,8 @@ def test_full_corpus_flow_and_prisma_counts_against_postgres(pg: Tx) -> None:
     assert counts_fixed.studies_identified == 4
 
     # History is fully preserved across the chain of revisions:
-    assert rev_split.parent_id == rev_wrong.id
+    assert rev_split.parent_id == rev_reports.id
+    assert rev_reports.parent_id == rev_wrong.id
     assert rev_wrong.parent_id == rev2.id
     assert rev2.parent_id == rev1.id
     assert rev1.parent_id == corpus_rev.identity_revision_id
@@ -697,5 +737,6 @@ def test_full_corpus_flow_and_prisma_counts_against_postgres(pg: Tx) -> None:
         "corpus.confirmed",
         "corpus.confirmed",
         "corpus.merged",
+        "corpus.split",
         "corpus.split",
     ]
