@@ -20,6 +20,7 @@ from kittum.corpus import (
     ProposalStatus,
     Relation,
     SplitLevel,
+    StaleRevision,
     confirm,
     confirm_exact,
     get_counts,
@@ -160,7 +161,8 @@ def confirm_exact_route(
     body: ConfirmExactRequest,
     ctx: Context,
 ) -> IdentityRevision:
-    """Confirm every open duplicate that shares a DOI, PMID, or PMCID; 400 when there is none."""
+    """Confirm every open duplicate that shares a DOI, PMID, or PMCID; 400 when there is none,
+    409 when the revision is no longer the newest."""
     with _errors(), ctx.db.transaction() as tx:
         require_lead(tx, project_id, body.actor_id)
         return confirm_exact(tx, project_id, body.revision_id, body.actor_id, ledger=_ledger(ctx))
@@ -224,7 +226,7 @@ def _errors() -> Generator[None]:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except NotLead as e:
         raise HTTPException(status_code=403, detail=str(e)) from e
-    except LifecycleError as e:
+    except (LifecycleError, StaleRevision) as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e

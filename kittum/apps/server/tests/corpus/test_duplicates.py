@@ -4,8 +4,10 @@ registry entry becomes a report of the study its papers name. The searches repla
 through the gateway (tests/search/record_fixtures.py, `duplicates`)."""
 
 import os
+import threading
 from collections import Counter
 from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
 import psycopg
 import pytest
@@ -21,6 +23,7 @@ from tests.search.record_fixtures import (
 
 from kittum.api import AppContext, create_app
 from kittum.app import create_project
+from kittum.corpus import StaleRevision, confirm_exact
 from kittum.db import Database
 from kittum.gateway import RecordedTransport, SourceGateway
 from kittum.ledger import PostgresLedger
@@ -131,6 +134,13 @@ def test_records_found_twice_become_one_report_and_a_registry_entry_joins_its_st
     )
     assert again.status_code == 400
     assert "no open duplicate" in again.json()["detail"]
+    # From the revision the page loaded before: refused, not applied over the newer links.
+    stale = client.post(
+        f"{base}/corpus/confirm-exact",
+        json={"revision_id": view["revision"]["id"], "actor_id": lead},
+    )
+    assert stale.status_code == 409, stale.text
+    assert "Reload" in stale.json()["detail"]
 
     revision = resp.json()["id"]
     for proposal in study_links:
@@ -227,3 +237,56 @@ def test_records_found_twice_become_one_report_and_a_registry_entry_joins_its_st
         for link in view["links"]
         if registry_record["occurrence_id"] in link["occurrence_ids"]
     ] == [["The paper reports this trial"]]
+
+
+def test_two_bulk_confirmations_at_once_confirm_each_duplicate_once(
+    api: tuple[TestClient, str, str],
+) -> None:
+    """The lead presses `a` in two tabs at once. The second waits for the first, then finds the
+    revision it read is no longer the newest: every duplicate is confirmed once, in one chain."""
+    client, project, lead = api
+    base = f"/api/projects/{project}"
+    for source, platform, strategy in SEARCHES[:2]:
+        plan = {"topic_id": "nrt", "source": source, "platform": platform, "strategy": strategy}
+        resp = client.post(f"{base}/search/run", json={"plan": plan, "actor_id": lead})
+        assert resp.status_code == 200, resp.text
+    assert client.post(f"{base}/corpus/ingest", json={"actor_id": lead}).status_code == 201
+    as_lead = {"X-Kittum-Reviewer": lead}
+    parent = client.get(f"{base}/corpus/revisions/latest", headers=as_lead).json()["revision"]
+    db = Database(os.environ["KITTUM_DATABASE_URL"], max_size=4)
+    ledger = PostgresLedger()
+    first_done = threading.Event()
+    outcomes: dict[str, object] = {}
+
+    def second() -> None:
+        try:
+            with db.transaction() as tx:
+                outcomes["second"] = confirm_exact(
+                    tx, UUID(project), UUID(parent["id"]), UUID(lead), ledger=ledger
+                )
+        except StaleRevision as e:
+            outcomes["second"] = e
+        outcomes["second_after_first"] = first_done.is_set()
+
+    with db.transaction() as tx:
+        outcomes["first"] = confirm_exact(
+            tx, UUID(project), UUID(parent["id"]), UUID(lead), ledger=ledger
+        )
+        racer = threading.Thread(target=second)
+        racer.start()
+        racer.join(timeout=1.0)  # it waits on the first, which has not committed
+        assert racer.is_alive()
+        first_done.set()
+    racer.join(timeout=30)
+    db.close()
+
+    assert isinstance(outcomes["second"], StaleRevision)
+    assert outcomes["second_after_first"] is True
+    counts = client.get(
+        f"{base}/corpus/revisions/{outcomes['first'].id}/counts"  # type: ignore[attr-defined]
+    ).json()
+    assert counts["duplicates_removed"] == 4
+    proposals = client.get(f"{base}/corpus/proposals", headers=as_lead).json()
+    assert sum(p["status"] == "confirmed" for p in proposals) == 4
+    events = client.get(f"{base}/corpus/revisions/latest", headers=as_lead).json()
+    assert events["revision"]["id"] == str(outcomes["first"].id)  # type: ignore[attr-defined]

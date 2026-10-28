@@ -5,13 +5,17 @@ from typing import Literal
 
 from pydantic import Field
 
-from kittum.core import Id, Record, new_id
+from kittum.core import Id, KittumError, Record, new_id
 from kittum.search import SourceRecord
 
 type Relation = Literal["same_record", "same_report", "same_study"]
 type LinkRelation = Literal["same_record", "same_report", "same_study", "standalone"]
 type ProposalStatus = Literal["pending", "confirmed", "rejected"]
 type SplitLevel = Literal["report", "study"]
+
+
+class StaleRevision(KittumError):
+    """A change was asked of an identity revision that is no longer the project's newest."""
 
 
 class Occurrence(Record):

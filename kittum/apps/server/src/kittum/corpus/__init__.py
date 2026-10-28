@@ -32,6 +32,7 @@ from kittum.corpus.models import (
     ProposalStatus,
     Relation,
     SplitLevel,
+    StaleRevision,
 )
 from kittum.ledger import EventDraft, Ledger
 from kittum.search import list_executions
@@ -293,20 +294,38 @@ def confirm_exact(
 ) -> IdentityRevision:
     """Confirm every open proposal of a duplicate on a report identifier (same DOI, PMID, or
     PMCID), one `corpus.confirmed` event and identity revision each, as `confirm` does. Returns
-    the newest revision. Raises `ValueError` when there is none to confirm."""
+    the newest revision. Raises `StaleRevision` when `parent_revision_id` is no longer the newest
+    revision, and `ValueError` when there is nothing to confirm.
+
+    One bulk confirmation runs at a time per project, until the caller's transaction ends: a
+    second one waits, then finds its parent stale."""
+    tx.execute(
+        "select pg_advisory_xact_lock(hashtext('corpus.confirm_exact'), hashtext(%s::text))",
+        (project_id,),
+    )
+    newest = latest_revision(tx, project_id)
+    if newest is None or newest.id != parent_revision_id:
+        raise StaleRevision(
+            "The links changed since this page loaded. Reload it and confirm the duplicates again."
+        )
     pending = [
         p
         for p in list_proposals(tx, project_id, status="pending")
         if p.exact and p.relation == "same_record"
     ]
-    if not pending:
-        raise ValueError("no open duplicate shares a DOI, PMID, or PMCID")
     revision_id = parent_revision_id
     revision: IdentityRevision | None = None
     for proposal in pending:
+        # A single confirmation may have taken it meanwhile.
+        row = tx.execute(
+            "select status from proposal where id = %s for update", (proposal.id,)
+        ).fetchone()
+        if row is None or row["status"] != "pending":
+            continue
         revision = confirm(tx, project_id, revision_id, proposal.id, confirmed_by, ledger=ledger)
         revision_id = revision.id
-    assert revision is not None
+    if revision is None:
+        raise ValueError("no open duplicate shares a DOI, PMID, or PMCID")
     return revision
 
 
@@ -724,6 +743,7 @@ __all__ = [
     "ProposalStatus",
     "Relation",
     "SplitLevel",
+    "StaleRevision",
     "confirm",
     "confirm_exact",
     "get_counts",

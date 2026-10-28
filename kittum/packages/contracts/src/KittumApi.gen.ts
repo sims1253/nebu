@@ -2316,7 +2316,8 @@ readonly "confirmCorpusProposal": {
     <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly payload: typeof ConfirmCorpusProposalRequestJson.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<ConfirmCorpusProposal200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ConfirmCorpusProposal422", ConfirmCorpusProposal422>>;
   }
   /**
-* Confirm every open duplicate that shares a DOI, PMID, or PMCID; 400 when there is none.
+* Confirm every open duplicate that shares a DOI, PMID, or PMCID; 400 when there is none,
+* 409 when the revision is no longer the newest.
 */
 readonly "confirmExactDuplicates": {
     <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly payload: typeof ConfirmExactDuplicatesRequestJson.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<ConfirmExactDuplicates200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ConfirmExactDuplicates422", ConfirmExactDuplicates422>>;

@@ -11086,7 +11086,7 @@
     },
     "/api/projects/{project_id}/corpus/confirm-exact": {
       "post": {
-        "description": "Confirm every open duplicate that shares a DOI, PMID, or PMCID; 400 when there is none.",
+        "description": "Confirm every open duplicate that shares a DOI, PMID, or PMCID; 400 when there is none,\n409 when the revision is no longer the newest.",
         "operationId": "confirmExactDuplicates",
         "parameters": [
           {
