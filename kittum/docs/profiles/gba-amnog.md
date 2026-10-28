@@ -155,6 +155,12 @@ indication, hint), not GRADE. GRADE is optional for JCA and is not modelled in t
 | `gba_amnog.justification_4235` | The §4.2.3.5 justification for the screening mode |
 | `gba_amnog.jca` | The JCA dossier sections (Implementing Regulation (EU) 2024/1381) from the same evidence base |
 
+Implemented so far (WP-14): `gba_amnog.anhang_4a`, `gba_amnog.anhang_4b`,
+`gba_amnog.anhang_4c`, `gba_amnog.anhang_4d`, `gba_amnog.justification_4235`, and
+`gba_amnog.anlage_ii_1`, as separate targets until `gba_amnog.modul4` exists. The Anlage II.1
+file names are not yet read from the document, so the tree uses a provisional layout
+(`kittum.profiles.gba_amnog.reports.ANLAGE_II_1`) and says so in its `GAPS.md`.
+
 Exclusion reasons are protocol criterion IDs, so Anhang 4-C and 4-D reasons come from data instead
 of free text. Sections can reference the EU dossier, but Modul 4 tables must still be filled, so the
 Modul 4 and JCA targets render from one evidence base.
