@@ -24,12 +24,18 @@ const READINGS: Record<string, Partial<Record<Key, Reading>>> = {
     S1: met("randomised, double-blind, placebo-controlled, phase 3 study", "Randomised."),
   },
   "33798493": {
-    P1: met("locally advanced or metastatic biliary tract cancer", "Advanced biliary tract cancer."),
+    P1: met(
+      "locally advanced or metastatic biliary tract cancer",
+      "Advanced biliary tract cancer.",
+    ),
     P2: met(
       "documented radiological disease progression to first-line cisplatin and gemcitabine",
       "Progressed on first-line chemotherapy.",
     ),
-    I1: met("active symptom control (ASC) and FOLFOX or ASC alone", "FOLFOX and active symptom control."),
+    I1: met(
+      "active symptom control (ASC) and FOLFOX or ASC alone",
+      "FOLFOX and active symptom control.",
+    ),
     S1: met("randomly assigned (1:1) centrally", "Randomised 1:1."),
   },
   "20375404": {
@@ -42,8 +48,14 @@ const READINGS: Record<string, Partial<Record<Key, Reading>>> = {
   },
   "34656226": {
     P1: met("metastatic biliary tract cancer", "Metastatic biliary tract cancer."),
-    P2: met("progressed on first-line gemcitabine plus cisplatin", "Progressed on first-line therapy."),
-    I1: met("leucovorin and fluorouracil only every 2 weeks", "Fluorouracil and leucovorin control arm."),
+    P2: met(
+      "progressed on first-line gemcitabine plus cisplatin",
+      "Progressed on first-line therapy.",
+    ),
+    I1: met(
+      "leucovorin and fluorouracil only every 2 weeks",
+      "Fluorouracil and leucovorin control arm.",
+    ),
     S1: met("randomly assigned (1:1) using permuted blocks", "Randomised."),
   },
   "37075781": {
@@ -53,7 +65,10 @@ const READINGS: Record<string, Partial<Record<Key, Reading>>> = {
     ),
   },
   "36652354": {
-    S1: notMet("open-label, single-group, phase 2 study", "A single-group study has no randomised comparison."),
+    S1: notMet(
+      "open-label, single-group, phase 2 study",
+      "A single-group study has no randomised comparison.",
+    ),
   },
   "30922733": {
     P1: notMet(
@@ -62,7 +77,10 @@ const READINGS: Record<string, Partial<Record<Key, Reading>>> = {
     ),
   },
   "26615328": {
-    P1: notMet("metastatic pancreatic ductal adenocarcinoma", "Pancreatic cancer, not biliary tract cancer."),
+    P1: notMet(
+      "metastatic pancreatic ductal adenocarcinoma",
+      "Pancreatic cancer, not biliary tract cancer.",
+    ),
   },
   "40910862": {
     X1: notMet(
@@ -80,18 +98,27 @@ const READINGS: Record<string, Partial<Record<Key, Reading>>> = {
   },
   "32464280": {
     P1: met("nonresectable/metastatic biliary tract cancer", "Advanced biliary tract cancer."),
-    P2: met("progressed after gemcitabine/platinum chemotherapy", "Progressed after first-line therapy."),
+    P2: met(
+      "progressed after gemcitabine/platinum chemotherapy",
+      "Progressed after first-line therapy.",
+    ),
     I1: met("best supportive care plus either regorafenib", "Best supportive care in both arms."),
     S1: met("double-blind, placebo-controlled, randomized phase II study", "Randomised."),
   },
   "34554208": {
-    P1: met("unresectable or metastatic cholangiocarcinoma with IDH1 mutation", "Advanced cholangiocarcinoma."),
+    P1: met(
+      "unresectable or metastatic cholangiocarcinoma with IDH1 mutation",
+      "Advanced cholangiocarcinoma.",
+    ),
     P2: met("whose disease progressed with prior therapy", "Progressed after prior therapy."),
     I1: met("ivosidenib, 500 mg, once daily or matched placebo", "Ivosidenib is the intervention."),
     S1: met("randomized, double-blind, placebo-controlled, clinical phase 3 trial", "Randomised."),
   },
   "37901200": {
-    P1: notMet("Adults with sorafenib-treated advanced HCC", "Hepatocellular carcinoma, not biliary tract cancer."),
+    P1: notMet(
+      "Adults with sorafenib-treated advanced HCC",
+      "Hepatocellular carcinoma, not biliary tract cancer.",
+    ),
   },
   "41264278": {
     S1: unclear(
@@ -110,14 +137,20 @@ const READINGS: Record<string, Partial<Record<Key, Reading>>> = {
   "38870977": {
     P1: met("metastatic biliary tract cancer", "Metastatic biliary tract cancer."),
     P2: met("progression on gemcitabine-based therapy", "Progressed on first-line therapy."),
-    I1: met("fluorouracil (2400 mg/m2) plus leucovorin (400 mg/m2) every 2 weeks (control group)", "Fluorouracil control arm."),
+    I1: met(
+      "fluorouracil (2400 mg/m2) plus leucovorin (400 mg/m2) every 2 weeks (control group)",
+      "Fluorouracil control arm.",
+    ),
     S1: met("multicentre, open-label, randomised, phase 2 trial", "Randomised."),
   },
   "34973222": {
     X1: notMet("Author's reply", "A letter replying to correspondence, not a trial report."),
   },
   "38838500": {
-    S1: notMet("open-label, single-arm, phase II FIGHT-202 study", "A single-arm study has no randomised comparison."),
+    S1: notMet(
+      "open-label, single-arm, phase II FIGHT-202 study",
+      "A single-arm study has no randomised comparison.",
+    ),
   },
   "37751561": {
     S1: notMet("open-label phase II basket study", "A basket study without randomisation."),
@@ -141,7 +174,10 @@ const READINGS: Record<string, Partial<Record<Key, Reading>>> = {
     ),
   },
   "40631456": {
-    S1: notMet("open-label, single-arm, phase II trial", "A single-arm study has no randomised comparison."),
+    S1: notMet(
+      "open-label, single-arm, phase II trial",
+      "A single-arm study has no randomised comparison.",
+    ),
   },
   "38319896": {
     P2: notMet(
@@ -150,7 +186,10 @@ const READINGS: Record<string, Partial<Record<Key, Reading>>> = {
     ),
   },
   "41646284": {
-    S1: met("phase III ClarIDHy study of ivosidenib versus placebo", "A secondary analysis of a randomised trial."),
+    S1: met(
+      "phase III ClarIDHy study of ivosidenib versus placebo",
+      "A secondary analysis of a randomised trial.",
+    ),
   },
   "38353044": {
     X1: notMet(
@@ -170,10 +209,16 @@ const READINGS: Record<string, Partial<Record<Key, Reading>>> = {
 };
 
 /** The judge's verdict on every criterion of one record; unread criteria are `unclear`. */
-export const verdictsFor = (pmid: string, criterionIds: ReadonlyArray<string>): CriterionVerdict[] => {
+export const verdictsFor = (
+  pmid: string,
+  criterionIds: ReadonlyArray<string>,
+): CriterionVerdict[] => {
   const readings = READINGS[pmid] ?? {};
   const byId = new Map<string, Reading>(
-    (Object.entries(readings) as Array<[Key, Reading]>).map(([key, reading]) => [KEYS[key], reading]),
+    (Object.entries(readings) as Array<[Key, Reading]>).map(([key, reading]) => [
+      KEYS[key],
+      reading,
+    ]),
   );
   return criterionIds.map((criterion_id) => {
     const reading = byId.get(criterion_id);
