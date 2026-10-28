@@ -75,11 +75,18 @@ class Completion(Record):
     # Where the request went, for the AI disclosure: the recipe's serving and the server's base URL
     # without credentials. None when nothing was sent, as in a replay.
     serving: str | None = None
-    endpoint: str | None = None
+    endpoint: str | None = None  # "replay of <endpoint>" when replayed (kittum.models.replay)
 
 
 class LlmBackend(Protocol):
     def complete(self, request: CompletionRequest) -> Completion: ...
+
+
+class RecipeBackend(LlmBackend, Protocol):
+    """A backend that serves one recipe, as a configured endpoint or its replay does."""
+
+    @property
+    def recipe(self) -> ModelRecipe: ...
 
 
 class BackendError(KittumError):

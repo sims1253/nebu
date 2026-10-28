@@ -127,6 +127,57 @@ a server. `pnpm --dir apps/web e2e` runs the end-to-end journeys against a migra
 `apps/server/tests/enrich/fixtures/stack` (`KITTUM_OFFLINE=1` with `KITTUM_GATEWAY_RECORDINGS`),
 so nothing touches the network. `uv run python -m tests.app.record_stack` in `apps/server` records them again.
 
+## Record a live run, replay it
+
+A live run (real sources, a real model) can be captured once and replayed exactly, for a filmed
+demo or a reproducible test. Recording writes what the sources and the models answered; replaying
+answers every request from those recordings, so the run gives the same records, enrichment,
+verdicts, and ledger payloads without a network, a model server, or a key. What people do in the
+workbench is not recorded: replay the same steps.
+
+| Variable                 | What it does                                                                                                                                                                                              |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `KITTUM_GATEWAY_RECORD`  | A directory. The gateway writes every source response into it (status, `Content-Type`, body) with a `manifest.json`, the format `KITTUM_GATEWAY_RECORDINGS` reads. Live only: refused with `KITTUM_OFFLINE=1`. |
+| `KITTUM_LLM_RECORD`      | A directory, or a file ending in `.json`. Every model completion is written under its request hash, with the model identity the server reported, the serving, the endpoint, and the exact request and response bytes. |
+| `KITTUM_LLM_REPLAY`      | A recording from `KITTUM_LLM_RECORD`. Replaces every model server: each request is answered from it, and one that was never recorded fails naming its request hash. Refused with `KITTUM_LLM_RECORD`.      |
+
+Recordings hold no credentials and no personal data: request headers (where API keys travel) are
+never written, credential query parameters such as NCBI's `api_key` are dropped, and the contact
+address becomes `contact@example.invalid` in every URL and body, on recording and on lookup alike,
+so a replay finds them whatever `KITTUM_CONTACT_EMAIL` it runs with. Model keys go only in a
+request header, which no backend stores.
+
+A replay never passes itself off as a live call. The verdicts and transcripts keep the model
+identity that really answered and its serving, and their endpoint, which every verdict, ledger
+event, and AI disclosure carries, reads `replay of <recorded endpoint>`, for example `replay of
+https://api.example-provider.test/v1`.
+
+Recording uses the deployment's live rate limits but a response cache of its own process, so
+every request of the run reaches its source and is written, even one the deployment had cached.
+The demo judge (`KITTUM_JUDGE_BACKEND=demo`) is a replay already; record with a real judge.
+
+For example, the demo with a hosted judge, recorded once into `.kittum/demo-run/` and replayed in
+a fresh database:
+
+```sh
+# Record: live sources and the live model, as in "Run Kittum" above.
+export KITTUM_GATEWAY_RECORD=.kittum/demo-run/sources
+export KITTUM_LLM_RECORD=.kittum/demo-run/models
+uv run kittum demo seed --live
+uv run kittum serve & uv run kittum worker   # click through the run; enrichment is recorded too
+
+# Replay: a fresh database, no network, no key. The model comes from the recordings, so the
+# endpoints and keys stay unset; KITTUM_RECIPES_FILE and KITTUM_JUDGE_MODEL stay as they were.
+unset KITTUM_GATEWAY_RECORD KITTUM_LLM_RECORD KITTUM_LLM_ENDPOINTS KITTUM_LLM_API_KEYS
+unset EXAMPLE_PROVIDER_API_KEY
+export KITTUM_DATABASE_URL=postgresql://kittum:kittum@127.0.0.1:55432/kittum_replay  # created, migrated
+export KITTUM_OFFLINE=1
+export KITTUM_GATEWAY_RECORDINGS=.kittum/demo-run/sources
+export KITTUM_LLM_REPLAY=.kittum/demo-run/models
+uv run kittum demo seed --live
+uv run kittum serve & uv run kittum worker
+```
+
 ## Documents
 
 - [Design](DESIGN.md): the pipeline, modules, data model, audit ledger, reviewer UI, stack, and

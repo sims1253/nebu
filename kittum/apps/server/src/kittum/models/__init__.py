@@ -12,6 +12,10 @@ returns, the recipe's serving, and the endpoint. `backends_from_endpoints` build
 API's key comes from an environment variable and is never stored. A deployment adds its own
 recipes, hosted ones included, with `ModelRegistry.load(local=...)`.
 
+`RecordingBackend` records a live run's completions (`KITTUM_LLM_RECORD`) and `ReplayBackend`
+answers from them (`KITTUM_LLM_REPLAY`), keyed by `request_key`, never with a credential. A replayed
+completion keeps the recorded model identity and reports its endpoint as `replay of <endpoint>`.
+
 Owner: WP-08. `kittum.models.testing.RecordedBackend` replays stored answers for tests.
 """
 
@@ -23,6 +27,15 @@ from kittum.models.openai_compat import (
 )
 from kittum.models.reasoning import split_reasoning
 from kittum.models.registry import ModelRegistry, RecipeError
+from kittum.models.replay import (
+    REPLAY_PREFIX,
+    ArtifactStorage,
+    LlmRecordings,
+    NotReplayed,
+    RecordingBackend,
+    ReplayBackend,
+    replayed_endpoint,
+)
 from kittum.models.types import (
     ALLOWED_WEIGHTS_LICENCES,
     BackendError,
@@ -31,24 +44,33 @@ from kittum.models.types import (
     LlmBackend,
     Message,
     ModelRecipe,
+    RecipeBackend,
     request_key,
     weights_hash,
 )
 
 __all__ = [
     "ALLOWED_WEIGHTS_LICENCES",
+    "REPLAY_PREFIX",
     "ArtifactSink",
+    "ArtifactStorage",
     "BackendError",
     "Completion",
     "CompletionRequest",
     "Endpoint",
     "LlmBackend",
+    "LlmRecordings",
     "Message",
     "ModelRecipe",
     "ModelRegistry",
+    "NotReplayed",
     "OpenAICompatibleBackend",
+    "RecipeBackend",
     "RecipeError",
+    "RecordingBackend",
+    "ReplayBackend",
     "backends_from_endpoints",
+    "replayed_endpoint",
     "request_key",
     "split_reasoning",
     "weights_hash",

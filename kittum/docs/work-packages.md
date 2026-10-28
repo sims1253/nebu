@@ -848,6 +848,18 @@ Enrichment and open-access retrieval (branch `kittum/enrichment-ui`):
   limits and response cache (`SourceGateway(cache="memory")`), so recordings never reach the
   deployment's cache. The end-to-end stack points it at `tests/enrich/fixtures/stack`, recorded by
   `tests/app/record_stack.py` (no key; the CC BY PDFs are the repository's own fixtures).
+- Record and replay (README, "Record a live run, replay it"): `KITTUM_GATEWAY_RECORD` wraps the
+  live transport in `kittum.gateway.RecordingTransport`, which writes each response in the
+  `RecordedTransport` format under `recording_key` (URL and query, credential parameters dropped,
+  the contact address replaced by `CONTACT_PLACEHOLDER` on recording and lookup alike), live only
+  and with a process-local cache. `KITTUM_LLM_RECORD` wraps every backend in
+  `kittum.models.RecordingBackend` (completion, request, and raw bytes under the request hash);
+  `KITTUM_LLM_REPLAY` replaces them with `ReplayBackend`, which fails with `NotReplayed` naming the
+  hash. A replayed completion keeps the model identity and serving and reports its endpoint as
+  `replay of <endpoint>`, the one field every verdict, ledger event, and disclosure carries.
+  `tests/app/test_record_replay.py` records an enrichment and a hosted judge run and replays it
+  offline to the same rows and ledger payloads; `tests/models/test_replay.py` does the same for a
+  judge run alone, in a file and in a directory.
 - Tests: `tests/app/test_enrichment.py` drives both jobs through the worker on recorded responses
   with PubTator answering 503, then again with it back (the cache answers the rest), and an attach
   that fails once and resumes; `tests/app/test_enrichment_jobs.py` has a worker lose its lease
