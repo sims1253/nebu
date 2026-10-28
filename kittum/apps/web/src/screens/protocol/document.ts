@@ -189,8 +189,9 @@ const isObject = (v: unknown): v is Json =>
 
 /** A source from the YAML view as the form can show it: the lists and texts the schema lets a
  * protocol leave out filled in empty, everything else kept as it is. The compiler judges the
- * rest when the lead saves. Returns why not when the shape is one the form cannot show, such as
- * a list given as text or an entry without an ID. */
+ * rest when the lead saves. Returns why not when the shape is one the form cannot show: a list
+ * given as text, an entry without an ID, or a value the form reads as a string (a source's name,
+ * platform, and query, a choice, a text in one language) that is something else. */
 export const toDoc = (source: unknown): { readonly doc: Doc } | { readonly problem: string } => {
   const problems: string[] = [];
   const list = (owner: Json, key: string, at: string): Json[] => {
@@ -204,10 +205,27 @@ export const toDoc = (source: unknown): { readonly doc: Doc } | { readonly probl
       return isObject(item) ? item : {};
     });
   };
+  /** What a value that must be a string is instead, in words. */
+  const notText = (value: unknown) =>
+    isObject(value)
+      ? "must be plain text, not text per language."
+      : Array.isArray(value)
+        ? "must be text, not a list."
+        : "must be text. Put the value in quotes.";
   const text = (owner: Json, key: string, at: string) => {
     const value = owner[key] ?? {};
     if (!isObject(value)) problems.push(`${at}${key} must give the text per language, as en: ...`);
+    for (const [lang, words] of Object.entries(isObject(value) ? value : {}))
+      if (typeof words !== "string") problems.push(`${at}${key}.${lang} ${notText(words)}`);
     return isObject(value) ? value : {};
+  };
+  /** Fields the form shows or reads as plain strings: absent or null is fine, anything else not. */
+  const plain = (owner: Json, keys: ReadonlyArray<string>, at: string) => {
+    for (const key of keys) {
+      const value = owner[key];
+      if (value !== undefined && value !== null && typeof value !== "string")
+        problems.push(`${at}${key} ${notText(value)}`);
+    }
   };
   const values = (owner: Json, key: string, at: string): unknown[] => {
     const value = owner[key] ?? [];
@@ -219,12 +237,14 @@ export const toDoc = (source: unknown): { readonly doc: Doc } | { readonly probl
       problems.push(`${at} needs an id for the form to show it.`);
   };
   if (!isObject(source)) return { problem: "The protocol must be a mapping of fields." };
+  plain(source, ["version_label", "default_language"], "");
   const doc: Json = {
     ...source,
     title: text(source, "title", ""),
     questions: list(source, "questions", "").map((q, i) => {
       const at = `questions[${i}]`;
       withId(q, at);
+      if (q["outcomes"] !== undefined) values(q, "outcomes", `${at}.`);
       return {
         ...q,
         label: text(q, "label", `${at}.`),
@@ -238,21 +258,28 @@ export const toDoc = (source: unknown): { readonly doc: Doc } | { readonly probl
     }),
     outcomes: list(source, "outcomes", "").map((o, i) => {
       withId(o, `outcomes[${i}]`);
+      plain(o, ["category"], `outcomes[${i}].`);
       return { ...o, name: text(o, "name", `outcomes[${i}].`) };
     }),
     search_topics: list(source, "search_topics", "").map((t, i) => {
       const at = `search_topics[${i}]`;
       withId(t, at);
+      plain(t, ["kind", "mode"], `${at}.`);
       const plan = t["source_plan"] ?? {};
       if (!isObject(plan)) problems.push(`${at}.source_plan must be a mapping of fields.`);
       const sourcePlan = isObject(plan) ? plan : {};
       return {
         ...t,
         label: text(t, "label", `${at}.`),
-        scopes: values(t, "scopes", `${at}.`),
+        scopes: values(t, "scopes", `${at}.`).map((scope, j) => {
+          if (typeof scope !== "string" && !(isObject(scope) && typeof scope["id"] === "string"))
+            problems.push(`${at}.scopes[${j}] must be a question's id.`);
+          return scope;
+        }),
         criteria: list(t, "criteria", `${at}.`).map((c, j) => {
           const cat = `${at}.criteria[${j}]`;
           withId(c, cat);
+          plain(c, ["slot", "polarity"], `${cat}.`);
           return {
             polarity: "include",
             ...c,
@@ -264,8 +291,10 @@ export const toDoc = (source: unknown): { readonly doc: Doc } | { readonly probl
         source_plan: {
           ...sourcePlan,
           sources: list(sourcePlan, "sources", `${at}.source_plan.`).map((s, j) => {
-            withId(s, `${at}.source_plan.sources[${j}]`);
-            return { name: "", ...s };
+            const sat = `${at}.source_plan.sources[${j}]`;
+            withId(s, sat);
+            plain(s, ["kind", "name", "platform", "strategy"], `${sat}.`);
+            return { ...s, name: s["name"] ?? "" };
           }),
         },
       };

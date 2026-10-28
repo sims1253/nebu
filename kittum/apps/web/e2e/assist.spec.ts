@@ -351,6 +351,25 @@ test("a lead writes the protocol by hand in the form, counts a query, and edits 
   await test.step("YAML the form only partly understands still opens in it, and saving says what is missing", async () => {
     await yamlTab.click();
     const full = await editor.inputValue();
+    // A value the form reads as text that is something else: the YAML tab stays, and says which.
+    const refusal = page.getByRole("tablist", { name: "How to write" }).getByRole("alert");
+    for (const [yaml, says] of [
+      [
+        full.replace("platform: PubMed", "platform: 123"),
+        "search_topics[0].source_plan.sources[0].platform must be text. Put the value in quotes.",
+      ],
+      [
+        full.replace(/^( *)name: MEDLINE$/m, "$1name:\n$1  en: MEDLINE"),
+        "search_topics[0].source_plan.sources[0].name must be plain text, not text per language.",
+      ],
+    ] as const) {
+      expect(yaml).not.toBe(full);
+      await editor.fill(yaml);
+      await formTab.click();
+      await expect(refusal).toContainText(`The form cannot show this YAML. ${says}`);
+      await expect(yamlTab).toHaveAttribute("aria-selected", "true");
+      await expect(editor).toHaveValue(yaml);
+    }
     // A mapping with a title alone: the form opens with empty lists, and saving lists the rest.
     await editor.fill("title:\n  en: Only a title\n");
     await formTab.click();
