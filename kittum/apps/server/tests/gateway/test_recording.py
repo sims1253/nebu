@@ -148,8 +148,9 @@ def test_a_replay_answers_in_the_recorded_order_with_the_bytes_the_live_run_saw(
     database: Database, tmp_path: Path
 ) -> None:
     """Unpaywall answers 503 twice, so the first lookup gives up; asked again, it answers, with
-    a body that names the contact address. For another DOI the connection fails before it answers.
-    The replay gives up, fails, and answers in the same way, with the same bytes and the same hash
+    a body that names the contact address. For another DOI the connection fails, then a body
+    cannot be decoded, then the redirects never end, before it answers. The replay gives up, fails
+    each of those ways, and answers in the same way, with the same bytes and the same hash
     as the live run."""
     directory = tmp_path / "sources"
     echo = json.dumps({"doi": "10.1186/s12916-026-04943-4", "email": ALICE}).encode()
@@ -162,6 +163,8 @@ def test_a_replay_answers_in_the_recorded_order_with_the_bytes_the_live_run_saw(
             ],
             UNREACHABLE.split("?")[0]: [
                 httpx2.ConnectError(f"connection refused for {UNREACHABLE}"),
+                httpx2.DecodingError("Error -3 while decompressing data: incorrect header check"),
+                httpx2.TooManyRedirects("Exceeded maximum allowed redirects."),
                 response(200, b"{}", (("Content-Type", "application/json"),)),
             ],
         }
@@ -189,13 +192,15 @@ def test_a_replay_answers_in_the_recorded_order_with_the_bytes_the_live_run_saw(
         url, unreachable = UNPAYWALL.replace(ALICE, contact), UNREACHABLE.replace(ALICE, contact)
         with pytest.raises(SourceUnavailable):
             sources.fetch("unpaywall", HttpRequest(url=url))
-        with pytest.raises(httpx2.ConnectError):
-            sources.fetch("unpaywall", HttpRequest(url=unreachable))
+        for failure in (httpx2.ConnectError, httpx2.DecodingError, httpx2.TooManyRedirects):
+            with pytest.raises(failure) as raised:
+                sources.fetch("unpaywall", HttpRequest(url=unreachable))
+            assert type(raised.value) is failure
         assert sources.fetch("unpaywall", HttpRequest(url=unreachable)).body == b"{}"
         return sources.fetch("unpaywall", HttpRequest(url=url))
 
     answered = session(RecordingTransport(live, directory, contact_email=ALICE), ALICE)
-    assert answered.status == 200 and len(live.sent) == 5
+    assert answered.status == 200 and len(live.sent) == 7
     # A failure is recorded by its kind alone: its message quoted the address.
     assert b"alice" not in _written(directory).lower()
     # The live run gets the bytes the recording holds: the address is the placeholder.

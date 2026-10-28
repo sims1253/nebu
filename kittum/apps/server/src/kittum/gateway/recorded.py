@@ -2,10 +2,11 @@
 
 A recordings directory holds a `manifest.json` that maps each request URL to its recorded
 responses. An entry is a file name, `{"file": ..., "status": ..., "content_type": ...}`, or a list
-of those; `{"error": <kind>}` stands for a transport failure, such as httpx's `ConnectError`, and
-raises the same kind again. A single entry, as in a hand-made manifest, answers every time; a list
-holds the responses and failures in the order they came and is answered in that order, one per request, so a source that
-failed and later recovered fails and recovers again. A file name may point outside the directory
+of those; `{"error": <kind>}` stands for a failure to get a response, such as httpx's
+`ConnectError`, `DecodingError`, or `TooManyRedirects`, and raises the same kind again. A single
+entry, as in a hand-made manifest, answers every time; a list holds the responses and failures in
+the order they came and is answered in that order, one per request, so a source that failed and
+later recovered fails and recovers again. A file name may point outside the directory
 (a PDF the repository holds elsewhere). A request with nothing (left) to answer it fails as an
 unreachable source would, so a stack that serves the gateway from recordings
 (`KITTUM_GATEWAY_RECORDINGS`) never touches the network.
@@ -168,12 +169,18 @@ type _Entry = tuple[Path, int, str | None] | Exception
 
 
 def _failure(kind: str) -> Exception:
-    """The transport error a recorded failure stands for: the same httpx class, or a builtin
-    connection error, never anything that would not be raised by a transport."""
-    found = getattr(httpx2, kind, None) or getattr(builtins, kind, None)
+    """The error a recorded failure stands for: the httpx error of that name (`DecodingError`,
+    `TooManyRedirects`, the `TransportError` family, any `HTTPError` built from a message), or the
+    builtin connection error. Anything else, a kind this version does not know included, becomes
+    a `ConnectionError`, as an unreachable source would."""
     message = f"recorded failure: {kind}"
-    if isinstance(found, type) and issubclass(found, httpx2.TransportError):
-        return found(message)
+    found = getattr(httpx2, kind, None)
+    if isinstance(found, type) and issubclass(found, httpx2.HTTPError):
+        try:
+            return found(message)
+        except TypeError:  # one that needs a request and response, which no transport raises
+            return ConnectionError(message)
+    found = getattr(builtins, kind, None)
     if isinstance(found, type) and issubclass(found, OSError):
         return found(message)
     return ConnectionError(message)
