@@ -1124,22 +1124,31 @@ def match_component(value_rule: ValueRule, raw: str) -> tuple[str | None, str | 
     return None, f"Value did not match the declared {shape.value} source shape", False
 
 
+def _singular(word: str) -> str:
+    """An English plural as its singular ("controls", "weeks", "studies", "boxes"); any other
+    word unchanged. Only plurals fold: "untreated" stays apart from "treated"."""
+    if any(c.isdigit() for c in word) or len(word) < 4:
+        return word
+    if word.endswith("ies"):
+        return word[:-3] + "y"
+    if word.endswith(("ches", "shes", "sses", "xes", "zes")):
+        return word[:-2]
+    if word.endswith("s") and not word.endswith(("ss", "us", "is")):
+        return word[:-1]
+    return word
+
+
 def _words(text: str) -> list[str]:
-    return re.findall(r"[^\W_]+", text.casefold())
-
-
-def _has_word(word: str, words: list[str]) -> bool:
-    """Whether `words` carry `word` the way the label scorer sees it: case and punctuation
-    aside, close spellings ("controls", "Control") alike; numbers only as printed."""
-    if any(c.isdigit() for c in word):
-        return word in words
-    return any(fuzz.ratio(word, other) >= 80 for other in words)
+    """The words of a header or section as the guards compare them: case folded, punctuation
+    removed within each printed word ("Non-responder" is "nonresponder"), plurals folded."""
+    words = ("".join(c for c in raw if c.isalnum()) for raw in text.casefold().split())
+    return [_singular(word) for word in words if word]
 
 
 def _missing_words(aliases: list[str], context: str | None) -> list[set[str]]:
     """Per alias, the words of the alias the context does not carry."""
-    present = _words(context or "")
-    return [{w for w in _words(alias) if not _has_word(w, present)} for alias in aliases]
+    present = set(_words(context or ""))
+    return [set(_words(alias)) - present for alias in aliases]
 
 
 def _missing_column_words(field: ExtractionField, candidate: _Candidate) -> bool:
@@ -1158,17 +1167,19 @@ def _explains_missing_columns(
     aliases = _column_labels(field)
     lacking = _missing_words(aliases, original.column_context)
     carried = _missing_words(aliases, inferred.column_context)
-    supplied = _words(inferred.inferred_column_context or "")
-    return any(
-        not carry and all(_has_word(word, supplied) for word in lack)
-        for lack, carry in zip(lacking, carried, strict=True)
-    )
+    supplied = set(_words(inferred.inferred_column_context or ""))
+    return any(not carry and lack <= supplied for lack, carry in zip(lacking, carried, strict=True))
 
 
 def _carries_sections(field: ExtractionField, candidate: _Candidate) -> bool:
-    """Whether the candidate's section carries every word of a requested section alias."""
+    """Whether the candidate's section is a requested section: the whole context, or one level
+    of an inferred "group / subgroup" path, equals an alias word for word."""
     sections = field.locate.section_labels
-    return not sections or not all(_missing_words(sections, candidate.row_context))
+    if not sections:
+        return True
+    context = candidate.row_context or ""
+    levels = [context, *context.split(" / ")]
+    return any(_words(alias) == _words(level) for alias in sections for level in levels)
 
 
 _CANDIDATE_NOUN = {"table_label": "table label", "text_label": "text label"}

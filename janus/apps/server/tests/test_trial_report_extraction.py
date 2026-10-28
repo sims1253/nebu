@@ -563,6 +563,65 @@ LOOKALIKE_TABLES = [
         ("extracted", 1),
         id="a-longer-header-does-not-explain-missing-words",
     ),
+    pytest.param(
+        # "Treated" is not "Untreated": the row-0 reading's pick lacks the requested word, and
+        # the continuation header under "Cohort" supplies it.
+        [
+            ([["Outcome", "Treated"], ["Deaths", "1"]], None),
+            (
+                [["Outcome", "Cohort", ""], ["", "Treated", "Untreated"], ["Deaths", "30", "40"]],
+                None,
+            ),
+        ],
+        table(["Deaths"], column_labels=["Untreated"]),
+        ("extracted", 40),
+        id="treated-is-not-untreated",
+    ),
+    pytest.param(
+        # "Male" is not "Female": the Male pick of the row-0 reading stands.
+        [
+            (
+                [["Outcome", "Controls"], ["", "Women and men aged over 65"], ["Deaths", "1"]],
+                [None, None, "Male"],
+            ),
+            (
+                [["Outcome", "Cohort", ""], ["", "Cases", "Controls"], ["Deaths", "30", "40"]],
+                [None, None, "Female"],
+            ),
+        ],
+        table(["Deaths"], column_labels=["Cohort Controls"], section_labels=["Male"]),
+        ("extracted", 1),
+        id="male-is-not-female",
+    ),
+    pytest.param(
+        # A section is matched word for word: "Women over 65" is not "Women".
+        [
+            (
+                [["Outcome", "Controls"], ["", "Women and men aged over 65"], ["Deaths", "1"]],
+                [None, None, "Women"],
+            ),
+            (
+                [["Outcome", "Cohort", ""], ["", "Cases", "Controls"], ["Deaths", "30", "40"]],
+                [None, None, "Women over 65"],
+            ),
+        ],
+        table(["Deaths"], column_labels=["Cohort Controls"], section_labels=["Women"]),
+        ("ambiguous", None),
+        id="a-section-is-matched-word-for-word",
+    ),
+    pytest.param(
+        # "Non-responder" is one word, not "Responder": the column under "Cohort" is.
+        [
+            ([["Outcome", "Non-responder"], ["Deaths", "1"]], None),
+            (
+                [["Outcome", "Cohort", ""], ["", "Responder", "Untreated"], ["Deaths", "30", "40"]],
+                None,
+            ),
+        ],
+        table(["Deaths"], column_labels=["Responder"]),
+        ("extracted", 30),
+        id="non-responder-is-not-responder",
+    ),
 ]
 
 
@@ -574,21 +633,57 @@ def test_tables_that_only_look_like_trial_tables_keep_their_reading(tables, fiel
     assert (only.status, result.data["value"]) == expected, only.message
 
 
-def words(text: str) -> set[str]:
-    """Words as the scorer compares them: case, punctuation and a plural "s" aside."""
-    return {word.rstrip("s") for word in re.findall(r"[a-z0-9]+", text.casefold())}
+def words(text: str) -> list[str]:
+    """Words as the guards compare them: case and punctuation aside, English plurals folded,
+    anything else (a prefix, a number) as printed."""
+    out = []
+    for raw in text.casefold().split():
+        word = re.sub(r"[^a-z0-9]", "", raw)
+        if len(word) >= 4 and not re.search(r"\d", word):
+            word = re.sub(r"ies$", "y", word)
+            word = re.sub(r"(ch|sh|ss|x|z)es$", r"\1", word)
+            word = re.sub(r"(?<![su])(?<!i)s$", "", word)
+        if word:
+            out.append(word)
+    return out
+
+
+# Names that differ by a prefix or a few letters and must never be taken for each other.
+DISTINCT_NAMES = ["Male", "Female", "Treated", "Untreated", "Pre", "Post"]
+DISTINCT_NAMES += ["Responder", "Non-responder"]
+
+
+def distinct_names_evidence() -> DocumentEvidence:
+    """The distinct names as headers, continuation headers and reader sections."""
+    return evidence_with(
+        [
+            ([["Outcome", "Treated", "Pre"], ["Deaths", "1", "2"]], [None, "Male"]),
+            (
+                [
+                    ["Outcome", "Cohort", "", "", ""],
+                    ["", "Untreated", "Post", "Female", "Non-responder"],
+                    ["Deaths", "30", "40", "50", "60"],
+                ],
+                [None, None, "Female"],
+            ),
+            ([["Outcome", "Responder", "Male"], ["Deaths", "7", "8"]], [None, "Responder"]),
+        ]
+    )
 
 
 def test_inferred_structure_never_overrides_a_unique_original_reading(tmp_path, monkeypatch):
-    """First do no harm. For every row label of every table above and of the trial report,
-    alone, with each reader section, and with each row-0 header as printed, in capitals and in
-    the plural: a field that the original reading (row-0 column context, sections only from the
-    reader) resolves to one cell carrying the requested column and section words gets exactly
-    that result."""
+    """First do no harm. For every row label of every table above, of a table of names that
+    differ by a prefix or a few letters (Male and Female, Treated and Untreated, ...) and of the
+    trial report, alone, with each reader section and each such name as the section, and with
+    each row-0 header as printed, in capitals, in the plural, and each such name as the
+    column: a field that the original reading (row-0 column context, sections only from the
+    reader) resolves to one cell carrying the requested column words, in the requested
+    section, gets exactly that result."""
     from janus.comparison import extractor
 
     pdf = trial_report(tmp_path / "trial.pdf")
     documents = [evidence_with(case.values[0]) for case in LOOKALIKE_TABLES]
+    documents.append(distinct_names_evidence())
     documents.append(TextLayerDocumentReader().read(pdf, pdf.name, normalize_rotation=True))
     candidates = extractor._table_candidates
     checked = 0
@@ -598,12 +693,13 @@ def test_inferred_structure_never_overrides_a_unique_original_reading(tmp_path, 
             for table in page.tables:
                 labels = {c.text.strip() for c in table.cells if c.column == 0 and c.text.strip()}
                 headers = {c.text.strip() for c in table.cells if c.row == 0 and c.column}
-                sections = {c.section for c in table.cells if c.section}
+                sections = {c.section for c in table.cells if c.section} | set(DISTINCT_NAMES)
                 columns = [[]] + [
                     [variant]
                     for header in sorted(h for h in headers if h)
                     for variant in (header, header.upper(), f"{header}s")
                 ]
+                columns += [[name] for name in DISTINCT_NAMES]
                 for label in sorted(labels):
                     for section in [None, *sorted(sections)]:
                         for column_labels in columns:
@@ -636,9 +732,10 @@ def test_inferred_structure_never_overrides_a_unique_original_reading(tmp_path, 
             section = next(
                 (c.section or "" for c in cells if c.row == source.row and c.column == 0), ""
             )
-            if not words(" ".join(locate.get("column_labels", []))) <= words(header):
+            if not set(words(" ".join(locate.get("column_labels", [])))) <= set(words(header)):
                 continue
-            if not words(" ".join(locate.get("section_labels", []))) <= words(section):
+            requested = locate.get("section_labels")
+            if requested and words(requested[0]) != words(section):
                 continue
             assert current[path] == before, (path, locate)
             checked += 1

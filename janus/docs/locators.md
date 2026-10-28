@@ -46,12 +46,14 @@ the group name as section context. For example, `Group\nSub A\nSub B` becomes tw
 indentation to identify parent groups. A section mismatch can lower the score by 30 percent.
 
 That reading, with row 0 as the column context and only the reader's sections, stands whenever
-it selects one cell whose header carries the requested column words, compared as the scorer
-compares them (case, punctuation, and close spellings such as plurals aside; numbers as
-printed). Only when it selects nothing, ties, or selects a cell whose header lacks those words
-does Janus infer more of the table's structure for the field. An inferred cell then replaces
-the original choice only if a spanning or continuation header above its column supplies the
-missing words, and never if it lies outside a requested section:
+it selects one cell whose header carries the requested column words. Words compare after case
+folding, removing punctuation within each word, and folding English plurals (`Controls` is
+`Control`); nothing else, so `Treated` is not `Untreated`, `Male` is not `Female`, and
+`Non-responder` is not `Responder`. Only when the reading selects nothing, ties, or selects a
+cell whose header lacks those words does Janus infer more of the table's structure for the
+field. An inferred cell then replaces the original choice only if a spanning or continuation
+header above its column supplies the missing words, and never if its section is not a
+requested section word for word:
 
 - Rows below row 0 with an empty first cell, and only names or group sizes in their other cells,
   continue the header. Digits beside words name things (`Dose 10 mg`, `ARM 10`, `Week 2024`); a
