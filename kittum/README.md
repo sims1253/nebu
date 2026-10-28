@@ -72,6 +72,37 @@ project --help` lists the lifecycle steps for a review of your own: create it, a
 publish a protocol, import or run searches, ingest the corpus, attach full texts, open stages
 (`--sentinels examples/sentinels/nicotine-replacement.yaml` for the example protocol).
 
+To judge with a hosted OpenAI-compatible API instead, add it as a recipe of your own in a file
+under `.kittum/` (git ignores it), point `KITTUM_RECIPES_FILE` at it, and name the environment
+variable that holds the key in `KITTUM_LLM_API_KEYS`. Kittum sends the key as a bearer token and
+never stores it; the AI disclosure records the recipe, `serving: hosted`, and the endpoint. Which
+records may go to a hosted model is your decision. For example, in
+`apps/server/.kittum/recipes.yaml`:
+
+```yaml
+recipes:
+  - id: example-provider-model
+    family: example
+    repository: example-org/example-model # where the weights and their licence come from
+    served_name: example-model # the model name the API expects
+    revision: "2026-10"
+    weights_licence: apache-2.0 # must be on ALLOWED_WEIGHTS_LICENCES
+    licence_url: https://example.org/example-model/LICENSE
+    serving: hosted # hosted recipes pin no weight files
+    context_tokens: 131072
+    reasoning: true
+    extra_body: {"thinking": {"type": "disabled"}} # sent unchanged with every request
+```
+
+```sh
+export EXAMPLE_PROVIDER_API_KEY=...   # in your shell, not in .env
+export KITTUM_RECIPES_FILE=.kittum/recipes.yaml
+export KITTUM_LLM_ENDPOINTS=example-provider-model=https://api.example-provider.test/v1
+export KITTUM_LLM_API_KEYS=example-provider-model=EXAMPLE_PROVIDER_API_KEY
+export KITTUM_JUDGE_MODEL=example-provider-model
+uv run kittum demo seed --live
+```
+
 For development, `pnpm dev:web` serves the workbench with hot reload on port 5180 against
 `kittum serve`, and `VITE_KITTUM_WORKBENCH=mock pnpm dev:web` shows recorded example data without
 a server. `pnpm --dir apps/web e2e` runs the end-to-end journey against a migrated database in

@@ -1,4 +1,4 @@
-"""An `LlmBackend` for OpenAI-compatible servers: vLLM, Ollama, and hosted EU APIs.
+"""An `LlmBackend` for OpenAI-compatible servers: vLLM, Ollama, and hosted APIs.
 
 Every call asks for JSON Schema-constrained output through `response_format`:
 
@@ -10,7 +10,11 @@ returning the thinking in `message.reasoning` (`reasoning_content` before vLLM 0
 the same field into its `format` grammar and returns thinking in `message.reasoning`. Both read
 `seed`; Ollama maps `max_tokens` to `num_predict`. Model-specific switches, such as
 `chat_template_kwargs.enable_thinking` for vLLM or `reasoning_effort` for Ollama, come from the
-recipe's `extra_body`.
+recipe's `extra_body`, which is sent unchanged to every server, hosted ones included.
+
+A hosted API's key comes from the environment: the endpoint names the variable, and the backend
+reads it for each call and sends it as a bearer token. The key is never part of the request body,
+the stored bytes, the completion, or an error; an error body that echoes it is redacted.
 
 The exact request and response bytes go to the artifact store before anything else happens, so a
 failed or odd answer is still on record. Only transport errors are retried; an HTTP error status
@@ -18,7 +22,9 @@ or an unusable body raises `BackendError` at once.
 """
 
 import json
+import os
 from typing import TYPE_CHECKING, Any, Protocol
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx2
 import stamina
@@ -30,7 +36,6 @@ from kittum.models.types import (
     Completion,
     CompletionRequest,
     ModelRecipe,
-    check_confidentiality,
     request_key,
 )
 
@@ -58,11 +63,20 @@ class Endpoint(Protocol):
     def base_url(self) -> str: ...
 
     @property
-    def api_key(self) -> str: ...
+    def api_key_env(self) -> str | None: ...
+
+
+def public_url(url: str) -> str:
+    """`url` without user info, query, or fragment, safe to record."""
+    parts = urlsplit(url)
+    host = parts.hostname or ""
+    netloc = f"{host}:{parts.port}" if parts.port else host
+    return urlunsplit((parts.scheme, netloc, parts.path.rstrip("/"), "", ""))
 
 
 class OpenAICompatibleBackend:
-    """Serves one recipe from one server. `base_url` ends in `/v1`."""
+    """Serves one recipe from one server. `base_url` ends in `/v1`. `api_key_env` names the
+    environment variable that holds the server's API key, if it needs one."""
 
     def __init__(
         self,
@@ -70,7 +84,7 @@ class OpenAICompatibleBackend:
         base_url: str,
         store: ArtifactSink,
         *,
-        api_key: str = "unused",
+        api_key_env: str | None = None,
         client: httpx2.Client | None = None,
         timeout: float = 600.0,
         attempts: int = 3,
@@ -78,8 +92,9 @@ class OpenAICompatibleBackend:
     ) -> None:
         self.recipe = recipe
         self._url = base_url.rstrip("/") + "/chat/completions"
+        self.endpoint = public_url(base_url)
         self._store = store
-        self._headers = {"authorization": f"Bearer {api_key}", "content-type": "application/json"}
+        self._api_key_env = api_key_env
         self._client = client or httpx2.Client(timeout=timeout)
         self._attempts = attempts
         self._wait_initial = wait_initial
@@ -104,19 +119,21 @@ class OpenAICompatibleBackend:
         return body
 
     def complete(self, request: CompletionRequest) -> Completion:
-        check_confidentiality(self.recipe, request)
         if request.model_id != self.recipe.id:
             raise ValueError(f"backend serves {self.recipe.id}, not {request.model_id}")
+        headers = self._headers()
         raw_request = canonical_json(self.body(request))
         raw_request_hash = self._store.put(raw_request)
-        response = self._post(raw_request)
-        raw_response_hash = self._store.put(response.content)
+        response = self._post(raw_request, headers)
+        # A provider that echoes the key in an error body gets it redacted before anything keeps it.
+        key = headers.get("authorization", "").removeprefix("Bearer ").encode()
+        content = response.content.replace(key, b"[redacted]") if key else response.content
+        raw_response_hash = self._store.put(content)
         if response.status_code >= 400:
-            raise BackendError(
-                f"{self.recipe.id}: HTTP {response.status_code}: {response.text[:500]}"
-            )
+            text = content.decode(errors="replace")[:500]
+            raise BackendError(f"{self.recipe.id}: HTTP {response.status_code}: {text}")
         try:
-            data = json.loads(response.content)
+            data = json.loads(content)
             choice = data["choices"][0]
             message = choice["message"]
         except (ValueError, KeyError, IndexError, TypeError) as e:
@@ -131,9 +148,23 @@ class OpenAICompatibleBackend:
             raw_request_hash=raw_request_hash,
             reasoning=reasoning,
             finish_reason=choice.get("finish_reason"),
+            serving=self.recipe.serving,
+            endpoint=self.endpoint,
         )
 
-    def _post(self, raw_request: bytes) -> httpx2.Response:
+    def _headers(self) -> dict[str, str]:
+        """Read at call time, so a rotated key needs no restart."""
+        headers = {"content-type": "application/json"}
+        if self._api_key_env is not None:
+            key = os.environ.get(self._api_key_env)
+            if not key:
+                raise BackendError(
+                    f"{self.recipe.id}: the API key variable {self._api_key_env} is not set"
+                )
+            headers["authorization"] = f"Bearer {key}"
+        return headers
+
+    def _post(self, raw_request: bytes, headers: dict[str, str]) -> httpx2.Response:
         for attempt in stamina.retry_context(
             on=httpx2.TransportError,
             attempts=self._attempts,
@@ -142,7 +173,7 @@ class OpenAICompatibleBackend:
             wait_jitter=self._wait_initial,
         ):
             with attempt:
-                return self._client.post(self._url, content=raw_request, headers=self._headers)
+                return self._client.post(self._url, content=raw_request, headers=headers)
         raise AssertionError("unreachable")
 
 
@@ -163,6 +194,6 @@ def backends_from_endpoints(
                 f"endpoint {endpoint.base_url} names unknown recipe {endpoint.recipe_id!r}"
             ) from None
         backends[recipe.id] = OpenAICompatibleBackend(
-            recipe, endpoint.base_url, store, api_key=endpoint.api_key, client=client
+            recipe, endpoint.base_url, store, api_key_env=endpoint.api_key_env, client=client
         )
     return backends

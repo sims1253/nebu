@@ -11,8 +11,6 @@ from kittum.core import NotFoundError
 from kittum.models import (
     BackendError,
     CompletionRequest,
-    Confidentiality,
-    ConfidentialityError,
     Message,
     ModelRegistry,
     OpenAICompatibleBackend,
@@ -79,7 +77,7 @@ def _request(model_id: str, **kwargs: Any) -> CompletionRequest:
 class Server:
     """Answers each POST with the next scripted reply and records what was sent."""
 
-    def __init__(self, *replies: bytes | int | Exception) -> None:
+    def __init__(self, *replies: bytes | int | Exception | httpx2.Response) -> None:
         self.replies = list(replies)
         self.seen: list[httpx2.Request] = []
 
@@ -88,6 +86,8 @@ class Server:
         reply = self.replies.pop(0)
         if isinstance(reply, Exception):
             raise reply
+        if isinstance(reply, httpx2.Response):
+            return reply
         if isinstance(reply, int):
             return httpx2.Response(reply, json={"object": "error", "message": "engine busy"})
         return httpx2.Response(200, content=reply, headers={"content-type": "application/json"})
@@ -104,9 +104,7 @@ def registry() -> ModelRegistry:
 def test_vllm_call_is_constrained_deterministic_and_stored(registry: ModelRegistry) -> None:
     server = Server(_fixture("vllm_qwen_structured.json"))
     store = MemoryStore()
-    endpoints = (
-        LlmEndpoint(recipe_id="qwen3.8-27b-bf16", base_url="http://gpu-box:8000/v1/", api_key="k"),
-    )
+    endpoints = (LlmEndpoint(recipe_id="qwen3.8-27b-bf16", base_url="http://gpu-box:8000/v1/"),)
     backend = backends_from_endpoints(endpoints, registry, store, client=server.client())[
         "qwen3.8-27b-bf16"
     ]
@@ -116,7 +114,7 @@ def test_vllm_call_is_constrained_deterministic_and_stored(registry: ModelRegist
 
     (sent,) = server.seen
     assert str(sent.url) == "http://gpu-box:8000/v1/chat/completions"
-    assert sent.headers["authorization"] == "Bearer k"
+    assert "authorization" not in sent.headers  # a local server needs no key
     body = json.loads(sent.content)
     assert body["model"] == "Qwen/Qwen3.8-27B"
     assert body["temperature"] == 0.0
@@ -133,6 +131,7 @@ def test_vllm_call_is_constrained_deterministic_and_stored(registry: ModelRegist
     assert completion.finish_reason == "stop"
     assert completion.reasoning is None
     assert completion.request_hash == request_key(request)
+    assert (completion.serving, completion.endpoint) == ("vllm", "http://gpu-box:8000/v1")
     assert completion.raw_request_hash is not None
     assert store.get(completion.raw_request_hash) == sent.content
     assert store.get(completion.raw_response_hash) == _fixture("vllm_qwen_structured.json")
@@ -246,24 +245,73 @@ def test_transport_errors_are_retried_and_http_errors_are_not(registry: ModelReg
     assert len(down.seen) == 3
 
 
-def test_local_only_content_never_reaches_a_hosted_model(registry: ModelRegistry) -> None:
+def test_a_hosted_api_gets_its_key_from_the_environment_and_the_recipe_unchanged(
+    registry: ModelRegistry, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A hosted reasoning model thinks by default: the recipe's switch goes out as written, and
+    thinking that comes back anyway, in its own field or before the JSON, never reaches the
+    answer."""
     hosted = registry.get("gemma-4-31b-it-bf16").model_copy(
-        update={"id": "gemma-4-31b-eu-hosted", "serving": "hosted", "served_name": "gemma-4-31b"}
+        update={
+            "id": "example-hosted",
+            "serving": "hosted",
+            "served_name": "example-model",
+            "reasoning": True,
+            "extra_body": {"thinking": {"type": "disabled"}, "reasoning_effort": "none"},
+        }
     )
-    server = Server(_fixture("vllm_qwen_structured.json"))
+    body = json.loads(_fixture("vllm_qwen_structured.json"))
+    message = body["choices"][0]["message"]
+    message["reasoning_content"] = "The record says 12 to 17 years."
+    message["content"] = "<think>Adolescents.</think>\n" + message["content"]
+    server = Server(json.dumps(body).encode(), json.dumps(body).encode())
     store = RecordingStore()
-    backend = OpenAICompatibleBackend(
-        hosted, "https://eu.example/v1", store, client=server.client()
-    )
+    (backend,) = backends_from_endpoints(
+        (
+            LlmEndpoint(
+                recipe_id="example-hosted",
+                base_url="https://llm.example/v1/",
+                api_key_env="EXAMPLE_LLM_KEY",
+            ),
+        ),
+        ModelRegistry([hosted]),
+        store,
+        client=server.client(),
+    ).values()
 
-    with pytest.raises(ConfidentialityError):
-        backend.complete(_request(hosted.id))  # local_only is the default
-    assert server.seen == []
-    assert store.puts == []
+    # Without the variable nothing is sent, and the error names the variable.
+    monkeypatch.delenv("EXAMPLE_LLM_KEY", raising=False)
+    with pytest.raises(BackendError, match="EXAMPLE_LLM_KEY is not set"):
+        backend.complete(_request("example-hosted"))
+    assert server.seen == [] and store.puts == []
 
-    completion = backend.complete(_request(hosted.id, confidentiality=Confidentiality.CONFIDENTIAL))
+    # The key is read for each call, so a rotated key needs no restart.
+    for key in ("sk-first-0000", "sk-rotated-1111"):
+        monkeypatch.setenv("EXAMPLE_LLM_KEY", key)
+        completion = backend.complete(_request("example-hosted"))
+        sent = server.seen[-1]
+        assert sent.headers["authorization"] == f"Bearer {key}"
+        assert not any(key.encode() in data for data in store.puts)
+
+    assert str(sent.url) == "https://llm.example/v1/chat/completions"
+    sent_body = json.loads(sent.content)
+    assert sent_body["thinking"] == {"type": "disabled"}
+    assert sent_body["reasoning_effort"] == "none"
+    assert sent_body["model"] == "example-model"
     assert json.loads(completion.text) == ANSWER
-    assert len(server.seen) == 1
+    assert completion.reasoning == "The record says 12 to 17 years."
+    assert (completion.serving, completion.endpoint) == ("hosted", "https://llm.example/v1")
+    assert store.get(completion.raw_request_hash or "") == sent.content
+
+    # A provider that echoes a wrong key in its error gets it redacted, in the error and the store.
+    monkeypatch.setenv("EXAMPLE_LLM_KEY", "sk-wrong-2222")
+    server.replies.append(
+        httpx2.Response(401, json={"error": {"message": "Invalid API key: sk-wrong-2222"}})
+    )
+    with pytest.raises(BackendError, match=r"HTTP 401: .*Invalid API key: \[redacted\]") as e:
+        backend.complete(_request("example-hosted"))
+    assert "sk-wrong-2222" not in str(e.value)
+    assert not any(b"sk-wrong-2222" in data for data in store.puts)
 
 
 def test_a_backend_refuses_requests_for_another_recipe(registry: ModelRegistry) -> None:

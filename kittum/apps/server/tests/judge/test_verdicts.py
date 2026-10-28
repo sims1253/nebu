@@ -2,18 +2,10 @@
 
 import json
 
-import httpx2
 import pytest
 
 from kittum.judge import Verdict, applicable, build_request, judge
-from kittum.models import (
-    Confidentiality,
-    ConfidentialityError,
-    ModelRegistry,
-    OpenAICompatibleBackend,
-)
 from kittum.models.testing import RecordedBackend
-from kittum.storage import MemoryStore
 from tests.judge.records import (
     ADOLESCENTS,
     ADOLESCENTS_PARAPHRASED,
@@ -166,19 +158,3 @@ def test_unsupported_exclusions_are_downgraded(status: str, quote: str, check: s
     backend = recorded(ADOLESCENTS, answers={ADOLESCENTS.item_ref: text})
     pop = _by_id(judge(ADOLESCENTS, SCOPE, CRITERIA, CONFIG, backend))["C_POP_ADULT_NSCLC"]
     assert (pop.status, pop.downgraded_from, pop.failed_check) == ("unclear", "not_met", check)
-
-
-def test_a_local_only_record_is_never_sent_to_a_hosted_model() -> None:
-    hosted = (
-        ModelRegistry.load()
-        .get(CONFIG.model_id)
-        .model_copy(update={"serving": "hosted", "served_name": "qwen3.8-27b"})
-    )
-    sent: list[httpx2.Request] = []
-    client = httpx2.Client(transport=httpx2.MockTransport(lambda r: sent.append(r) or None))
-    backend = OpenAICompatibleBackend(hosted, "https://eu.example/v1", MemoryStore(), client=client)
-    csr = ADOLESCENTS.model_copy(update={"confidentiality": Confidentiality.LOCAL_ONLY})
-
-    with pytest.raises(ConfidentialityError):
-        judge(csr, SCOPE, CRITERIA, CONFIG, backend)
-    assert sent == []

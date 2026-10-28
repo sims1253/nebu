@@ -390,7 +390,8 @@ def record_proposals(
     """Save a finished run's anchors, fields, and proposals, once. Called from the job's publish
     step, so it commits with the job or not at all."""
     run = run_inputs(tx, run_id)
-    model_identity = extraction.transcript.model_identity if extraction.transcript else None
+    transcript = extraction.transcript
+    model_identity = transcript.model_identity if transcript else None
     command = Command(
         command_id=run["publish_command_id"],
         project_id=run["project_id"],
@@ -415,6 +416,8 @@ def record_proposals(
                         "output_hash": output_hash,
                         "transcript_hash": transcript_hash,
                         "model_identity": model_identity,
+                        "serving": transcript.serving if transcript else None,
+                        "endpoint": transcript.endpoint if transcript else None,
                         "janus_version": JANUS_VERSION,
                         **_counts(extraction),
                     },

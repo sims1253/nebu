@@ -401,6 +401,7 @@ def disclosure(review: Review) -> dict[str, Any]:
                 "serving": recipe.get("serving"),
                 "reasoning": recipe.get("reasoning"),
                 "reported_model_identities": list(j.model_identities),
+                "endpoints": list(j.endpoints),
                 "verdicts": j.verdicts,
                 "decoding": j.decoding,
                 "prompt_version": j.prompt_version,
@@ -492,6 +493,13 @@ def _fmt(value: float | None) -> str:
     return "not defined" if value is None else f"{value:.2f}"
 
 
+def _served_as(model: dict[str, Any]) -> str:
+    served = ", ".join(model["reported_model_identities"]) or model["serving"]
+    if model["endpoints"]:
+        served += f" ({model['serving']} at {', '.join(model['endpoints'])})"
+    return served
+
+
 def render_disclosure(review: Review, scope_id: str | None) -> list[RenderedFile]:
     del scope_id
     d = disclosure(review)
@@ -514,7 +522,7 @@ def render_disclosure(review: Review, scope_id: str | None) -> list[RenderedFile
                     m["revision"],
                     f"`{m['weights_hash']}`",
                     m["weights_licence"],
-                    ", ".join(m["reported_model_identities"]) or m["serving"],
+                    _served_as(m),
                 ]
                 for m in d["models"]
             ],

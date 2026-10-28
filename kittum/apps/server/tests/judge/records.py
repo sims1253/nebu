@@ -7,7 +7,6 @@ schema-constrained model returns for them, including the ways models go wrong.
 import json
 
 from kittum.judge import JudgeConfig, ScreeningItem, applicable, build_request
-from kittum.models import Confidentiality
 from kittum.models.testing import RecordedBackend
 from kittum.protocol import Criterion
 
@@ -57,7 +56,6 @@ def item(ref: str, title: str, text: str) -> ScreeningItem:
         stage="title_abstract",
         title=title,
         text=text,
-        confidentiality=Confidentiality.PUBLIC,
     )
 
 

@@ -252,7 +252,7 @@ Module `kittum.corpus`. Needs: `search`, `enrich`, `ledger`.
 Modules `kittum.judge` and `kittum.models`. Needs: `protocol`, `core`.
 
 - An OpenAI-compatible backend for vLLM and Ollama with JSON Schema-constrained output; the model
-  recipe registry with the licence allowlist; the confidentiality check.
+  recipe registry with the licence allowlist; where each call went (serving and endpoint).
 - `judge`: the prompt per criterion set, decoding, `find_quote` verification, keyword and negation
   checks, downgrade to `unclear`, raw output capture.
 - Gold-data metrics: per-judge recall and specificity, the double-fault rate, run-to-run kappa.
@@ -264,12 +264,17 @@ Modules `kittum.judge` and `kittum.models`. Needs: `protocol`, `core`.
   the recipe's `extra_body` (thinking switches), raw request and response bytes in the artifact
   store, the model identity the server reports, thinking removed before the JSON (`<think>`,
   Gemma channels, harmony, code fences, or the `reasoning` field), retries on transport errors
-  only. `backends_from_endpoints` builds backends from `Settings.llm_endpoints`. A `local_only`
-  request to a `hosted` recipe raises `ConfidentialityError` before anything is sent.
+  only. `backends_from_endpoints` builds backends from `Settings.llm_endpoints`. A hosted API's key comes
+  from the environment variable `KITTUM_LLM_API_KEYS` names, read for each call and never stored;
+  each completion records the recipe's serving and the endpoint (without credentials). Kittum
+  does not gate hosted models: where content goes is the operator's decision.
 - `models.ModelRegistry` loads `models/recipes.yaml`: Qwen3.8-27B (thinking off and on),
   Gemma-4-31B-it, Nemotron 3.5 Super VL NVFP4, and Gemma 4 E4B, Gemma 4 12B, and Qwen3.5-4B on
   Ollama. Revisions and weight hashes were checked against Hugging Face and the Ollama registry on
   28.10.2026. Loading rejects licences outside `ALLOWED_WEIGHTS_LICENCES`.
+  `ModelRegistry.load(local=...)` adds a deployment's own recipes (`KITTUM_RECIPES_FILE`, same
+  format); a local ID may not reuse a shipped one, and the allowlist applies. Hosted recipes pin
+  no weight files.
 - `judge.judge` and `judge.judge_many`: one call per record and scope, a per-criterion schema
   generated from Pydantic, verification and downgrades with `failed_check`, retry with the next
   seed on malformed output, then `unclear` with the `invalid_output` flag. Records that try to
@@ -690,10 +695,11 @@ Modules `kittum.api`, `kittum.app`, and `kittum.people`. Needs: the modules it e
   `AppContext.from_settings` builds the Postgres ledger, the job queue and command receipts
   (extraction's commands use them), the filesystem artifact store, the `SourceGateway` (default
   policies, `HttpxTransport` with the contact email), every model backend in
-  `Settings.llm_endpoints` by recipe, and the screening `Judge`. A hosted judge recipe is refused
-  at start (screening records are `local_only`); the backends refuse each call as before.
-- Settings: `KITTUM_JUDGE_MODEL`, `KITTUM_JUDGE_BACKEND` (`endpoint`, or `demo` to replay the
-  demo's recorded answers), `KITTUM_WEB_DIST`; all listed in `kittum/.env.example`.
+  `Settings.llm_endpoints` by recipe (with the deployment's own recipes from
+  `KITTUM_RECIPES_FILE`), and the screening `Judge`, which may be a hosted recipe.
+- Settings: `KITTUM_LLM_API_KEYS`, `KITTUM_RECIPES_FILE`, `KITTUM_JUDGE_MODEL`,
+  `KITTUM_JUDGE_BACKEND` (`endpoint`, or `demo` to replay the demo's recorded answers),
+  `KITTUM_WEB_DIST`; all listed in `kittum/.env.example`.
 - `kittum serve` serves the API and, with `KITTUM_WEB_DIST` or `--web-dist`, the built workbench
   (files under `/assets` immutable, `index.html` for every other non-API path).
   `kittum worker` runs a `Worker` with every registered job kind (`register_job_handler(kind,

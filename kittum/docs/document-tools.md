@@ -142,8 +142,8 @@ non-commercial Layout build can enter the lockfile.
 
 ## Language models
 
-Kittum runs open-weight models locally for the PoC and for confidential documents. Hosted models
-are an option for public literature.
+Kittum runs open-weight models locally by default. A deployment can add hosted OpenAI-compatible
+APIs as its own recipes; which content goes to them is the deployment's decision.
 
 ### What the leaderboards say
 
@@ -264,9 +264,10 @@ recently as October 2026 (#59940, #58899). Kittum therefore:
 
 ### Hosted models and confidentiality
 
-A hosted model needs EU processing, a data processing agreement, zero retention, and no training on
-inputs. Record the model identity the provider returns, not only the alias in the request. Client
-CSRs stay on local models unless the client signs off in writing.
+Kittum does not gate hosted models: the operator chooses what goes where. For client CSRs, a hosted
+model should have EU processing, a data processing agreement, zero retention, no training on
+inputs, and the client's written sign-off. Kittum records the recipe, its serving, the endpoint,
+and the model identity the provider returns, not only the alias in the request.
 
 ## Sources
 

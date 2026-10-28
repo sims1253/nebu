@@ -289,10 +289,6 @@
       "AgentConfig": {
         "additionalProperties": false,
         "properties": {
-          "confidentiality": {
-            "$ref": "#/components/schemas/Confidentiality",
-            "default": "local_only"
-          },
           "intro_chars": {
             "default": 2500,
             "title": "Intro Chars",
@@ -954,15 +950,6 @@
       },
       "ConfidencePercent": {
         "pattern": "^[0-9]{1,3}(\\.[0-9]+)?$",
-        "type": "string"
-      },
-      "Confidentiality": {
-        "enum": [
-          "public",
-          "confidential",
-          "local_only"
-        ],
-        "title": "Confidentiality",
         "type": "string"
       },
       "ConfirmRequest": {

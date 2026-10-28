@@ -191,5 +191,4 @@ def build_request(
         temperature=config.temperature,
         seed=config.seed + attempt,
         max_tokens=config.max_tokens,
-        confidentiality=item.confidentiality,
     )
