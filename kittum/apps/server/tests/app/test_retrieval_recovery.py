@@ -34,7 +34,7 @@ from kittum.app import job_handlers
 from kittum.app.demo import DATA, PDFS, PROTOCOL
 from kittum.core import FixedClock
 from kittum.corpus import latest_revision, reports
-from kittum.gateway import RecordedTransport, SourceGateway
+from kittum.gateway import HttpRequest, RecordedTransport, SourceGateway
 from kittum.gateway.testing import response
 from kittum.ledger import PostgresLedger
 from kittum.runs import PostgresJobQueue, PostgresReceipts, Worker
@@ -49,7 +49,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from kittum.db import Tx
-    from kittum.gateway import HttpRequest, HttpResponse
+    from kittum.gateway import HttpResponse
 
 pytestmark = pytest.mark.postgres
 
@@ -60,15 +60,29 @@ OUTAGE = (FIXTURES / "europepmc_outage_503.json").read_bytes()
 CHECKLIST = (PDF_FIXTURES / "jmir" / "app2.pdf").read_bytes()
 
 
+UNPAYWALL = "https://api.unpaywall.org/v2/{}?email=test%40kittum.dev"
+
+
 class Sources:
-    """The recorded sources, with Europe PMC's search and PubMed Central's bucket down at will."""
+    """The recorded sources, with Europe PMC's search and PubMed Central's bucket down at will.
+    Unpaywall can answer for the Vitamin C trial when asked about the Lesotho trial, and the
+    Lancet's PDF link can serve a JMIR trial's CONSORT checklist."""
 
     def __init__(self) -> None:
         self.recorded = RecordedTransport(STACK)
         self.europepmc_down = False
         self.pmc_down = False
+        self.unpaywall_swapped = False
+        self.lancet_serves_checklist = False
 
     def send(self, request: HttpRequest) -> HttpResponse:
+        if self.unpaywall_swapped and request.url == UNPAYWALL.format(
+            "10.1186%2Fs12916-026-04943-4"
+        ):
+            other = HttpRequest(url=UNPAYWALL.format("10.1186%2Fs12916-026-05037-x"))
+            return self.recorded.send(other)
+        if self.lancet_serves_checklist and "thelancet.com" in request.url:
+            return response(200, CHECKLIST)
         if self.europepmc_down and "europepmc/webservices/rest/search" in request.url:
             return response(503, OUTAGE)
         if self.pmc_down and "pmc-oa-opendata" in request.url:
@@ -192,7 +206,7 @@ def test_a_lead_retries_the_sources_that_were_down_without_a_new_run(
     pg: Tx, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     sources = Sources()
-    sources.europepmc_down = True
+    sources.europepmc_down = sources.unpaywall_swapped = True
     review = Review(pg, sources, monkeypatch)
     assert review.work() == 1  # the enrichment, with Europe PMC down
 
@@ -209,12 +223,14 @@ def test_a_lead_retries_the_sources_that_were_down_without_a_new_run(
 
     # Retrieval runs while PubMed Central's bucket is unreachable too. Without Europe PMC there is
     # no PMCID, so PubMed Central's ID converter finds it first.
-    sources.pmc_down = True
+    sources.pmc_down = sources.lancet_serves_checklist = True
     review.post("retrieval/open-access")
     assert review.work() == 1
     first = {r["report_id"]: r for r in review.get("retrieval/open-access/latest")["reports"]}
     lancet = review.reports[LANCET_DOI]
     assert first[lancet]["outcome"] == "not_acquired"
+    (wrong,) = [a for a in first[lancet]["attempts"] if a["outcome"] == "wrong_document"]
+    assert "thelancet.com" in wrong["url"]
     (pmc,) = [a for a in first[lancet]["attempts"] if a["source"] == "pmc"]
     assert (pmc["kind"], pmc["outcome"], pmc["status"]) == ("lookup", "unavailable", None)
     assert "pmc-oa-opendata" in pmc["url"]
@@ -273,8 +289,18 @@ def test_a_lead_retries_the_sources_that_were_down_without_a_new_run(
         r["report_id"] for r in retried["reports"]
     }
     assert all(r == first[r["report_id"]] for r in retried["earlier"])
+    # What a retry cannot change is not asked again: Unpaywall answered for another work about the
+    # Lesotho trial, and the Lancet's link gave another document.
+    asked = review.pg.execute(
+        "select e.asked, e.failed from enrichment_run_record e join record_enrichment r"
+        " on r.occurrence_id = e.occurrence_id where e.run_id = %s and r.doi = %s",
+        (rerun["id"], LESOTHO_DOI),
+    ).fetchone()
+    assert asked is not None and "unpaywall" not in asked["asked"]
+    assert [f["source"] for f in asked["failed"] if f["kind"] == "other_work"] == ["unpaywall"]
     (again,) = [r for r in retried["reports"] if r["report_id"] == lancet]
     assert [a["outcome"] for a in again["attempts"] if a["source"] == "pmc"] == ["none"]
+    assert wrong["url"] not in [a["url"] for a in again["attempts"]]
 
     # Nothing failed this time, so there is nothing left to retry.
     assert review.get("retrieval/retry") == {"occurrences": 0, "reports": 0, "sources": []}

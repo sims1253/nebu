@@ -32,6 +32,7 @@ from kittum.enrich import (
     FailureKind,
     FieldSource,
     OaLocation,
+    SourceFailure,
     WorkUpdate,
     lookup,
     save_enrichment,
@@ -491,6 +492,21 @@ def _store_chunk(
         )
 
 
+def _carried(tx: Tx, run: dict[str, Any]) -> dict[Id, tuple[SourceFailure, ...]]:
+    """For a retry: each record's failures from the run that enriched it last before this one."""
+    rows = tx.execute(
+        "select distinct on (e.occurrence_id) e.occurrence_id, e.failed"
+        " from enrichment_run_record e join enrichment_run r on r.id = e.run_id"
+        " where r.project_id = %s and r.id <> %s and r.requested_at <= %s"
+        " order by e.occurrence_id, r.requested_at desc, r.id desc",
+        (run["project_id"], run["id"], run["requested_at"]),
+    ).fetchall()
+    return {
+        r["occurrence_id"]: tuple(SourceFailure.model_validate(f) for f in r["failed"])
+        for r in rows
+    }
+
+
 def enrichment_handler(
     ctx: AppContext, gateway: Gateway, ledger: Ledger, queue: JobQueue
 ) -> Handler:
@@ -518,13 +534,15 @@ def enrichment_handler(
                 for r in _occurrences(tx, run["project_id"], run["identity_revision_id"])
                 if r.occurrence_id not in done and (only is None or r.occurrence_id in only)
             ]
+            carried = _carried(tx, run) if run["trigger"] == "retry" else {}
         for start in range(0, len(records), CHUNK):
             if job_ctx.lease_lost.is_set():
                 return JobOutput()  # the heartbeat saw another worker take over; stop asking
             # The sources are asked outside any transaction; the answers are written only while
             # this worker still holds the job (`fence`), so one whose lease went to another while
             # it waited writes nothing.
-            result = lookup(tuple(records[start : start + CHUNK]), gateway, config=config)
+            chunk = tuple(records[start : start + CHUNK])
+            result = lookup(chunk, gateway, config=config, carried=carried)
             with ctx.db.transaction() as tx:
                 queue.fence(tx, job)
                 tx.execute("select id from enrichment_run where id = %s for update", (run_id,))

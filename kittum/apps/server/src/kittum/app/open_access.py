@@ -221,15 +221,18 @@ def queue_retrieval(
     clock: Clock,
 ) -> Id:
     """Queue a run of the waterfall over `report_ids`, in that order. The caller holds the
-    project's retrieval lock and has checked no run is going."""
+    project's retrieval lock and has checked no run is going. A retry carries each report's
+    terminal attempts from earlier runs, which its waterfall skips."""
     run_id = new_id()
+    carried = _terminal_attempts(tx, project_id, report_ids) if trigger == "retry" else {}
     event = ledger.append(
         tx,
         _event(
             project_id,
             OPEN_ACCESS_REQUESTED,
             actor_id,
-            {"run_id": str(run_id), "trigger": trigger, "report_ids": [str(r) for r in report_ids]},
+            {"run_id": str(run_id), "trigger": trigger, "report_ids": [str(r) for r in report_ids]}
+            | ({"carried": {str(r): a for r, a in carried.items()}} if carried else {}),
         ),
     )
     job = queue.enqueue(
@@ -248,10 +251,36 @@ def queue_retrieval(
     )
     with tx.cursor() as cur:
         cur.executemany(
-            "insert into retrieval_run_report (run_id, report_id, ordinal) values (%s, %s, %s)",
-            [(run_id, report_id, i) for i, report_id in enumerate(report_ids)],
+            "insert into retrieval_run_report (run_id, report_id, ordinal, carried)"
+            " values (%s, %s, %s, %s)",
+            [
+                (run_id, report_id, i, Jsonb(carried.get(report_id, [])))
+                for i, report_id in enumerate(report_ids)
+            ],
         )
     return run_id
+
+
+def _terminal_attempts(
+    tx: Tx, project_id: Id, report_ids: list[Id]
+) -> dict[Id, list[dict[str, Any]]]:
+    """Each report's attempts that asking again cannot change, over every earlier run: a lookup
+    whose source answered for another work, and a PDF that was another document."""
+    rows = tx.execute(
+        "select rr.report_id, rr.attempts, rr.carried from retrieval_run_report rr"
+        " join retrieval_run r on r.id = rr.run_id"
+        " where r.project_id = %s and rr.report_id = any(%s) order by r.requested_at, r.id",
+        (project_id, report_ids),
+    ).fetchall()
+    out: dict[Id, list[dict[str, Any]]] = {}
+    for row in rows:
+        for attempt in [*row["carried"], *row["attempts"]]:
+            terminal = (attempt.get("kind") == "lookup" and attempt["outcome"] == "other_work") or (
+                attempt.get("kind", "fetch") == "fetch" and attempt["outcome"] == "wrong_document"
+            )
+            if terminal and attempt not in out.setdefault(row["report_id"], []):
+                out[row["report_id"]].append(attempt)
+    return {r: a for r, a in out.items() if a}
 
 
 def request_open_access(
@@ -613,7 +642,12 @@ class _Report:
             done = len(row["attempts"])
             if row["outcome"] is not None or row["acquisition_id"] is not None:
                 return False
-            step = next_step(row["locations"], row["attempts"], ids=self.ids, config=self.config)
+            step = next_step(
+                row["locations"],
+                [*row["carried"], *row["attempts"]],
+                ids=self.ids,
+                config=self.config,
+            )
         if step is None:
             return False
         if step[0] == "lookup":
