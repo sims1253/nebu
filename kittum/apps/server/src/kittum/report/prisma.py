@@ -127,7 +127,15 @@ def _records(stage: StageResult | None) -> list[ItemResult]:
 
 
 def flow(review: Review, topic_id: str, scope_id: str) -> PrismaFlow:
-    """The flow of one scope of one search topic."""
+    """The flow of one scope of one search topic.
+
+    A flow is self-contained, as PRISMA reports one per review question: it identifies the
+    occurrences of its own topic's searches that the identity revision holds, and deduplicates
+    them among themselves. A report that several topics' searches found is identified, and
+    unique, in each of their flows. So `corpus.get_counts`, which counts the whole revision,
+    equals a flow's identification only when one topic was searched; with several, the topics'
+    identified records sum to its total and the union of their unique records is its reports.
+    """
     identity = review.identity
     report_of = identity.report_of() if identity else {}
     study_of = identity.study_of() if identity else {}
@@ -185,7 +193,11 @@ def flow(review: Review, topic_id: str, scope_id: str) -> PrismaFlow:
     reasons: Counter[str] = Counter()
     by_reason: dict[str, list[str]] = {}
     for i in ft_excluded:
-        # One reason per report: the adjudicated one, or the one both screeners agreed on.
+        # One reason per report, so the reasons sum to the exclusions. Usually there is only
+        # one: the adjudicated reason, or the screeners' shared one (screeners who exclude on
+        # different criteria open an exclusion_reason conflict). If several survive, e.g. an
+        # extra screen whose auditor excluded on another criterion, this takes the first by
+        # criterion ID. Anhang 4-C and 4-D list every reason.
         reason = i.reason_criterion_ids[0] if i.reason_criterion_ids else "unstated"
         reasons[reason] += 1
         by_reason.setdefault(f"reason:{reason}", []).append(i.item_ref)
