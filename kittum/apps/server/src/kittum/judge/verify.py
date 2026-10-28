@@ -22,11 +22,11 @@ A `not_met` stands only if all of these hold:
    a function word or negation of another language ("non", "sin", "pas").
 6. The quote's sentence has at most one negation cue, inside the quote, at most three tokens
    before a key term and in the same clause. A cue such as "excluded", "with or without", or
-   "not only" anywhere in the sentence makes the scope ambiguous, as does an exclusion cue in the
-   sentence before or in the introduction of a list the quote belongs to ("The following were
-   exclusion criteria. No prior chemotherapy."). A key term the quote negates does not also
-   stand unnegated in the sentence ("adults who did not smoke tobacco and adults who smoke
-   tobacco").
+   "not only" anywhere in the sentence makes the scope ambiguous, as does an exclusion cue
+   anywhere earlier in its paragraph or in the sentence just before ("Exclusion criteria were
+   predefined. Uncontrolled infection. No prior chemotherapy."). A key term the quote negates
+   does not also stand unnegated in the sentence ("adults who did not smoke tobacco and adults
+   who smoke tobacco").
 7. If the cue negates some of the quote's key terms and not others, the quote states the
    opposite of one requirement of an affirmative condition: "adults who did not smoke tobacco"
    against "Adults who smoke tobacco". Then the key terms it leaves unnegated come before the
@@ -231,9 +231,10 @@ _RANDOM_ALLOCATION = re.compile(
     re.IGNORECASE,
 )
 
-# A cue that the quote's sentence lists who was left out. It may stand in the sentence before
-# ("The following were exclusion criteria. No prior chemotherapy.") or in the introduction of
-# a list that ends in a colon. Matches accent-folded text.
+# A cue that the quote's sentence lists who was left out. It may stand anywhere earlier in the
+# paragraph ("Exclusion criteria were predefined. Uncontrolled infection. No prior
+# chemotherapy."). Matches accent-folded text.
+_PARAGRAPH = re.compile(r"\n\s*\n")
 _EXCLUSION_CONTEXT = re.compile(
     r"\b(?:exclu\w*|esclu\w*|ineligib\w*|inelegib\w*|not\s+eligible|(?:were|was)\s+not\s+included"
     r"|not\s+enrolled|ausgeschlossen|ausschluss\w*|nicht\s+eingeschlossen)",
@@ -493,16 +494,17 @@ def _reads_whole(criterion: Criterion, source: str, span: Span, negated_end: int
 
 
 def _exclusion_context(source: str, start: int) -> bool:
-    """Whether the sentence before the one at `start`, or the introduction of a list that the
-    sentence belongs to, says who was left out."""
-    starts = [0] + [m.end() for m in _SENTENCE_END.finditer(source, 0, start) if m.end() < start]
-    before = source[starts[-1] : start]
-    paragraph = source.rfind("\n\n", 0, start) + 1
-    colon = source.rfind(":", paragraph, start)
-    if colon >= 0:
-        intro = [0] + [m.end() for m in _SENTENCE_END.finditer(source, 0, colon)]
-        before += " " + source[intro[-1] : colon]
-    return _EXCLUSION_CONTEXT.search(_fold(before)) is not None
+    """Whether anything earlier in the paragraph of the sentence at `start`, or the sentence
+    just before it, says who was left out: a heading such as "Exclusion criteria:" may stand
+    alone above a blank line. A paragraph runs from the last blank line; section labels inside
+    it ("METHODS:") do not end it. The title (up to the first blank line) is its own paragraph
+    and never the sentence before the text."""
+    breaks = [m.end() for m in _PARAGRAPH.finditer(source, 0, start)]
+    previous = [0] + [m.end() for m in _SENTENCE_END.finditer(source, 0, start) if m.end() < start]
+    scope = min(breaks[-1] if breaks else 0, previous[-1])
+    if breaks:
+        scope = max(scope, breaks[0])  # not into the title
+    return _EXCLUSION_CONTEXT.search(_fold(source[scope:start])) is not None
 
 
 def _anchored_negation(criterion: Criterion, source: str, span: Span) -> _Reading:

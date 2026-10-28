@@ -290,7 +290,7 @@ Modules `kittum.judge` and `kittum.models`. Needs: `protocol`, `core`.
   record with no hint of random allocation) support `not_met`. Any negated quote that excludes
   is read with its whole sentence: nothing but closing punctuation follows its last negated
   term, the sentence names no time, frequency, or age and coordinates or compares no other
-  population, and neither it, the sentence before, nor a list introduction says who was
+  population, and nothing earlier in its paragraph, nor the sentence before, says who was
   excluded. A bare survey, questionnaire, interview, or assessment is a measurement, not a
   design. `Verdict.excludes`
   is a proposal for humans and adjudication, never a final exclusion. `judge_many` stores
