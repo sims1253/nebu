@@ -1,0 +1,16 @@
+{
+  "https://api.crossref.org/works/10.1016%2Fs0140-6736%2820%2931180-6?mailto=test%40kittum.dev": "9a6f354bc2cfa489.json",
+  "https://api.crossref.org/works/10.1056%2Fnejmoa2021436?mailto=test%40kittum.dev": "cafb6adc1637bddb.json",
+  "https://api.crossref.org/works/10.1056%2Fnejmoa2034577?mailto=test%40kittum.dev": "6d7a0ffdb79d9755.json",
+  "https://api.crossref.org/works/10.1136%2Fbmjopen-2026-124110?mailto=test%40kittum.dev": "8b69ed0662f29d0a.json",
+  "https://api.openalex.org/works?filter=doi:10.1016/s0140-6736%2820%2931180-6|10.1056/nejmoa2021436|10.1136/bmjopen-2026-124110&per-page=100&select=id,doi,ids,display_name,abstract_inverted_index,is_retracted,open_access,best_oa_location,locations": "14cbf1570373a00e.json",
+  "https://api.openalex.org/works?filter=pmid:32450107|33301246|32678530|42785935&per-page=100&select=id,doi,ids,display_name,abstract_inverted_index,is_retracted,open_access,best_oa_location,locations": "8ef040a5ab2f80bd.json",
+  "https://api.unpaywall.org/v2/10.1016%2Fs0140-6736%2820%2931180-6?email=test%40kittum.dev": "e55003869bd604c8.json",
+  "https://api.unpaywall.org/v2/10.1056%2Fnejmoa2021436?email=test%40kittum.dev": "ebd5173a3a013236.json",
+  "https://api.unpaywall.org/v2/10.1136%2Fbmjopen-2026-124110?email=test%40kittum.dev": "68f15f26e578f908.json",
+  "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID%3A32450107+OR+EXT_ID%3A32678530+OR+EXT_ID%3A42785935+OR+DOI%3A%2210.1016%2Fs0140-6736%2820%2931180-6%22+OR+DOI%3A%2210.1056%2Fnejmoa2021436%22+OR+DOI%3A%2210.1136%2Fbmjopen-2026-124110%22&format=json&resultType=core&synonym=FALSE&pageSize=100": "22e7e8127cb907fb.json",
+  "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID%3A32450107+OR+EXT_ID%3A33301246+OR+EXT_ID%3A32678530+OR+EXT_ID%3A42785935+OR+DOI%3A%2210.1016%2Fs0140-6736%2820%2931180-6%22+OR+DOI%3A%2210.1056%2Fnejmoa2021436%22+OR+DOI%3A%2210.1136%2Fbmjopen-2026-124110%22&format=json&resultType=core&synonym=FALSE&pageSize=100": "aafbae5b0d37650a.json",
+  "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID%3A32450107+OR+EXT_ID%3A33301246+OR+EXT_ID%3A32678530+OR+EXT_ID%3A42785935+OR+DOI%3A%2210.1016%2Fs0140-6736%2820%2931180-6%22+OR+DOI%3A%2210.1056%2Fnejmoa2034577%22+OR+DOI%3A%2210.1056%2Fnejmoa2021436%22+OR+DOI%3A%2210.1136%2Fbmjopen-2026-124110%22&format=json&resultType=core&synonym=FALSE&pageSize=100": "51dc44ea574c9d45.json",
+  "https://www.ncbi.nlm.nih.gov/research/pubtator3-api/publications/export/biocjson?pmids=32450107%2C32678530%2C42785935": "d633f2cf23f7dcc6.json",
+  "https://www.ncbi.nlm.nih.gov/research/pubtator3-api/publications/export/biocjson?pmids=32450107%2C33301246%2C32678530%2C42785935": "869f8b955389f9b0.json"
+}
