@@ -169,20 +169,23 @@ def mark_wrong_document(
 ) -> WrongDocument:
     """The PDF of one of the reviewer's full-text assignments is not the record's report.
 
-    The item leaves screening (`Screening.withdraw_item`), the document is detached from the
+    The record leaves every full-text stage (`Screening.withdraw_item`), the document is detached from the
     record, and the ledger records who said so, when, and the note. The record then has no full
     text again: the retrieval list shows it as missing and PRISMA counts it as not retrieved. It is
     not an exclusion. `document_id` is the PDF the reviewer saw; if the record's full text is
     another one by now, nothing changes. A retry with the same `command_id` returns the first
     result.
     """
+    screening = ctx.screening()
+    ledger = ctx.require_ledger()
+    # One operation under the project's command lock: a retry that arrives while the first
+    # request is still running waits here, then finds its detachment and returns it.
+    screening.lock_project(tx, project_id)
     done = tx.execute(
         "select recorded_at from full_text_detachment where command_id = %s", (command_id,)
     ).fetchone()
     if done is not None:
         return WrongDocument(recorded_at=done["recorded_at"])
-    screening = ctx.screening()
-    ledger = ctx.require_ledger()
     ref, info, _ = screening.assignment_source(tx, project_id, reviewer_id, assignment_id)
     found = full_text(tx, project_id, ref)
     if found is None or found.document_id != document_id:
