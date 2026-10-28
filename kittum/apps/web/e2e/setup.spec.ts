@@ -271,6 +271,7 @@ test("a lead sets up a review from nothing in the browser, as the CLI would", as
     await page.keyboard.press("g");
     await page.keyboard.press("d");
     await expect(page.getByText("The corpus is not built yet.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Build the corpus" })).toBeEnabled();
     await page.keyboard.press("b");
     await expect(page.getByText(/^30 reports in 30 studies/)).toBeVisible();
     // The PubMed and CENTRAL records of one trial share a DOI: proposed, left for the lead.

@@ -125,13 +125,14 @@ function Layout({ state, onSwitch }: { state: ProjectState; onSwitch: () => void
           >
             {NAV.map((item, index) => (
               <span key={item.section} className="flex items-center">
-                {item.group && NAV[index - 1]?.group !== item.group ? (
-                  <span className="mr-1 ml-2 text-xs text-ink-3">{item.group}</span>
+                {/* A rule on each side of a group, the screening stages. */}
+                {index > 0 && NAV[index - 1]?.group !== item.group ? (
+                  <span aria-hidden="true" className="mx-1.5 h-4 w-px self-center bg-rule-strong" />
                 ) : null}
                 <Link
                   to={path(item.section)}
                   params={{ projectId: state.project.id }}
-                  className="rounded-[3px] px-[7px] py-1 text-sm whitespace-nowrap text-ink-2 hover:text-ink data-[status=active]:bg-petrol-wash data-[status=active]:font-medium data-[status=active]:text-petrol"
+                  className="narrow rounded-[3px] px-[5px] py-1 text-sm whitespace-nowrap text-ink-2 hover:text-ink data-[status=active]:bg-petrol-wash data-[status=active]:font-medium data-[status=active]:text-petrol"
                   title={`g then ${item.chord}`}
                 >
                   {item.label}
@@ -168,7 +169,7 @@ function ProjectSwitcher({ state }: { state: ProjectState }) {
   return (
     <Menu.Root>
       <Menu.Trigger className="flex max-w-[360px] min-w-0 flex-none items-baseline gap-2 rounded-[3px] px-2 py-1 text-left hover:bg-sheet-2 data-[popup-open]:bg-sheet-2">
-        <span className="max-w-[220px] truncate text-sm font-semibold">{state.project.name}</span>
+        <span className="max-w-[150px] truncate text-sm font-semibold">{state.project.name}</span>
         <svg
           width="9"
           height="6"
@@ -328,11 +329,11 @@ function Identity({ member, onSwitch }: { member: Member; onSwitch: () => void }
       onClick={onSwitch}
       data-testid="identity"
       title={`${member.roles.map((r) => ROLE_LABELS[r]).join(", ")}. There is no sign-in yet: choose who you are. Anyone who can reach the server can act as anyone.`}
-      className="flex items-baseline gap-2 rounded-[3px] px-2 py-1 text-sm hover:bg-sheet-2"
+      aria-label={`Acting as ${member.display_name}, ${member.roles.map((r) => ROLE_LABELS[r]).join(", ")}. Switch person`}
+      className="flex items-baseline gap-2 rounded-[3px] px-2 py-1 text-sm whitespace-nowrap hover:bg-sheet-2"
     >
-      <span className="text-xs text-ink-3">Acting as</span>
       <span className="font-medium">{member.display_name}</span>
-      <span className="text-xs text-ink-3">
+      <span className="hidden text-xs text-ink-3 2xl:inline">
         {member.roles.map((r) => ROLE_LABELS[r]).join(", ")}
       </span>
     </button>
