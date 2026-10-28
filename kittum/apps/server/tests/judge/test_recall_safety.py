@@ -438,6 +438,18 @@ def _record(ref: str, sentence: str) -> ScreeningItem:
             "Melanoma NON presente in alcun paziente arruolato.",
             "language_unverifiable",
         ),
+        (
+            ("include", "Prior chemotherapy", ("chemotherapy",)),
+            "(The assay was not performed.) Chemotherapy was administered.",
+            "(The assay was not performed.) Chemotherapy was administered.",
+            "multiple_sentences",
+        ),
+        (
+            ("include", "Prior chemotherapy", ("chemotherapy",)),
+            "Patients without prior chemotherapy; they did not participate.",
+            "Patients without prior chemotherapy",
+            "negation",
+        ),
     ],
     ids=[
         "S4-non-smokers-vs-smokers",
@@ -447,6 +459,8 @@ def _record(ref: str, sentence: str) -> ScreeningItem:
         "S3-double-negation-in-quote",
         "S3-double-negation-in-criterion",
         "S2-uppercase-NON",
+        "R5-sentence-end-before-closing-bracket",
+        "R5-semicolon-hides-a-second-negation",
     ],
 )
 def test_structurally_unsupported_exclusions_are_unclear(

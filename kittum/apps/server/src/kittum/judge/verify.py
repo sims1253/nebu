@@ -129,7 +129,10 @@ _EQUIVALENT = {"chemotherapie": "chemotherapy", "chemotherapies": "chemotherapy"
 _WINDOW = 3  # a negation cue negates a key term at most this many tokens later
 
 # A line break alone does not end a sentence: abstracts are often wrapped mid-sentence.
-_SENTENCE_END = re.compile(r"(?<=[.;!?])\s+|\n\s*\n")
+# A sentence ends at . ! or ?, after any closing bracket or quote mark. A semicolon joins two
+# clauses of one sentence, so it bounds negation scope but not the sentence.
+_CLOSERS = ")\\]\"'\u201d\u2019\u00bb"
+_SENTENCE_END = re.compile(rf"(?<=[.!?])[{_CLOSERS}]*\s+|\n\s*\n")
 
 # Text in a record that addresses the model. The only harmful effect of an injection is an
 # exclusion, so a record that matches cannot be excluded by the judge.
@@ -172,7 +175,9 @@ def injection_suspected(text: str) -> bool:
 
 # Words, with a negating compound prefix kept as part of the word ("non-smokers" is not
 # "smokers"), clause punctuation, and sentence ends.
-_TOKEN = re.compile(r"(?:non|nicht|kein)-[^\W_]+|[^\W_]+|[,;:]|[.!?](?=\s|$)", re.IGNORECASE)
+_TOKEN = re.compile(
+    rf"(?:non|nicht|kein)-[^\W_]+|[^\W_]+|[,;:]|[.!?](?=[{_CLOSERS}]*(?:\s|$))", re.IGNORECASE
+)
 _PREFIX = re.compile(r"^(?:non|nicht|kein)-")
 _PUNCTUATION = frozenset(",;:.!?")
 
