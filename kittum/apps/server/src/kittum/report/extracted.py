@@ -224,7 +224,8 @@ def check_bundle(
             f"{VALUES_PATH} says it shows the ledger at event {claimed}, but the bundle's ledger"
             f" ends at event {cutoff}"
         )
-    tables = _tables(root, problems)
+    # A review without extraction has empty tables in its bundle, and nothing to compare.
+    tables = _tables(root, problems) if values else ({}, {}, {}, {})
     if tables is None:
         return
     fields, runs, anchors, acceptances = tables
