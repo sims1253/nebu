@@ -10,33 +10,170 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as PProjectIdRouteRouteImport } from './routes/p/$projectId/route'
+import { Route as PProjectIdIndexRouteImport } from './routes/p/$projectId/index'
+import { Route as PProjectIdExtractionRouteImport } from './routes/p/$projectId/extraction'
+import { Route as PProjectIdProgressRouteImport } from './routes/p/$projectId/progress'
+import { Route as PProjectIdProtocolRouteImport } from './routes/p/$projectId/protocol'
+import { Route as PProjectIdReportsRouteImport } from './routes/p/$projectId/reports'
+import { Route as PProjectIdRiskOfBiasRouteImport } from './routes/p/$projectId/risk-of-bias'
+import { Route as PProjectIdSearchRouteImport } from './routes/p/$projectId/search'
+import { Route as PProjectIdStudiesRouteImport } from './routes/p/$projectId/studies'
+import { Route as PProjectIdScreeningFullTextRouteImport } from './routes/p/$projectId/screening/full-text'
+import { Route as PProjectIdScreeningTitleAbstractRouteImport } from './routes/p/$projectId/screening/title-abstract'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PProjectIdRouteRoute = PProjectIdRouteRouteImport.update({
+  id: '/p/$projectId',
+  path: '/p/$projectId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PProjectIdIndexRoute = PProjectIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => PProjectIdRouteRoute,
+} as any)
+const PProjectIdExtractionRoute = PProjectIdExtractionRouteImport.update({
+  id: '/extraction',
+  path: '/extraction',
+  getParentRoute: () => PProjectIdRouteRoute,
+} as any)
+const PProjectIdProgressRoute = PProjectIdProgressRouteImport.update({
+  id: '/progress',
+  path: '/progress',
+  getParentRoute: () => PProjectIdRouteRoute,
+} as any)
+const PProjectIdProtocolRoute = PProjectIdProtocolRouteImport.update({
+  id: '/protocol',
+  path: '/protocol',
+  getParentRoute: () => PProjectIdRouteRoute,
+} as any)
+const PProjectIdReportsRoute = PProjectIdReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => PProjectIdRouteRoute,
+} as any)
+const PProjectIdRiskOfBiasRoute = PProjectIdRiskOfBiasRouteImport.update({
+  id: '/risk-of-bias',
+  path: '/risk-of-bias',
+  getParentRoute: () => PProjectIdRouteRoute,
+} as any)
+const PProjectIdSearchRoute = PProjectIdSearchRouteImport.update({
+  id: '/search',
+  path: '/search',
+  getParentRoute: () => PProjectIdRouteRoute,
+} as any)
+const PProjectIdStudiesRoute = PProjectIdStudiesRouteImport.update({
+  id: '/studies',
+  path: '/studies',
+  getParentRoute: () => PProjectIdRouteRoute,
+} as any)
+const PProjectIdScreeningFullTextRoute =
+  PProjectIdScreeningFullTextRouteImport.update({
+    id: '/screening/full-text',
+    path: '/screening/full-text',
+    getParentRoute: () => PProjectIdRouteRoute,
+  } as any)
+const PProjectIdScreeningTitleAbstractRoute =
+  PProjectIdScreeningTitleAbstractRouteImport.update({
+    id: '/screening/title-abstract',
+    path: '/screening/title-abstract',
+    getParentRoute: () => PProjectIdRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/p/$projectId': typeof PProjectIdRouteRouteWithChildren
+  '/p/$projectId/extraction': typeof PProjectIdExtractionRoute
+  '/p/$projectId/progress': typeof PProjectIdProgressRoute
+  '/p/$projectId/protocol': typeof PProjectIdProtocolRoute
+  '/p/$projectId/reports': typeof PProjectIdReportsRoute
+  '/p/$projectId/risk-of-bias': typeof PProjectIdRiskOfBiasRoute
+  '/p/$projectId/search': typeof PProjectIdSearchRoute
+  '/p/$projectId/studies': typeof PProjectIdStudiesRoute
+  '/p/$projectId/': typeof PProjectIdIndexRoute
+  '/p/$projectId/screening/full-text': typeof PProjectIdScreeningFullTextRoute
+  '/p/$projectId/screening/title-abstract': typeof PProjectIdScreeningTitleAbstractRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/p/$projectId/extraction': typeof PProjectIdExtractionRoute
+  '/p/$projectId/progress': typeof PProjectIdProgressRoute
+  '/p/$projectId/protocol': typeof PProjectIdProtocolRoute
+  '/p/$projectId/reports': typeof PProjectIdReportsRoute
+  '/p/$projectId/risk-of-bias': typeof PProjectIdRiskOfBiasRoute
+  '/p/$projectId/search': typeof PProjectIdSearchRoute
+  '/p/$projectId/studies': typeof PProjectIdStudiesRoute
+  '/p/$projectId': typeof PProjectIdIndexRoute
+  '/p/$projectId/screening/full-text': typeof PProjectIdScreeningFullTextRoute
+  '/p/$projectId/screening/title-abstract': typeof PProjectIdScreeningTitleAbstractRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/p/$projectId': typeof PProjectIdRouteRouteWithChildren
+  '/p/$projectId/extraction': typeof PProjectIdExtractionRoute
+  '/p/$projectId/progress': typeof PProjectIdProgressRoute
+  '/p/$projectId/protocol': typeof PProjectIdProtocolRoute
+  '/p/$projectId/reports': typeof PProjectIdReportsRoute
+  '/p/$projectId/risk-of-bias': typeof PProjectIdRiskOfBiasRoute
+  '/p/$projectId/search': typeof PProjectIdSearchRoute
+  '/p/$projectId/studies': typeof PProjectIdStudiesRoute
+  '/p/$projectId/': typeof PProjectIdIndexRoute
+  '/p/$projectId/screening/full-text': typeof PProjectIdScreeningFullTextRoute
+  '/p/$projectId/screening/title-abstract': typeof PProjectIdScreeningTitleAbstractRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/p/$projectId'
+    | '/p/$projectId/extraction'
+    | '/p/$projectId/progress'
+    | '/p/$projectId/protocol'
+    | '/p/$projectId/reports'
+    | '/p/$projectId/risk-of-bias'
+    | '/p/$projectId/search'
+    | '/p/$projectId/studies'
+    | '/p/$projectId/'
+    | '/p/$projectId/screening/full-text'
+    | '/p/$projectId/screening/title-abstract'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/p/$projectId/extraction'
+    | '/p/$projectId/progress'
+    | '/p/$projectId/protocol'
+    | '/p/$projectId/reports'
+    | '/p/$projectId/risk-of-bias'
+    | '/p/$projectId/search'
+    | '/p/$projectId/studies'
+    | '/p/$projectId'
+    | '/p/$projectId/screening/full-text'
+    | '/p/$projectId/screening/title-abstract'
+  id:
+    | '__root__'
+    | '/'
+    | '/p/$projectId'
+    | '/p/$projectId/extraction'
+    | '/p/$projectId/progress'
+    | '/p/$projectId/protocol'
+    | '/p/$projectId/reports'
+    | '/p/$projectId/risk-of-bias'
+    | '/p/$projectId/search'
+    | '/p/$projectId/studies'
+    | '/p/$projectId/'
+    | '/p/$projectId/screening/full-text'
+    | '/p/$projectId/screening/title-abstract'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  PProjectIdRouteRoute: typeof PProjectIdRouteRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +185,119 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/p/$projectId': {
+      id: '/p/$projectId'
+      path: '/p/$projectId'
+      fullPath: '/p/$projectId'
+      preLoaderRoute: typeof PProjectIdRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/p/$projectId/': {
+      id: '/p/$projectId/'
+      path: '/'
+      fullPath: '/p/$projectId/'
+      preLoaderRoute: typeof PProjectIdIndexRouteImport
+      parentRoute: typeof PProjectIdRouteRoute
+    }
+    '/p/$projectId/extraction': {
+      id: '/p/$projectId/extraction'
+      path: '/extraction'
+      fullPath: '/p/$projectId/extraction'
+      preLoaderRoute: typeof PProjectIdExtractionRouteImport
+      parentRoute: typeof PProjectIdRouteRoute
+    }
+    '/p/$projectId/progress': {
+      id: '/p/$projectId/progress'
+      path: '/progress'
+      fullPath: '/p/$projectId/progress'
+      preLoaderRoute: typeof PProjectIdProgressRouteImport
+      parentRoute: typeof PProjectIdRouteRoute
+    }
+    '/p/$projectId/protocol': {
+      id: '/p/$projectId/protocol'
+      path: '/protocol'
+      fullPath: '/p/$projectId/protocol'
+      preLoaderRoute: typeof PProjectIdProtocolRouteImport
+      parentRoute: typeof PProjectIdRouteRoute
+    }
+    '/p/$projectId/reports': {
+      id: '/p/$projectId/reports'
+      path: '/reports'
+      fullPath: '/p/$projectId/reports'
+      preLoaderRoute: typeof PProjectIdReportsRouteImport
+      parentRoute: typeof PProjectIdRouteRoute
+    }
+    '/p/$projectId/risk-of-bias': {
+      id: '/p/$projectId/risk-of-bias'
+      path: '/risk-of-bias'
+      fullPath: '/p/$projectId/risk-of-bias'
+      preLoaderRoute: typeof PProjectIdRiskOfBiasRouteImport
+      parentRoute: typeof PProjectIdRouteRoute
+    }
+    '/p/$projectId/search': {
+      id: '/p/$projectId/search'
+      path: '/search'
+      fullPath: '/p/$projectId/search'
+      preLoaderRoute: typeof PProjectIdSearchRouteImport
+      parentRoute: typeof PProjectIdRouteRoute
+    }
+    '/p/$projectId/studies': {
+      id: '/p/$projectId/studies'
+      path: '/studies'
+      fullPath: '/p/$projectId/studies'
+      preLoaderRoute: typeof PProjectIdStudiesRouteImport
+      parentRoute: typeof PProjectIdRouteRoute
+    }
+    '/p/$projectId/screening/full-text': {
+      id: '/p/$projectId/screening/full-text'
+      path: '/screening/full-text'
+      fullPath: '/p/$projectId/screening/full-text'
+      preLoaderRoute: typeof PProjectIdScreeningFullTextRouteImport
+      parentRoute: typeof PProjectIdRouteRoute
+    }
+    '/p/$projectId/screening/title-abstract': {
+      id: '/p/$projectId/screening/title-abstract'
+      path: '/screening/title-abstract'
+      fullPath: '/p/$projectId/screening/title-abstract'
+      preLoaderRoute: typeof PProjectIdScreeningTitleAbstractRouteImport
+      parentRoute: typeof PProjectIdRouteRoute
+    }
   }
 }
 
+interface PProjectIdRouteRouteChildren {
+  PProjectIdExtractionRoute: typeof PProjectIdExtractionRoute
+  PProjectIdProgressRoute: typeof PProjectIdProgressRoute
+  PProjectIdProtocolRoute: typeof PProjectIdProtocolRoute
+  PProjectIdReportsRoute: typeof PProjectIdReportsRoute
+  PProjectIdRiskOfBiasRoute: typeof PProjectIdRiskOfBiasRoute
+  PProjectIdSearchRoute: typeof PProjectIdSearchRoute
+  PProjectIdStudiesRoute: typeof PProjectIdStudiesRoute
+  PProjectIdIndexRoute: typeof PProjectIdIndexRoute
+  PProjectIdScreeningFullTextRoute: typeof PProjectIdScreeningFullTextRoute
+  PProjectIdScreeningTitleAbstractRoute: typeof PProjectIdScreeningTitleAbstractRoute
+}
+
+const PProjectIdRouteRouteChildren: PProjectIdRouteRouteChildren = {
+  PProjectIdExtractionRoute: PProjectIdExtractionRoute,
+  PProjectIdProgressRoute: PProjectIdProgressRoute,
+  PProjectIdProtocolRoute: PProjectIdProtocolRoute,
+  PProjectIdReportsRoute: PProjectIdReportsRoute,
+  PProjectIdRiskOfBiasRoute: PProjectIdRiskOfBiasRoute,
+  PProjectIdSearchRoute: PProjectIdSearchRoute,
+  PProjectIdStudiesRoute: PProjectIdStudiesRoute,
+  PProjectIdIndexRoute: PProjectIdIndexRoute,
+  PProjectIdScreeningFullTextRoute: PProjectIdScreeningFullTextRoute,
+  PProjectIdScreeningTitleAbstractRoute: PProjectIdScreeningTitleAbstractRoute,
+}
+
+const PProjectIdRouteRouteWithChildren = PProjectIdRouteRoute._addFileChildren(
+  PProjectIdRouteRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  PProjectIdRouteRoute: PProjectIdRouteRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
