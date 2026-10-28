@@ -158,7 +158,8 @@ def _record(
     ledger: Ledger,
     store: ArtifactStore,
     clock: Clock,
-) -> None:
+) -> Verdict:
+    """Insert the verdict and its event, or return the verdict another worker recorded first."""
     verdict = run.verdict
     attempts = []
     for a in run.attempts:
@@ -178,11 +179,12 @@ def _record(
     first = run.attempts[0].request
     verdict_id = new_id()
     criteria = [c.model_dump(mode="json") for c in verdict.criteria]
-    tx.execute(
+    inserted = tx.execute(
         "insert into verdict (id, project_id, judge_config_id, cache_key, item_ref, scope_id,"
         " stage, input_hash, protocol_hash, rendered_prompt_hash, schema_hash, criteria,"
         " excludes, flags, model_identity, raw_output_hash, attempts, created_at)"
-        " values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+        " values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+        " on conflict (project_id, cache_key) do nothing returning id",
         (
             verdict_id,
             project_id,
@@ -203,7 +205,13 @@ def _record(
             Jsonb(attempts),
             clock.now(),
         ),
-    )
+    ).fetchone()
+    if inserted is None:
+        winner = tx.execute(
+            "select * from verdict where project_id = %s and cache_key = %s", (project_id, key)
+        ).fetchone()
+        assert winner is not None
+        return _verdict_from_row(winner)
     ledger.append(
         tx,
         EventDraft(
@@ -227,6 +235,7 @@ def _record(
             },
         ),
     )
+    return verdict
 
 
 def judge_many(
@@ -249,7 +258,8 @@ def judge_many(
     """Judge every item once, in input order, at most `concurrency` model calls at a time.
 
     A verdict already recorded under the same cache key is returned without a model call, so a
-    rerun of a finished batch costs nothing. New verdicts, their artifacts, and one
+    rerun of a finished batch costs nothing. If a concurrent batch records the same key first,
+    its verdict is returned and no second row or event is written. New verdicts, their artifacts, and one
     `judge.verdict_recorded` event each are written through `tx`.
     """
     _check_recipe(config, recipe)
@@ -270,7 +280,7 @@ def judge_many(
                 )
             )
         for (key, item), run in zip(todo.items(), runs, strict=True):
-            _record(
+            done[key] = _record(
                 tx,
                 run,
                 item,
@@ -282,5 +292,4 @@ def judge_many(
                 store=store,
                 clock=clock,
             )
-            done[key] = run.verdict
     return [done[k] for k in keys]

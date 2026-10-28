@@ -1,11 +1,15 @@
 """`judge_many` against Postgres: verdict rows, raw outputs, ledger events, and the cache."""
 
 import json
+import os
+import threading
+import time
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import psycopg
 import pytest
+from psycopg.rows import dict_row
 
 from kittum.core import FixedClock
 from kittum.judge import (
@@ -13,6 +17,7 @@ from kittum.judge import (
     JudgeConfigConflict,
     judge_many,
     load_verdicts,
+    register_config,
 )
 from kittum.ledger.testing import InMemoryLedger
 from kittum.models import ModelRegistry
@@ -164,3 +169,62 @@ def test_verdict_rows_cannot_be_changed(pg: Tx) -> None:
     _run(pg, recorded(*ITEMS), InMemoryLedger(), MemoryStore(), ids)
     with pytest.raises(psycopg.errors.RaiseException, match="immutable"):
         pg.execute("update verdict set excludes = true where project_id = %s", (ids[0],))
+
+
+@pytest.mark.usefixtures("pg")  # skips without a database
+def test_concurrent_batches_record_each_verdict_once() -> None:
+    """Two workers miss the cache together; the loser takes the winner's row and stays usable."""
+    url = os.environ["KITTUM_DATABASE_URL"]
+    config = CONFIG.model_copy(update={"id": f"race-{time.time_ns()}"})
+    connect = lambda: psycopg.Connection[dict[str, Any]].connect(url, row_factory=dict_row)  # noqa: E731
+    with connect() as first, connect() as second, connect() as watcher:
+        watcher.autocommit = True
+        ids = _seed(first)
+        register_config(first, config, RECIPE, FixedClock(datetime(2026, 10, 28, tzinfo=UTC)))
+        first.commit()
+        try:
+            winner_ledger, loser_ledger = InMemoryLedger(), InMemoryLedger()
+            winner = _run(first, recorded(*ITEMS), winner_ledger, MemoryStore(), ids, config)
+            # `first` holds its uncommitted rows; `second` misses the cache and blocks on insert.
+            pid = second.execute("select pg_backend_pid() as pid").fetchone()["pid"]
+            result: dict[str, Any] = {}
+
+            def race() -> None:
+                try:
+                    backend = recorded(*ITEMS)
+                    result["verdicts"] = _run(
+                        second, backend, loser_ledger, MemoryStore(), ids, config
+                    )
+                    result["calls"] = len(backend.requests)
+                    second.commit()
+                except Exception as e:
+                    result["error"] = e
+                    second.rollback()
+
+            thread = threading.Thread(target=race)
+            thread.start()
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline and thread.is_alive():
+                row = watcher.execute(
+                    "select cardinality(pg_blocking_pids(%s)) as n", (pid,)
+                ).fetchone()
+                if row and row["n"]:
+                    break
+                time.sleep(0.02)
+            first.commit()
+            thread.join(timeout=10)
+
+            assert "error" not in result, result.get("error")
+            assert result["calls"] == len(ITEMS)  # it did miss the cache
+            assert result["verdicts"] == winner
+            assert len(winner_ledger.events(first, ids[0])) == len(ITEMS)
+            assert loser_ledger.events(second, ids[0]) == []
+            count = watcher.execute(
+                "select count(*) as n from verdict where judge_config_id = %s", (config.id,)
+            ).fetchone()
+            assert count == {"n": len(ITEMS)}
+        finally:
+            first.rollback()
+            watcher.execute("delete from verdict where judge_config_id = %s", (config.id,))
+            watcher.execute("delete from judge_config where id = %s", (config.id,))
+            watcher.execute("delete from project where id = %s", (ids[0],))
