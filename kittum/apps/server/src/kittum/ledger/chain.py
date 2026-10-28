@@ -9,12 +9,10 @@ The first event of a project chains to GENESIS_HASH. Changing anything here brea
 chain, so a change needs a new domain tag and a migration plan.
 """
 
-from typing import TYPE_CHECKING, Any
+from datetime import UTC, datetime
+from typing import Any
 
 from kittum.core import Id, content_hash
-
-if TYPE_CHECKING:
-    from datetime import datetime
 
 GENESIS_HASH = "0" * 64
 
@@ -45,7 +43,7 @@ def event_hash(
             "type": type,
             "schema_version": schema_version,
             "actor_id": str(actor_id),
-            "recorded_at": recorded_at.isoformat(),
+            "recorded_at": recorded_at.astimezone(UTC).isoformat(),
             "payload_hash": payload_hash,
             "prev_hash": prev_hash,
         },

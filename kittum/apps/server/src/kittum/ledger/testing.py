@@ -66,10 +66,15 @@ class InMemoryLedger:
                 schema_version=e.schema_version,
                 actor_id=e.actor_id,
                 recorded_at=e.recorded_at,
-                payload_hash=payload_hash(e.payload),
+                payload_hash=e.payload_hash,
                 prev_hash=prev,
             )
-            if e.seq != expected_seq or e.prev_hash != prev or e.event_hash != recomputed:
+            if (
+                e.seq != expected_seq
+                or e.prev_hash != prev
+                or e.payload_hash != payload_hash(e.payload)
+                or e.event_hash != recomputed
+            ):
                 return VerifyReport(
                     project_id=project_id,
                     checked_through_seq=expected_seq - 1,

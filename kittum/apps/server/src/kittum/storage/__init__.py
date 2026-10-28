@@ -5,12 +5,12 @@ Rows and ledger events reference the hash. Upload before committing the referenc
 leaves an orphan artifact, never a dangling reference.
 """
 
-from typing import TYPE_CHECKING, Protocol
+import os
+import tempfile
+from pathlib import Path
+from typing import Protocol
 
 from kittum.core import Sha256, sha256_hex
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 class ArtifactStore(Protocol):
@@ -35,9 +35,10 @@ class FilesystemStore:
         path = self._path(digest)
         if not path.exists():
             path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = path.with_suffix(".tmp")
-            tmp.write_bytes(data)
-            tmp.replace(path)
+            fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{digest}.")
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(data)
+            Path(tmp).replace(path)
         return digest
 
     def get(self, sha256: str) -> bytes:

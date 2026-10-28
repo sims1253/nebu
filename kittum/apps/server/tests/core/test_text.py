@@ -36,3 +36,7 @@ def test_repeated_quote_returns_every_occurrence() -> None:
 
 def test_empty_quote_is_never_found() -> None:
     assert find_quote("  ", ABSTRACT) == ()
+
+
+def test_hyphenated_and_plain_occurrences_are_both_reported() -> None:
+    assert len(find_quote("Treatment", "Treatment and Treat-\nment")) == 2

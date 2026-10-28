@@ -54,7 +54,14 @@ def _module_of(path: Path) -> str:
     return rel.parts[0].removesuffix(".py")
 
 
+def _is_submodule(dotted: str) -> bool:
+    """Whether `kittum.a.b` names a module or package on disk, not an attribute."""
+    rel = Path(*dotted.split(".")[1:])
+    return (SRC / rel).is_dir() or (SRC / rel).with_suffix(".py").exists()
+
+
 def _imports(path: Path) -> list[tuple[int, str]]:
+    """Every imported module, with `from x import y` resolved to `x.y` when y is a module."""
     tree = ast.parse(path.read_text(), filename=str(path))
     found: list[tuple[int, str]] = []
     for node in ast.walk(tree):
@@ -62,6 +69,11 @@ def _imports(path: Path) -> list[tuple[int, str]]:
             found += [(node.lineno, a.name) for a in node.names]
         elif isinstance(node, ast.ImportFrom) and node.module:
             found.append((node.lineno, node.module))
+            if node.module.split(".")[0] == "kittum":
+                for alias in node.names:
+                    dotted = f"{node.module}.{alias.name}"
+                    if _is_submodule(dotted):
+                        found.append((node.lineno, dotted))
     return found
 
 

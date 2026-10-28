@@ -69,14 +69,12 @@ def find_quote(quote: str, text: str) -> tuple[Span, ...]:
     needle, _ = _normalize(quote, join_hyphenated=False)
     if not needle:
         return ()
+    spans: set[Span] = set()
     for join in (False, True):
         hay, origin = _normalize(text, join_hyphenated=join)
-        spans: list[Span] = []
         start = hay.find(needle)
         while start != -1:
             end = start + len(needle) - 1
-            spans.append(Span(origin[start], origin[end] + 1))
+            spans.add(Span(origin[start], origin[end] + 1))
             start = hay.find(needle, start + 1)
-        if spans:
-            return tuple(spans)
-    return ()
+    return tuple(sorted(spans, key=lambda s: (s.start, s.end)))
