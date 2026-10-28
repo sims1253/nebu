@@ -6,6 +6,9 @@ import type { Page } from "@playwright/test";
 
 // Keys that only the AI's verdict or another person's decision carries.
 const AI_FIELDS = ["quote_verified", "downgraded_from", "failed_check", "excludes", "ai"];
+// What the person's own reveal may say of the AI's reading besides its words: whether the quote
+// was verified, and what the model answered before the check. Nothing else of the verdict.
+const REVEAL_FIELDS = new Set(["quote_verified", "downgraded_from"]);
 const DECISION_FIELDS = ["columns", "outcome", "reason_criterion_id", "evidence_anchor_ids"];
 // Keys that would tell a sentinel from any other record, anywhere; and, in screening answers, an
 // audit item (elsewhere `audit` is the protocol's audit plan, which everyone may read).
@@ -64,7 +67,7 @@ export const expectNothingLeaked = (responses: ReadonlyArray<{ url: string; body
     for (const [path, object] of objects(json)) {
       const keys = decisions
         ? [
-            ...(ownReveals.has(path) ? [] : AI_FIELDS),
+            ...AI_FIELDS.filter((key) => !(ownReveals.has(path) && REVEAL_FIELDS.has(key))),
             ...DECISION_FIELDS,
             ...AUDIT_FIELDS,
             ...SENTINEL_FIELDS,
