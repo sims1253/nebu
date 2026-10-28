@@ -138,9 +138,13 @@ so nothing touches the network. `uv run python -m tests.app.record_stack` in `ap
 
 A live run (real sources, a real model) can be captured once and replayed exactly, for a filmed
 demo or a reproducible test. Recording writes what the sources and the models answered; replaying
-answers every request from those recordings, so the run gives the same records, enrichment,
-verdicts, and ledger payloads without a network, a model server, or a key. What people do in the
-workbench is not recorded: replay the same steps.
+answers every request from those recordings, without a network, a model server, or a key. The
+source and model answers, the counts, the AI readings, the decisions, and the reports match the live
+run. Random draws over record IDs (the auditor's samples, where sentinels are placed) can differ,
+because every run gives its records new IDs: a stratum may sample two records live and three in the
+replay, so the elusion upper bound and the full-text audit items differ too. They match only when
+the replay reuses the live run's database IDs. What people do in the workbench is not recorded:
+replay the same steps.
 
 | Variable                | What it does                                                                                                                                                                                                                                         |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

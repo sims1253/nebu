@@ -182,6 +182,16 @@ def test_m1_blinds_reviewers_reveals_disagreement_and_adjudicates(
         )
     }
     assert any(i["title"] in {s.record.title for s in SENTINELS} for i in first)
+    # An abstract without section labels is shown whole, as one unlabelled section, not as a
+    # record with no abstract; and every protocol term marked in any abstract is in a section.
+    (review,) = [i for i in first if i["title"].startswith(TITLES["cf_review"])]
+    assert review["text"].startswith("Lumacaftor/ivacaftor (Orkambi")
+    assert review["record"]["sections"] == [["", 0, len(review["text"])]]
+    assert [label for *_, label in review["record"]["title_highlights"]] == ["protocol:DESIGN"]
+    marked = [(i, h) for i in first for h in i["highlights"]]
+    assert marked
+    for item, (start, end, _) in marked:
+        assert any(s <= start and end <= e for _, s, e in item["record"]["sections"])
     # A different seeded order for each reviewer.
     assert [i["title"] for i in first] != [i["title"] for i in a.whole_queue()]
 

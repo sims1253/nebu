@@ -514,3 +514,40 @@ def test_a_request_queued_for_a_slot_honours_a_cooldown_set_meanwhile(database: 
 
     assert sent_at == [sent_at[0]]
     assert sent_at[0] >= deadline
+
+
+def test_concurrent_requests_to_one_source_wait_their_turn(database: Database) -> None:
+    """Counting several searches at once: their rate tokens come from one bucket, and requests
+    the rate refuses wait for a token instead of failing."""
+    clock = FixedClock(START)
+    transport = FakeTransport(
+        responses={f"https://eutils.ncbi.nlm.nih.gov/{i}": b"<Count>1</Count>" for i in range(24)}
+    )
+    gateway = _gateway(
+        database,
+        transport,
+        policies=[_policy("pubmed", 3.0, concurrency=6)],
+        clock=clock,
+        sleep=RecordingSleep(clock),
+    )
+    barrier = threading.Barrier(6)
+    failures: list[BaseException] = []
+
+    def count(first: int) -> None:
+        try:
+            barrier.wait()
+            for i in range(first, 24, 6):
+                gateway.fetch("pubmed", _request(f"https://eutils.ncbi.nlm.nih.gov/{i}"))
+        except BaseException as error:
+            failures.append(error)
+
+    threads = [threading.Thread(target=count, args=(n,), daemon=True) for n in range(6)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+    # A deadlock fails here rather than hanging the run.
+    assert not any(thread.is_alive() for thread in threads)
+    assert failures == []
+    assert len(transport.sent) == 24
+    assert [a["status"] for a in _attempts(database)] == [200] * 24

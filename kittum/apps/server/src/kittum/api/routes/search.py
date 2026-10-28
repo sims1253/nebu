@@ -8,6 +8,7 @@ from kittum.api import Context  # noqa: TC001
 from kittum.api.routes.projects import Viewer  # noqa: TC001 - FastAPI resolves it at runtime
 from kittum.app import NotLead, require_lead
 from kittum.core import Id, Record
+from kittum.gateway import GatewayError
 from kittum.ledger import Ledger  # noqa: TC001
 from kittum.search import (
     CtgovSource,
@@ -93,7 +94,7 @@ def run_search(
                 actor_id=body.actor_id,
                 artifacts=ctx.artifacts,
             )
-    except SourceError as exc:
+    except (SourceError, GatewayError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 

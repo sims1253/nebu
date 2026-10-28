@@ -12,6 +12,7 @@ from kittum.api import AppContext, create_app
 from kittum.core import new_id, sha256_hex
 from kittum.db import Database
 from kittum.db.testing import null_tx
+from kittum.gateway import RecordedTransport, SourceGateway
 from kittum.gateway.testing import FakeTransport, PassThroughGateway
 from kittum.ledger.testing import InMemoryLedger
 from kittum.settings import Settings
@@ -252,6 +253,42 @@ def test_search_routes_refuse_to_write_without_a_ledger_or_gateway(
         )
         assert resp.status_code == 503
         assert "gateway" in resp.json()["detail"]
+        listed = client.get(
+            f"/api/projects/{project_id}/search/executions",
+            headers={"X-Kittum-Reviewer": actor_id},
+        )
+        assert listed.json() == []
+
+
+def test_an_offline_search_with_no_recording_is_an_unreachable_source(
+    url: str, actor_id: str, context: AppContext, tmp_path: Path
+) -> None:
+    """Offline, the gateway answers from recordings; a search nobody recorded is a 502 that names
+    its request, for PubMed and ClinicalTrials.gov alike, and nothing is stored."""
+    project_id = _project(url)
+    _lead(url, project_id, actor_id)
+    (tmp_path / "manifest.json").write_text("{}")
+    context.gateway = SourceGateway(
+        database=context.db,
+        transport=RecordedTransport(tmp_path),
+        artifacts=context.artifacts,
+        buckets="memory",
+        cache="memory",
+    )
+    ctgov_plan = {**PUBMED_PLAN, "source": "ctgov", "platform": "ClinicalTrials.gov"}
+    with TestClient(create_app(context)) as client:
+        for plan, source, host in (
+            (PUBMED_PLAN, "pubmed", "https://eutils.ncbi.nlm.nih.gov/"),
+            (ctgov_plan, "clinicaltrials", "https://clinicaltrials.gov/"),
+        ):
+            resp = client.post(
+                f"/api/projects/{project_id}/search/run",
+                json={"plan": plan, "actor_id": actor_id},
+            )
+            assert resp.status_code == 502, resp.text
+            assert resp.json()["detail"].startswith(
+                f"{source} is unreachable: no recorded response for {host}"
+            )
         listed = client.get(
             f"/api/projects/{project_id}/search/executions",
             headers={"X-Kittum-Reviewer": actor_id},

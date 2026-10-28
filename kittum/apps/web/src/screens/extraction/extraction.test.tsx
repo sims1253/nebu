@@ -157,16 +157,26 @@ describe("extraction review", () => {
       const app = mount(RUN);
       unmount = app.unmount;
       await expect.element(page.getByText("1 of 21 accepted"), settle).toBeVisible();
-      // A glance at the two rows, a while in another tab, and back: not a look at them.
-      const rows = await showGroupRows();
+      // The rows come into view as the page goes to another tab: the browser's reports reach the
+      // page while it is hidden, and no time may run then. Holding the reports at both edges
+      // makes this independent of how fast the machine is.
+      const rows = groupRows();
+      expect(rows).toHaveLength(2);
+      hold();
+      rows.at(-1)!.scrollIntoView({ block: "end" });
+      await expect.poll(() => (held?.length ?? 0) > 0, settle).toBe(true);
       setHidden(true);
+      release();
       await pause(HIDDEN_MS);
+      // Back, the fresh reports wait: nothing has been on screen since the return.
       const counts = rows.map((r) => inViewOf.get(r) ?? 0);
+      hold();
       setHidden(false);
       await press("a");
       await expect.element(notice(), settle).toMatchTextContent("has been on screen long enough");
       expect(app.workbench.groupAccepts).toHaveLength(0);
-      // Their time runs again once the page is back and has said so.
+      // Their time runs once the page has said they are in view again.
+      release();
       await reportedAgain(rows, counts);
       await pause(VIEW_MS + 100);
       await press("a");
