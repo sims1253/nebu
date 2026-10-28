@@ -60,24 +60,27 @@ function ProjectLayout() {
   const [help, setHelp] = useState(false);
   const { theme, toggle } = useTheme();
 
-  useKeys((event) => {
-    if (chord) {
-      setChord(false);
-      const target = NAV.find((n) => n.chord === event.key);
-      if (target)
-        void navigate({ to: path(target.section), params: { projectId: state.project.id } });
-      return true;
-    }
-    if (event.key === "g") {
-      setChord(true);
-      return true;
-    }
-    if (event.key === "h") {
-      setHelp(true);
-      return true;
-    }
-    return false;
-  });
+  useKeys(
+    (event) => {
+      if (chord) {
+        setChord(false);
+        const target = NAV.find((n) => n.chord === event.key);
+        if (target)
+          void navigate({ to: path(target.section), params: { projectId: state.project.id } });
+        return true;
+      }
+      if (event.key === "g") {
+        setChord(true);
+        return true;
+      }
+      if (event.key === "h") {
+        setHelp(true);
+        return true;
+      }
+      return false;
+    },
+    { first: true },
+  );
 
   return (
     <ProjectContext value={state}>

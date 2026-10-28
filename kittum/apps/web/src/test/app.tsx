@@ -25,6 +25,7 @@ export const press = (key: string) => {
     " ": " ",
     Backspace: "{Backspace}",
     Enter: "{Enter}",
+    Escape: "{Escape}",
     Tab: "{Tab}",
     ArrowDown: "{ArrowDown}",
     ArrowUp: "{ArrowUp}",
