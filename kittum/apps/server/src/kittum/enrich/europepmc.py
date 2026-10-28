@@ -53,7 +53,7 @@ def _locations(raw: dict[str, Any]) -> tuple[OaLocation, ...]:
     pmcid = raw.get("pmcid")
     in_epmc = raw.get("inEPMC") == "Y"
     licence = raw.get("license") if isinstance(raw.get("license"), str) else None
-    if not in_epmc or not isinstance(pmcid, str) or not pmcid:
+    if not in_epmc or not isinstance(pmcid, str) or not pmcid or not _is_open_access(raw):
         return ()
     found = [
         OaLocation(
@@ -75,6 +75,22 @@ def _locations(raw: dict[str, Any]) -> tuple[OaLocation, ...]:
             )
         )
     return tuple(found)
+
+
+def _is_open_access(raw: dict[str, Any]) -> bool:
+    """Full-text downloads exist only for Europe PMC's open-access subset.
+
+    `inEPMC=Y` also covers abstract-only and author-manuscript records, so it is not enough.
+    """
+    if raw.get("isOpenAccess") == "Y":
+        return True
+    urls = raw.get("fullTextUrlList")
+    if not isinstance(urls, dict):
+        return False
+    return any(
+        isinstance(entry, dict) and entry.get("availabilityCode") == "OA"
+        for entry in urls.get("fullTextUrl") or []
+    )
 
 
 def _has_pdf_link(raw: dict[str, Any]) -> bool:

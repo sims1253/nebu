@@ -1,27 +1,40 @@
 """Enrichment against recorded real responses. No test here touches the network."""
 
+import uuid
 from typing import TYPE_CHECKING
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
 import pytest
 
+from kittum.core import sha256_hex
 from kittum.enrich import (
     Enrichment,
     EnrichmentConfig,
     RecordEnrichment,
     SourceFailure,
+    crossref,
     enrich,
     full_text_candidates,
+    pubtator,
+)
+from kittum.gateway import HttpResponse
+from kittum.search import SourceRecord
+from tests.enrich.support import (
+    CONTACT_EMAIL,
+    DERIVED_RELATION_FIXTURE,
+    FIXTURES,
+    RETRACTION_NOTICE,
+    RETRACTION_ORIGINAL,
+    doi_only_records,
+    non_oa_records,
+    replay_gateway,
+    source_records,
 )
 from tests.enrich.support import config as enrichment_config
-from tests.enrich.support import doi_only_records, replay_gateway, source_records
 
 if TYPE_CHECKING:
-    import uuid
-
     from kittum.db import Tx
-    from kittum.gateway import Gateway, HttpRequest, HttpResponse
-    from kittum.search import SourceRecord
+    from kittum.gateway import Gateway, HttpRequest
 
 pytestmark = pytest.mark.postgres
 
@@ -40,6 +53,23 @@ class _DownGateway:
         if source in self._sources:
             raise TimeoutError(f"{source} is out of budget")
         return self._inner.fetch(source, request)
+
+
+class _OnlyCrossref:
+    """A gateway that answers Crossref with one recorded body and nothing else."""
+
+    def __init__(self, body: bytes) -> None:
+        self._body = body
+
+    def fetch(self, source: str, _request: HttpRequest) -> HttpResponse:
+        if source != "crossref":
+            raise TimeoutError(f"{source} is out of budget")
+        return HttpResponse(
+            status=200,
+            headers=(),
+            body=self._body,
+            body_hash=sha256_hex(self._body),
+        )
 
 
 def _project(tx: Tx) -> uuid.UUID:
@@ -253,3 +283,102 @@ def test_full_text_candidates_follow_the_waterfall(pg: Tx) -> None:
     assert retracted_candidates[0].format == "xml"
     assert retracted_candidates[-1].source == "openalex"
     assert retracted_candidates[-1].format == "pdf"
+
+
+def test_entity_offsets_keep_repeated_mentions_distinct(pg: Tx) -> None:
+    result = _enrich(pg, source_records())
+    retracted = _by_pmid(result.records)[_RETRACTED_PMID]
+    source = next(record for record in source_records() if record.pmid == _RETRACTED_PMID)
+    text = f"{source.title}\n{retracted.abstract}"
+    title_end = len(source.title)
+
+    gateway, _ = replay_gateway()
+    annotations = pubtator.annotations(gateway, ["32450107", "33301246", "32678530", "42785935"])[
+        _RETRACTED_PMID
+    ]
+    expected_texts = {annotation.text for annotation in annotations}
+
+    mentions = [
+        entity
+        for entity in retracted.entities
+        if text[entity.start : entity.end].lower() == "hydroxychloroquine"
+    ]
+    assert len(mentions) > 1
+    assert len({(entity.start, entity.end) for entity in mentions}) == len(mentions)
+
+    in_title = [entity for entity in mentions if entity.start < title_end]
+    assert [entity.start for entity in in_title] == [11]
+    assert all(entity.start > title_end for entity in mentions if entity not in in_title)
+
+    # Every span is exactly the annotation text, and none crosses the title/abstract seam.
+    for entity in retracted.entities:
+        assert text[entity.start : entity.end] in expected_texts
+        assert entity.end <= title_end or entity.start >= title_end + 1
+
+
+def test_retraction_notice_is_not_flagged_but_the_original_is() -> None:
+    gateway, _ = replay_gateway()
+    notice = crossref.work(gateway, RETRACTION_NOTICE, email=CONTACT_EMAIL)
+    original = crossref.work(gateway, RETRACTION_ORIGINAL, email=CONTACT_EMAIL)
+    assert notice is not None
+    assert original is not None
+
+    assert any(
+        update.kind == "retraction" and update.direction == "updates" for update in notice.updates
+    )
+    assert crossref.retraction_notice(notice) is None
+
+    assert crossref.retraction_notice(original) == RETRACTION_NOTICE.lower()
+
+
+def test_incoming_is_retracted_by_relation_flags_the_work(pg: Tx) -> None:
+    body = (FIXTURES / DERIVED_RELATION_FIXTURE).read_bytes()
+    record = SourceRecord(
+        occurrence_id=uuid.UUID(int=4001),
+        source="crossref",
+        provider_record_id=RETRACTION_ORIGINAL,
+        ordinal=1,
+        title="RETRACTED: Ileal-lymphoid-nodular hyperplasia, non-specific colitis.",
+        doi=RETRACTION_ORIGINAL,
+        raw_hash=sha256_hex(b"wp06-relation"),
+    )
+    result = _enrich(pg, (record,), _OnlyCrossref(body))
+
+    assert any(failure.source == "openalex" for failure in result.failures)
+    enriched = result.records[0]
+    assert enriched.retracted is True
+    assert enriched.retraction_notice_doi == RETRACTION_NOTICE.lower()
+    assert ("retraction", "crossref") in {
+        (source.field, source.source) for source in enriched.field_sources
+    }
+
+
+def test_unpaywall_is_asked_for_every_record_with_a_doi(pg: Tx) -> None:
+    gateway, transport = replay_gateway()
+    result = _enrich(pg, source_records(), gateway)
+
+    # The waterfall asks Unpaywall even when Europe PMC or OpenAlex already offered a file.
+    assert all(
+        any(location.format in {"pdf", "xml"} for location in record.oa_locations)
+        for record in result.records
+    )
+    requested = [
+        request.url for request in transport.sent if "api.unpaywall.org/v2/" in request.url
+    ]
+    dois = {record.doi for record in result.records if record.doi}
+    assert len(requested) == len(dois) == 4
+    for doi in dois:
+        assert any(unquote(urlsplit(url).path).lower().endswith(doi) for url in requested)
+    for record in result.records:
+        assert ("oa_locations", "unpaywall") in {
+            (source.field, source.source) for source in record.field_sources
+        }
+
+
+def test_non_open_access_europepmc_record_gets_no_full_text_candidate(pg: Tx) -> None:
+    result = _enrich(pg, non_oa_records())
+    record = result.records[0]
+
+    assert record.pmcid == "PMC13544592"  # Europe PMC indexes it, but not as open access
+    assert not any(location.source == "europepmc" for location in record.oa_locations)
+    assert all(candidate.source != "europepmc" for candidate in full_text_candidates(record))

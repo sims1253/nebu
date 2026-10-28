@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 
 from kittum.enrich import crossref, europepmc, openalex, pubtator, unpaywall
 from kittum.enrich._http import SourceUnavailable
-from kittum.enrich._text import title_and_abstract
 from kittum.enrich.store import store
 from kittum.enrich.types import (
     Enrichment,
@@ -74,11 +73,12 @@ class _State:
             self.note("pmid", source)
 
     def add_locations(self, locations: tuple[OaLocation, ...], source: str) -> None:
+        if not locations:
+            return
         known = {location.url for location in self.oa_locations}
-        added = [location for location in locations if location.url not in known]
-        if added:
-            self.oa_locations.extend(added)
-            self.note("oa_locations", source)
+        self.oa_locations.extend(location for location in locations if location.url not in known)
+        # The source answered for this field even when its URL duplicates an earlier one.
+        self.note("oa_locations", source)
 
     def add_entities(self, entities: tuple[EntityTag, ...]) -> None:
         known = {(entity.start, entity.end, entity.label) for entity in self.entities}
@@ -88,9 +88,6 @@ class _State:
         if added:
             self.entities.extend(added)
             self.note("entities", pubtator.SOURCE)
-
-    def has_full_text_file(self) -> bool:
-        return any(location.format in {"pdf", "xml"} for location in self.oa_locations)
 
     def finish(self) -> RecordEnrichment:
         sources_used = tuple(dict.fromkeys(item.source for item in self.field_sources.values()))
@@ -262,7 +259,7 @@ def _from_unpaywall(
         return
     seen: dict[str, OaLocation | None] = {}
     for state in states:
-        if not state.doi or state.has_full_text_file():
+        if not state.doi:
             continue
         if state.doi not in seen:
             try:
@@ -291,29 +288,67 @@ def _from_pubtator(
     for state in states:
         if not state.pmid:
             continue
-        text = title_and_abstract(state.record.title, state.abstract)
-        entities = _entities(state, annotations.get(state.pmid, ()), text)
+        entities = _entities(state, annotations.get(state.pmid, ()))
         state.add_entities(entities)
 
 
-def _entities(
-    state: _State, annotations: tuple[pubtator.Annotation, ...], text: str
-) -> tuple[EntityTag, ...]:
-    """Re-anchor PubTator's passage offsets in Kittum's title-plus-abstract text."""
+def _entities(state: _State, annotations: tuple[pubtator.Annotation, ...]) -> tuple[EntityTag, ...]:
+    """Re-anchor PubTator's passage offsets in Kittum's title-plus-abstract text.
+
+    PubTator's passage text can differ from Kittum's (section markup, spacing, or a different
+    abstract source). The annotation's own offset is used when the text there still matches;
+    otherwise the annotation maps to the same occurrence number of its text within the passage.
+    Either way the mapped span is checked against the annotation text, and one span is used once,
+    so repeated mentions stay distinct.
+    """
+    passages = {"title": state.record.title, "abstract": state.abstract}
     title_length = len(state.record.title)
+    ranks: dict[tuple[str, str], int] = {}
+    used: dict[tuple[str, str], set[int]] = {}
     found = []
-    for annotation in annotations:
-        base = 0 if annotation.passage == "title" else title_length + 1
-        start = text.find(annotation.text, base)
-        if start < 0:
+    ordered = sorted(annotations, key=lambda a: (a.passage != "title", a.offset))
+    for annotation in ordered:
+        passage = passages.get(annotation.passage)
+        if passage is None:
             continue
+        key = (annotation.passage, annotation.text)
+        rank = ranks.get(key, 0)
+        spans = used.setdefault(key, set())
+        start = _passage_offset(passage, annotation, rank, spans)
+        if start is None:
+            continue
+        ranks[key] = rank + 1
+        spans.add(start)
+        base = 0 if annotation.passage == "title" else title_length + 1
         found.append(
             EntityTag(
-                start=start,
-                end=start + len(annotation.text),
+                start=base + start,
+                end=base + start + len(annotation.text),
                 label=annotation.label,
                 normalized_id=annotation.normalized_id,
                 tagger=pubtator.SOURCE,
             )
         )
     return tuple(found)
+
+
+def _passage_offset(
+    passage: str, annotation: pubtator.Annotation, rank: int, used: set[int]
+) -> int | None:
+    """Where one annotation sits in Kittum's version of its passage, or `None` if it is absent."""
+    text = annotation.text
+    if (
+        passage[annotation.offset : annotation.offset + len(text)] == text
+        and annotation.offset not in used
+    ):
+        return annotation.offset
+    position = -1
+    for _ in range(rank + 1):
+        position = passage.find(text, position + 1)
+        if position < 0:
+            return None
+    while position in used:
+        position = passage.find(text, position + 1)
+        if position < 0:
+            return None
+    return position

@@ -17,10 +17,20 @@ from typing import TYPE_CHECKING
 import psycopg
 
 from kittum.core import sha256_hex
-from kittum.enrich import EnrichmentConfig, enrich
+from kittum.enrich import EnrichmentConfig, crossref, enrich
 from kittum.gateway import HttpRequest, HttpResponse
 from kittum.gateway.testing import PassThroughGateway
-from tests.enrich.support import FIXTURES, config, doi_only_records, source_records
+from tests.enrich.support import (
+    CONTACT_EMAIL,
+    DERIVED_RELATION_FIXTURE,
+    FIXTURES,
+    RETRACTION_NOTICE,
+    RETRACTION_ORIGINAL,
+    config,
+    doi_only_records,
+    non_oa_records,
+    source_records,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -99,8 +109,29 @@ def main() -> None:
         _run(source_records(), openalex_down, connection, config())
         _run(doi_only_records(), gateway, connection, config())
         _run(doi_only_records(), metadata_down, connection, config())
+        _run(non_oa_records(), gateway, connection, config())
+        for doi in (RETRACTION_ORIGINAL, RETRACTION_NOTICE):
+            crossref.work(gateway, doi, email=CONTACT_EMAIL)
     transport.write_manifest()
+    _derive_relation_fixture(transport)
     print(f"recorded {len(transport._manifest)} responses in {FIXTURES}")
+
+
+def _derive_relation_fixture(transport: RecordingTransport) -> None:
+    """Copy a recorded work and state an incoming `is-retracted-by` relation.
+
+    Crossref's live API returns `updated-by` for the cases we could find and rejects
+    `is-retracted-by` as a relation filter, but publishers can deposit relation kinds that the
+    filter list does not cover. The rest of the document is the real recorded original.
+    """
+    url = crossref._url(RETRACTION_ORIGINAL, CONTACT_EMAIL)
+    body = json.loads((FIXTURES / transport._manifest[url]).read_bytes())
+    message = body["message"]
+    message["updated-by"] = []
+    message["relation"] = {
+        "is-retracted-by": [{"id-type": "doi", "id": RETRACTION_NOTICE, "asserted-by": "object"}]
+    }
+    (FIXTURES / DERIVED_RELATION_FIXTURE).write_text(json.dumps(body, indent=1) + "\n")
 
 
 if __name__ == "__main__":

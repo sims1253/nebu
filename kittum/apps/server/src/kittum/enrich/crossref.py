@@ -17,7 +17,24 @@ if TYPE_CHECKING:
 
 SOURCE = "crossref"
 BASE = "https://api.crossref.org/works"
-_RETRACTION_KINDS = {"retraction"}
+RETRACTION = "retraction"
+
+type Direction = Literal["updates", "updated_by"]
+type UpdateKind = tuple[str, Direction]
+
+# Relation kinds stated by Crossref, mapped to the normalised notice kind and its direction.
+# `is-retracted-by` is an incoming relation: the linked work retracts this one. A plain
+# `retraction` relation and an `update-to` belong to the notice and point at the retracted work.
+_RELATIONS: dict[str, UpdateKind] = {
+    "retraction": (RETRACTION, "updates"),
+    "is-retracted-by": (RETRACTION, "updated_by"),
+    "correction": ("correction", "updates"),
+    "is-correction-of": ("correction", "updates"),
+    "erratum": ("erratum", "updates"),
+    "is-erratum-of": ("erratum", "updates"),
+    "expression_of_concern": ("expression_of_concern", "updates"),
+    "is-expression-of-concern-of": ("expression_of_concern", "updates"),
+}
 
 
 class Work(Record):
@@ -38,26 +55,40 @@ def _url(doi: str, email: str | None) -> str:
 def _updates(message: dict[str, Any]) -> tuple[WorkUpdate, ...]:
     found: dict[tuple[str, str, str], WorkUpdate] = {}
 
-    def add(doi: Any, kind: Any, direction: Literal["updates", "updated_by"]) -> None:
-        if not isinstance(doi, str) or not doi or not isinstance(kind, str) or not kind:
+    def add(doi: Any, kind: str, direction: Direction) -> None:
+        if not isinstance(doi, str) or not doi or not kind:
             return
         update = WorkUpdate(doi=doi.lower(), kind=kind, direction=direction)
         found.setdefault((update.doi, update.kind, update.direction), update)
 
     for entry in message.get("update-to") or []:
         if isinstance(entry, dict):
-            add(entry.get("DOI"), entry.get("type"), "updates")
+            kind = entry.get("type")
+            if isinstance(kind, str):
+                add(entry.get("DOI"), _kind(kind), "updates")
     for entry in message.get("updated-by") or []:
         if isinstance(entry, dict):
-            add(entry.get("DOI"), entry.get("type"), "updated_by")
+            kind = entry.get("type")
+            if isinstance(kind, str):
+                add(entry.get("DOI"), _kind(kind), "updated_by")
     relation = message.get("relation")
     if isinstance(relation, dict):
         for kind, entries in relation.items():
-            direction = "updated_by" if kind.startswith("is-") else "updates"
+            normalised, direction = _relation(kind)
             for entry in entries or []:
                 if isinstance(entry, dict):
-                    add(entry.get("id"), kind, direction)
+                    add(entry.get("id"), normalised, direction)
     return tuple(found.values())
+
+
+def _kind(kind: str) -> str:
+    """The normalised notice kind of one `update-to`/`updated-by` type."""
+    return _RELATIONS.get(kind.lower(), (kind.lower(), "updates"))[0]
+
+
+def _relation(kind: str) -> UpdateKind:
+    """The notice kind and direction of a Crossref relation key."""
+    return _RELATIONS.get(kind.lower(), (kind.lower(), "updates"))
 
 
 def _trial_numbers(message: dict[str, Any]) -> tuple[str, ...]:
@@ -88,13 +119,12 @@ def work(gateway: Gateway, doi: str, *, email: str | None = None) -> Work | None
 
 
 def retraction_notice(work: Work) -> str | None:
-    """The DOI of the notice that retracts this work, if Crossref records one."""
+    """The DOI of the notice that retracts this work, if Crossref records one.
+
+    Only an incoming notice counts. Outgoing `update-to` links and a plain `retraction` relation
+    belong to the notice itself, so a retraction notice is never flagged as retracted.
+    """
     for update in work.updates:
-        # `update-to` on a retracted paper is how some publishers deposit the notice; on a notice
-        # it points the other way. Prefer `updated_by`, then accept `update-to`.
-        if update.kind in _RETRACTION_KINDS and update.direction == "updated_by":
-            return update.doi
-    for update in work.updates:
-        if update.kind in _RETRACTION_KINDS and update.direction == "updates":
+        if update.kind == RETRACTION and update.direction == "updated_by":
             return update.doi
     return None

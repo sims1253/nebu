@@ -1,16 +1,25 @@
 {
+  "https://api.crossref.org/works/10.1002%2Fpri.70332?mailto=test%40kittum.dev": "d668aa52c30bf9f5.json",
+  "https://api.crossref.org/works/10.1016%2Fs0140-6736%2810%2960175-4?mailto=test%40kittum.dev": "fb51ecb7d658d982.json",
   "https://api.crossref.org/works/10.1016%2Fs0140-6736%2820%2931180-6?mailto=test%40kittum.dev": "9a6f354bc2cfa489.json",
+  "https://api.crossref.org/works/10.1016%2Fs0140-6736%2897%2911096-0?mailto=test%40kittum.dev": "b09a6deb4cf36b89.json",
   "https://api.crossref.org/works/10.1056%2Fnejmoa2021436?mailto=test%40kittum.dev": "cafb6adc1637bddb.json",
   "https://api.crossref.org/works/10.1056%2Fnejmoa2034577?mailto=test%40kittum.dev": "6d7a0ffdb79d9755.json",
   "https://api.crossref.org/works/10.1136%2Fbmjopen-2026-124110?mailto=test%40kittum.dev": "8b69ed0662f29d0a.json",
+  "https://api.openalex.org/works?filter=doi:10.1002/pri.70332&per-page=100&select=id,doi,ids,display_name,abstract_inverted_index,is_retracted,open_access,best_oa_location,locations": "57170c14f77e8b78.json",
   "https://api.openalex.org/works?filter=doi:10.1016/s0140-6736%2820%2931180-6|10.1056/nejmoa2021436|10.1136/bmjopen-2026-124110&per-page=100&select=id,doi,ids,display_name,abstract_inverted_index,is_retracted,open_access,best_oa_location,locations": "14cbf1570373a00e.json",
   "https://api.openalex.org/works?filter=pmid:32450107|33301246|32678530|42785935&per-page=100&select=id,doi,ids,display_name,abstract_inverted_index,is_retracted,open_access,best_oa_location,locations": "8ef040a5ab2f80bd.json",
+  "https://api.openalex.org/works?filter=pmid:42696477&per-page=100&select=id,doi,ids,display_name,abstract_inverted_index,is_retracted,open_access,best_oa_location,locations": "1d428228e1df30aa.json",
+  "https://api.unpaywall.org/v2/10.1002%2Fpri.70332?email=test%40kittum.dev": "368f4a0c9812e39c.json",
   "https://api.unpaywall.org/v2/10.1016%2Fs0140-6736%2820%2931180-6?email=test%40kittum.dev": "e55003869bd604c8.json",
   "https://api.unpaywall.org/v2/10.1056%2Fnejmoa2021436?email=test%40kittum.dev": "ebd5173a3a013236.json",
+  "https://api.unpaywall.org/v2/10.1056%2Fnejmoa2034577?email=test%40kittum.dev": "97f19170302e5ac5.json",
   "https://api.unpaywall.org/v2/10.1136%2Fbmjopen-2026-124110?email=test%40kittum.dev": "68f15f26e578f908.json",
   "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID%3A32450107+OR+EXT_ID%3A32678530+OR+EXT_ID%3A42785935+OR+DOI%3A%2210.1016%2Fs0140-6736%2820%2931180-6%22+OR+DOI%3A%2210.1056%2Fnejmoa2021436%22+OR+DOI%3A%2210.1136%2Fbmjopen-2026-124110%22&format=json&resultType=core&synonym=FALSE&pageSize=100": "22e7e8127cb907fb.json",
   "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID%3A32450107+OR+EXT_ID%3A33301246+OR+EXT_ID%3A32678530+OR+EXT_ID%3A42785935+OR+DOI%3A%2210.1016%2Fs0140-6736%2820%2931180-6%22+OR+DOI%3A%2210.1056%2Fnejmoa2021436%22+OR+DOI%3A%2210.1136%2Fbmjopen-2026-124110%22&format=json&resultType=core&synonym=FALSE&pageSize=100": "aafbae5b0d37650a.json",
   "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID%3A32450107+OR+EXT_ID%3A33301246+OR+EXT_ID%3A32678530+OR+EXT_ID%3A42785935+OR+DOI%3A%2210.1016%2Fs0140-6736%2820%2931180-6%22+OR+DOI%3A%2210.1056%2Fnejmoa2034577%22+OR+DOI%3A%2210.1056%2Fnejmoa2021436%22+OR+DOI%3A%2210.1136%2Fbmjopen-2026-124110%22&format=json&resultType=core&synonym=FALSE&pageSize=100": "51dc44ea574c9d45.json",
+  "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID%3A42696477+OR+DOI%3A%2210.1002%2Fpri.70332%22&format=json&resultType=core&synonym=FALSE&pageSize=100": "2f57668cef24aa41.json",
   "https://www.ncbi.nlm.nih.gov/research/pubtator3-api/publications/export/biocjson?pmids=32450107%2C32678530%2C42785935": "d633f2cf23f7dcc6.json",
-  "https://www.ncbi.nlm.nih.gov/research/pubtator3-api/publications/export/biocjson?pmids=32450107%2C33301246%2C32678530%2C42785935": "869f8b955389f9b0.json"
+  "https://www.ncbi.nlm.nih.gov/research/pubtator3-api/publications/export/biocjson?pmids=32450107%2C33301246%2C32678530%2C42785935": "869f8b955389f9b0.json",
+  "https://www.ncbi.nlm.nih.gov/research/pubtator3-api/publications/export/biocjson?pmids=42696477": "dad06b3eb1d92173.json"
 }

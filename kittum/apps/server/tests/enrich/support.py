@@ -19,6 +19,9 @@ if TYPE_CHECKING:
 
 FIXTURES = Path(__file__).parent / "fixtures"
 CONTACT_EMAIL = "test@kittum.dev"
+RETRACTION_ORIGINAL = "10.1016/S0140-6736(97)11096-0"
+RETRACTION_NOTICE = "10.1016/S0140-6736(10)60175-4"
+DERIVED_RELATION_FIXTURE = "crossref_is_retracted_by.json"
 
 _HCQ = {
     "provider_record_id": "32450107",
@@ -43,6 +46,16 @@ _DEX = {
     "journal": "New England Journal of Medicine",
     "doi": "10.1056/NEJMoa2021436",
     "pmid": "32678530",
+}
+_NON_OA = {
+    "provider_record_id": "42696477",
+    "title": (
+        "Adding Rib Mobilization to Diaphragm Release Techniques in Patients With Non-Specific "
+        "Neck Pain: Randomized Controlled Trial."
+    ),
+    "journal": "Physiotherapy Research International",
+    "doi": "10.1002/pri.70332",
+    "pmid": "42696477",
 }
 _BMJ = {
     "provider_record_id": "42785935",
@@ -85,6 +98,11 @@ def doi_only_records() -> tuple[SourceRecord, ...]:
         _record(2000 + index, {**raw, "pmid": None})
         for index, raw in enumerate((_HCQ, _DEX, _BMJ), 1)
     )
+
+
+def non_oa_records() -> tuple[SourceRecord, ...]:
+    """One trial that Europe PMC indexes but does not offer as open access."""
+    return (_record(3001, _NON_OA),)
 
 
 def config() -> EnrichmentConfig:
