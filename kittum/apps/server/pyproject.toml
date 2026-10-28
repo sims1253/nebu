@@ -25,6 +25,7 @@ dependencies = [
     "rapidfuzz>=3.14.6",
     "pydantic-ai-slim[openai]>=2.62.0",
     "janus-server",
+    "pdf-inspector>=1.25.2",
 ]
 
 [project.scripts]
