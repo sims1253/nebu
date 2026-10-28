@@ -3,17 +3,32 @@ import * as Data from "effect/Data"
 import * as Effect from "effect/Effect"
 import type { SchemaError } from "effect/Schema"
 import * as Schema from "effect/Schema"
-import type * as HttpClient from "effect/http/HttpClient"
+import * as Stream from "effect/Stream"
+import * as HttpClient from "effect/http/HttpClient"
 import * as HttpClientError from "effect/http/HttpClientError"
 import * as HttpClientRequest from "effect/http/HttpClientRequest"
 import * as HttpClientResponse from "effect/http/HttpClientResponse"
 // non-recursive definitions
-export type Health = { readonly "status": string, readonly "version": string }
-export const Health = Schema.Struct({ "status": Schema.String.annotate({ "title": "Status" }), "version": Schema.String.annotate({ "title": "Version" }) }).annotate({ "title": "Health", "identifier": "Health" })
+export type Box = { readonly "page": number, readonly "x0": number, readonly "x1": number, readonly "y0": number, readonly "y1": number }
+export const Box = Schema.Struct({ "page": Schema.Number.annotate({ "title": "Page" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "x0": Schema.Number.annotate({ "title": "X0" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "x1": Schema.Number.annotate({ "title": "X1" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "y0": Schema.Number.annotate({ "title": "Y0" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "y1": Schema.Number.annotate({ "title": "Y1" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })) }).annotate({ "title": "Box", "identifier": "Box" })
+export type CellRef = { readonly "col": number, readonly "col_span"?: number, readonly "header_path"?: ReadonlyArray<string>, readonly "row": number, readonly "row_span"?: number, readonly "table_id": string }
+export const CellRef = Schema.Struct({ "col": Schema.Number.annotate({ "title": "Col" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "col_span": Schema.optionalKey(Schema.Number.annotate({ "title": "Col Span", "default": 1 }).check(Schema.isInt().annotate({ "expected": "an integer" }))), "header_path": Schema.optionalKey(Schema.Array(Schema.String).annotate({ "title": "Header Path", "default": [] })), "row": Schema.Number.annotate({ "title": "Row" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "row_span": Schema.optionalKey(Schema.Number.annotate({ "title": "Row Span", "default": 1 }).check(Schema.isInt().annotate({ "expected": "an integer" }))), "table_id": Schema.String.annotate({ "title": "Table Id" }) }).annotate({ "title": "CellRef", "identifier": "CellRef" })
 export type Id = string
 export const Id = Schema.String.annotate({ "format": "uuid", "identifier": "Id" })
+export type TextQuote = { readonly "exact": string, readonly "prefix"?: string, readonly "suffix"?: string }
+export const TextQuote = Schema.Struct({ "exact": Schema.String.annotate({ "title": "Exact" }), "prefix": Schema.optionalKey(Schema.String.annotate({ "title": "Prefix", "default": "" })), "suffix": Schema.optionalKey(Schema.String.annotate({ "title": "Suffix", "default": "" })) }).annotate({ "title": "TextQuote", "identifier": "TextQuote" })
+export type Sha256 = string
+export const Sha256 = Schema.String.check(Schema.isPattern(new RegExp("^[0-9a-f]{64}$", "u")).annotate({ "expected": "a string matching the RegExp ^[0-9a-f]{64}$", "identifier": "Sha256" }))
 export type ValidationError = { readonly "ctx"?: { readonly [x: string]: Schema.Json }, readonly "input"?: Schema.Json, readonly "loc": ReadonlyArray<string | number>, readonly "msg": string, readonly "type": string } & { readonly [x: string]: Schema.Json }
 export const ValidationError = Schema.StructWithRest(Schema.Struct({ "ctx": Schema.optionalKey(Schema.Record(Schema.String, Schema.Json.annotate({ "expected": "JSON value" })).annotate({ "title": "Context" })), "input": Schema.optionalKey(Schema.Json.annotate({ "expected": "JSON value", "title": "Input" })), "loc": Schema.Array(Schema.Union([Schema.String, Schema.Int])).annotate({ "title": "Location" }), "msg": Schema.String.annotate({ "title": "Message" }), "type": Schema.String.annotate({ "title": "Error Type" }) }), [Schema.Record(Schema.String, Schema.Json.annotate({ "expected": "JSON value" }))]).annotate({ "title": "ValidationError", "identifier": "ValidationError" })
+export type PageTriage = { readonly "kind": "text" | "ocr" | "broken_encoding", readonly "page": number, readonly "reasons"?: ReadonlyArray<string> }
+export const PageTriage = Schema.Struct({ "kind": Schema.Literals(["text", "ocr", "broken_encoding"]).annotate({ "title": "Kind" }), "page": Schema.Number.annotate({ "title": "Page" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "reasons": Schema.optionalKey(Schema.Array(Schema.String).annotate({ "title": "Reasons", "default": [] })) }).annotate({ "title": "PageTriage", "description": "Whether a page's text layer can be trusted (pdf-inspector plus a PyMuPDF check).", "identifier": "PageTriage" })
+export type Health = { readonly "status": string, readonly "version": string }
+export const Health = Schema.Struct({ "status": Schema.String.annotate({ "title": "Status" }), "version": Schema.String.annotate({ "title": "Version" }) }).annotate({ "title": "Health", "identifier": "Health" })
+export type AnchorRequest = { readonly "occurrence"?: number | null, readonly "quote": string }
+export const AnchorRequest = Schema.Struct({ "occurrence": Schema.optionalKey(Schema.Union([Schema.Int, Schema.Null]).annotate({ "title": "Occurrence" })), "quote": Schema.String.annotate({ "title": "Quote" }) }).annotate({ "title": "AnchorRequest", "identifier": "AnchorRequest" })
+export type WordBox = { readonly "end": number, readonly "start": number, readonly "text": string, readonly "x0": number, readonly "x1": number, readonly "y0": number, readonly "y1": number }
+export const WordBox = Schema.Struct({ "end": Schema.Number.annotate({ "title": "End" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "start": Schema.Number.annotate({ "title": "Start" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "text": Schema.String.annotate({ "title": "Text" }), "x0": Schema.Number.annotate({ "title": "X0" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "x1": Schema.Number.annotate({ "title": "X1" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "y0": Schema.Number.annotate({ "title": "Y0" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "y1": Schema.Number.annotate({ "title": "Y1" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })) }).annotate({ "title": "WordBox", "identifier": "WordBox" })
 export type Relation = "same_record" | "same_report" | "same_study"
 export const Relation = Schema.Literals(["same_record", "same_report", "same_study"]).annotate({ "identifier": "Relation" })
 export type ProposalStatus = "pending" | "confirmed" | "rejected"
@@ -22,8 +37,6 @@ export type PrismaCounts = { readonly "duplicates_removed": number, readonly "re
 export const PrismaCounts = Schema.Struct({ "duplicates_removed": Schema.Number.annotate({ "title": "Duplicates Removed" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "records_identified_per_source": Schema.Record(Schema.String, Schema.Int).annotate({ "title": "Records Identified Per Source" }), "studies_identified": Schema.Number.annotate({ "title": "Studies Identified" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "total_records_identified": Schema.Number.annotate({ "title": "Total Records Identified" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "unique_records": Schema.Number.annotate({ "title": "Unique Records" }).check(Schema.isInt().annotate({ "expected": "an integer" })) }).annotate({ "title": "PrismaCounts", "identifier": "PrismaCounts" })
 export type SplitLevel = "report" | "study"
 export const SplitLevel = Schema.Literals(["report", "study"]).annotate({ "identifier": "SplitLevel" })
-export type Sha256 = string
-export const Sha256 = Schema.String.check(Schema.isPattern(new RegExp("^[0-9a-f]{64}$", "u")).annotate({ "expected": "a string matching the RegExp ^[0-9a-f]{64}$", "identifier": "Sha256" }))
 export type LanguageCode = string
 export const LanguageCode = Schema.String.check(Schema.isPattern(new RegExp("^[a-z]{2,3}(-[A-Z]{2})?$", "u")).annotate({ "expected": "a string matching the RegExp ^[a-z]{2,3}(-[A-Z]{2})?$", "identifier": "LanguageCode" }))
 export type Text = string
@@ -58,6 +71,8 @@ export type SearchPlan = { readonly "limits"?: ReadonlyArray<string>, readonly "
 export const SearchPlan = Schema.Struct({ "limits": Schema.optionalKey(Schema.Array(Schema.String).annotate({ "title": "Limits", "default": [] })), "platform": Schema.String.annotate({ "title": "Platform" }), "source": Schema.String.annotate({ "title": "Source" }), "strategy": Schema.String.annotate({ "title": "Strategy" }), "topic_id": Schema.String.annotate({ "title": "Topic Id" }) }).annotate({ "title": "SearchPlan", "identifier": "SearchPlan" })
 export type ProtocolIssue = { readonly "message": string, readonly "path": string }
 export const ProtocolIssue = Schema.Struct({ "message": Schema.String.annotate({ "title": "Message" }), "path": Schema.String.annotate({ "title": "Path" }) }).annotate({ "title": "ProtocolIssue", "identifier": "ProtocolIssue" })
+export type LayerSummary = { readonly "engine": string, readonly "engine_version": string, readonly "id": Id }
+export const LayerSummary = Schema.Struct({ "engine": Schema.String.annotate({ "title": "Engine" }), "engine_version": Schema.String.annotate({ "title": "Engine Version" }), "id": Id }).annotate({ "title": "LayerSummary", "identifier": "LayerSummary" })
 export type ConfirmRequest = { readonly "actor_id": Id, readonly "proposal_id": Id, readonly "revision_id": Id }
 export const ConfirmRequest = Schema.Struct({ "actor_id": Id, "proposal_id": Id, "revision_id": Id }).annotate({ "title": "ConfirmRequest", "identifier": "ConfirmRequest" })
 export type IdentityRevision = { readonly "event_id"?: Id | null, readonly "event_seq"?: number, readonly "id": Id, readonly "parent_id"?: Id | null, readonly "project_id": Id }
@@ -66,16 +81,24 @@ export type ProtocolVersionSummary = { readonly "content_hash": string, readonly
 export const ProtocolVersionSummary = Schema.Struct({ "content_hash": Schema.String.annotate({ "title": "Content Hash" }), "created_at": Schema.String.annotate({ "title": "Created At", "format": "date-time" }), "id": Id, "parent_id": Schema.Union([Id, Schema.Null]), "published_at": Schema.Union([Schema.String.annotate({ "format": "date-time" }), Schema.Null]).annotate({ "title": "Published At" }), "status": Schema.Literals(["draft", "published"]).annotate({ "title": "Status" }), "version_label": Schema.String.annotate({ "title": "Version Label" }) }).annotate({ "title": "ProtocolVersionSummary", "identifier": "ProtocolVersionSummary" })
 export type PublishRequest = { readonly "approved_by": Id, readonly "reason"?: string | null }
 export const PublishRequest = Schema.Struct({ "approved_by": Id, "reason": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Reason" })) }).annotate({ "title": "PublishRequest", "identifier": "PublishRequest" })
+export type Anchor = { readonly "boxes": ReadonlyArray<Box>, readonly "cells"?: ReadonlyArray<CellRef>, readonly "document_id": Id, readonly "end": number, readonly "id": Id, readonly "layer_id": Id, readonly "quote": TextQuote, readonly "start": number, readonly "text_hash": Sha256 }
+export const Anchor = Schema.Struct({ "boxes": Schema.Array(Box).annotate({ "title": "Boxes" }), "cells": Schema.optionalKey(Schema.Array(CellRef).annotate({ "title": "Cells", "default": [] })), "document_id": Id, "end": Schema.Number.annotate({ "title": "End" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "id": Id, "layer_id": Id, "quote": TextQuote, "start": Schema.Number.annotate({ "title": "Start" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "text_hash": Sha256 }).annotate({ "title": "Anchor", "identifier": "Anchor" })
+export type Document = { readonly "artifact_hash": Sha256, readonly "id": Id, readonly "media_type": string, readonly "page_count"?: number | null }
+export const Document = Schema.Struct({ "artifact_hash": Sha256, "id": Id, "media_type": Schema.String.annotate({ "title": "Media Type" }), "page_count": Schema.optionalKey(Schema.Union([Schema.Int, Schema.Null]).annotate({ "title": "Page Count" })) }).annotate({ "title": "Document", "identifier": "Document" })
+export type SourceRecord = { readonly "abstract"?: string | null, readonly "authors"?: ReadonlyArray<string>, readonly "doi"?: string | null, readonly "journal"?: string | null, readonly "occurrence_id": Id, readonly "ordinal": number, readonly "pmid"?: string | null, readonly "provider_record_id": string, readonly "publication_types"?: ReadonlyArray<string>, readonly "raw_hash": Sha256, readonly "registry_ids"?: ReadonlyArray<string>, readonly "source": string, readonly "title": string, readonly "year"?: number | null }
+export const SourceRecord = Schema.Struct({ "abstract": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Abstract" })), "authors": Schema.optionalKey(Schema.Array(Schema.String).annotate({ "title": "Authors", "default": [] })), "doi": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Doi" })), "journal": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Journal" })), "occurrence_id": Id, "ordinal": Schema.Number.annotate({ "title": "Ordinal" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "pmid": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Pmid" })), "provider_record_id": Schema.String.annotate({ "title": "Provider Record Id" }), "publication_types": Schema.optionalKey(Schema.Array(Schema.String).annotate({ "title": "Publication Types", "default": [] })), "raw_hash": Sha256, "registry_ids": Schema.optionalKey(Schema.Array(Schema.String).annotate({ "title": "Registry Ids", "default": [] })), "source": Schema.String.annotate({ "title": "Source" }), "title": Schema.String.annotate({ "title": "Title" }), "year": Schema.optionalKey(Schema.Union([Schema.Int, Schema.Null]).annotate({ "title": "Year" })) }).annotate({ "title": "SourceRecord", "description": "One record as a source returned it, before dedupe.\n\n`occurrence_id` is assigned when the search module stores the execution; corpus and every\nlater stage refer to records by it.", "identifier": "SourceRecord" })
 export type HTTPValidationError = { readonly "detail"?: ReadonlyArray<ValidationError> } & { readonly [x: string]: Schema.Json }
 export const HTTPValidationError = Schema.StructWithRest(Schema.Struct({ "detail": Schema.optionalKey(Schema.Array(ValidationError).annotate({ "title": "Detail" })) }), [Schema.Record(Schema.String, Schema.Json.annotate({ "expected": "JSON value" }))]).annotate({ "title": "HTTPValidationError", "identifier": "HTTPValidationError" })
+export type PageView = { readonly "height": number, readonly "label": string | null, readonly "number": number, readonly "rotation": number, readonly "triage": PageTriage | null, readonly "width": number }
+export const PageView = Schema.Struct({ "height": Schema.Number.annotate({ "title": "Height" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "label": Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Label" }), "number": Schema.Number.annotate({ "title": "Number" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "rotation": Schema.Number.annotate({ "title": "Rotation" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "triage": Schema.Union([PageTriage, Schema.Null]), "width": Schema.Number.annotate({ "title": "Width" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })) }).annotate({ "title": "PageView", "identifier": "PageView" })
+export type PageWords = { readonly "height": number, readonly "layer_id": Id, readonly "page": number, readonly "rotation": number, readonly "width": number, readonly "words": ReadonlyArray<WordBox> }
+export const PageWords = Schema.Struct({ "height": Schema.Number.annotate({ "title": "Height" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "layer_id": Id, "page": Schema.Number.annotate({ "title": "Page" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "rotation": Schema.Number.annotate({ "title": "Rotation" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "width": Schema.Number.annotate({ "title": "Width" }).check(Schema.isFinite().annotate({ "expected": "a finite number" })), "words": Schema.Array(WordBox).annotate({ "title": "Words" }) }).annotate({ "title": "PageWords", "identifier": "PageWords" })
 export type MergeRequest = { readonly "actor_id": Id, readonly "occurrence_ids": ReadonlyArray<Id>, readonly "reason"?: string, readonly "relation": Relation, readonly "revision_id": Id }
 export const MergeRequest = Schema.Struct({ "actor_id": Id, "occurrence_ids": Schema.Array(Id).annotate({ "title": "Occurrence Ids" }), "reason": Schema.optionalKey(Schema.String.annotate({ "title": "Reason", "default": "" })), "relation": Relation, "revision_id": Id }).annotate({ "title": "MergeRequest", "identifier": "MergeRequest" })
 export type LinkProposal = { readonly "evidence": ReadonlyArray<string>, readonly "id"?: Id, readonly "occurrence_ids": ReadonlyArray<Id>, readonly "relation": Relation, readonly "status"?: ProposalStatus }
 export const LinkProposal = Schema.Struct({ "evidence": Schema.Array(Schema.String).annotate({ "title": "Evidence" }), "id": Schema.optionalKey(Id), "occurrence_ids": Schema.Array(Id).annotate({ "title": "Occurrence Ids" }), "relation": Relation, "status": Schema.optionalKey(Schema.suspend((): Schema.Codec<ProposalStatus> => ProposalStatus).annotate({ "default": "pending" })) }).annotate({ "title": "LinkProposal", "identifier": "LinkProposal" })
 export type SplitRequest = { readonly "actor_id": Id, readonly "level": SplitLevel, readonly "occurrence_ids": ReadonlyArray<Id>, readonly "reason"?: string, readonly "revision_id": Id }
 export const SplitRequest = Schema.Struct({ "actor_id": Id, "level": SplitLevel, "occurrence_ids": Schema.Array(Id).annotate({ "title": "Occurrence Ids" }), "reason": Schema.optionalKey(Schema.String.annotate({ "title": "Reason", "default": "" })), "revision_id": Id }).annotate({ "title": "SplitRequest", "identifier": "SplitRequest" })
-export type SourceRecord = { readonly "abstract"?: string | null, readonly "authors"?: ReadonlyArray<string>, readonly "doi"?: string | null, readonly "journal"?: string | null, readonly "occurrence_id": Id, readonly "ordinal": number, readonly "pmid"?: string | null, readonly "provider_record_id": string, readonly "publication_types"?: ReadonlyArray<string>, readonly "raw_hash": Sha256, readonly "registry_ids"?: ReadonlyArray<string>, readonly "source": string, readonly "title": string, readonly "year"?: number | null }
-export const SourceRecord = Schema.Struct({ "abstract": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Abstract" })), "authors": Schema.optionalKey(Schema.Array(Schema.String).annotate({ "title": "Authors", "default": [] })), "doi": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Doi" })), "journal": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Journal" })), "occurrence_id": Id, "ordinal": Schema.Number.annotate({ "title": "Ordinal" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "pmid": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Pmid" })), "provider_record_id": Schema.String.annotate({ "title": "Provider Record Id" }), "publication_types": Schema.optionalKey(Schema.Array(Schema.String).annotate({ "title": "Publication Types", "default": [] })), "raw_hash": Sha256, "registry_ids": Schema.optionalKey(Schema.Array(Schema.String).annotate({ "title": "Registry Ids", "default": [] })), "source": Schema.String.annotate({ "title": "Source" }), "title": Schema.String.annotate({ "title": "Title" }), "year": Schema.optionalKey(Schema.Union([Schema.Int, Schema.Null]).annotate({ "title": "Year" })) }).annotate({ "title": "SourceRecord", "description": "One record as a source returned it, before dedupe.\n\n`occurrence_id` is assigned when the search module stores the execution; corpus and every\nlater stage refer to records by it.", "identifier": "SourceRecord" })
 export type LocalizedText = { readonly [x: string]: Text }
 export const LocalizedText = Schema.Record(Schema.String, Text).check(Schema.isMinProperties(1).annotate({ "expected": "a value with at least 1 entry" })).check(Schema.isPropertyNames(Schema.String.check(Schema.isPattern(new RegExp("^[a-z]{2,3}(-[A-Z]{2})?$", "u")).annotate({ "expected": "a string matching the RegExp ^[a-z]{2,3}(-[A-Z]{2})?$" }))).annotate({ "expected": "an object with property names matching the schema", "identifier": "LocalizedText" }))
 export type PressReview = { readonly "reviewed_on"?: string | null, readonly "reviewer"?: Text | null, readonly "status": "planned" | "done" }
@@ -96,8 +119,12 @@ export type RunSearchRequest = { readonly "actor_id": Id, readonly "plan": Searc
 export const RunSearchRequest = Schema.Struct({ "actor_id": Id, "plan": SearchPlan }).annotate({ "title": "RunSearchRequest", "identifier": "RunSearchRequest" })
 export type ValidationReport = { readonly "content_hash"?: string | null, readonly "issues"?: ReadonlyArray<ProtocolIssue>, readonly "ok": boolean }
 export const ValidationReport = Schema.Struct({ "content_hash": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Content Hash" })), "issues": Schema.optionalKey(Schema.Array(ProtocolIssue).annotate({ "title": "Issues", "default": [] })), "ok": Schema.Boolean.annotate({ "title": "Ok" }) }).annotate({ "title": "ValidationReport", "identifier": "ValidationReport" })
+export type UploadedDocument = { readonly "document": Document, readonly "layer_id": Id }
+export const UploadedDocument = Schema.Struct({ "document": Document, "layer_id": Id }).annotate({ "title": "UploadedDocument", "identifier": "UploadedDocument" })
 export type SearchExecution = { readonly "ended_at": string, readonly "id": Id, readonly "kind": "live_api" | "file_import", readonly "plan": SearchPlan, readonly "query_translation": string | null, readonly "raw_artifact_hashes": ReadonlyArray<Sha256>, readonly "records": ReadonlyArray<SourceRecord>, readonly "reported_count": number, readonly "retrieved_count": number, readonly "skipped_record_ids"?: ReadonlyArray<string>, readonly "started_at": string }
 export const SearchExecution = Schema.Struct({ "ended_at": Schema.String.annotate({ "title": "Ended At", "format": "date-time" }), "id": Id, "kind": Schema.Literals(["live_api", "file_import"]).annotate({ "title": "Kind" }), "plan": SearchPlan, "query_translation": Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Query Translation" }), "raw_artifact_hashes": Schema.Array(Sha256).annotate({ "title": "Raw Artifact Hashes" }), "records": Schema.Array(SourceRecord).annotate({ "title": "Records" }), "reported_count": Schema.Number.annotate({ "title": "Reported Count" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "retrieved_count": Schema.Number.annotate({ "title": "Retrieved Count" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "skipped_record_ids": Schema.optionalKey(Schema.Array(Schema.String).annotate({ "title": "Skipped Record Ids", "default": [] })), "started_at": Schema.String.annotate({ "title": "Started At", "format": "date-time" }) }).annotate({ "title": "SearchExecution", "identifier": "SearchExecution" })
+export type DocumentView = { readonly "document": Document, readonly "layers": ReadonlyArray<LayerSummary>, readonly "pages": ReadonlyArray<PageView> }
+export const DocumentView = Schema.Struct({ "document": Document, "layers": Schema.Array(LayerSummary).annotate({ "title": "Layers" }), "pages": Schema.Array(PageView).annotate({ "title": "Pages" }) }).annotate({ "title": "DocumentView", "identifier": "DocumentView" })
 export type EffectModifier = { readonly "categories"?: ReadonlyArray<Text>, readonly "id": Identifier, readonly "label": LocalizedText }
 export const EffectModifier = Schema.Struct({ "categories": Schema.optionalKey(Schema.Array(Text).annotate({ "title": "Categories", "default": [] })), "id": Identifier, "label": LocalizedText }).annotate({ "title": "EffectModifier", "identifier": "EffectModifier" })
 export type Outcome = { readonly "category": Identifier, readonly "definition"?: LocalizedText | null, readonly "extensions"?: Extensions, readonly "id": Identifier, readonly "name": LocalizedText, readonly "rationale"?: LocalizedText | null }
@@ -123,8 +150,32 @@ export const ProtocolVersion = Schema.Struct({ "content_hash": Sha256, "protocol
 export type StoredProtocol = { readonly "approved_by"?: Id | null, readonly "approved_event_id"?: Id | null, readonly "created_at": string, readonly "id": Id, readonly "parent_id": Id | null, readonly "project_id": Id, readonly "publish_reason"?: string | null, readonly "published_at"?: string | null, readonly "status": "draft" | "published", readonly "version": ProtocolVersion }
 export const StoredProtocol = Schema.Struct({ "approved_by": Schema.optionalKey(Schema.Union([Id, Schema.Null])), "approved_event_id": Schema.optionalKey(Schema.Union([Id, Schema.Null])), "created_at": Schema.String.annotate({ "title": "Created At", "format": "date-time" }), "id": Id, "parent_id": Schema.Union([Id, Schema.Null]), "project_id": Id, "publish_reason": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Publish Reason" })), "published_at": Schema.optionalKey(Schema.Union([Schema.String.annotate({ "format": "date-time" }), Schema.Null]).annotate({ "title": "Published At" })), "status": Schema.Literals(["draft", "published"]).annotate({ "title": "Status" }), "version": ProtocolVersion }).annotate({ "title": "StoredProtocol", "identifier": "StoredProtocol" })
 // schemas
+export type GetAnchor200 = Anchor
+export const GetAnchor200 = Anchor
+export type GetAnchor422 = HTTPValidationError
+export const GetAnchor422 = HTTPValidationError
+export type UploadDocument201 = UploadedDocument
+export const UploadDocument201 = UploadedDocument
+export type GetDocument200 = DocumentView
+export const GetDocument200 = DocumentView
+export type GetDocument422 = HTTPValidationError
+export const GetDocument422 = HTTPValidationError
+export type RenderPageParams = { readonly "scale"?: number }
+export const RenderPageParams = Schema.Struct({ "scale": Schema.optionalKey(Schema.Number.annotate({ "title": "Scale", "default": 1 }).check(Schema.isFinite().annotate({ "expected": "a finite number" })).check(Schema.isGreaterThanOrEqualTo(0.25).annotate({ "expected": "a value greater than or equal to 0.25" })).check(Schema.isLessThanOrEqualTo(4).annotate({ "expected": "a value less than or equal to 4" }))) })
+export type RenderPage422 = HTTPValidationError
+export const RenderPage422 = HTTPValidationError
 export type GetHealth200 = Health
 export const GetHealth200 = Health
+export type CreateAnchorRequestJson = AnchorRequest
+export const CreateAnchorRequestJson = AnchorRequest
+export type CreateAnchor201 = Anchor
+export const CreateAnchor201 = Anchor
+export type CreateAnchor422 = HTTPValidationError
+export const CreateAnchor422 = HTTPValidationError
+export type GetPageWords200 = PageWords
+export const GetPageWords200 = PageWords
+export type GetPageWords422 = HTTPValidationError
+export const GetPageWords422 = HTTPValidationError
 export type ConfirmCorpusProposalRequestJson = ConfirmRequest
 export const ConfirmCorpusProposalRequestJson = ConfirmRequest
 export type ConfirmCorpusProposal200 = IdentityRevision
@@ -291,6 +342,19 @@ export const make = (
     }
     return Effect.succeed(method(path))
   })
+  const executeStreamRequest = (request: HttpClientRequest.HttpClientRequest) =>
+    Effect.suspend(() =>
+      options.transformClient
+        ? Effect.flatMap(options.transformClient(httpClient), (client) => HttpClient.filterStatusOk(client).execute(request))
+        : HttpClient.filterStatusOk(httpClient).execute(request)
+    )
+  const decodeBinary = (response: HttpClientResponse.HttpClientResponse) =>
+    Effect.map(response.arrayBuffer, (buffer) => new Uint8Array(buffer))
+  const binaryRequest = (request: HttpClientRequest.HttpClientRequest): Stream.Stream<Uint8Array, HttpClientError.HttpClientError> =>
+    executeStreamRequest(request).pipe(
+      Effect.map((response) => response.stream),
+      Stream.unwrap
+    )
   const decodeSuccess =
     <Schema extends Schema.Constraint>(schema: Schema) =>
     (response: HttpClientResponse.HttpClientResponse) =>
@@ -304,12 +368,71 @@ export const make = (
       )
   return {
     httpClient,
+    "getAnchor": (anchorId, options: Parameters<KittumApi["getAnchor"]>[1]) => __makePathRequest(HttpClientRequest.get, [anchorId], () => "/api/anchors/" + __encodePathParam(anchorId) + "").pipe(
+    Effect.flatMap((request) => request.pipe(
+      withResponse(options?.config)(HttpClientResponse.matchStatus({
+      "2xx": decodeSuccess(GetAnchor200),
+      "422": decodeError("GetAnchor422", GetAnchor422),
+      orElse: unexpectedStatus
+    }))
+    ))
+  ),
+    "uploadDocument": (options: Parameters<KittumApi["uploadDocument"]>[0]) => HttpClientRequest.post("/api/documents").pipe(
+      withResponse(options?.config)(HttpClientResponse.matchStatus({
+      "2xx": decodeSuccess(UploadDocument201),
+      orElse: unexpectedStatus
+    }))
+    ),
+    "getDocument": (documentId, options: Parameters<KittumApi["getDocument"]>[1]) => __makePathRequest(HttpClientRequest.get, [documentId], () => "/api/documents/" + __encodePathParam(documentId) + "").pipe(
+    Effect.flatMap((request) => request.pipe(
+      withResponse(options?.config)(HttpClientResponse.matchStatus({
+      "2xx": decodeSuccess(GetDocument200),
+      "422": decodeError("GetDocument422", GetDocument422),
+      orElse: unexpectedStatus
+    }))
+    ))
+  ),
+    "renderPage": (documentId, page, options: Parameters<KittumApi["renderPage"]>[2]) => __makePathRequest(HttpClientRequest.get, [documentId, page], () => "/api/documents/" + __encodePathParam(documentId) + "/pages/" + __encodePathParam(page) + "/image").pipe(
+    Effect.flatMap((request) => request.pipe(
+      HttpClientRequest.setUrlParams({ "scale": options?.params?.["scale"] as any }),
+      withResponse(options?.config)(HttpClientResponse.matchStatus({
+      "2xx": decodeBinary,
+      "422": decodeError("RenderPage422", RenderPage422),
+      orElse: unexpectedStatus
+    }))
+    ))
+  ),
+    "renderPageStream": (documentId, page, options) => Stream.unwrap(__makePathRequest(HttpClientRequest.get, [documentId, page], () => "/api/documents/" + __encodePathParam(documentId) + "/pages/" + __encodePathParam(page) + "/image").pipe(
+    Effect.map((request) => request.pipe(
+      HttpClientRequest.setUrlParams({ "scale": options?.params?.["scale"] as any }),
+      binaryRequest
+    ))
+  )),
     "getHealth": (options: Parameters<KittumApi["getHealth"]>[0]) => HttpClientRequest.get("/api/health").pipe(
       withResponse(options?.config)(HttpClientResponse.matchStatus({
       "2xx": decodeSuccess(GetHealth200),
       orElse: unexpectedStatus
     }))
     ),
+    "createAnchor": (layerId, options: Parameters<KittumApi["createAnchor"]>[1]) => __makePathRequest(HttpClientRequest.post, [layerId], () => "/api/layers/" + __encodePathParam(layerId) + "/anchors").pipe(
+    Effect.flatMap((request) => request.pipe(
+      HttpClientRequest.bodyJsonUnsafe(options.payload),
+      withResponse(options.config)(HttpClientResponse.matchStatus({
+      "2xx": decodeSuccess(CreateAnchor201),
+      "422": decodeError("CreateAnchor422", CreateAnchor422),
+      orElse: unexpectedStatus
+    }))
+    ))
+  ),
+    "getPageWords": (layerId, page, options: Parameters<KittumApi["getPageWords"]>[2]) => __makePathRequest(HttpClientRequest.get, [layerId, page], () => "/api/layers/" + __encodePathParam(layerId) + "/pages/" + __encodePathParam(page) + "/words").pipe(
+    Effect.flatMap((request) => request.pipe(
+      withResponse(options?.config)(HttpClientResponse.matchStatus({
+      "2xx": decodeSuccess(GetPageWords200),
+      "422": decodeError("GetPageWords422", GetPageWords422),
+      orElse: unexpectedStatus
+    }))
+    ))
+  ),
     "confirmCorpusProposal": (projectId, options: Parameters<KittumApi["confirmCorpusProposal"]>[1]) => __makePathRequest(HttpClientRequest.post, [projectId], () => "/api/projects/" + __encodePathParam(projectId) + "/corpus/confirm").pipe(
     Effect.flatMap((request) => request.pipe(
       HttpClientRequest.bodyJsonUnsafe(options.payload),
@@ -450,11 +573,58 @@ export const make = (
 export interface KittumApi {
   readonly httpClient: HttpClient.HttpClient
   /**
+* An anchor with its quote, offsets, one box per line, and table cells.
+*/
+readonly "getAnchor": {
+    <Config extends OperationConfig | undefined = undefined>(anchorId: string, options: { readonly config: Config }): Effect.Effect<WithOptionalResponse<GetAnchor200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetAnchor422", GetAnchor422>>;
+    <Config extends OperationConfig | undefined = undefined>(anchorId: string, options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<GetAnchor200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetAnchor422", GetAnchor422>>;
+  }
+  /**
+* Store a PDF and parse its base layer. Uploading the same bytes again is a no-op.
+*/
+readonly "uploadDocument": {
+    <Config extends OperationConfig | undefined = undefined>(options: { readonly config: Config }): Effect.Effect<WithOptionalResponse<UploadDocument201, Config>, HttpClientError.HttpClientError | SchemaError>;
+    <Config extends OperationConfig | undefined = undefined>(options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<UploadDocument201, Config | undefined>, HttpClientError.HttpClientError | SchemaError>;
+  }
+  /**
+* Get Document View
+*/
+readonly "getDocument": {
+    <Config extends OperationConfig | undefined = undefined>(documentId: string, options: { readonly config: Config }): Effect.Effect<WithOptionalResponse<GetDocument200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetDocument422", GetDocument422>>;
+    <Config extends OperationConfig | undefined = undefined>(documentId: string, options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<GetDocument200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetDocument422", GetDocument422>>;
+  }
+  /**
+* The page, unrotated, at `scale` pixels per PDF point.
+*/
+readonly "renderPage": {
+    <Config extends OperationConfig | undefined = undefined>(documentId: string, page: string, options: { readonly params?: typeof RenderPageParams.Encoded | undefined; readonly config: Config }): Effect.Effect<WithOptionalResponse<Uint8Array, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"RenderPage422", RenderPage422>>;
+    <Config extends OperationConfig | undefined = undefined>(documentId: string, page: string, options: { readonly params?: typeof RenderPageParams.Encoded | undefined; readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<Uint8Array, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"RenderPage422", RenderPage422>>;
+  }
+  /**
+* The page, unrotated, at `scale` pixels per PDF point.
+*/
+readonly "renderPageStream": (documentId: string, page: string, options: { readonly params?: typeof RenderPageParams.Encoded | undefined } | undefined) => Stream.Stream<Uint8Array, HttpClientError.HttpClientError>
+  /**
 * Health
 */
 readonly "getHealth": {
     <Config extends OperationConfig | undefined = undefined>(options: { readonly config: Config }): Effect.Effect<WithOptionalResponse<GetHealth200, Config>, HttpClientError.HttpClientError | SchemaError>;
     <Config extends OperationConfig | undefined = undefined>(options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<GetHealth200, Config | undefined>, HttpClientError.HttpClientError | SchemaError>;
+  }
+  /**
+* Anchor a verbatim quote. 404 if the layer does not contain it, 409 if it occurs more than
+* once and no `occurrence` is given.
+*/
+readonly "createAnchor": {
+    <Config extends OperationConfig | undefined = undefined>(layerId: string, options: { readonly payload: typeof CreateAnchorRequestJson.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<CreateAnchor201, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"CreateAnchor422", CreateAnchor422>>;
+    <Config extends OperationConfig | undefined = undefined>(layerId: string, options: { readonly payload: typeof CreateAnchorRequestJson.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<CreateAnchor201, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"CreateAnchor422", CreateAnchor422>>;
+  }
+  /**
+* Get Page Words
+*/
+readonly "getPageWords": {
+    <Config extends OperationConfig | undefined = undefined>(layerId: string, page: string, options: { readonly config: Config }): Effect.Effect<WithOptionalResponse<GetPageWords200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetPageWords422", GetPageWords422>>;
+    <Config extends OperationConfig | undefined = undefined>(layerId: string, page: string, options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<GetPageWords200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetPageWords422", GetPageWords422>>;
   }
   /**
 * Confirm Route
