@@ -41,6 +41,13 @@ from kittum.documents.anchors import (
 )
 from kittum.documents.docling_engine import DoclingParser, DoclingUnavailable, docling_available
 from kittum.documents.engines import PdfiumParser, PyMuPDFParser
+from kittum.documents.matching import (
+    TITLE_THRESHOLD,
+    ReportCheck,
+    check_pages,
+    check_report,
+    first_pages,
+)
 from kittum.documents.model import (
     Acquisition,
     AcquisitionAttempt,
@@ -49,6 +56,7 @@ from kittum.documents.model import (
     Box,
     CellRef,
     Document,
+    ExpectedReport,
     FullTextLocation,
     Layer,
     Line,
@@ -89,6 +97,7 @@ __all__ = [
     "NOT_ACQUIRED",
     "RENDERER",
     "RESOLVE_VERSION",
+    "TITLE_THRESHOLD",
     "Acquisition",
     "AcquisitionAttempt",
     "AcquisitionOutcome",
@@ -99,6 +108,7 @@ __all__ = [
     "DoclingParser",
     "DoclingUnavailable",
     "Document",
+    "ExpectedReport",
     "FetchedLocation",
     "FullTextLocation",
     "Layer",
@@ -115,6 +125,7 @@ __all__ = [
     "PdfiumParser",
     "PyMuPDFParser",
     "RawLayer",
+    "ReportCheck",
     "Resolution",
     "Table",
     "TableCell",
@@ -122,10 +133,13 @@ __all__ = [
     "Word",
     "acquire",
     "acquisitions",
+    "check_pages",
+    "check_report",
     "compare_layers",
     "derive",
     "docling_available",
     "fetch_location",
+    "first_pages",
     "get_acquisition",
     "get_anchor",
     "get_document",

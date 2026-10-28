@@ -174,12 +174,14 @@ def work(gateway: Gateway, doi: str, *, email: str | None = None) -> Work | None
     if body is None:
         return None
     if not isinstance(body, dict) or not isinstance(body.get("message"), dict):
-        raise SourceUnavailable(SOURCE, "response has no work")
+        raise SourceUnavailable(SOURCE, "response has no work", kind="malformed")
     message = body["message"]
     asked = canonical_doi(doi) or doi
     answered = canonical_doi(str(message.get("DOI") or doi)) or asked
     if answered != asked:
-        raise SourceUnavailable(SOURCE, f"answered for DOI {answered}, not {asked}")
+        raise SourceUnavailable(
+            SOURCE, f"answered for DOI {answered}, not {asked}", kind="other_work"
+        )
     title = message.get("title")
     return Work(
         doi=answered,

@@ -55,9 +55,12 @@ _DEFAULT_POLICIES = default_policies()
 class _Retryable(Exception):
     """A response worth another attempt. Carries the attempt number for jitter."""
 
-    def __init__(self, status: int, attempt: int, retry_after: float | None) -> None:
+    def __init__(
+        self, status: int, attempt: int, retry_after: float | None, body: bytes = b""
+    ) -> None:
         super().__init__(f"status {status}")
         self.status = status
+        self.body = body
         self.attempt = attempt
         self.retry_after = retry_after
 
@@ -223,7 +226,7 @@ class SourceGateway:
                 self._retry_delay, self._attempt, source, policy, request, key, attempts
             )
         except _Retryable as error:
-            raise SourceUnavailable(source, error.status, attempts[0]) from error
+            raise SourceUnavailable(source, error.status, attempts[0], body=error.body) from error
         except NotRecorded as error:
             raise SourceUnavailable(source, None, attempts[0], str(error)) from error
 
@@ -269,7 +272,7 @@ class SourceGateway:
             self._observe(source, response)
             if response.status in RETRYABLE_STATUSES:
                 retry_after = _seconds(self._header(response, "retry-after"), self._clock.now())
-                raise _Retryable(response.status, number, retry_after)
+                raise _Retryable(response.status, number, retry_after, response.body)
             return response
 
     def _retry_delay(self, error: Exception) -> bool | float:

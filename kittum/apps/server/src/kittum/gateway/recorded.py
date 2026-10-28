@@ -54,6 +54,7 @@ CONTACT_PARAMS = {
     "api.crossref.org": "mailto",
     "eutils.ncbi.nlm.nih.gov": "email",
     "api.openalex.org": "mailto",
+    "pmc.ncbi.nlm.nih.gov": "email",
 }
 """The query parameter each source takes the contact address in, by host."""
 

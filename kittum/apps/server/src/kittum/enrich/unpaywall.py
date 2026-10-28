@@ -57,9 +57,11 @@ def best_oa_location(gateway: Gateway, doi: str, *, email: str | None) -> OaLoca
     if body is None:
         return None
     if not isinstance(body, dict):
-        raise SourceUnavailable(SOURCE, "unexpected response shape")
+        raise SourceUnavailable(SOURCE, "unexpected response shape", kind="malformed")
     asked = canonical_doi(doi) or doi
     answered = canonical_doi(str(body.get("doi") or doi)) or asked
     if answered != asked:
-        raise SourceUnavailable(SOURCE, f"answered for DOI {answered}, not {asked}")
+        raise SourceUnavailable(
+            SOURCE, f"answered for DOI {answered}, not {asked}", kind="other_work"
+        )
     return _location(body.get("best_oa_location"))

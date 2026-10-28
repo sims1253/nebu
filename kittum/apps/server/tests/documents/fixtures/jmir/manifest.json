@@ -1,0 +1,51 @@
+{
+  "https://api.semanticscholar.org/graph/v1/paper/DOI:10.2196/66709?fields=externalIds%2CopenAccessPdf": [
+    {
+      "content_type": "application/json",
+      "file": "7897e35a7fe6799a232bb4369ebd936e8af97e8afa07562a6b95c6ec3bea66c5.json",
+      "status": 200
+    }
+  ],
+  "https://api.unpaywall.org/v2/10.2196%2F66709?email=contact%40example.invalid": [
+    {
+      "content_type": "application/json",
+      "file": "unpaywall-10.2196-66709.json",
+      "status": 200
+    }
+  ],
+  "https://jmir.org/api/download?alt_name=formative_v9i1e66709_app2.pdf&filename=3bd69eb1-0665-11f0-9506-01e71748f354.pdf": [
+    {
+      "content_type": "application/octet-stream",
+      "file": "app2.pdf",
+      "status": 200
+    }
+  ],
+  "https://pmc-oa-opendata.s3.amazonaws.com/?list-type=2&prefix=metadata%2FPMC11951811.": [
+    {
+      "content_type": "application/xml",
+      "file": "e1438231a316e4f38df0ff2ac662dd569d12322b7ccf22ba4133a7dae8dc2393",
+      "status": 200
+    }
+  ],
+  "https://pmc-oa-opendata.s3.amazonaws.com/PMC11951811.1/PMC11951811.1.pdf": [
+    {
+      "content_type": "binary/octet-stream",
+      "file": "f2e610f76c1ab51c8be7d6a01fa7e3cff1e3bf30df53465c04116c699da68994",
+      "status": 200
+    }
+  ],
+  "https://pmc-oa-opendata.s3.amazonaws.com/metadata/PMC11951811.1.json": [
+    {
+      "content_type": "binary/octet-stream",
+      "file": "1cf1e74adc1a0a5587a83e71e0994179a7ff6e38edfa247a7475197ce69522fe",
+      "status": 200
+    }
+  ],
+  "https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/?ids=40116747&idtype=pmid&format=json&tool=kittum&email=contact%40example.invalid": [
+    {
+      "content_type": "application/json",
+      "file": "10031ad0a31ccfec079749730f219ecdab848ed2b055408d4e824fcdf2a9dd6b.json",
+      "status": 200
+    }
+  ]
+}

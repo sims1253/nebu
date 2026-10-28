@@ -76,6 +76,43 @@ def default_policies(
             concurrency=1,
             terms_url="https://www.ncbi.nlm.nih.gov/research/pubtator3/",
         ),
+        # The PMC ID converter takes NCBI's E-utilities rate; the PMC Article Datasets bucket on
+        # AWS publishes no limit, so it shares the converter's.
+        "pmc": SourcePolicy(
+            source="pmc",
+            requests_per_second=_under(pubmed_rate),
+            concurrency=2,
+            terms_url="https://pmc.ncbi.nlm.nih.gov/tools/pmcaws/",
+        ),
+        # api.biorxiv.org publishes no limit; one request a second is Kittum's choice.
+        "biorxiv": SourcePolicy(
+            source="biorxiv",
+            requests_per_second=_under(1),
+            concurrency=1,
+            terms_url="https://api.biorxiv.org/",
+        ),
+        # One request every three seconds, on one connection.
+        "arxiv": SourcePolicy(
+            source="arxiv",
+            requests_per_second=_under(1 / 3),
+            concurrency=1,
+            terms_url="https://info.arxiv.org/help/api/tou.html",
+        ),
+        # One request a second with a key; without one, a pool shared by every caller.
+        "semanticscholar": SourcePolicy(
+            source="semanticscholar",
+            requests_per_second=_under(1),
+            concurrency=1,
+            terms_url="https://www.semanticscholar.org/product/api/license",
+        ),
+        # A registered key: 10 requests a minute and 1,000 a day at the lowest tier.
+        "core": SourcePolicy(
+            source="core",
+            requests_per_second=_under(10 / 60),
+            concurrency=1,
+            daily_budget=_budget(1_000),
+            terms_url="https://core.ac.uk/terms",
+        ),
     }
 
 

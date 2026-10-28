@@ -947,6 +947,23 @@
         "title": "Assertion",
         "type": "object"
       },
+      "AssignRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "report_id": {
+            "$ref": "#/components/schemas/Id"
+          }
+        },
+        "required": [
+          "actor_id",
+          "report_id"
+        ],
+        "title": "AssignRequest",
+        "type": "object"
+      },
       "AssignmentFullText": {
         "additionalProperties": false,
         "description": "The full text behind a reviewer's full-text assignment.",
@@ -1111,8 +1128,19 @@
       },
       "AttemptView": {
         "additionalProperties": false,
-        "description": "One step of the waterfall for one report.",
+        "description": "One step of the waterfall for one report: a lookup that asked a source about the report,\nor a fetch of one file location.",
         "properties": {
+          "check": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Check"
+          },
           "error": {
             "anyOf": [
               {
@@ -1124,8 +1152,28 @@
             ],
             "title": "Error"
           },
+          "found": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Found"
+          },
           "host": {
             "title": "Host",
+            "type": "string"
+          },
+          "kind": {
+            "default": "fetch",
+            "enum": [
+              "fetch",
+              "lookup"
+            ],
+            "title": "Kind",
             "type": "string"
           },
           "licence": {
@@ -1138,6 +1186,17 @@
               }
             ],
             "title": "Licence"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
           },
           "outcome": {
             "title": "Outcome",
@@ -3072,6 +3131,58 @@
         ],
         "type": "string"
       },
+      "FailedSource": {
+        "additionalProperties": false,
+        "description": "A source that failed where asking again can help, with the last failure it gave.",
+        "properties": {
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "records": {
+            "title": "Records",
+            "type": "integer"
+          },
+          "reports": {
+            "title": "Reports",
+            "type": "integer"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "required": [
+          "source",
+          "records",
+          "reports",
+          "reason"
+        ],
+        "title": "FailedSource",
+        "type": "object"
+      },
       "FieldChange": {
         "additionalProperties": false,
         "properties": {
@@ -3385,6 +3496,59 @@
           "version"
         ],
         "title": "Health",
+        "type": "object"
+      },
+      "HeldUpload": {
+        "additionalProperties": false,
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/UploadCandidate"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "document_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "file_name": {
+            "title": "File Name",
+            "type": "string"
+          },
+          "page_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Count"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "upload_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "uploaded_at": {
+            "format": "date-time",
+            "title": "Uploaded At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "upload_id",
+          "file_name",
+          "uploaded_at",
+          "document_id",
+          "page_count",
+          "reason",
+          "candidates"
+        ],
+        "title": "HeldUpload",
         "type": "object"
       },
       "Highlight": {
@@ -3919,6 +4083,94 @@
         "title": "Milestone",
         "type": "object"
       },
+      "MissingReport": {
+        "additionalProperties": false,
+        "description": "A report sought for retrieval without a usable full text, for the exports.",
+        "properties": {
+          "attempts": {
+            "items": {
+              "$ref": "#/components/schemas/AttemptView"
+            },
+            "title": "Attempts",
+            "type": "array"
+          },
+          "authors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Authors",
+            "type": "array"
+          },
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "file_name": {
+            "title": "File Name",
+            "type": "string"
+          },
+          "journal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal"
+          },
+          "pmid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pmid"
+          },
+          "report_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "required": [
+          "report_id",
+          "title",
+          "doi",
+          "pmid",
+          "authors",
+          "journal",
+          "year",
+          "file_name",
+          "attempts"
+        ],
+        "title": "MissingReport",
+        "type": "object"
+      },
       "ModeChange": {
         "additionalProperties": false,
         "properties": {
@@ -4264,6 +4516,14 @@
       "OpenAccessRun": {
         "additionalProperties": false,
         "properties": {
+          "earlier": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ReportRetrieval"
+            },
+            "title": "Earlier",
+            "type": "array"
+          },
           "error": {
             "anyOf": [
               {
@@ -4305,6 +4565,14 @@
           "requested_by": {
             "$ref": "#/components/schemas/Id"
           },
+          "skipped": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SkippedSource"
+            },
+            "title": "Skipped",
+            "type": "array"
+          },
           "status": {
             "enum": [
               "queued",
@@ -4314,6 +4582,10 @@
             ],
             "title": "Status",
             "type": "string"
+          },
+          "trigger": {
+            "$ref": "#/components/schemas/RunTrigger",
+            "default": "requested"
           }
         },
         "required": [
@@ -6624,6 +6896,82 @@
         "title": "RetrievalItem",
         "type": "object"
       },
+      "RetryPlan": {
+        "additionalProperties": false,
+        "description": "What `request_retry` queued: the records enriched again, and the reports retrieved again\n(after that enrichment, when there is one).",
+        "properties": {
+          "enrichment_run_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "occurrences": {
+            "title": "Occurrences",
+            "type": "integer"
+          },
+          "reports": {
+            "title": "Reports",
+            "type": "integer"
+          },
+          "retrieval_run_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "occurrences",
+          "reports",
+          "sources"
+        ],
+        "title": "RetryPlan",
+        "type": "object"
+      },
+      "RetryPreview": {
+        "additionalProperties": false,
+        "description": "What a retry would ask again: records to enrich and reports to retrieve, by source.",
+        "properties": {
+          "occurrences": {
+            "title": "Occurrences",
+            "type": "integer"
+          },
+          "reports": {
+            "title": "Reports",
+            "type": "integer"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/FailedSource"
+            },
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "occurrences",
+          "reports",
+          "sources"
+        ],
+        "title": "RetryPreview",
+        "type": "object"
+      },
       "Reveal": {
         "additionalProperties": false,
         "description": "Shown after a provisional decision when the AI disagrees (or always, if set so).",
@@ -7183,6 +7531,13 @@
         "title": "RunSearchRequest",
         "type": "object"
       },
+      "RunTrigger": {
+        "enum": [
+          "requested",
+          "retry"
+        ],
+        "type": "string"
+      },
       "SchemaText": {
         "additionalProperties": false,
         "properties": {
@@ -7721,6 +8076,25 @@
         "pattern": "^[0-9a-f]{128}$",
         "type": "string"
       },
+      "SkippedSource": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "reason"
+        ],
+        "title": "SkippedSource",
+        "type": "object"
+      },
       "Source": {
         "additionalProperties": false,
         "properties": {
@@ -7804,6 +8178,29 @@
       "SourceFailureView": {
         "additionalProperties": false,
         "properties": {
+          "kind": {
+            "default": "http_error",
+            "enum": [
+              "http_error",
+              "unreachable",
+              "budget",
+              "malformed",
+              "other_work"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
           "reason": {
             "title": "Reason",
             "type": "string"
@@ -7811,6 +8208,17 @@
           "source": {
             "title": "Source",
             "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
           }
         },
         "required": [
@@ -7867,7 +8275,7 @@
       },
       "SourceProgress": {
         "additionalProperties": false,
-        "description": "One source's part in a run: records it was asked about, records it filled a field of, and\nrecords it failed for without answering, with the last reason it gave.",
+        "description": "One source's part in a run: records it was asked about, records it filled a field of, and\nrecords it failed for without answering, with the last failure.",
         "properties": {
           "answered": {
             "title": "Answered",
@@ -7891,6 +8299,16 @@
               }
             ],
             "title": "Last Error"
+          },
+          "last_failure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceFailureView"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "source": {
             "title": "Source",
@@ -8885,7 +9303,8 @@
       "Trigger": {
         "enum": [
           "corpus_built",
-          "requested"
+          "requested",
+          "retry"
         ],
         "type": "string"
       },
@@ -8925,6 +9344,130 @@
           "recorded_at"
         ],
         "title": "UndoResult",
+        "type": "object"
+      },
+      "UploadCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "pmid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pmid"
+          },
+          "report_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "report_id",
+          "title",
+          "doi",
+          "pmid"
+        ],
+        "title": "UploadCandidate",
+        "type": "object"
+      },
+      "UploadResult": {
+        "additionalProperties": false,
+        "properties": {
+          "candidates": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/UploadCandidate"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "file_name": {
+            "title": "File Name",
+            "type": "string"
+          },
+          "matched_by": {
+            "anyOf": [
+              {
+                "enum": [
+                  "file_name",
+                  "content"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched By"
+          },
+          "page_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Count"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "report_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "attached",
+              "held"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "upload_id": {
+            "$ref": "#/components/schemas/Id"
+          }
+        },
+        "required": [
+          "upload_id",
+          "file_name",
+          "status"
+        ],
+        "title": "UploadResult",
         "type": "object"
       },
       "UploadedDocument": {
@@ -13387,6 +13930,128 @@
         ]
       }
     },
+    "/api/projects/{project_id}/retrieval/missing": {
+      "get": {
+        "description": "The reports sought for retrieval without a usable full text, with every attempt for each.",
+        "operationId": "listMissingFullTexts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MissingReport"
+                  },
+                  "title": "Response Listmissingfulltexts",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Missing",
+        "tags": [
+          "enrichment"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/retrieval/missing/export": {
+      "get": {
+        "description": "The same list as a CSV or RIS file, to hand to whoever can send the PDFs.",
+        "operationId": "exportMissingFullTexts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "default": "csv",
+              "enum": [
+                "csv",
+                "ris"
+              ],
+              "title": "Format",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Missing",
+        "tags": [
+          "enrichment"
+        ]
+      }
+    },
     "/api/projects/{project_id}/retrieval/open-access": {
       "post": {
         "description": "Walk the open-access waterfall for every report sought for retrieval without a full text.",
@@ -13558,6 +14223,377 @@
           }
         },
         "summary": "List Attempts",
+        "tags": [
+          "enrichment"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/retrieval/retry": {
+      "get": {
+        "description": "What a retry would ask again: the records a source failed for in their last enrichment,\nand the reports without a full text a source failed for in their last retrieval.",
+        "operationId": "previewRetry",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetryPreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Retry",
+        "tags": [
+          "enrichment"
+        ]
+      },
+      "post": {
+        "description": "Ask the failed sources again: enrich the records they failed for, then retrieve the reports\namong them still without a full text; and retrieve again the reports a source failed for.\n409 while a run is going or when no source failed.",
+        "operationId": "retryFailedSources",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetryPlan"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry",
+        "tags": [
+          "enrichment"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/retrieval/uploads": {
+      "get": {
+        "description": "The uploads waiting for the lead to assign or discard them, oldest first.",
+        "operationId": "listHeldUploads",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/HeldUpload"
+                  },
+                  "title": "Response Listhelduploads",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Held",
+        "tags": [
+          "enrichment"
+        ]
+      },
+      "post": {
+        "description": "One PDF of a bulk upload: attached to the report its file name or first pages match, or\nheld for the lead when it matches none or several. 415 for a file that is not a PDF.",
+        "operationId": "uploadFullTexts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actor_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "file_name",
+            "required": true,
+            "schema": {
+              "title": "File Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "licence",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Licence"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/pdf": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload",
+        "tags": [
+          "enrichment"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/retrieval/uploads/{upload_id}/assign": {
+      "post": {
+        "description": "Make a held upload the full text of the report the lead chose.",
+        "operationId": "assignHeldUpload",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "upload_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Upload Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FullText"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assign",
+        "tags": [
+          "enrichment"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/retrieval/uploads/{upload_id}/discard": {
+      "post": {
+        "description": "Take a held upload off the list.",
+        "operationId": "discardHeldUpload",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "upload_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Upload Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Discard",
         "tags": [
           "enrichment"
         ]

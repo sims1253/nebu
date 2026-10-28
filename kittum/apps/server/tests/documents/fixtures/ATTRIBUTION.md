@@ -15,3 +15,13 @@ Why these two: both use the two-column BMC layout. The Lesotho trial's baseline 
 page 7) has merged column headers ("Primary analysis set" and "All participants set" over three
 arms each). The Vitamin C trial's results tables (Tables 4 and 5, page 7) have row-spanning header
 cells and two tables on one page.
+
+## `jmir/`: the wrong document of issue #60
+
+Recorded by `tests/documents/record_jmir.py`. Both PDFs are unmodified and licensed under CC BY 4.0
+(PMC metadata `license_code: CC BY`; Unpaywall `license: cc-by`).
+
+| File | What it is | SHA-256 |
+| --- | --- | --- |
+| `app2.pdf` | The CONSORT-EHEALTH checklist the authors filed as Multimedia Appendix 2 of Morgan, He, Nicholson, El Shahawy, Sherman, Stevens. Using Text Messaging Ecological Momentary Assessment to Record Changes in e-Cigarette and Combustible Cigarette Use: Pilot Randomized Clinical Trial. *JMIR Formative Research* 2025;9:e66709. doi:[10.2196/66709](https://doi.org/10.2196/66709). Copied from the 28 October 2026 live run, where Unpaywall named it as the article's PDF. | `696b4a6a3b27bbb2e945bd717142235d155042a66cc116592c93a909859f7674` |
+| `f2e610f7…` | The article itself, from the PMC Article Datasets (PMC11951811, PMID 40116747). | `f2e610f76c1ab51c8be7d6a01fa7e3cff1e3bf30df53465c04116c699da68994` |

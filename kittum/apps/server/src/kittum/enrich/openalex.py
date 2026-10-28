@@ -134,10 +134,10 @@ def _fetch(gateway: Gateway, api_key: str | None, filter_value: str) -> list[Wor
     if body is None:
         return []
     if not isinstance(body, dict):
-        raise SourceUnavailable(SOURCE, "unexpected response shape")
+        raise SourceUnavailable(SOURCE, "unexpected response shape", kind="malformed")
     results = body.get("results")
     if not isinstance(results, list):
-        raise SourceUnavailable(SOURCE, "response has no results")
+        raise SourceUnavailable(SOURCE, "response has no results", kind="malformed")
     return [work for raw in results if isinstance(raw, dict) and (work := _work(raw))]
 
 

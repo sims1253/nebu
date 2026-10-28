@@ -32,10 +32,16 @@ class SourceBudgetExhausted(GatewayError):
 
 class SourceUnavailable(GatewayError):
     """Every attempt failed with a status worth retrying, or (with `reason`, and no status) the
-    source could not be reached at all, as offline with no recorded response."""
+    source could not be reached at all, as offline with no recorded response. `body` is the last
+    response's body, when there was one: a source often says in it why it failed."""
 
     def __init__(
-        self, source: str, status: int | None, attempts: int, reason: str | None = None
+        self,
+        source: str,
+        status: int | None,
+        attempts: int,
+        reason: str | None = None,
+        body: bytes | None = None,
     ) -> None:
         super().__init__(
             f"{source} is unreachable: {reason}"
@@ -46,6 +52,7 @@ class SourceUnavailable(GatewayError):
         self.status = status
         self.attempts = attempts
         self.reason = reason
+        self.body = body
 
 
 __all__ = ["GatewayError", "SourceBudgetExhausted", "SourceUnavailable", "UnknownSource"]

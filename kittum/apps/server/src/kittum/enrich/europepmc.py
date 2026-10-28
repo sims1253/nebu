@@ -1,7 +1,9 @@
 """Europe PMC: search by PMID or DOI, full-text availability, and JATS abstracts.
 
 `synonym=FALSE` keeps hit counts and lookups reproducible, as docs/sources.md requires. One search
-can carry many IDs, so the whole record set costs one request per batch.
+can carry many IDs, so the whole record set costs one request per batch. A PMID is looked up as
+`EXT_ID:<pmid> AND SRC:MED`: `EXT_ID` on its own also matches records of other sources that carry
+the same number.
 """
 
 from typing import TYPE_CHECKING, Any
@@ -128,7 +130,9 @@ def works(
 ) -> list[Work]:
     pmid_values = [str(pmid) for pmid in dict.fromkeys(pmids) if pmid]
     doi_values = [d for d in dict.fromkeys(canonical_doi(doi) for doi in dois) if d]
-    terms = [f"EXT_ID:{pmid}" for pmid in pmid_values]
+    # EXT_ID alone also matches other sources' records that share the number (an Agricola or a
+    # patent ID); `SRC:MED` keeps it to the MEDLINE record of that PMID.
+    terms = [f"(EXT_ID:{pmid} AND SRC:MED)" for pmid in pmid_values]
     terms += [f'DOI:"{doi}"' for doi in doi_values]
     found: list[Work] = []
     for batch in chunks(terms, batch_size):
@@ -136,9 +140,9 @@ def works(
         if body is None:
             continue
         if not isinstance(body, dict) or not isinstance(body.get("resultList"), dict):
-            raise SourceUnavailable(SOURCE, "response has no result list")
+            raise SourceUnavailable(SOURCE, "response has no result list", kind="malformed")
         results = body["resultList"].get("result")
         if not isinstance(results, list):
-            raise SourceUnavailable(SOURCE, "result list is not a list")
+            raise SourceUnavailable(SOURCE, "result list is not a list", kind="malformed")
         found += [work for raw in results if isinstance(raw, dict) and (work := _work(raw))]
     return found

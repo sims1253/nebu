@@ -64,6 +64,10 @@ class Settings:
     )
     ncbi_api_key: str | None = None
     openalex_api_key: str | None = None
+    # Full-text lookups: Semantic Scholar answers without a key too, from a pool shared by every
+    # caller; CORE answers only with one.
+    semantic_scholar_api_key: str | None = None
+    core_api_key: str | None = None
     llm_endpoints: tuple[LlmEndpoint, ...] = field(default=())
     # A deployment's own model recipes, in the format of kittum/models/recipes.yaml, added to the
     # shipped ones. Hosted APIs go here.
@@ -112,6 +116,8 @@ class Settings:
             contact_email=env.get("KITTUM_CONTACT_EMAIL"),
             ncbi_api_key=env.get("KITTUM_NCBI_API_KEY"),
             openalex_api_key=env.get("KITTUM_OPENALEX_API_KEY"),
+            semantic_scholar_api_key=env.get("KITTUM_SEMANTIC_SCHOLAR_API_KEY"),
+            core_api_key=env.get("KITTUM_CORE_API_KEY"),
             llm_endpoints=_endpoints(
                 env.get("KITTUM_LLM_ENDPOINTS", ""), env.get("KITTUM_LLM_API_KEYS", "")
             ),

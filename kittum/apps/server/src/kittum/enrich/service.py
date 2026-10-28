@@ -78,8 +78,18 @@ class _State:
         if source not in self.asked:
             self.asked.append(source)
 
-    def fail(self, source: str, reason: str) -> None:
-        failure = SourceFailure(source=source, reason=reason)
+    def fail(self, source: str, error: SourceUnavailable | str) -> None:
+        failure = (
+            SourceFailure(source=source, reason=error, kind="other_work")
+            if isinstance(error, str)
+            else SourceFailure(
+                source=source,
+                reason=error.reason,
+                kind=error.kind,
+                status=error.status,
+                message=error.message,
+            )
+        )
         if failure not in self.failures:
             self.failures.append(failure)
 
@@ -202,7 +212,7 @@ def enrich(
 
 def _batch_failed(states: list[_State], source: str, error: SourceUnavailable) -> None:
     for state in states:
-        state.fail(source, error.reason)
+        state.fail(source, error)
 
 
 def _from_openalex(states: list[_State], gateway: Gateway, config: EnrichmentConfig) -> None:
@@ -286,7 +296,7 @@ def _from_crossref(states: list[_State], gateway: Gateway, config: EnrichmentCon
                 works[state.doi] = error
         work = works[state.doi]
         if isinstance(work, SourceUnavailable):
-            state.fail(crossref.SOURCE, work.reason)
+            state.fail(crossref.SOURCE, work)
             continue
         if work is None:
             continue
@@ -329,7 +339,7 @@ def _from_unpaywall(states: list[_State], gateway: Gateway, config: EnrichmentCo
                 seen[state.doi] = error
         location = seen[state.doi]
         if isinstance(location, SourceUnavailable):
-            state.fail(unpaywall.SOURCE, location.reason)
+            state.fail(unpaywall.SOURCE, location)
         elif location is not None:
             state.add_locations((location,), unpaywall.SOURCE)
 
