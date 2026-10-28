@@ -10,10 +10,12 @@ file `formative_v9i1e66709_app2.pdf`, as the article's PDF; Kittum stored it as 
 text. That run's recording holds Unpaywall's answer and the checklist, and both are copied from it
 unchanged. PubMed Central's answer (ID converter, bucket listing, metadata, the article's PDF) and
 Semantic Scholar's, which names the same checklist, are recorded live through the gateway's own
-`RecordingTransport`.
+`RecordingTransport`. Semantic Scholar is asked only with a key: set
+KITTUM_SEMANTIC_SCHOLAR_API_KEY. The key travels in a header, which no recording keeps.
 """
 
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -41,7 +43,10 @@ def main(live_run: Path) -> None:
         HttpxTransport(contact_email=CONTACT_EMAIL), JMIR, contact_email=CONTACT_EMAIL
     )
     gateway = PassThroughGateway(transport)
-    config = EnrichmentConfig(contact_email=CONTACT_EMAIL)
+    config = EnrichmentConfig(
+        contact_email=CONTACT_EMAIL,
+        semantic_scholar_api_key=os.environ.get("KITTUM_SEMANTIC_SCHOLAR_API_KEY"),
+    )
     for source in ("pmc", "semanticscholar"):
         lookup_full_text(gateway, source, WorkIds(doi=DOI, pmid=PMID), config=config)
     gateway.fetch("pmc", HttpRequest(url=ARTICLE))

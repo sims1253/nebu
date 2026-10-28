@@ -372,11 +372,10 @@ def test_a_lead_enriches_the_corpus_and_fetches_open_access_full_texts(
     assert lancet["outcome"] == "not_acquired"
     fetched = [a for a in lancet["attempts"] if a["kind"] == "fetch"]
     assert {a["outcome"] for a in fetched} <= {"http_error", "not_pdf"}
-    # PubMed Central holds the retracted trial without a PDF; Semantic Scholar names the
-    # Lancet's own PDF, which OpenAlex named already and which refused the download.
+    # PubMed Central holds the retracted trial without a PDF. Semantic Scholar is not asked: the
+    # stack has no key for it.
     assert [(a["source"], a["outcome"]) for a in lancet["attempts"] if a["kind"] == "lookup"] == [
-        ("pmc", "none"),
-        ("semanticscholar", "known"),
+        ("pmc", "none")
     ]
     assert (
         ok(
@@ -416,7 +415,6 @@ def test_a_lead_enriches_the_corpus_and_fetches_open_access_full_texts(
         [
             (report_of[LESOTHO_DOI], "pmc"),
             (lancet["report_id"], "pmc"),
-            (lancet["report_id"], "semanticscholar"),
         ]
     )
     assert [

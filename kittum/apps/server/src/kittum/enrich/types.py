@@ -107,6 +107,8 @@ class EnrichmentConfig(Record):
     contact_email: str | None = None
     openalex_api_key: str | None = None
     semantic_scholar_api_key: str | None = None
+    """Semantic Scholar is asked only with a key: its licence asks for permission before
+    commercial use."""
     core_api_key: str | None = None
     """CORE answers only with a key; without one the waterfall skips it."""
     batch_size: int = 50

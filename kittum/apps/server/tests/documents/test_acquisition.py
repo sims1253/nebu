@@ -154,7 +154,10 @@ def test_a_supplement_named_as_the_article_is_a_wrong_document_and_the_waterfall
     project = new_project(pg)
     actor = new_id()
     gateway = PassThroughGateway(RecordedTransport(JMIR, contact_email=CONTACT_EMAIL))
-    config = EnrichmentConfig(contact_email=CONTACT_EMAIL)
+    # A key opts in to Semantic Scholar; the recording answers whatever key is sent.
+    config = EnrichmentConfig(
+        contact_email=CONTACT_EMAIL, semantic_scholar_api_key="a-semantic-scholar-key"
+    )
     ids = WorkIds(doi=JMIR_DOI, pmid="40116747")
     best = json.loads((JMIR / "unpaywall-10.2196-66709.json").read_bytes())["best_oa_location"]
     named = best["url_for_pdf"]

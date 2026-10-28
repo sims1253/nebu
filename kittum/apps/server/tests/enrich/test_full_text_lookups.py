@@ -115,6 +115,13 @@ def test_preprint_servers_and_arxiv_name_their_pdfs_with_licences_and_core_needs
 
     # CORE without a key is skipped, and says why; with one, the key goes in a header (never into
     # a URL or a recording) and a repository copy of the same DOI answers.
+    # Semantic Scholar too is asked only with a key: its licence asks for permission before
+    # commercial use.
+    assert skipped_source("semanticscholar", config) == (
+        "no Semantic Scholar key is set (KITTUM_SEMANTIC_SCHOLAR_API_KEY)"
+    )
+    assert not lookup_applies("semanticscholar", journal, config=config)
+    assert lookup_full_text(gateway, "semanticscholar", journal, config=config) is None
     assert skipped_source("core", config) == "no CORE key is set (KITTUM_CORE_API_KEY)"
     assert not lookup_applies("core", journal, config=config)
     assert lookup_full_text(gateway, "core", journal, config=config) is None

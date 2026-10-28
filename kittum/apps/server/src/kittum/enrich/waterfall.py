@@ -80,6 +80,8 @@ def skipped_source(source: str, config: EnrichmentConfig) -> str | None:
     """Why the waterfall leaves a lookup source out for every report, or `None` when it asks it."""
     if source == core.SOURCE and not config.core_api_key:
         return core.NO_KEY
+    if source == semanticscholar.SOURCE and not config.semantic_scholar_api_key:
+        return semanticscholar.NO_KEY
     return None
 
 

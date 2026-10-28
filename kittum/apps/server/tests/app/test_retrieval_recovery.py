@@ -448,10 +448,10 @@ def test_a_lead_uploads_a_folder_of_pdfs_and_exports_what_is_still_missing(
     assert row["Authors"].startswith("Mehra")
     assert row["Journal"]
     tried = row["Sources tried"].split("; ")
-    assert tried == ["PubMed Central", "OpenAlex", "Semantic Scholar"]
+    assert tried == ["PubMed Central", "OpenAlex"]
     assert row["Why each attempt failed"] == (
         "PubMed Central has no open copy. OpenAlex (www.thelancet.com) refused the download"
-        " (HTTP 403). Semantic Scholar named a file an earlier source named."
+        " (HTTP 403)."
     )
     assert row["Name the PDF"] == "10.1016_s0140-6736(20)31180-6.pdf"
 

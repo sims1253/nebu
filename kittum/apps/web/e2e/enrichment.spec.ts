@@ -220,9 +220,11 @@ test("a lead enriches the corpus from the open sources and fetches open-access f
       { timeout: 60_000 },
     );
     await expect(counts).toHaveText("2 of 4 reports sought have a PDF");
-    // CORE needs a key, which the stack does not have.
+    // Semantic Scholar and CORE need a key, which the stack does not have.
     await expect(lead.getByTestId("skipped-sources")).toHaveText(
-      "Kittum skipped CORE because no CORE key is set (KITTUM_CORE_API_KEY).",
+      "Kittum skipped Semantic Scholar because no Semantic Scholar key is set" +
+        " (KITTUM_SEMANTIC_SCHOLAR_API_KEY). Kittum skipped CORE because no CORE key is set" +
+        " (KITTUM_CORE_API_KEY).",
     );
 
     // Europe PMC's PDF link is refused; PubMed Central, asked next, names its CC BY copy, which

@@ -64,8 +64,8 @@ class Settings:
     )
     ncbi_api_key: str | None = None
     openalex_api_key: str | None = None
-    # Full-text lookups: Semantic Scholar answers without a key too, from a pool shared by every
-    # caller; CORE answers only with one.
+    # Full-text lookups that are asked only with a key: Semantic Scholar (its licence asks for
+    # permission before commercial use) and CORE (full texts for registered users only).
     semantic_scholar_api_key: str | None = None
     core_api_key: str | None = None
     # The largest PDF an upload takes, in bytes; a bigger one is refused (413) as it streams in.

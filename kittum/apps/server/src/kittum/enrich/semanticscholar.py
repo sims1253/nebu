@@ -1,8 +1,8 @@
-"""Semantic Scholar: a paper's `openAccessPdf`, by DOI or PMID.
+"""Semantic Scholar: a paper's `openAccessPdf`, by DOI or PMID. Only with a key (`x-api-key`).
 
-A key (`x-api-key`) is optional: with one Kittum gets its own one request a second, without one
-it shares a pool with every caller that has none. An answer whose DOI or PMID names another work
-is refused. See docs/sources.md.
+Semantic Scholar's API licence asks for permission before commercial use, so a deployment opts in
+by setting its key; without one the waterfall skips it and says so. An answer whose DOI or PMID
+names another work is refused. See docs/sources.md.
 """
 
 import re
@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
 SOURCE = "semanticscholar"
 BASE = "https://api.semanticscholar.org/graph/v1/paper"
+NO_KEY = "no Semantic Scholar key is set (KITTUM_SEMANTIC_SCHOLAR_API_KEY)"
 
 _CC = re.compile(r"^CC(BY)?(NC)?(ND)?(SA)?$")
 
@@ -34,7 +35,9 @@ def _licence(value: Any) -> str | None:
     return value
 
 
-def find(gateway: Gateway, ids: WorkIds, *, api_key: str | None = None) -> FullTextLookup | None:
+def find(gateway: Gateway, ids: WorkIds, *, api_key: str | None) -> FullTextLookup | None:
+    if not api_key:
+        return None
     doi = canonical_doi(ids.doi)
     if doi:
         paper = f"DOI:{doi}"
@@ -43,8 +46,7 @@ def find(gateway: Gateway, ids: WorkIds, *, api_key: str | None = None) -> FullT
     else:
         return None
     url = f"{BASE}/{quote(paper, safe=':/')}?{urlencode({'fields': 'externalIds,openAccessPdf'})}"
-    headers = (("x-api-key", api_key),) if api_key else ()
-    body = fetch_json(gateway, SOURCE, url, headers=headers)
+    body = fetch_json(gateway, SOURCE, url, headers=(("x-api-key", api_key),))
     if body is None:
         return FullTextLookup(source=SOURCE, url=url)
     if not isinstance(body, dict):
