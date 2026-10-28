@@ -600,6 +600,9 @@ export const makeApiWorkbench = (): Workbench => ({
   auditArtifact: ({ projectId, as, sha256 }) =>
     call((api) => api.downloadAuditArtifact(projectId, sha256, { params: reviewer(as) })),
 
+  checkArtifact: ({ projectId, as, sha256 }) =>
+    call((api) => api.checkAuditArtifact(projectId, sha256, { params: reviewer(as) })),
+
   extractionRuns: ({ projectId, as }) =>
     call((api) => api.listExtractionRuns(projectId, { params: reviewer(as) })),
 

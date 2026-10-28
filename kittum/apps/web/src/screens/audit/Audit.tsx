@@ -1,7 +1,8 @@
 // Audit (DESIGN.md, "The ledger"): the hash-chained ledger as an assessor questions it. Trace a
-// PRISMA count to its records and a record to every event that touched it; check the chain and
-// see exactly which event fails which check; look at the review as it stood at an earlier event.
-// The ledger holds every reviewer's decisions, so the server answers the methods lead only.
+// PRISMA count to its records and a record to every event about it, each event first in words and
+// then its hashes with the content behind them; check the chain and see which event fails which
+// check; look at the review as it was at an earlier event. The ledger contains every reviewer's
+// decisions, so the server answers the methods lead only.
 import { useRouteContext } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
@@ -20,13 +21,15 @@ import { run, WorkbenchError } from "../../data/workbench.ts";
 import { KeyHint } from "../../ui/Key.tsx";
 import { useKeys } from "../../ui/keys.ts";
 import { LEAD_ONLY, useProject } from "../project.tsx";
+import { ArtifactToggle, EventHashes, ModelCalls, short } from "./Evidence.tsx";
+import type { Caller } from "./Evidence.tsx";
 
 type View = "trace" | "integrity" | "cutoff";
 
 const VIEWS: ReadonlyArray<readonly [View, string, string]> = [
-  ["trace", "1", "Trace a number"],
-  ["integrity", "2", "Integrity"],
-  ["cutoff", "3", "As of an event"],
+  ["trace", "1", "Trace a count"],
+  ["integrity", "2", "Check the chain"],
+  ["cutoff", "3", "Look back to an event"],
 ];
 
 /** The PRISMA counts a lead can open, in flow order, each with the `members` key behind it. */
@@ -35,14 +38,14 @@ const BOXES: ReadonlyArray<readonly [string, string, number]> = [
   ["unique_records", "Records after duplicates removed", 1],
   ["records_screened", "Records screened", 1],
   ["records_excluded", "Records excluded", 2],
-  ["title_abstract:excluded_with_ai_involvement", "Excluded with the AI involved", 3],
+  ["title_abstract:excluded_with_ai_involvement", "Excluded, the AI took part", 3],
   ["records_awaiting_screening", "Records not yet screened", 2],
   ["records_unresolved", "Records in conflict", 2],
   ["reports_sought", "Reports sought for retrieval", 1],
   ["reports_not_retrieved", "Reports not retrieved", 2],
   ["reports_assessed", "Reports assessed for eligibility", 1],
   ["reports_excluded", "Reports excluded", 2],
-  ["full_text:excluded_with_ai_involvement", "Excluded with the AI involved", 3],
+  ["full_text:excluded_with_ai_involvement", "Excluded, the AI took part", 3],
   ["reports_awaiting_classification", "Insufficient information", 2],
   ["reports_included", "Reports included", 1],
   ["studies_included", "Studies included", 1],
@@ -75,13 +78,6 @@ const STAGES: Record<string, string> = {
   title_abstract: "Title and abstract",
   full_text: "Full text",
 };
-
-/** A hash's first 16 digits in groups of four, so two hashes can be compared at a glance. */
-const short = (hash: string, digits = 16) =>
-  hash
-    .slice(0, digits)
-    .replace(/(.{4})/g, "$1 ")
-    .trim();
 
 const when = (iso: string) =>
   new Date(iso).toLocaleString("en-GB", {
@@ -179,7 +175,8 @@ export function AuditScreen() {
       <Shell>
         <h1 className="text-xl font-semibold tracking-[-0.01em]">Audit</h1>
         <p className="mt-4 max-w-[60ch] text-ink-2">
-          The ledger holds every reviewer&rsquo;s decisions and the AI&rsquo;s readings. {LEAD_ONLY}
+          The ledger contains every reviewer&rsquo;s decisions and the AI&rsquo;s readings.{" "}
+          {LEAD_ONLY}
         </p>
       </Shell>
     );
@@ -306,8 +303,8 @@ function ChainStrip({
     : !audit
       ? ""
       : audit.ok
-        ? `The chain holds through event ${audit.verified_through_seq} of ${audit.head_seq}.`
-        : `The chain breaks at event ${audit.verified_through_seq + 1}; it holds through ${audit.verified_through_seq}.`;
+        ? `Every event up to ${audit.verified_through_seq} of ${audit.head_seq} matches its hashes.`
+        : `The chain breaks at event ${audit.verified_through_seq + 1}. The events before it match their hashes.`;
   return (
     <section aria-label="The ledger chain" className="flex-none px-8 pt-4 pb-1">
       <div
@@ -403,7 +400,7 @@ function TraceView({
   findings: ReadonlyMap<number, Finding>;
   onOpen: (ref: string) => Promise<void>;
   scopeLabel: (scope: string) => string;
-  caller: { projectId: string; as: string };
+  caller: Caller;
 }) {
   const flows = head?.flows.filter((f) => f.records_identified > 0) ?? [];
   const [scope, setScope] = useState<string | null>(null);
@@ -427,10 +424,10 @@ function TraceView({
       pick(next);
       return true;
     }
-    if (event.key === "]" || event.key === "[") {
+    if (event.key === "." || event.key === ",") {
       const at = boxes.findIndex(([key]) => key === box);
       const next =
-        boxes[Math.min(boxes.length - 1, Math.max(0, at + (event.key === "]" ? 1 : -1)))];
+        boxes[Math.min(boxes.length - 1, Math.max(0, at + (event.key === "." ? 1 : -1)))];
       if (next) {
         setBox(next[0]);
         setIndex(0);
@@ -462,7 +459,7 @@ function TraceView({
         ) : null}
         <p className="text-xs text-ink-3">
           Every count is a list of records. Open one to see them.{" "}
-          <KeyHint keys={["[", "]"]}>Count</KeyHint>
+          <KeyHint keys={[",", "."]}>Previous or next count</KeyHint>
         </p>
         <ol className="mt-3">
           {boxes.map(([key, label, depth]) => {
@@ -524,7 +521,7 @@ function TraceView({
                   <span className="line-clamp-2">{item?.title ?? ref}</span>
                   {!item?.trace_ref ? (
                     <span className="text-xs text-ink-3">
-                      A sentinel; it has no history of its own
+                      A sentinel. It has no history of its own.
                     </span>
                   ) : null}
                 </button>
@@ -538,9 +535,9 @@ function TraceView({
           <Timeline trace={trace} findings={findings} caller={caller} />
         ) : (
           <p className="max-w-[52ch] text-ink-2">
-            Choose a record to see every ledger event that touched it: the searches that found it,
-            its duplicates, each person&rsquo;s blind decision, when the AI&rsquo;s reading was
-            shown, the full text, and the values taken from it.
+            Pick a record to see every ledger event about it, from the searches that found it to the
+            values taken from its full text. Each event says what happened first. Its hashes come
+            after, and each opens to the content it covers.
           </p>
         )}
       </section>
@@ -555,7 +552,7 @@ function Timeline({
 }: {
   trace: RecordTrace;
   findings: ReadonlyMap<number, Finding>;
-  caller: { projectId: string; as: string };
+  caller: Caller;
 }) {
   const [open, setOpen] = useState<ReadonlySet<number>>(new Set());
   const toggle = (seq: number) =>
@@ -573,7 +570,7 @@ function Timeline({
       <p className="mt-1 text-xs text-ink-3 tabular-nums">
         {trace.report_id
           ? `Report ${trace.report_id}${trace.study_id ? `, study ${trace.study_id}` : ""}`
-          : "A search result not yet in the corpus: no identity revision holds it."}
+          : "A search result that is not in the corpus yet. No identity revision includes it."}
       </p>
       <section className="mt-4" aria-label="Found by">
         <h3 className="text-sm font-semibold text-ink-2">
@@ -587,7 +584,7 @@ function Timeline({
               {o.search_seq !== null ? (
                 <span className="text-ink-3">search at event {o.search_seq}</span>
               ) : null}
-              <ArtifactLink caller={caller} sha256={o.raw_hash} label="Raw response" />
+              <ArtifactToggle caller={caller} sha256={o.raw_hash} label="Raw response" />
             </li>
           ))}
         </ul>
@@ -598,14 +595,12 @@ function Timeline({
           className="mt-4 max-w-[72ch] border-l-2 border-petrol pl-3 text-sm"
           data-testid="reveal"
         >
-          {r.reviewer} decided blind at event {r.decision_seq} ({STAGES[r.stage] ?? r.stage}). The
-          AI&rsquo;s reading was shown only afterwards
-          {r.shown_at && r.decided_at
-            ? `, ${seconds(r.decided_at, r.shown_at)} s after the decision`
-            : ""}
+          {r.reviewer} decided blind at event {r.decision_seq} ({STAGES[r.stage] ?? r.stage}).
+          Kittum showed the AI&rsquo;s reading only after that decision
+          {r.shown_at && r.decided_at ? `, ${seconds(r.decided_at, r.shown_at)} s later` : ""}.{" "}
           {r.final_seq !== null
-            ? `; ${r.kept ? "they kept their decision" : "they revised it"} at event ${r.final_seq}.`
-            : "; the final decision is still open."}
+            ? `${r.kept ? "They kept their decision" : "They changed it"} at event ${r.final_seq}.`
+            : "Their final decision is still open."}
         </p>
       ))}
       <ol className="mt-6" aria-label="Events">
@@ -664,7 +659,7 @@ function EventRow({
   finding: Finding | null;
   expanded: boolean;
   onToggle: () => void;
-  caller: { projectId: string; as: string };
+  caller: Caller;
 }) {
   const broken = finding !== null;
   return (
@@ -688,139 +683,70 @@ function EventRow({
           }`}
         />
       </span>
-      <div
-        className={`mb-1 ml-2 rounded-[3px] px-3 py-2 ${broken ? "bg-exclude-wash" : "hover:bg-sheet"}`}
-      >
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-expanded={expanded}
-          className="block w-full text-left"
-        >
-          <span className="flex items-baseline gap-3">
-            <span className="w-[5.5rem] flex-none text-xs text-ink-3">
-              {KIND_LABEL[e.kind]}
-              {e.stage ? <span className="block">{STAGES[e.stage] ?? e.stage}</span> : null}
+      <div className={`mb-1 ml-2 rounded-[3px] px-3 py-2 ${broken ? "bg-exclude-wash" : ""}`}>
+        <div className="flex items-baseline gap-3">
+          <span className="w-[5.5rem] flex-none text-xs text-ink-3">
+            {KIND_LABEL[e.kind]}
+            {e.stage ? <span className="block">{STAGES[e.stage] ?? e.stage}</span> : null}
+          </span>
+          <span className="min-w-0">
+            <span className="block text-md leading-snug" data-testid="event-summary">
+              {e.summary}
             </span>
-            <span className="min-w-0">
-              <span className="block text-md leading-snug">{e.summary}</span>
-              <span className="mt-0.5 flex flex-wrap gap-x-4 text-xs text-ink-2">
-                <span>{e.actor}</span>
-                <span className="tabular-nums">{when(e.recorded_at)}</span>
-                <span className="text-ink-3">{e.type}</span>
-              </span>
+            <span className="mt-0.5 flex flex-wrap gap-x-4 text-xs text-ink-2">
+              <span>{e.actor}</span>
+              <span className="tabular-nums">{when(e.recorded_at)}</span>
             </span>
           </span>
-        </button>
-        {broken ? (
-          <p
-            className="mt-1.5 ml-[6.25rem] text-sm font-medium text-exclude"
-            data-testid="event-finding"
-          >
-            Fails its {CHECKS[finding.check].toLowerCase()} check: {finding.reason}.
-          </p>
-        ) : null}
-        <dl className="narrow mt-1.5 ml-[6.25rem] grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-3 text-xs text-ink-3 tabular-nums">
-          <dt>Links to</dt>
-          <dd>{short(e.prev_hash)}</dd>
-          <dt>Hash</dt>
-          <dd className="text-ink-2">{short(e.event_hash)}</dd>
-        </dl>
-        {expanded ? (
-          <div className="mt-2 ml-[6.25rem] grid gap-2 text-sm">
-            {e.facts.length > 0 ? (
-              <dl className="grid grid-cols-[minmax(7rem,auto)_minmax(0,1fr)] gap-x-4 gap-y-0.5">
-                {e.facts.map((f) => (
-                  <div key={f.label} className="contents">
-                    <dt className="text-ink-2">{f.label}</dt>
-                    <dd className="break-words">{f.value}</dd>
-                  </div>
-                ))}
-              </dl>
-            ) : null}
-            <dl className="narrow grid grid-cols-[7rem_minmax(0,1fr)] gap-x-4 text-xs tabular-nums">
-              <dt className="text-ink-2">Payload hash</dt>
-              <dd className="break-all">{e.payload_hash}</dd>
-              <dt className="text-ink-2">Event hash</dt>
-              <dd className="break-all">{e.event_hash}</dd>
-              <dt className="text-ink-2">Previous hash</dt>
-              <dd className="break-all">{e.prev_hash}</dd>
-              <dt className="text-ink-2">Event ID</dt>
-              <dd className="break-all">{e.event_id}</dd>
+        </div>
+        <div className="ml-[6.25rem]">
+          {broken ? (
+            <p className="mt-1.5 text-sm font-medium text-exclude" data-testid="event-finding">
+              Fails the {CHECKS[finding.check].toLowerCase()} check. {sentence(finding.reason)}
+            </p>
+          ) : null}
+          {e.facts.length > 0 ? (
+            <dl
+              className="mt-1.5 grid grid-cols-[minmax(7rem,auto)_minmax(0,1fr)] gap-x-4 gap-y-0.5 text-sm"
+              data-testid="event-facts"
+            >
+              {e.facts.map((f, i) => (
+                <div key={`${f.label}-${i}`} className="contents">
+                  <dt className="max-w-[16rem] text-ink-2">{f.label}</dt>
+                  <dd className="break-words whitespace-pre-wrap">{f.value}</dd>
+                </div>
+              ))}
             </dl>
-            <details>
-              <summary className="cursor-default text-xs text-ink-2">Payload as recorded</summary>
-              <pre className="mt-1 max-h-72 overflow-auto bg-sheet-2 p-2 text-xs whitespace-pre-wrap">
-                {JSON.stringify(e.payload, null, 2)}
-              </pre>
-            </details>
-          </div>
-        ) : null}
-        {e.artifacts.length > 0 ? (
-          <span className="mt-1 ml-[6.25rem] flex flex-wrap gap-x-4 text-xs">
-            {e.artifacts.map((a) => (
-              <ArtifactLink
-                key={`${a.sha256}-${a.label}`}
-                caller={caller}
-                sha256={a.sha256}
-                label={a.label}
-                stored={a.stored}
-              />
-            ))}
-          </span>
-        ) : null}
+          ) : null}
+          {e.artifacts.length > 0 ? (
+            <div className="mt-1.5 grid gap-1">
+              {e.artifacts.map((a) => (
+                <ArtifactToggle
+                  key={`${a.sha256}-${a.label}`}
+                  caller={caller}
+                  sha256={a.sha256}
+                  label={a.label}
+                  stored={a.stored}
+                />
+              ))}
+            </div>
+          ) : null}
+          {e.model_calls && e.model_calls.length > 0 ? (
+            <ModelCalls calls={e.model_calls} caller={caller} />
+          ) : null}
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-expanded={expanded}
+            className="mt-1.5 text-xs text-ink-2 hover:text-ink"
+          >
+            {expanded ? "Hide the hashes" : "Show the hashes and what they cover"}{" "}
+            <span className="text-ink-3 tabular-nums">{short(e.event_hash, 8)}</span>
+          </button>
+          {expanded ? <EventHashes event={e} /> : null}
+        </div>
       </div>
     </div>
-  );
-}
-
-/** Opens an artifact the ledger names, fetched as the lead (the request needs the header). */
-function ArtifactLink({
-  caller,
-  sha256,
-  label,
-  stored = true,
-}: {
-  caller: { projectId: string; as: string };
-  sha256: string;
-  label: string;
-  stored?: boolean;
-}) {
-  const { workbench } = useRouteContext({ from: "/p/$projectId" });
-  const [failed, setFailed] = useState(false);
-  if (!stored) {
-    return (
-      <span className="text-ink-3" title={sha256}>
-        {label} {short(sha256, 8)}, not in this store
-      </span>
-    );
-  }
-  const openIt = async () => {
-    const tab = window.open("", "_blank");
-    try {
-      const bytes = await run(workbench.auditArtifact({ ...caller, sha256 }));
-      const pdf = bytes[0] === 0x25 && bytes[1] === 0x50;
-      const url = URL.createObjectURL(
-        new Blob([bytes as BlobPart], {
-          type: pdf ? "application/pdf" : "text/plain;charset=utf-8",
-        }),
-      );
-      if (tab) tab.location.href = url;
-    } catch {
-      tab?.close();
-      setFailed(true);
-    }
-  };
-  return (
-    <button
-      type="button"
-      onClick={() => void openIt()}
-      title={sha256}
-      className="text-petrol underline decoration-petrol/40 underline-offset-2 hover:decoration-petrol"
-    >
-      {label} {short(sha256, 8)}
-      {failed ? <span className="text-exclude"> could not be opened</span> : null}
-    </button>
   );
 }
 
@@ -837,7 +763,7 @@ function IntegrityView({
   verifying: boolean;
   onTrace: (ref: string) => Promise<void>;
   onSigned: () => void;
-  caller: { projectId: string; as: string };
+  caller: Caller;
 }) {
   const { workbench } = useRouteContext({ from: "/p/$projectId" });
   const [notice, setNotice] = useState<string | null>(null);
@@ -857,7 +783,7 @@ function IntegrityView({
       const page = await run(workbench.ledgerEvents({ ...caller, afterSeq: seq - 1, limit: 1 }));
       setShown(page.events[0]?.seq === seq ? page.events[0] : null);
     } catch (e) {
-      setNotice(e instanceof WorkbenchError ? e.message : "The event could not be read.");
+      setNotice(e instanceof WorkbenchError ? e.message : "Kittum could not read the event.");
     }
   };
 
@@ -891,10 +817,9 @@ function IntegrityView({
           </span>
         </div>
         <p className="mt-2 max-w-[78ch] text-sm text-ink-2">
-          Each event&rsquo;s payload is hashed again, then the event with that hash, then checked
-          against the event before it. A hash chain alone cannot tell a chain rewritten from an
-          event onwards; the signed checkpoints can, because their key is kept away from the
-          database.
+          Kittum hashes each event&rsquo;s payload again, then the event itself, and compares each
+          event with the one before it. A chain rewritten from some event onwards still links up.
+          Only a signed checkpoint shows that, because its key is kept apart from the database.
           {verifying ? " Checking again now." : ""}
         </p>
         {notice ? (
@@ -964,6 +889,16 @@ function IntegrityView({
             <p className="text-xs text-ink-2">
               {shown.actor}, {when(shown.recorded_at)}
             </p>
+            {shown.facts.length > 0 ? (
+              <dl className="mt-2 grid grid-cols-[minmax(7rem,auto)_minmax(0,1fr)] gap-x-4 gap-y-0.5 text-sm">
+                {shown.facts.map((f, i) => (
+                  <div key={`${f.label}-${i}`} className="contents">
+                    <dt className="max-w-[16rem] text-ink-2">{f.label}</dt>
+                    <dd className="break-words">{f.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            ) : null}
             {shownRef ? (
               <button
                 type="button"
@@ -973,7 +908,8 @@ function IntegrityView({
                 Trace the record it concerns
               </button>
             ) : null}
-            <pre className="mt-2 max-h-80 overflow-auto bg-sheet p-2 text-xs whitespace-pre-wrap">
+            <p className="mt-3 text-xs text-ink-2">The payload as stored</p>
+            <pre className="mt-1 max-h-80 overflow-auto bg-sheet p-2 text-xs whitespace-pre-wrap">
               {JSON.stringify(shown.payload, null, 2)}
             </pre>
           </section>
@@ -983,8 +919,9 @@ function IntegrityView({
           <h3 className="text-sm font-semibold text-ink-2">Signed checkpoints</h3>
           {audit.checkpoints.length === 0 ? (
             <p className="mt-2 max-w-[70ch] text-sm text-ink-2">
-              No checkpoint is signed yet, so a chain rewritten from some event onwards would still
-              verify. Sign one now, or seal a bundle on Reports, which signs one.
+              No checkpoint is signed yet. A chain rewritten from some event onwards would still
+              pass every check. Sign a checkpoint now, or seal a bundle on Reports, which signs one
+              too.
             </p>
           ) : (
             <table className="narrow mt-2 w-full text-sm tabular-nums" data-testid="checkpoints">
@@ -1016,14 +953,14 @@ function IntegrityView({
                         {
                           valid: "Valid",
                           invalid: "Does not verify",
-                          unknown_key: "Another key: not trusted",
+                          unknown_key: "Signed by another key, not trusted",
                           unchecked: "No key to check",
                         }[c.signature]
                       }
                     </td>
                     <td className={c.head_matches === false ? "text-exclude" : ""}>
                       {c.head_matches === null
-                        ? "The event is gone"
+                        ? "That event is missing"
                         : c.head_matches
                           ? `Matches ${short(c.checkpoint.head_hash, 8)}`
                           : "Differs from what was signed"}
@@ -1039,7 +976,7 @@ function IntegrityView({
             </p>
           ) : (
             <p className="mt-2 text-xs text-ink-3">
-              The server has no checkpoint key, so signatures cannot be checked here.
+              The server has no checkpoint key, so Kittum cannot check signatures here.
             </p>
           )}
         </section>
@@ -1063,7 +1000,7 @@ function CutoffView({
   cutoff: number | null;
   onCutoff: (seq: number) => void;
   scopeLabel: (scope: string) => string;
-  caller: { projectId: string; as: string };
+  caller: Caller;
 }) {
   const { workbench } = useRouteContext({ from: "/p/$projectId" });
   const [then, setThen] = useState<AsOf | null>(null);
@@ -1087,7 +1024,7 @@ function CutoffView({
       },
       (e: unknown) =>
         live &&
-        setNotice(e instanceof WorkbenchError ? e.message : "The review could not be read."),
+        setNotice(e instanceof WorkbenchError ? e.message : "Kittum could not read the review."),
     );
     return () => {
       live = false;
@@ -1223,8 +1160,8 @@ function CutoffView({
         ) : null}
         {!then || !head ? (
           <p className="max-w-[56ch] text-ink-2">
-            Pick an event to see the PRISMA flow and the AI disclosure exactly as the ledger stood
-            then, beside how they stand now.
+            Pick an event to see the PRISMA flow and the AI disclosure at that event, next to how
+            they look now.
           </p>
         ) : (
           <AsOfReport then={then} now={head} named={named} scopeLabel={scopeLabel} />
@@ -1333,7 +1270,7 @@ function AsOfReport({
             </table>
             {flow.checks.some((c) => !c.holds) ? (
               <p className="mt-2 text-sm text-exclude">
-                Sums that do not hold:{" "}
+                Sums that do not add up:{" "}
                 {flow.checks
                   .filter((c) => !c.holds)
                   .map((c) => c.name)
@@ -1350,7 +1287,7 @@ function AsOfReport({
         </h3>
         {then.stages.length === 0 ? (
           <p className="mt-1 text-sm text-ink-2">
-            No screening stage had opened yet: the AI had read nothing.
+            No screening stage was open yet, so the AI had read nothing.
           </p>
         ) : (
           <table
@@ -1362,9 +1299,9 @@ function AsOfReport({
                 <th className="py-1 font-normal">Stage</th>
                 <th className="py-1 font-normal">Records</th>
                 <th className="py-1 font-normal">Read by the AI</th>
-                <th className="py-1 font-normal">AI proposed exclusion</th>
-                <th className="py-1 font-normal">Readings shown</th>
-                <th className="py-1 font-normal">Revised after one</th>
+                <th className="py-1 font-normal">AI proposed to exclude</th>
+                <th className="py-1 font-normal">AI readings shown</th>
+                <th className="py-1 font-normal">Changed after one</th>
                 <th className="py-1 font-normal">Extra screens</th>
               </tr>
             </thead>

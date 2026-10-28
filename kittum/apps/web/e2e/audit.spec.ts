@@ -278,7 +278,7 @@ test("the lead traces a count to a record, looks back at an earlier event, and s
     await page.keyboard.press("g");
     await page.keyboard.press("l");
     await expect(page.getByRole("heading", { name: "Audit", level: 1 })).toBeVisible();
-    await expect(strip).toContainText(/The chain holds through event \d+ of \d+\./);
+    await expect(strip).toContainText(/Every event up to \d+ of \d+ matches its hashes\./);
 
     await page.getByTestId("box-reports_included").click();
     await expect(page.getByTestId("box-reports_included")).toContainText("1");
@@ -303,34 +303,65 @@ test("the lead traces a count to a record, looks back at an earlier event, and s
       expect(first(earlier ?? ""), `${earlier} before ${later}`).toBeLessThan(first(later ?? ""));
     }
     await expect(
-      events.filter({ hasText: "2 search results confirmed as the same record" }),
+      events.filter({ hasText: "Morgan Lee confirmed 2 search results as the same record" }),
     ).toHaveCount(1);
-    await expect(events.filter({ hasText: "Jun Park decided exclude on POP, blind" })).toHaveCount(
-      1,
-    );
-    await expect(events.filter({ hasText: "Elena Weiss adjudicated: include" })).toHaveCount(1);
-    await expect(events.filter({ hasText: "Full text uploaded by Morgan Lee" })).toHaveCount(1);
     await expect(
-      events.filter({ hasText: "Rita Nunes decided include, blind (the auditor's audit sample)" }),
+      events.filter({ hasText: "Jun Park excluded the record on POP, blind" }),
+    ).toHaveCount(1);
+    await expect(
+      events.filter({ hasText: "Elena Weiss adjudicated and included the record" }),
+    ).toHaveCount(1);
+    await expect(events.filter({ hasText: "Morgan Lee uploaded the full text" })).toHaveCount(1);
+    await expect(
+      events.filter({
+        hasText: "Rita Nunes included the record, blind (the auditor's audit sample)",
+      }),
     ).toHaveCount(1);
     // A decided blind; the AI's reading came only afterwards, and A revised.
     const reveal = page.getByTestId("reveal");
     await expect(reveal).toContainText("Sam Okafor decided blind at event");
     await expect(reveal).toContainText("Full text");
-    await expect(reveal).toContainText("they revised it at event");
+    await expect(reveal).toContainText("They changed it at event");
     await expect(
-      events.filter({ hasText: "Sam Okafor decided exclude on INT, blind" }),
+      events.filter({ hasText: "Sam Okafor excluded the record on INT, blind" }),
     ).toHaveCount(1);
     await expect(
-      events.filter({ hasText: "Sam Okafor decided include, after seeing the AI's reading" }),
+      events.filter({
+        hasText: "Sam Okafor included the record, after seeing the AI's reading",
+      }),
     ).toHaveCount(1);
-    // Each event shows where it sits in the chain; opened, it shows every hash and the facts.
-    const upload = events.filter({ hasText: "Full text uploaded by Morgan Lee" });
-    await upload.getByRole("button").first().click();
-    await expect(upload).toContainText("Payload hash");
-    await expect(upload).toContainText("CC BY 4.0");
-    await expect(upload.getByRole("button", { name: /^Full text PDF/ })).toBeVisible();
+    // Each event says what happened first; its hashes open to the content they cover, each
+    // with Kittum's check that the content still hashes to the recorded value.
+    const upload = events.filter({ hasText: "Morgan Lee uploaded the full text" });
+    await expect(upload.getByTestId("event-facts")).toContainText("CC BY 4.0");
+    await upload.getByRole("button", { name: /^Full text PDF/ }).click();
+    const pdf = upload.getByTestId("artifact-content");
+    await expect(pdf.getByTestId("hash-check")).toHaveAttribute("data-matches", "true");
+    await expect(pdf).toContainText("The hash matches the recorded one.");
+    await upload.getByRole("button", { name: /Show the hashes/ }).click();
+    await upload.getByRole("button", { name: /Payload hash/ }).click();
+    await expect(upload.getByTestId("event-hashes")).toContainText('"licence": "CC BY 4.0"');
+    await expect(upload.getByTestId("event-hashes").getByTestId("hash-check")).toHaveAttribute(
+      "data-matches",
+      "true",
+    );
     await shot(page, "1-trace");
+
+    // The AI judge's reading of the full text opens to the exact request and response.
+    const judged = events.filter({ hasText: "The AI judge" }).last();
+    await expect(judged).toHaveAttribute("data-kind", "ai");
+    await judged.getByRole("button", { name: "Show the request and the response" }).click();
+    const request = judged.getByTestId("call-request");
+    await expect(request.getByLabel("System prompt")).toContainText(
+      "You screen records for a systematic literature review.",
+    );
+    await expect(request.getByLabel("User prompt")).toContainText(`Title: ${TRIAL}`);
+    await expect(request.getByTestId("hash-check")).toHaveAttribute("data-matches", "true");
+    const response = judged.getByTestId("call-response");
+    await expect(response.getByLabel("Answer")).toContainText('"status"');
+    await expect(response.getByTestId("hash-check")).toHaveAttribute("data-matches", "true");
+    await judged.scrollIntoViewIfNeeded();
+    await shot(page, "1b-model-call");
   });
 
   await test.step("the lead looks back at the review when title and abstract closed, and keeps that report", async () => {
@@ -404,7 +435,10 @@ test("the lead traces a count to a record, looks back at an earlier event, and s
       .click();
     const broken = page.locator(`[data-testid=trace-event][data-seq="${tampered}"]`);
     await expect(broken).toHaveAttribute("data-broken", "true");
-    await expect(broken.getByTestId("event-finding")).toContainText("Fails its payload hash check");
+    await expect(broken.getByTestId("event-finding")).toContainText("Fails the payload hash check");
+    await broken.getByRole("button", { name: /Show the hashes/ }).click();
+    await broken.getByRole("button", { name: /Payload hash/ }).click();
+    await expect(broken.getByTestId("hash-check")).toHaveAttribute("data-matches", "false");
     await broken.scrollIntoViewIfNeeded();
     await shot(page, "4-trace-tampered");
 
@@ -431,7 +465,7 @@ test("the lead traces a count to a record, looks back at an earlier event, and s
     await expect(nav.getByRole("link", { name: "Reports" })).toBeVisible();
     await expect(nav.getByRole("link", { name: "Audit" })).toHaveCount(0);
     await screener.goto(`/p/${projectId}/audit?as=${sam}`);
-    await expect(screener.getByText(/The ledger holds every reviewer/)).toBeVisible();
+    await expect(screener.getByText(/The ledger contains every reviewer/)).toBeVisible();
     await expect(screener.getByTestId("chain-strip")).toHaveCount(0);
     const ref = await traceRef(lead);
     const headers = { "X-Kittum-Reviewer": sam };
@@ -443,6 +477,7 @@ test("the lead traces a count to a record, looks back at an earlier event, and s
       "milestones",
       "as-of",
       `artifacts/${"0".repeat(64)}`,
+      `artifacts/${"0".repeat(64)}/check`,
     ]) {
       const refused = await request.get(`/api/projects/${projectId}/audit/${path}`, { headers });
       expect(refused.status(), path).toBe(403);

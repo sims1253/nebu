@@ -363,5 +363,25 @@ test("a reviewer accepts and corrects values Janus read from a trial the screene
     expect(anchor.quote.exact.replace(/\s+/g, " ")).toBe(SPAN);
     expect(new Set(anchor.boxes.map((x) => x.page))).toEqual(new Set([5]));
   });
+
+  await test.step("the lead downloads the accepted values as CSV and JSON from Reports", async () => {
+    const lead = await (await browser.newContext({ acceptDownloads: true })).newPage();
+    await lead.goto(`/p/${projectId}/reports?as=${leadId}`);
+    await expect(lead.getByRole("heading", { name: "Reports", level: 1 })).toBeVisible();
+    await lead.keyboard.press("e");
+    const values = lead.getByTestId("extracted-values");
+    await expect(values.locator("tbody tr")).toHaveCount(2);
+    const edited = values.locator("tbody tr").filter({ hasText: "6.5" });
+    await expect(edited).toContainText("Edited by hand");
+    await expect(edited).toContainText("Page 5.");
+    await expect(edited).toContainText("Sam Okafor");
+    await expect(values.locator("tbody tr").filter({ hasText: "52" })).toContainText("Janus");
+    const download = lead.waitForEvent("download");
+    await lead.getByRole("link", { name: "extracted_values.csv" }).click();
+    const csv = readFileSync((await (await download).path()) ?? "", "utf8").split("\n");
+    expect(csv[0]).toMatch(/^study,report,field,value,unit,quantity,endpoint,timepoint,arm,/);
+    expect(csv.filter((line) => line.includes(",manual_edit,"))).toHaveLength(1);
+    await lead.context().close();
+  });
   await page.context().close();
 });
