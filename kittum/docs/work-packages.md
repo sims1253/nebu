@@ -591,8 +591,11 @@ Module `kittum.report`. Needs: most modules.
 
 **Done.** Every target renders from `load_review(tx, project_id, cutoff_seq=...)`: the review
 as the ledger recorded it through a cutoff (default: the head). Screening is replayed from the
-append-only decision, undo, conflict, and adjudication rows, so a report at an old cutoff shows
-the review as it stood then. Migration `20261029020000_report_artifacts.sql`.
+append-only decision, undo, and adjudication rows, and conflicts and extra screens from their
+ledger events (`screening.conflict_*`, `screening.adjudicated`,
+`screening.ai_disagreement_rescreen`), so a report at an old cutoff shows the review as it stood
+then. A record sent to the auditor's blind extra screen stays unresolved until the auditor
+decides. Migration `20261029020000_report_artifacts.sql`.
 
 - `prisma`: `flow(review, topic, scope)` from one frozen identity revision (default: the latest
   at the cutoff). Records per source and per kind (databases, registers, other), duplicates,
@@ -600,8 +603,8 @@ the review as it stood then. Migration `20261029020000_report_artifacts.sql`.
   exclusions per criterion ID, awaiting classification (insufficient information), included
   reports and studies. `members` lists the reports behind every count; `checks` states every sum
   that must hold and reports a broken one. The PRISMA automation box is always 0 (the AI never
-  removes a record); exclusions with an AI proposal, after a reveal, or after an AI-triggered
-  adjudication are counted separately. JSON and an SVG diagram per scope.
+  removes a record); exclusions with an AI proposal, after a reveal, or after an extra screen the
+  AI's disagreement triggered are counted separately. JSON and an SVG diagram per scope.
 - `ris`: one undeduplicated file per search, the deduplicated corpus (one entry per report), and
   per scope the included, title-and-abstract excluded, and full-text excluded lists. `AN` is the
   provider ID, `N1` the registry IDs and decision, `C1`/`C2`/`C3` the occurrence, report, and
@@ -611,10 +614,10 @@ the review as it stood then. Migration `20261029020000_report_artifacts.sql`.
   sources without a search and source deviations.
 - `ai_disclosure`: the disclosure record (`disclosure(review)`: recipes, weights hashes and
   licences, the identities the server reported, prompt and schema hashes, decoding, mode per
-  topic with rationale and validation pack, reveal per stage, kappa and PABAK, reveals, adjudication
-  on AI rules, the audit gauge, `judge.VERIFIER_LIMITS`) and one RAISE-aligned Markdown rendering.
-  Kappa, reveals, and the audit gauge are recomputed from the replayed decisions with screening's
-  definitions; the tests check them against `Screening.status`.
+  topic with rationale and validation pack, reveal per stage, kappa and PABAK against the model's
+  own and the verified reading, reveals, adjudicated conflicts, the audit gauge, the extra screens
+  the AI triggered with each one's reason and result (upheld, adjudicated, pending),
+  `judge.VERIFIER_LIMITS`) and one RAISE-aligned Markdown rendering.
 - `render(tx, target, project_id, scope_id, store=...)` stores the files by hash and returns an
   `Artifact`; `record_render` writes `report_artifact` and a `report.rendered` event.
 - `seal_bundle(tx, project_id, store, out_dir, signer=..., actor_id=..., rights=...)` renders
@@ -637,8 +640,8 @@ the review as it stood then. Migration `20261029020000_report_artifacts.sql`.
   replacement review and the capivasertib dossier through search, corpus, judge, and screening
   against Postgres, and check the PRISMA sums by hand and from data, earlier cutoffs, the RIS
   round trip, the PRISMA-S fields, the disclosure, the sealed bundle through `kittum verify`, the
-  trace from report numbers to decisions, events, and people in the bundle's SQLite, and the
-  routes.
+  trace from report numbers to decisions, rescreen events, and people in the bundle's SQLite, the
+  routes, and each copied metric against `Screening.status`.
 
 Left open:
 
@@ -654,8 +657,12 @@ Left open:
   and prompt hashes are, in `judge_config`.
 - The exporters live in `report` and read the other modules' tables directly; an owner may move
   its exporter into its own package. Enrichment rows are not exported.
-- A proposal's status and a conflict's later kind updates are not replayed to the cutoff; the
+- A proposal's status is not replayed to the cutoff (it is left out of the bundle); the
   confirmations are ledger events.
+- Screened counts, open and resolved conflicts, agreement, reveals, the audit gauge, and the
+  rescreen gauge are recomputed from the replayed rows with `screening.metrics`'s definitions, so
+  they stay exact at old cutoffs. `test_a_metric_the_report_computes_equals_what_screening_reports`
+  compares each with `Screening.status` on both reviews, so a change there fails here by name.
 - The report routes take the actor in the body and expose stage metrics without authentication
   (WP-15).
 
