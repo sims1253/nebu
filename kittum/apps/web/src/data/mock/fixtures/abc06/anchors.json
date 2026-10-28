@@ -5,12 +5,12 @@
     "id": "2776bac9-18ca-543e-9726-fdbcaba8ad94",
     "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
     "quote": {
-     "exact": "histologically or cytologically\nverified locally advanced",
+     "exact": "histologically or cytologically\nverified locally advanced or metastatic biliary tract cancer",
      "prefix": "tients (aged ≥18 years) who had ",
-     "suffix": " or metastatic biliary tract can"
+     "suffix": " (including cholangiocarcinoma a"
     },
     "start": 2623,
-    "end": 2680,
+    "end": 2715,
     "boxes": [
      {
       "page": 1,
@@ -22,26 +22,6 @@
      {
       "page": 1,
       "x0": 119.06,
-      "y0": 325.17,
-      "x1": 216.78,
-      "y1": 335.91
-     }
-    ]
-   },
-   {
-    "id": "109885dc-1396-5f1a-a243-f6ae4a7d97a3",
-    "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
-    "quote": {
-     "exact": "locally advanced or metastatic biliary tract cancer",
-     "prefix": "cally or cytologically\nverified ",
-     "suffix": " (including cholangiocarcinoma a"
-    },
-    "start": 2664,
-    "end": 2715,
-    "boxes": [
-     {
-      "page": 1,
-      "x0": 152.27,
       "y0": 325.17,
       "x1": 352.9,
       "y1": 335.91
@@ -72,43 +52,16 @@
     "id": "a1008486-4089-5420-aaed-023868c3d01a",
     "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
     "quote": {
-     "exact": "histologically or cytologically verified locally\nadvanced",
+     "exact": "histologically or cytologically verified locally\nadvanced or metastatic biliary tract cancer",
      "prefix": " aged 18 years or older\nand had ",
-     "suffix": " or metastatic biliary tract can"
-    },
-    "start": 13924,
-    "end": 13981,
-    "boxes": [
-     {
-      "page": 3,
-      "x0": 158.11,
-      "y0": 435.17,
-      "x1": 333.08,
-      "y1": 445.91
-     },
-     {
-      "page": 3,
-      "x0": 119.06,
-      "y0": 446.17,
-      "x1": 153.58,
-      "y1": 456.91
-     }
-    ]
-   },
-   {
-    "id": "aaf24841-8b31-5e67-aed0-68f27e7ad7cd",
-    "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
-    "quote": {
-     "exact": "locally\nadvanced or metastatic biliary tract cancer",
-     "prefix": "cally or cytologically verified ",
      "suffix": " (including\ncholangiocarcinoma, "
     },
-    "start": 13965,
+    "start": 13924,
     "end": 14016,
     "boxes": [
      {
       "page": 3,
-      "x0": 309.79,
+      "x0": 158.11,
       "y0": 435.17,
       "x1": 333.08,
       "y1": 445.91

@@ -1,6 +1,12 @@
 import { defineConfig } from "vite-plus";
 
-const GENERATED = ["**/routeTree.gen.ts", "**/*.gen.ts", "packages/contracts/src/openapi.json"];
+const GENERATED = [
+  "**/routeTree.gen.ts",
+  "**/*.gen.ts",
+  "packages/contracts/src/openapi.json",
+  // Written by apps/web/scripts from recorded sources.
+  "apps/web/src/data/mock/fixtures/**",
+];
 
 export default defineConfig({
   fmt: {

@@ -180,6 +180,17 @@ def find_all(haystack: str, origin: list[int], quote: str) -> list[tuple[int, in
     return spans
 
 
+def merge(spans: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Overlapping phrase matches are one mention."""
+    merged: list[tuple[int, int]] = []
+    for start, end in spans:
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(end, merged[-1][1]))
+        else:
+            merged.append((start, end))
+    return merged
+
+
 def page_of(pages, offset: int) -> int:
     for page_index, words in enumerate(pages):
         if words and words[0][0] <= offset <= words[-1][1]:
@@ -210,7 +221,7 @@ def main() -> None:
     haystack, origin = searchable(text)
     mentions: dict[str, list[dict]] = {}
     for criterion, phrases in MENTIONS.items():
-        spans = sorted({span for phrase in phrases for span in find_all(haystack, origin, phrase)})
+        spans = merge(sorted({span for phrase in phrases for span in find_all(haystack, origin, phrase)}))
         missing = [p for p in phrases if not find_all(haystack, origin, p)]
         if missing:
             raise SystemExit(f"{criterion}: no match for {missing}")
