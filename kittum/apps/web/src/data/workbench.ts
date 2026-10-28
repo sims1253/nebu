@@ -10,64 +10,69 @@ import type {
   AdjudicationItem,
   AdjudicationResult,
   Anchor,
-  AsOf,
   ArtifactCheck,
+  AsOf,
+  Assertion,
+  AssistModel,
+  AssistOutcome,
+  Box,
   ChainAudit,
   CheckpointStatus,
-  EventPage,
-  Milestone,
-  RecordTrace,
-  Box,
   CorpusRevision,
   CorpusView,
   DecideResult,
   Decision,
   DecisionTiming,
-  Assertion,
   DiffPreview,
   EnrichmentRun,
+  EventPage,
   ExampleProtocol,
   ExtractionReview,
   ExtractionRun,
   ExtractionSchema,
   FullText,
   FullTextAssignment,
+  HeldUpload,
   IdentityRevision,
   LayerSummary,
   LedgerSummary,
   LinkProposal,
   Member,
+  Milestone,
+  MissingReport,
   OpenAccessRun,
   PageLayer,
-  AssistModel,
-  AssistOutcome,
   ParsedSource,
-  ProtocolDiff,
-  ProtocolRevision,
-  QueryCount,
-  QueryDialect,
   Phase,
   Progress,
   ProjectSummary,
+  ProtocolDiff,
+  ProtocolRevision,
   ProtocolSource,
+  ProtocolVersion,
+  QueryCount,
+  QueryDialect,
+  QueueItem,
   RecordEnrichment,
   RecordFlag,
+  RecordTrace,
   RenderedReport,
   ReportInfo,
   RetrievalItem,
-  RunListing,
+  RetryPlan,
+  RetryPreview,
   RevealSetting,
   Role,
+  RunListing,
+  ScopeStatus,
   SealedBundle,
+  SearchExecution,
   SearchPlan,
   Sentinel,
-  StoredProtocol,
-  ProtocolVersion,
-  QueueItem,
-  ScopeStatus,
-  SearchExecution,
   Stage,
   StageInfo,
+  StoredProtocol,
+  UploadResult,
   ValidationReport,
 } from "./schema.ts";
 
@@ -344,6 +349,31 @@ export interface Workbench {
   readonly openAccess: (caller: Caller) => Call<OpenAccessRun | null>;
   /** Walks the open-access waterfall for every report sought without a full text. */
   readonly startOpenAccess: (caller: Caller) => Call<OpenAccessRun>;
+  /** What a retry would ask again: the failed sources, with the records and reports they
+   * failed for. */
+  readonly retryPreview: (caller: Caller) => Call<RetryPreview>;
+  /** Asks the failed sources again: enrichment of the records, then retrieval of the reports. */
+  readonly retryFailedSources: (caller: Caller) => Call<RetryPlan>;
+  /** The reports sought for retrieval without a usable full text, with every attempt. */
+  readonly missingFullTexts: (caller: Caller) => Call<ReadonlyArray<MissingReport>>;
+  /** The same list as a CSV or RIS file. */
+  readonly exportMissing: (
+    request: Caller & { readonly format: "csv" | "ris" },
+  ) => Call<Uint8Array>;
+  /** One PDF of a bulk upload: attached to the report it matches, or held for the lead. */
+  readonly uploadFullText: (
+    request: Caller & {
+      readonly fileName: string;
+      readonly pdf: Uint8Array;
+      readonly licence: string | null;
+    },
+  ) => Call<UploadResult>;
+  /** The uploads waiting for the lead to assign or discard them. */
+  readonly heldUploads: (caller: Caller) => Call<ReadonlyArray<HeldUpload>>;
+  readonly assignUpload: (
+    request: Caller & { readonly uploadId: string; readonly reportId: string },
+  ) => Call<FullText>;
+  readonly discardUpload: (request: Caller & { readonly uploadId: string }) => Call<void>;
 
   /** Reports, the methods lead's alone: render a target from the ledger, fetch one of its
    * files, and seal the handover bundle. */

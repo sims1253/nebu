@@ -593,6 +593,40 @@ export const makeApiWorkbench = (): Workbench => ({
   startOpenAccess: ({ projectId, as }) =>
     call((api) => api.startOpenAccessRetrieval(projectId, { payload: { actor_id: as } })),
 
+  retryPreview: ({ projectId, as }) =>
+    call((api) => api.previewRetry(projectId, { params: reviewer(as) })),
+
+  retryFailedSources: ({ projectId, as }) =>
+    call((api) => api.retryFailedSources(projectId, { payload: { actor_id: as } })),
+
+  missingFullTexts: ({ projectId, as }) =>
+    call((api) => api.listMissingFullTexts(projectId, { params: reviewer(as) })),
+
+  exportMissing: ({ projectId, as, format }) =>
+    call((api) => api.exportMissingFullTexts(projectId, { params: { format, ...reviewer(as) } })),
+
+  uploadFullText: ({ projectId, as, fileName, pdf, licence }) =>
+    call(
+      (api) =>
+        api.uploadFullTexts(projectId, {
+          params: { actor_id: as, file_name: fileName, ...(licence ? { licence } : {}) },
+        }),
+      withPdf(pdf),
+    ),
+
+  heldUploads: ({ projectId, as }) =>
+    call((api) => api.listHeldUploads(projectId, { params: reviewer(as) })),
+
+  assignUpload: ({ projectId, as, uploadId, reportId }) =>
+    call((api) =>
+      api.assignHeldUpload(projectId, uploadId, {
+        payload: { actor_id: as, report_id: reportId },
+      }),
+    ),
+
+  discardUpload: ({ projectId, as, uploadId }) =>
+    call((api) => api.discardHeldUpload(projectId, uploadId, { payload: { actor_id: as } })),
+
   renderReport: ({ projectId, as, target, cutoffSeq }) =>
     call((api) =>
       api.renderReportTarget(projectId, target, {

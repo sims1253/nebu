@@ -99,6 +99,12 @@ export type EntityTag = KittumApi.EntityTag;
 export type OpenAccessRun = KittumApi.OpenAccessRun;
 export type ReportRetrieval = KittumApi.ReportRetrieval;
 export type AttemptView = KittumApi.AttemptView;
+export type SourceFailure = KittumApi.SourceFailureView;
+export type RetryPreview = KittumApi.RetryPreview;
+export type RetryPlan = KittumApi.RetryPlan;
+export type MissingReport = KittumApi.MissingReport;
+export type UploadResult = KittumApi.UploadResult;
+export type HeldUpload = KittumApi.HeldUpload;
 
 /** A decision as the screens build it: every field the server reads, none left to defaults. */
 export interface Decision {

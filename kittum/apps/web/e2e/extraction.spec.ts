@@ -127,7 +127,7 @@ test("a reviewer accepts and corrects values Janus read from a trial the screene
   await test.step("the lead uploads the trial's PDF and a full-text sentinel on Retrieval", async () => {
     await lead.goto(`/p/${projectId}/retrieval?as=${leadId}`);
     await expect(lead.getByTestId("retrieval-counts")).toHaveText(
-      "0 of 3 sought for retrieval retrieved",
+      "0 of 3 reports sought have a PDF",
     );
     const titles = await lead.getByTestId("retrieval-row").locator("h2").allTextContents();
     for (let i = 0; i < titles.findIndex((t) => t.startsWith(TRIAL)); i++) {
@@ -141,20 +141,16 @@ test("a reviewer accepts and corrects values Janus read from a trial the screene
     await dialog.getByLabel("PDF file").setInputFiles(PDF);
     await dialog.getByLabel("Licence").fill("CC BY 4.0");
     await dialog.getByRole("button", { name: "Attach the PDF" }).click();
-    await expect(lead.getByTestId("retrieval-notice")).toContainText(
-      "Attached a 13-page full text",
-    );
+    await expect(lead.getByTestId("retrieval-notice")).toContainText("Attached a 13-page PDF");
     await expect(lead.getByTestId("retrieval-counts")).toHaveText(
-      "1 of 3 sought for retrieval retrieved",
+      "1 of 3 reports sought have a PDF",
     );
     await lead.keyboard.press("s");
     const sentinel = lead.getByRole("dialog", { name: "Add a full-text sentinel" });
     await sentinel.getByLabel("Title").fill(SENTINEL_TITLE);
     await sentinel.getByLabel("Sentinel PDF").setInputFiles(SENTINEL_PDF);
     await sentinel.getByRole("button", { name: "Add the sentinel" }).click();
-    await expect(lead.getByTestId("retrieval-notice")).toContainText(
-      "Added the full-text sentinel",
-    );
+    await expect(lead.getByTestId("retrieval-notice")).toContainText("Added the sentinel");
     // It is no report: the list does not grow.
     await expect(lead.getByTestId("retrieval-row")).toHaveCount(3);
   });

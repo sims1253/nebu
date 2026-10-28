@@ -6,9 +6,12 @@
 // The lead follows it per source on Studies, sees the retraction flagged, and opens records to
 // see where each field came from and which drugs and diseases PubTator tagged. Both reviewers
 // include everything; on Retrieval the lead uploads one trial by hand and has the worker fetch
-// the rest from open access, every attempt listed under its report. A reviewer gets none of it.
+// the rest from open access, every attempt listed under its report. The lead exports the reports
+// still without a PDF, then uploads a folder: a supplement named after the retracted trial is held
+// because its pages show another document, and a scan is assigned by hand. A reviewer gets none
+// of it.
 import { execFileSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { expect, test } from "@playwright/test";
@@ -28,6 +31,12 @@ const VITAMIN_C_PDF = join(
   "documents",
   "fixtures",
   "li2026-vitamin-c-kidney-biopsy-rct.pdf",
+);
+const CHECKLIST = join(SERVER, "tests", "documents", "fixtures", "jmir", "app2.pdf");
+// A one-page PDF without a text layer, as a scanner makes it.
+const SCAN = Buffer.from(
+  "%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n" +
+    "3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n",
 );
 const LESOTHO = "Community health worker-led";
 const VITAMIN_C = "Effect of Vitamin C";
@@ -193,7 +202,7 @@ test("a lead enriches the corpus from the open sources and fetches open-access f
   await test.step("the lead uploads one trial by hand, then fetches the rest from open access", async () => {
     await lead.goto(`/p/${projectId}/retrieval?as=${leadId}`);
     const counts = lead.getByTestId("retrieval-counts");
-    await expect(counts).toHaveText("0 of 4 sought for retrieval retrieved");
+    await expect(counts).toHaveText("0 of 4 reports sought have a PDF");
     const titles = await lead.getByTestId("retrieval-row").locator("h2").allTextContents();
     for (let i = 0; i < titles.findIndex((t) => t.startsWith(VITAMIN_C)); i++) {
       await lead.keyboard.press("j");
@@ -203,36 +212,99 @@ test("a lead enriches the corpus from the open sources and fetches open-access f
     await dialog.getByLabel("PDF file").setInputFiles(VITAMIN_C_PDF);
     await dialog.getByLabel("Licence").fill("CC BY 4.0");
     await dialog.getByRole("button", { name: "Attach the PDF" }).click();
-    await expect(counts).toHaveText("1 of 4 sought for retrieval retrieved");
+    await expect(counts).toHaveText("1 of 4 reports sought have a PDF");
 
     await lead.keyboard.press("o");
     await expect(lead.getByTestId("open-access-status")).toHaveText(
-      "Fetched 1 of 3 reports from open access. The rest need an upload.",
+      "Fetched 1 of 3 reports. The others need a PDF from you.",
       { timeout: 60_000 },
     );
-    await expect(counts).toHaveText("2 of 4 sought for retrieval retrieved");
+    await expect(counts).toHaveText("2 of 4 reports sought have a PDF");
+    // CORE needs a key, which the stack does not have.
+    await expect(lead.getByTestId("skipped-sources")).toHaveText(
+      "Kittum skipped CORE because no CORE key is set (KITTUM_CORE_API_KEY).",
+    );
 
-    // Europe PMC's PDF link is refused; the publisher's CC BY PDF, from Crossref, is fetched.
+    // Europe PMC's PDF link is refused; PubMed Central, asked next, names its CC BY copy, which
+    // is fetched.
     const lesotho = retrievalRow(LESOTHO);
     await expect(lesotho.getByTestId("attempt")).toHaveText([
       /^1Europe PMCeuropepmc\.orgRefused, HTTP 403cc by$/,
-      /^2Crossreflink\.springer\.comFetchedcc-by-4\.0$/,
+      /^2PubMed CentralAsked pmc-oa-opendata\.s3\.amazonaws\.comNamed 1 file$/,
+      /^3PubMed Centralpmc-oa-opendata\.s3\.amazonaws\.comFetchedCC BY$/,
     ]);
     await expect(lesotho.getByTestId("full-text-status")).toContainText("PDF, 13 pages");
-    await expect(lesotho.getByTestId("full-text-status")).toContainText("cc-by-4.0, from Crossref");
+    await expect(lesotho.getByTestId("full-text-status")).toContainText(
+      "CC BY, from PubMed Central",
+    );
     await expect(retrievalRow(REGISTRY).getByTestId("open-access")).toContainText(
-      "No open-access location is known. Upload it with u.",
+      "No source has an open copy. Upload it with u.",
     );
     const lancet = retrievalRow(RETRACTED);
     await expect(lancet.getByTestId("open-access")).toHaveAttribute("data-outcome", "not_acquired");
-    await expect(lancet.getByTestId("attempt").first()).toContainText("Refused, HTTP 403");
-    await expect(lancet.getByTestId("full-text-status")).toHaveText("Not retrieved");
+    await expect(lancet.locator("[data-testid=attempt][data-kind=fetch]").first()).toContainText(
+      "Refused, HTTP 403",
+    );
+    await expect(lancet.getByTestId("full-text-status")).toHaveText("No PDF");
     // The hand upload is untouched and stays next to it.
     await expect(retrievalRow(VITAMIN_C).getByTestId("open-access")).toHaveCount(0);
     await expect(retrievalRow(VITAMIN_C).getByTestId("full-text-status")).toContainText(
       "CC BY 4.0",
     );
     await shot(lead, "retrieval-open-access");
+  });
+
+  await test.step("the lead exports the reports without a PDF, then uploads a folder", async () => {
+    await expect(lead.getByTestId("missing-count")).toContainText("2 reports sought have no PDF");
+    await lead.keyboard.press("e");
+    const exporting = lead.getByRole("dialog", { name: "Export the reports without a PDF" });
+    const download = lead.waitForEvent("download");
+    await exporting.getByRole("button", { name: "Download" }).click();
+    const saved = await download;
+    expect(saved.suggestedFilename()).toBe("missing-full-texts.csv");
+    const csv = readFileSync((await saved.path()) ?? "", "utf8");
+    expect(csv.split(/\r?\n/)[0]).toBe(
+      "DOI,PMID,Title,Authors,Journal,Year,Sources tried,Why each attempt failed,Name the PDF",
+    );
+    expect(csv).toContain("10.1016/s0140-6736(20)31180-6,32450107,");
+    expect(csv).toContain("PubMed Central has no open copy.");
+
+    await lead.keyboard.press("b");
+    const many = lead.getByRole("dialog", { name: "Upload many PDFs" });
+    await many.getByLabel("PDF files").setInputFiles([
+      // A JMIR trial's CONSORT checklist, named after the retracted trial.
+      {
+        name: "10.1016_s0140-6736(20)31180-6.pdf",
+        mimeType: "application/pdf",
+        buffer: readFileSync(CHECKLIST),
+      },
+      { name: "registry-scan.pdf", mimeType: "application/pdf", buffer: SCAN },
+    ]);
+    await many.getByRole("button", { name: "Upload 2 PDFs" }).click();
+    await expect(lead.getByTestId("retrieval-notice")).toHaveText(
+      "Attached 0 of 2 PDFs. 2 wait for you to assign.",
+    );
+    const held = lead.getByTestId("held-upload");
+    await expect(held).toHaveCount(2);
+    const checklist = held.filter({ hasText: "10.1016_s0140-6736" });
+    await expect(checklist).toContainText(
+      "Its file name names a report, but its first pages show neither that report's DOI nor its title.",
+    );
+    await shot(lead, "retrieval-held-uploads");
+    await checklist.getByRole("button", { name: "Discard" }).click();
+    const scan = held.filter({ hasText: "registry-scan.pdf" });
+    const registry = await lead
+      .getByTestId("retrieval-row")
+      .filter({ hasText: REGISTRY })
+      .locator("h2")
+      .textContent();
+    await scan.getByLabel("Report for registry-scan.pdf").selectOption({ label: registry ?? "" });
+    await scan.getByRole("button", { name: "Attach" }).click();
+    await expect(held).toHaveCount(0);
+    await expect(lead.getByTestId("retrieval-counts")).toHaveText(
+      "3 of 4 reports sought have a PDF",
+    );
+    await expect(lead.getByTestId("missing-count")).toContainText("1 report sought has no PDF");
   });
 
   await test.step("a reviewer learns none of it", async () => {
@@ -257,11 +329,15 @@ test("a lead enriches the corpus from the open sources and fetches open-access f
       "enrichment/records",
       `enrichment/records/${occurrence}`,
       "retrieval/open-access/latest",
+      "retrieval/retry",
+      "retrieval/missing",
+      "retrieval/missing/export",
+      "retrieval/uploads",
     ]) {
       const refused = await own.request.get(`${base}/${path}`, { headers: as });
       expect(refused.status(), path).toBe(403);
     }
-    for (const path of ["enrichment/runs", "retrieval/open-access"]) {
+    for (const path of ["enrichment/runs", "retrieval/open-access", "retrieval/retry"]) {
       const refused = await own.request.post(`${base}/${path}`, { data: { actor_id: sam } });
       expect(refused.status(), path).toBe(403);
     }
