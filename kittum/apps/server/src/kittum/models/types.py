@@ -1,6 +1,5 @@
-"""The values that cross the model seam, and the confidentiality rule."""
+"""The values that cross the model seam."""
 
-from enum import StrEnum
 from typing import Any, Literal, Protocol
 
 from pydantic import Field
@@ -12,18 +11,12 @@ ALLOWED_WEIGHTS_LICENCES = frozenset(
 )
 
 
-class Confidentiality(StrEnum):
-    PUBLIC = "public"
-    CONFIDENTIAL = "confidential"  # hosted EU models allowed with a DPA
-    LOCAL_ONLY = "local_only"  # default for CSRs
-
-
 class ModelRecipe(Record):
     id: str  # Kittum's name, e.g. "qwen3.8-27b-bf16"
     family: str  # for judge diversity, e.g. "qwen", "gemma", "nemotron"
     repository: str  # e.g. "Qwen/Qwen3.8-27B"
     revision: str
-    file_hashes: tuple[tuple[str, Sha256], ...]
+    file_hashes: tuple[tuple[str, Sha256], ...] = ()  # required unless `serving` is hosted
     weights_licence: str
     licence_url: str
     serving: Literal["vllm", "ollama", "hosted"]
@@ -64,7 +57,6 @@ class CompletionRequest(Record):
     temperature: float = 0.0
     seed: int | None = 0
     max_tokens: int = 2048
-    confidentiality: Confidentiality = Confidentiality.LOCAL_ONLY
 
 
 def request_key(request: CompletionRequest) -> str:
@@ -80,23 +72,15 @@ class Completion(Record):
     raw_request_hash: Sha256 | None = None  # the exact bytes sent, in the artifact store
     reasoning: str | None = None
     finish_reason: str | None = None
+    # Where the request went, for the AI disclosure: the recipe's serving and the server's base URL
+    # without credentials. None when nothing was sent, as in a replay.
+    serving: str | None = None
+    endpoint: str | None = None
 
 
 class LlmBackend(Protocol):
     def complete(self, request: CompletionRequest) -> Completion: ...
 
 
-class ConfidentialityError(KittumError):
-    """A request would send `local_only` content to a hosted model."""
-
-
 class BackendError(KittumError):
     """The model server answered, but not with a usable completion."""
-
-
-def check_confidentiality(recipe: ModelRecipe, request: CompletionRequest) -> None:
-    """Refuse to send `local_only` content to a hosted backend."""
-    if recipe.serving == "hosted" and request.confidentiality is Confidentiality.LOCAL_ONLY:
-        raise ConfidentialityError(
-            f"refusing to send local_only content to hosted model {recipe.id}"
-        )

@@ -172,6 +172,7 @@ def _record(
                 "raw_response_hash": a.completion.raw_response_hash,
                 "output_hash": store.put(a.completion.text.encode()),
                 "model_identity": a.completion.model_identity,
+                "endpoint": a.completion.endpoint,
                 "finish_reason": a.completion.finish_reason,
                 "error": a.error,
             }
@@ -230,6 +231,7 @@ def _record(
                 "statuses": {c.criterion_id: c.status for c in verdict.criteria},
                 "flags": list(verdict.flags),
                 "model_identity": verdict.model_identity,
+                "endpoint": run.attempts[-1].completion.endpoint,
                 "raw_output_hash": verdict.raw_output_hash,
                 "rendered_prompt_hash": attempts[0]["rendered_request"],
             },

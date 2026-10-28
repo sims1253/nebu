@@ -4,7 +4,7 @@ with values and verbatim quotes; a deterministic verifier decides what counts.
 The agent runs on `LlmBackendModel`, a PydanticAI model that sends each turn to a Kittum
 `LlmBackend` as one JSON Schema-constrained completion: the model picks one tool (`search`,
 `read_page`, `open_table`) or the final answer, and fills its arguments. So every call goes through
-the backend's confidentiality check and raw capture, and `RecordedBackend` replays a whole run.
+the backend's raw capture, and `RecordedBackend` replays a whole run.
 
 Budgets: at most `AgentConfig.max_calls` model calls, the last of which may only answer, and
 `max_seconds` of wall time by the given clock; a run that runs out records `error` for every field.
@@ -41,7 +41,7 @@ from kittum.core import KittumError, Record, Span
 from kittum.documents import make_anchor, quote_spans
 from kittum.extraction.model import Proposal
 from kittum.extraction.numbers import printed_in, well_formed
-from kittum.models import CompletionRequest, Confidentiality, Message
+from kittum.models import CompletionRequest, Message
 
 if TYPE_CHECKING:
     from kittum.core import Clock
@@ -81,7 +81,6 @@ class AgentConfig(Record):
     temperature: float = 0.0
     seed: int | None = 0
     max_tokens: int = 2048
-    confidentiality: Confidentiality = Confidentiality.LOCAL_ONLY
     search_hits: int = 8
     page_chars: int = 6000
     intro_chars: int = 2500
@@ -109,6 +108,8 @@ class Transcript:
     calls: list[dict[str, Any]] = field(default_factory=list)
     tools: list[dict[str, Any]] = field(default_factory=list)
     model_identity: str | None = None
+    serving: str | None = None  # where the calls went: the recipe's serving and the endpoint
+    endpoint: str | None = None
     stopped: str | None = None
 
 
@@ -332,10 +333,11 @@ class LlmBackendModel:
             temperature=self._config.temperature,
             seed=self._config.seed,
             max_tokens=self._config.max_tokens,
-            confidentiality=self._config.confidentiality,
         )
         completion: Completion = self._backend.complete(request)
         self._transcript.model_identity = completion.model_identity
+        self._transcript.serving = completion.serving
+        self._transcript.endpoint = completion.endpoint
         self._transcript.calls.append(
             {
                 "request_hash": completion.request_hash,

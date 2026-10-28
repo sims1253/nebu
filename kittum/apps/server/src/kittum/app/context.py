@@ -2,9 +2,9 @@
 
 `AppContext.from_settings` wires the Postgres ledger, the job queue and command receipts, the
 artifact store, the source gateway (with the default policies and the httpx transport), the model
-backends from `Settings.llm_endpoints`, and the screening judge. `job_handlers` gives a
-`kittum.runs.Worker` the handler of every job kind a module registered: the screening judge and
-extraction runs.
+backends from `Settings.llm_endpoints` (with the recipes in `Settings.recipes_file`), and the
+screening judge. `job_handlers` gives a `kittum.runs.Worker` the handler of every job kind a
+module registered: the screening judge and extraction runs.
 """
 
 import functools
@@ -20,11 +20,7 @@ from kittum.extraction import run_handler
 from kittum.gateway import HttpxTransport, SourceGateway, default_policies
 from kittum.judge import PROMPT_VERSION, JudgeConfig, judge_many
 from kittum.ledger import PostgresLedger
-from kittum.models import (
-    Confidentiality,
-    ModelRegistry,
-    backends_from_endpoints,
-)
+from kittum.models import ModelRegistry, backends_from_endpoints
 from kittum.runs import Commands, PermanentJobError, PostgresJobQueue, PostgresReceipts
 from kittum.screening import JUDGE_JOB, Screening, judge_handler
 from kittum.storage import ArtifactStore, FilesystemStore
@@ -52,20 +48,13 @@ class ConfigurationError(KittumError):
 class Judge:
     """The screening judge this deployment runs: a config, its recipe, and the backend serving it.
 
-    Screening records are `local_only` (the judge's default), so a hosted recipe is refused here,
-    before any stage asks for it, as `check_confidentiality` would refuse each call.
+    Any recipe may judge, hosted ones included: where records may go is the deployment's choice.
+    The recipe and the endpoint are recorded with every verdict for the AI disclosure.
     """
 
     config: JudgeConfig
     recipe: ModelRecipe
     backend: LlmBackend
-
-    def __post_init__(self) -> None:
-        if self.recipe.serving == "hosted":
-            raise ConfigurationError(
-                f"the judge recipe {self.recipe.id} is hosted; screening records are "
-                f"{Confidentiality.LOCAL_ONLY.value} and may not leave this deployment"
-            )
 
     @property
     def actor_ref(self) -> str:
@@ -164,7 +153,7 @@ class AppContext:
         clock = SystemClock()
         db = Database(settings.database_url)
         artifacts = FilesystemStore(settings.artifact_dir)
-        registry = ModelRegistry.load()
+        registry = ModelRegistry.load(local=settings.recipes_file)
         backends = backends_from_endpoints(settings.llm_endpoints, registry, artifacts)
         return cls(
             settings=settings,

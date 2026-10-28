@@ -3,7 +3,6 @@
 from typing import Literal
 
 from kittum.core import Record, Sha256
-from kittum.models import Confidentiality
 from kittum.protocol import Stage
 
 type CriterionStatus = Literal["met", "not_met", "unclear"]
@@ -28,7 +27,6 @@ class ScreeningItem(Record):
     stage: Stage
     title: str
     text: str
-    confidentiality: Confidentiality = Confidentiality.LOCAL_ONLY
 
     @property
     def source(self) -> str:

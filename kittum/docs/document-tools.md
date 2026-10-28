@@ -102,7 +102,7 @@ a proposal that Kittum re-anchors. The leaderboards disagree, which says more th
 
 | Tool | Licence | Fit | Momentum | Verdict |
 | --- | --- | --- | --- | --- |
-| PydanticAI (`pydantic-ai-slim` 2.63.0) | MIT | Typed, model-agnostic agent loop with tool calls and structured output | 2.63.0; 100 releases a year, so pin it | **Use** for the bounded extraction agent. Kittum runs it on its own `LlmBackend` through a `FunctionModel`, so every call keeps the confidentiality check, raw capture, and recorded replay. |
+| PydanticAI (`pydantic-ai-slim` 2.63.0) | MIT | Typed, model-agnostic agent loop with tool calls and structured output | 2.63.0; 100 releases a year, so pin it | **Use** for the bounded extraction agent. Kittum runs it on its own `LlmBackend` through a `FunctionModel`, so every call keeps raw capture, provenance (serving and endpoint), and recorded replay. |
 | LangExtract (Google) | Apache-2.0 | Few-shot extraction that aligns each value to a character interval | 10 releases; "not an officially supported Google product". Open alignment bugs: #289 (wrong `char_interval` on long extractions, open since December 2025), #591, #450. | **Optional**, for chunking or its HTML viewer. Not a source of provenance while its offsets are unreliable. |
 | Instructor | MIT | Pydantic-validated output with retries | Stable | Optional; PydanticAI covers it |
 | LangChain and LangGraph | MIT | General agent frameworks | | **Skip.** A shallow layer over `judge` and `extraction`. |
@@ -142,8 +142,8 @@ non-commercial Layout build can enter the lockfile.
 
 ## Language models
 
-Kittum runs open-weight models locally for the PoC and for confidential documents. Hosted models
-are an option for public literature.
+Kittum runs open-weight models locally by default. A deployment can add hosted OpenAI-compatible
+APIs as its own recipes; which content goes to them is the deployment's decision.
 
 ### What the leaderboards say
 
@@ -264,9 +264,10 @@ recently as October 2026 (#59940, #58899). Kittum therefore:
 
 ### Hosted models and confidentiality
 
-A hosted model needs EU processing, a data processing agreement, zero retention, and no training on
-inputs. Record the model identity the provider returns, not only the alias in the request. Client
-CSRs stay on local models unless the client signs off in writing.
+Kittum does not gate hosted models: the operator chooses what goes where. For client CSRs, a hosted
+model should have EU processing, a data processing agreement, zero retention, no training on
+inputs, and the client's written sign-off. Kittum records the recipe, its serving, the endpoint,
+and the model identity the provider returns, not only the alias in the request.
 
 ## Sources
 

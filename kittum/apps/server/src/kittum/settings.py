@@ -1,6 +1,7 @@
 """Configuration from the environment. Only entry points (api, cli) read it."""
 
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
@@ -8,20 +9,50 @@ from typing import Literal
 
 @dataclass(frozen=True)
 class LlmEndpoint:
-    """An OpenAI-compatible server (vLLM, Ollama) serving one model recipe."""
+    """An OpenAI-compatible server (vLLM, Ollama, a hosted API) serving one model recipe.
+
+    `api_key_env` names the environment variable that holds the server's API key; the backend
+    reads it for each call. The key itself is never held in settings.
+    """
 
     recipe_id: str
     base_url: str
-    api_key: str = "unused"
+    api_key_env: str | None = None
 
 
-def _endpoints(raw: str) -> tuple[LlmEndpoint, ...]:
-    """Parse `recipe=url` pairs separated by commas, one per served model."""
+_ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def _pairs(raw: str) -> list[tuple[str, str]]:
+    """`key=value` pairs separated by commas."""
     out = []
     for item in filter(None, (part.strip() for part in raw.split(","))):
-        recipe_id, _, url = item.partition("=")
-        out.append(LlmEndpoint(recipe_id=recipe_id.strip(), base_url=url.strip()))
-    return tuple(out)
+        key, _, value = item.partition("=")
+        out.append((key.strip(), value.strip()))
+    return out
+
+
+def _endpoints(raw: str, keys: str = "") -> tuple[LlmEndpoint, ...]:
+    """Parse `recipe=url` pairs, one per served model, and `recipe=ENV_VAR` key variables."""
+    endpoints = _pairs(raw)
+    served = {recipe_id for recipe_id, _ in endpoints}
+    key_envs: dict[str, str] = {}
+    for recipe_id, name in _pairs(keys):
+        if recipe_id not in served:
+            raise ValueError(
+                f"KITTUM_LLM_API_KEYS names {recipe_id!r}, which no KITTUM_LLM_ENDPOINTS entry serves"
+            )
+        if not _ENV_NAME.fullmatch(name):
+            # Not echoed: a key pasted here by mistake must not reach a log.
+            raise ValueError(
+                f"KITTUM_LLM_API_KEYS: the value for {recipe_id} must be the name of an"
+                " environment variable that holds the key, not the key"
+            )
+        key_envs[recipe_id] = name
+    return tuple(
+        LlmEndpoint(recipe_id=recipe_id, base_url=url, api_key_env=key_envs.get(recipe_id))
+        for recipe_id, url in endpoints
+    )
 
 
 @dataclass(frozen=True)
@@ -32,6 +63,9 @@ class Settings:
     ncbi_api_key: str | None = None
     openalex_api_key: str | None = None
     llm_endpoints: tuple[LlmEndpoint, ...] = field(default=())
+    # A deployment's own model recipes, in the format of kittum/models/recipes.yaml, added to the
+    # shipped ones. Hosted APIs go here.
+    recipes_file: Path | None = None
     grobid_url: str | None = None
     # Ed25519 private key (PEM) that signs ledger checkpoints and bundles. Hold it apart from the
     # database administrator: `openssl genpkey -algorithm ed25519 -out checkpoint.pem`.
@@ -56,7 +90,12 @@ class Settings:
             contact_email=env.get("KITTUM_CONTACT_EMAIL"),
             ncbi_api_key=env.get("KITTUM_NCBI_API_KEY"),
             openalex_api_key=env.get("KITTUM_OPENALEX_API_KEY"),
-            llm_endpoints=_endpoints(env.get("KITTUM_LLM_ENDPOINTS", "")),
+            llm_endpoints=_endpoints(
+                env.get("KITTUM_LLM_ENDPOINTS", ""), env.get("KITTUM_LLM_API_KEYS", "")
+            ),
+            recipes_file=(
+                Path(env["KITTUM_RECIPES_FILE"]) if env.get("KITTUM_RECIPES_FILE") else None
+            ),
             grobid_url=env.get("KITTUM_GROBID_URL"),
             checkpoint_key_path=(
                 Path(env["KITTUM_CHECKPOINT_KEY"]) if env.get("KITTUM_CHECKPOINT_KEY") else None

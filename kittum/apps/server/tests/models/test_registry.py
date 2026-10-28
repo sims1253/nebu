@@ -1,5 +1,6 @@
-"""The shipped recipes and the weights licence allowlist."""
+"""The shipped recipes, a deployment's own recipes, and the weights licence allowlist."""
 
+import re
 from typing import TYPE_CHECKING
 
 import pytest
@@ -80,3 +81,46 @@ def test_malformed_and_duplicate_recipes_are_rejected(tmp_path: Path) -> None:
     path = tmp_path / "recipes.yaml"
     path.write_text(GOOD)
     assert ModelRegistry.load(path).get("gemma-4-e4b-it-ollama").api_model == "gemma4:e4b"
+
+
+HOSTED = """
+recipes:
+  - id: example-hosted
+    family: example
+    repository: example-org/example-model
+    served_name: example-model
+    revision: "2026-10"
+    weights_licence: mit
+    licence_url: https://example.org/LICENSE
+    serving: hosted
+    context_tokens: 131072
+    extra_body: {"thinking": {"type": "disabled"}}
+"""
+
+
+def test_a_deployments_own_recipes_join_the_shipped_ones(tmp_path: Path) -> None:
+    """A hosted API pins no weight files, but its licence is checked like any other, and it may
+    not take the ID of a shipped recipe."""
+    local = tmp_path / "recipes.yaml"
+    local.write_text(HOSTED)
+    registry = ModelRegistry.load(local=local)
+    assert len(registry) == len(ModelRegistry.load()) + 1
+    hosted = registry.get("example-hosted")
+    assert (hosted.serving, hosted.api_model) == ("hosted", "example-model")
+    assert hosted.extra_body == {"thinking": {"type": "disabled"}}
+    assert registry.get("qwen3.5-4b-ollama").serving == "ollama"
+
+    local.write_text(HOSTED.replace("mit", "cc-by-nc-4.0"))
+    with pytest.raises(RecipeError, match=r"example-hosted: weights licence 'cc-by-nc-4\.0'"):
+        ModelRegistry.load(local=local)
+    local.write_text(HOSTED.replace("example-hosted", "qwen3.5-4b-ollama"))
+    with pytest.raises(RecipeError, match=r"qwen3\.5-4b-ollama has the ID of a built-in recipe"):
+        ModelRegistry.load(local=local)
+    local.write_text(HOSTED.replace("serving: hosted", "serving: vllm"))
+    with pytest.raises(RecipeError, match="example-hosted pins no weight files"):
+        ModelRegistry.load(local=local)
+    local.write_text(HOSTED.replace("serving: hosted", "serving: openai"))
+    with pytest.raises(RecipeError, match=re.escape(f"{local}: recipe example-hosted")):
+        ModelRegistry.load(local=local)
+    with pytest.raises(RecipeError, match="cannot read the recipes file"):
+        ModelRegistry.load(local=tmp_path / "missing.yaml")

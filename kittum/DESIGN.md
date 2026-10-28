@@ -320,7 +320,7 @@ hypothetical seam, so Kittum does not add a port for it.
 | `search` | `run(plan) -> SearchExecution` | Query dialects, paging, the PubMed 10,000-record cap, retries, raw capture, PRISMA-S fields | `LiveApi` (PubMed, ClinicalTrials.gov), `FileImport` |
 | `enrich` | `enrich(records) -> Enrichment` | Source choice, token buckets, response cache, retraction checks | OpenAlex, Crossref, Europe PMC, Unpaywall, PubTator |
 | `corpus` | `ingest(executions) -> CorpusRevision`, `link(proposal, receipt) -> IdentityRevision` | Dedupe, record-to-study clustering, occurrence retention | None |
-| `judge` | `judge(item, criteria, config) -> Verdict` | Prompts, constrained decoding, quote verification, retries, raw output capture | `LlmBackend`: vLLM, Ollama, EU-hosted API, recorded-response fake |
+| `judge` | `judge(item, criteria, config) -> Verdict` | Prompts, constrained decoding, quote verification, retries, raw output capture | `LlmBackend`: vLLM, Ollama, hosted API, recorded-response fake |
 | `screening` | `next(reviewer, scope)`, `decide(assignment, decision, expected_revision)`, `status(scope)` | Mode rules, blinding, reveal-after-commit, queue order, sentinels, audit sampling, conflicts | None. The workbench is a thin client of this module. |
 | `documents` | `derive(document, recipe) -> Layer`, `resolve(anchor, layer) -> Resolution` | Acquisition, parsing, OCR fallback, coordinate frames, text maps, re-anchoring | `Parser`: PyMuPDF, pypdfium2, Docling, GROBID |
 | `extraction` | `extract(layer, field_specs) -> ProposalSet` | Janus path, LLM path, validators, reconciliation | Janus and the LLM agent |
@@ -401,7 +401,8 @@ A profile can add rules and make existing ones stricter. It cannot weaken these:
 - Every state change writes an event to the hash-chained ledger, and the handover bundle verifies
   offline.
 - Every result names its reproducibility tier.
-- Confidentiality tiers, local inference by default, and the licence rules for code and weights.
+- Local inference by default, a record of where every model call went, and the licence rules for
+  code and weights.
 
 ### Profiles
 
@@ -732,10 +733,13 @@ requires. [Dependencies](docs/dependencies.md) has the evaluation of every depen
 Client CSRs contain pseudonymized health data and trade secrets. The trade-secret terms in client
 contracts often bind more tightly than GDPR.
 
-- Each document carries a confidentiality tier. `local_only` is the default for CSRs, and the
-  model gateway refuses to send those documents to an external API.
-- External APIs are EU-hosted with a data processing agreement, zero retention, and no training on
-  inputs.
+- Kittum does not decide which content may leave the deployment. It calls the model servers the
+  deployment configures, local or hosted. Choosing them, and the terms behind a hosted API (EU
+  processing, a data processing agreement, zero retention, no training on inputs, the client's
+  sign-off for CSRs), is the operator's responsibility.
+- Every model call records the recipe, its serving (vLLM, Ollama, hosted), and the endpoint's base
+  URL, so the AI disclosure states where content went. A hosted API's key comes from an
+  environment variable and is never stored, logged, or exported.
 - Kittum ingests the CSR core report and section 14 tables, and leaves out patient listings unless
   a review needs them.
 - The firm acts as processor for the client. A data protection impact assessment comes before the

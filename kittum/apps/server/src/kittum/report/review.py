@@ -286,6 +286,7 @@ class JudgeInfo(Record):
     schema_hash: str
     decoding: dict[str, Any]
     model_identities: tuple[str, ...]
+    endpoints: tuple[str, ...] = ()  # where the records were sent, as recorded with each verdict
     verdicts: int
 
 
@@ -901,5 +902,6 @@ def _judges(
             model_identities=tuple(
                 sorted({v["model_identity"] for v in mine if v["model_identity"]})
             ),
+            endpoints=tuple(sorted({v["endpoint"] for v in mine if v.get("endpoint")})),
             verdicts=len(mine),
         )

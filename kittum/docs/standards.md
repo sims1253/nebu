@@ -29,8 +29,8 @@ The status column says how each fact was confirmed:
 | --- | --- | --- | --- |
 | EU AI Act, Regulation (EU) 2024/1689 | Not high-risk: Kittum is not in Annex III, not a medical device, and not a safety component. Article 4 AI literacy applies to the firm. Article 50(4) is avoided because humans take editorial responsibility. | Training records; disclosure; human sign-off events | Reported. Write a documented legal assessment. |
 | Digital Omnibus on AI, Regulation (EU) 2026/1744 | In force since 27.07.2026. Annex III obligations moved to 02.12.2027. AI literacy kept. | No change for a system that is not high-risk | Read |
-| GDPR | CSRs hold pseudonymized health data (Article 9). The firm acts as processor for the client (Article 28). Author names in records are low-risk personal data. | Confidentiality tiers; local inference by default; DPIA; minimal CSR intake | Reported |
-| Trade secrets law (in Germany the GeschGehG) and client NDAs | Often stricter than GDPR for CSRs | Access control; no external model for CSRs without sign-off | Reported |
+| GDPR | CSRs hold pseudonymized health data (Article 9). The firm acts as processor for the client (Article 28). Author names in records are low-risk personal data. | Local inference by default; where each model call went, recorded and disclosed; DPIA; minimal CSR intake | Reported |
+| Trade secrets law (in Germany the GeschGehG) and client NDAs | Often stricter than GDPR for CSRs | Access control; the operator chooses which models see CSRs, and the disclosure records it | Reported |
 | DSM Directive Article 4 (in Germany §44b UrhG) | Commercial text and data mining is allowed unless rights are reserved in machine-readable form. Publisher licences can restrict it further. | Licence recorded per acquisition | Reported. Check per publisher. |
 
 ## Quality frameworks
