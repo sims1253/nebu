@@ -1,0 +1,149 @@
+# A generic intervention review with no profile: nicotine replacement therapy (NRT) for smoking
+# cessation, in the style of a Cochrane review.
+#
+# Illustrative. The questions and eligibility criteria are modelled on the Cochrane reviews
+# CD000146 ("Nicotine replacement therapy versus control for smoking cessation") and CD013308
+# (doses, durations, and modes of delivery of NRT). It is not a copy of either protocol, and its
+# screening plan is Kittum's own.
+
+schema_version: 1
+version_label: "0.3"
+default_language: en
+title:
+  en: Nicotine replacement therapy for smoking cessation
+  de: Nikotinersatztherapie zur Raucherentwöhnung
+
+questions:
+  - id: nrt-vs-control
+    label:
+      en: NRT versus placebo or no NRT
+    population:
+      en: Adults who smoke tobacco and want to stop, in any setting.
+    intervention:
+      en: Any form of nicotine replacement therapy.
+    comparators:
+      - id: placebo
+        text: { en: Placebo NRT }
+      - id: no-nrt
+        text: { en: No NRT (usual care or behavioural support alone) }
+    comparators_are_alternatives: true
+  - id: combination-vs-single
+    label:
+      en: Combination NRT versus a single form
+    population:
+      en: Adults who smoke tobacco and want to stop, in any setting.
+    intervention:
+      en: A fast-acting form of NRT combined with the patch.
+    comparators:
+      - id: single-form
+        text: { en: A single form of NRT }
+    outcomes: [abstinence, sae]
+
+outcomes:
+  - id: abstinence
+    category: primary
+    name:
+      en: Smoking cessation at six months or longer
+      de: Rauchstopp nach mindestens sechs Monaten
+    definition:
+      en: >-
+        Abstinence at the longest follow-up of at least six months after the start of treatment,
+        using the strictest definition reported and biochemical validation where available.
+  - id: sae
+    category: secondary
+    name:
+      en: Serious adverse events
+  - id: withdrawal-ae
+    category: secondary
+    name:
+      en: Withdrawal from treatment due to adverse events
+
+effect_modifiers:
+  - id: setting
+    label: { en: Setting }
+    categories: [primary care, hospital, community, workplace]
+  - id: support
+    label: { en: Intensity of behavioural support }
+    categories: [none or brief, intensive]
+
+search_topics:
+  - id: TRIALS
+    kind: rct
+    label:
+      en: Randomized trials of NRT
+    mode: M1
+    scopes: [nrt-vs-control, combination-vs-single]
+    audit:
+      sentinel_percent: "1"
+    freshness:
+      max_age_months: 12
+    source_plan:
+      sources:
+        - id: central
+          kind: bibliographic
+          name: Cochrane Central Register of Controlled Trials
+          platform: Cochrane Register of Studies
+        - id: medline
+          kind: bibliographic
+          name: MEDLINE
+          platform: Ovid
+          study_filter: Cochrane highly sensitive search strategy for RCTs
+        - id: embase
+          kind: bibliographic
+          name: Embase
+          platform: Ovid
+        - id: psycinfo
+          kind: bibliographic
+          name: APA PsycInfo
+          platform: Ovid
+        - id: clinicaltrials_gov
+          kind: registry
+          name: ClinicalTrials.gov
+        - id: ictrp
+          kind: registry
+          name: WHO ICTRP Search Portal
+    criteria:
+      - id: POP
+        slot: population
+        text:
+          en: Adults (18 years or older) who smoke tobacco.
+          de: Erwachsene (ab 18 Jahren), die Tabak rauchen.
+        decidable_at: [title_abstract, full_text]
+        applies_to: [TRIALS]
+        negative_examples:
+          - Adolescent smokers aged 12 to 17 years.
+          - Smokeless tobacco users.
+      - id: INT
+        slot: intervention
+        text:
+          en: >-
+            One arm receives nicotine replacement therapy (patch, gum, lozenge, inhaler, nasal
+            spray, mouth spray, or sublingual tablet).
+        decidable_at: [title_abstract, full_text]
+        applies_to: [TRIALS]
+        keywords: [varenicline, bupropion, cytisine, e-cigarette]
+      - id: COMP-CONTROL
+        slot: comparator
+        text:
+          en: The control arm receives placebo NRT or no NRT.
+        decidable_at: [full_text]
+        applies_to: [nrt-vs-control]
+      - id: COMP-SINGLE
+        slot: comparator
+        text:
+          en: The trial compares combination NRT with a single form of NRT.
+        decidable_at: [full_text]
+        applies_to: [combination-vs-single]
+      - id: DESIGN
+        slot: study_type
+        text:
+          en: Randomized or quasi-randomized controlled trial.
+        decidable_at: [title_abstract, full_text]
+        applies_to: [TRIALS]
+        keywords: [cohort, cross-sectional, case-control, observational, review, survey]
+      - id: FOLLOWUP
+        slot: outcome
+        text:
+          en: Reports smoking status at least six months after the start of treatment.
+        decidable_at: [full_text]
+        applies_to: [TRIALS]
