@@ -13,6 +13,7 @@ from kittum.corpus import (
     Relation,
     SplitLevel,
     confirm,
+    confirm_exact,
     get_counts,
     ingest,
     list_proposals,
@@ -896,3 +897,104 @@ def test_crossrefs_trial_number_proposes_a_study_link_the_search_could_not(pg: T
         )
         == []
     )
+
+
+@pytest.mark.postgres
+def test_a_preprint_or_a_notice_sharing_a_doi_is_left_for_the_lead_not_merged_in_bulk(
+    pg: Tx,
+) -> None:
+    """A preprint and its journal version, or an erratum and its article, can share a DOI. They
+    stay proposals the lead judges one by one; confirming every exact duplicate merges only the
+    true copy, and only it counts as a duplicate removed."""
+    proj_id, actor_id = create_test_project_and_actor(pg)
+    ledger = InMemoryLedger()
+    artifacts = MemoryStore()
+    title = "Electronic Nicotine-Delivery Systems for Smoking Cessation"
+    doi = "10.1056/NEJMoa2308815"
+    pubmed = [
+        make_record(
+            provider_record_id="38354139",
+            pmid="38354139",
+            doi=doi,
+            title=title,
+            publication_types=("Journal Article",),
+        ),
+        make_record(
+            provider_record_id="38354200",
+            pmid="38354200",
+            doi="10.1056/NEJMx240001",
+            title=f"Correction: {title}",
+            publication_types=("Published Erratum",),
+        ),
+    ]
+    europepmc = [
+        # The same article from Europe PMC: a true duplicate.
+        make_record(
+            source="europepmc",
+            provider_record_id="MED:38354139",
+            pmid="38354139",
+            doi=doi,
+            title=title,
+            publication_types=("Journal Article",),
+        ),
+        # The preprint, which Europe PMC lists with the journal version's DOI.
+        make_record(
+            source="europepmc",
+            provider_record_id="PPR:PPR612345",
+            doi=doi,
+            title=title,
+            publication_types=("preprint",),
+        ),
+        # The erratum without its PMID, filed under the article's DOI.
+        make_record(
+            source="europepmc",
+            provider_record_id="PMC:PMC11000001",
+            doi="10.1056/NEJMx240001",
+            title=f"Correction: {title}",
+            publication_types=("Published Erratum",),
+        ),
+    ]
+    executions = [
+        run(
+            pg,
+            proj_id,
+            SearchPlan(topic_id="T1", source=name, platform=name, strategy="e-cigarettes"),
+            FakeSource(artifacts, name, records=tuple(records)),
+            ledger=ledger,
+            actor_id=actor_id,
+            artifacts=artifacts,
+        )
+        for name, records in (("pubmed", pubmed), ("europepmc", europepmc))
+    ]
+    corpus = ingest(pg, proj_id, executions, actor_id=actor_id, ledger=ledger)
+    assert corpus.identity_revision_id is not None
+    erratum_article = make_record(
+        source="europepmc",
+        provider_record_id="MED:1",
+        doi=doi,
+        title=f"Erratum: {title}",
+        publication_types=("Published Erratum",),
+    )
+    assert check_same_record(pubmed[0], erratum_article) == (
+        True,
+        f"A correction or retraction notice and another record share DOI {doi.lower()}",
+    )
+
+    by_provider = {r.provider_record_id: r.occurrence_id for e in executions for r in e.records}
+    proposals = {
+        frozenset(p.occurrence_ids): p for p in corpus.proposals if p.relation == "same_record"
+    }
+    article = proposals[
+        frozenset(
+            {by_provider["38354139"], by_provider["MED:38354139"], by_provider["PPR:PPR612345"]}
+        )
+    ]
+    assert not article.exact
+    assert f"A preprint and a journal version share DOI {doi.lower()}" in article.evidence
+    erratum = proposals[frozenset({by_provider["38354200"], by_provider["PMC:PMC11000001"]})]
+    assert erratum.exact  # two copies of one erratum are a true duplicate
+
+    # Only the erratum's two copies are exact: the preprint's group waits for the lead.
+    revision = confirm_exact(pg, proj_id, corpus.identity_revision_id, actor_id, ledger=ledger)
+    assert get_counts(pg, proj_id, revision.id).duplicates_removed == 1
+    assert [p.id for p in list_proposals(pg, proj_id, status="pending")] == [article.id]

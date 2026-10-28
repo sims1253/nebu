@@ -192,6 +192,20 @@ def distinguishing_tokens_conflict(title_a: str, title_b: str) -> bool:
     )
 
 
+# Publication types (PubMed's and Europe PMC's) of a record that is a notice about another record.
+_NOTICE_TYPES = ("erratum", "correction", "retraction of publication", "expression of concern")
+
+
+def _version(rec: SourceRecord) -> str:
+    """Whether a record is a notice, a preprint, or the article itself."""
+    types = [t.casefold() for t in rec.publication_types]
+    if any(n in t for t in types for n in _NOTICE_TYPES):
+        return "notice"
+    if "preprint" in types or rec.provider_record_id.upper().startswith("PPR:"):
+        return "preprint"
+    return "article"
+
+
 def check_same_record(rec_a: SourceRecord, rec_b: SourceRecord) -> tuple[bool, str | None]:
     """Check if two records represent the same bibliographic record across databases.
 
@@ -204,7 +218,19 @@ def check_same_record(rec_a: SourceRecord, rec_b: SourceRecord) -> tuple[bool, s
         ("PMCID", normalize_pmcid(rec_a.pmcid), normalize_pmcid(rec_b.pmcid)),
     ):
         if a and b:
-            return (True, f"Same {label} {a}") if a == b else (False, None)
+            if a != b:
+                return False, None
+            # A preprint and its journal version, or a notice and the article it is about, may
+            # share an identifier: the lead decides, so the evidence is no exact duplicate.
+            versions = {_version(rec_a), _version(rec_b)}
+            if "notice" in versions and len(versions) > 1:
+                return (
+                    True,
+                    f"A correction or retraction notice and another record share {label} {a}",
+                )
+            if versions == {"preprint", "article"}:
+                return True, f"A preprint and a journal version share {label} {a}"
+            return True, f"Same {label} {a}"
 
     if distinguishing_tokens_conflict(rec_a.title, rec_b.title):
         return False, None
