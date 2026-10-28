@@ -58,8 +58,10 @@ Module `kittum.runs`. Needs: `ledger`.
 
 Module `kittum.protocol`. Needs: `core`.
 
-- The full schema from DESIGN.md "Protocol" (Anwendungsgebiet, Teilpopulation, zVT, endpoints,
-  effect modifiers, source plan, reference set, audit and stopping plans, freshness policy).
+- The generic schema from DESIGN.md "Protocol" (review questions and scopes, PICO, comparators,
+  outcomes, effect modifiers, source plan, reference set, audit and stopping plans, freshness
+  policy), with a profile registry for extensions. The `gba_amnog` dossier fields live in
+  `kittum.profiles.gba_amnog`.
 - `compile(source)` from JSON or YAML with clear validation errors; a content hash per version.
 - `diff(a, b)` for criteria, scopes, and modes.
 - Criterion rendering: the human question and the model prompt fragment.
@@ -150,7 +152,8 @@ Module `kittum.extraction`. Needs: `documents`, `protocol`, `models`.
 
 Module `kittum.appraisal`. Needs: `documents`, `extraction`.
 
-- Instruments as data (G-BA Bewertungsbogen, RoB 2, ROBINS-I V2); quote assembly per question.
+- Instruments as data (RoB 2, ROBINS-I V2, plus profile-registered forms); quote assembly per
+  question.
 
 ## WP-13 Statistics
 
@@ -164,8 +167,9 @@ Module `kittum.stats`. Needs: nothing.
 
 Module `kittum.report`. Needs: most modules.
 
-- PRISMA 2020 flow per scope, Anhang 4-A to 4-D, the Anlage II.1 tree with RIS files, the
-  §4.2.3.5 justification, the AI disclosure.
+- The core targets: PRISMA 2020 flow per scope, RIS exports, the handover bundle, and the AI
+  disclosure. Profile targets register through `report.register_target`; the `gba_amnog`
+  targets are listed in docs/profiles/gba-amnog.md.
 - Acceptance: golden files for a small fixture project.
 
 ## WP-15 API

@@ -1,7 +1,7 @@
 [project]
 name = "kittum-server"
 version = "0.0.1"
-description = "Kittum: auditable systematic literature reviews for AMNOG dossiers"
+description = "Kittum: auditable, AI-assisted systematic literature reviews"
 readme = "README.md"
 requires-python = ">=3.14"
 license = { text = "AGPL-3.0-or-later" }

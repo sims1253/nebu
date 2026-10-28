@@ -1,5 +1,10 @@
 # Council record
 
+This is a historical record. The council reviewed Kittum as a tool for German AMNOG dossiers.
+Afterwards the framing changed: the core became domain-neutral, and the G-BA and IQWiG specifics
+moved into an optional [profile](profiles/gba-amnog.md). The decisions below still hold, and
+the former requirements page is now split into [Standards](standards.md) and that profile.
+
 Four models reviewed the seed brief independently on 27.10.2026. Each covered the full design and
 went deeper on one focus area. Claude Opus 5.5 merged the four reports into the design and checked
 the disputed claims.

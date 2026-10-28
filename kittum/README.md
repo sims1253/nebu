@@ -1,9 +1,12 @@
 # Kittum
 
-Kittum is a workbench for systematic literature reviews behind German AMNOG benefit dossiers. It
-runs the review from the protocol to the Modul 4 annexes. AI screens and extracts beside two human
-reviewers, and every decision lands in a hash-chained ledger. The deliverable is the dossier output
-plus one database file that holds the whole audit trail.
+Kittum is a workbench for auditable, AI-assisted systematic literature reviews. It runs the review
+from the protocol to the final reports. AI screens and extracts beside two human reviewers, and
+every decision lands in a hash-chained ledger. The deliverable is the review output plus one
+database file that holds the whole audit trail.
+
+The core does not depend on any jurisdiction. The rules of a particular agency or jurisdiction come
+from an optional [profile](DESIGN.md#profiles).
 
 Status: scaffold. Every module has its interface and the shared fakes; the work is split into
 [work packages](docs/work-packages.md). [AGENTS.md](AGENTS.md) explains how to build, test, and
@@ -19,8 +22,10 @@ work on it in parallel.
   local models, with licence verdicts.
 - [Dependencies](docs/dependencies.md): the licence decision and an evaluation of every dependency
   for fit, quality, and maintenance.
-- [Requirements and standards](docs/requirements.md): what IQWiG, G-BA, PRISMA, RAISE, the EU HTA
-  Regulation, the EU AI Act, and GDPR require of the system.
+- [Standards and regulation](docs/standards.md): what PRISMA, RAISE, the EU AI Act, GDPR, and
+  quality frameworks require of the system.
+- [Profiles](DESIGN.md#profiles): optional agency and jurisdiction rules, with a list of the
+  profiles and their docs.
 - [Work packages](docs/work-packages.md): the build split into independent pieces, with status.
 - [Council record](docs/council.md): how the design was reached, where the council disagreed, and
   which claims were checked.

@@ -1,40 +1,56 @@
 # How Kittum works
 
-This document explains the design of Kittum, a workbench for the systematic literature review
-(SLR) inside a G-BA benefit dossier. It is written for an engineer who knows LLMs but not German
-health technology assessment (HTA). The supporting reference pages are:
+This document explains the design of Kittum, a workbench for auditable, AI-assisted systematic
+literature reviews (SLRs). It is written for an engineer who knows LLMs but not evidence synthesis.
+The supporting reference pages are:
 
 - [Sources](docs/sources.md) for search and enrichment sources.
 - [Document and model tools](docs/document-tools.md) for parsers, OCR, and models.
-- [Requirements and standards](docs/requirements.md) for the regulatory mapping.
+- [Standards and regulation](docs/standards.md) for the mapping to PRISMA, RAISE, the EU AI Act,
+  GDPR, and quality frameworks.
+- [Profiles](#profiles) for the optional rules of a particular agency or jurisdiction, each with
+  its own doc.
+
+Kittum's core does not depend on any jurisdiction. It rests on these principles:
+
+- A protocol is the source of truth.
+- Humans decide first.
+- The AI excludes only with verified verbatim quotes.
+- Screening modes come with a statistical audit.
+- Provenance anchors survive re-parsing.
+- A hash-chained ledger records every decision, and a handover bundle carries it.
+- The reviewer workbench is blinded and keyboard-first.
+- Reproducibility promises are named in tiers.
+- Models run locally by default, and licence rules apply to code and weights.
+
+Everything that one agency or jurisdiction requires on top of that lives in a profile.
 
 ## The problem in one page
 
-A pharmaceutical company that launches a drug in Germany submits a dossier to the Federal Joint
-Committee (G-BA). The Institute for Quality and Efficiency in Health Care (IQWiG) then assesses it.
-Modul 4 of the dossier must show the complete evidence for the drug against the comparator the
-G-BA chose, the *zweckmäßige Vergleichstherapie* (zVT). Completeness is checked: IQWiG reruns
-searches and spot-checks the studies the company excluded. A missed study can sink the assessment.
+Some systematic reviews are checked for completeness by someone other than their authors: an
+assessment agency, a guideline panel, a journal's methods editor, or a regulator. The checker may
+rerun the searches and spot-check the studies the authors excluded. A missed study can sink the
+review. Such reviews need more than a screening tool. They need a record that shows who decided
+what, on which evidence, under which rules.
 
 The review follows a fixed shape:
 
 1. A protocol states the population, intervention, comparator, outcomes, and study types (PICO)
-   for each subpopulation. One dossier can have several *Anwendungsgebiete* (therapeutic
-   indications), each with subpopulations and its own zVT.
-2. A search specialist runs one Boolean search per database. The minimum is MEDLINE and Cochrane
-   CENTRAL, plus the registries ClinicalTrials.gov, EU-CTR, CTIS, and the EMA Clinical Data portal.
+   for each scope. A scope is a subpopulation or research question that decisions are keyed by.
+   One review can have several scopes, each with its own comparator.
+2. A search specialist runs one Boolean search per database, including trial registries. The
+   review's method guidance, or its profile, sets the minimum list of sources.
 3. Two people screen titles and abstracts independently, then full texts. They resolve
    disagreements and record a reason for every full-text exclusion.
 4. Records are grouped into studies. One trial typically appears as a paper, follow-up papers,
    congress abstracts, registry entries, and a clinical study report (CSR).
 5. Reviewers extract results per study, endpoint, subpopulation, arm, and timepoint, and assess
-   risk of bias on the G-BA form.
-6. The output is the Modul 4 text and tables, Anhänge 4-A to 4-F, and RIS files in a directory tree
-   whose names Anlage II.1 fixes.
+   risk of bias with a named instrument.
+6. The output is a PRISMA report, the search strategies, exclusion lists with reasons, RIS files,
+   and whatever report format the review's audience requires.
 
-Searches must be at most three months old at submission, so every review ends with an update
-search. Since January 2025 the EU HTA Regulation adds joint clinical assessments (JCA). These
-arrive with several PICOs that member states consolidate, often late.
+Searches go stale, and many review settings cap their age at submission, so a review usually ends
+with an update search. New scopes often arrive late, after screening has started.
 
 ## Where the value is
 
@@ -43,38 +59,39 @@ Inference costs little next to reviewer time, so Kittum spends compute on recall
 verification, not on picking the cheapest model. Three corrections change what "evidence layer"
 means in practice.
 
-**The unit of inclusion is the study, not the record.** Modul 4 asks how many studies the relevant
-records belong to. Kittum keeps search records, reports, studies, and PDF files as separate
-identities, and a human confirms each record-to-study link.
+**The unit of inclusion is the study, not the record.** A checker asks how many studies the
+relevant records belong to. Kittum keeps search records, reports, studies, and PDF files as
+separate identities, and a human confirms each record-to-study link.
 
-**A decision belongs to a record within a scope.** A scope is a search topic, subpopulation, or JCA
-PICO. When a new JCA PICO arrives, Kittum evaluates only the new criteria over the screened corpus.
-It does not rescreen everything.
+**A decision belongs to a record within a scope.** A scope is a search topic, subpopulation, or
+research question. When a new scope arrives, Kittum evaluates only the new criteria over the
+screened corpus. It does not rescreen everything.
 
-**Recall cannot be certified statistically at AMNOG scale.** Most search topics have tens of
-relevant records. If all 10 relevant records of a topic are found, the one-sided 95% lower confidence
-bound on recall is 74%. A miss rate below 2.5% at the same level needs at least 119 relevant
-records with no misses. (Kittum states every bound as one-sided 95% Clopper-Pearson.) The
+**Recall cannot be certified statistically at typical review scale.** Most search topics have tens
+of relevant records. If all 10 relevant records of a topic are found, the one-sided 95% lower
+confidence bound on recall is 74%. A miss rate below 2.5% at the same level needs at least 119
+relevant records with no misses. (Kittum states every bound as one-sided 95% Clopper-Pearson.) The
 honest pitch for AI screening is that it finds studies humans miss. It is not that it cuts the
-human reading load on submission-critical topics. Workload savings are real only for large
-searches, such as indirect comparisons or JCA sweeps.
+human reading load on critical topics. Workload savings are real only for large searches, such as
+indirect comparisons or broad sweeps over many scopes.
 
 ## Screening modes
 
-IQWiG's methods (v8.0, §9.1.1) require two people to perform every selection step independently.
-Modul 4 §4.2.3.5 asks the company to justify any other procedure. IQWiG v8.0 also states for the
-first time that AI in study selection is possible, if the tool's suitability is shown against
-RAISE. So the protocol declares a screening mode per search topic before screening starts, and
-Kittum writes the matching §4.2.3.5 justification from the ledger.
+Established method guidance asks for two people to perform every selection step independently, and
+some assessment agencies make that binding. Guidance increasingly allows AI in study selection, if
+the tool's suitability is shown against RAISE. So the protocol declares a screening mode per search
+topic before screening starts, and Kittum writes the matching methods text, including the reason
+for the mode, from the ledger.
 
 | Mode | Human work | AI role | Use when |
 | --- | --- | --- | --- |
-| M1 dual human, AI as third reader (default) | Two humans screen every record. | Independent third screener. A record that the AI includes and both humans exclude goes to adjudication. | Every submission-critical topic. |
+| M1 dual human, AI as third reader (default) | Two humans screen every record. | Independent third screener. A record that the AI includes and both humans exclude goes to adjudication. | Every critical topic. |
 | M2 single human, AI as second reader | One human screens every record. | Replaces the second human. Disagreements go to adjudication. | Large topics, after a validation pack shows the AI's performance on pooled gold data. |
-| M3 prioritized dual screening with a certified stop | Humans screen in AI order and stop when a pre-specified statistical test passes. | Ranking only. | Topics with roughly 10,000 records and 100 expected relevant records. Rare in AMNOG. |
+| M3 prioritized dual screening with a certified stop | Humans screen in AI order and stop when a pre-specified statistical test passes. | Ranking only. | Topics with roughly 10,000 records and 100 expected relevant records. Rare in small reviews. |
 
 No mode lets the AI exclude a record that no human saw. Changing the mode mid-topic creates a new
-protocol version with a logged reason.
+protocol version with a logged reason. A profile can narrow the choice further: a jurisdiction
+profile can require two-person screening and a written justification for anything else.
 
 ## The pipeline
 
@@ -91,7 +108,7 @@ flowchart TD
 	J --> FS
 	FS --> X[Extraction: Janus path and LLM path]
 	X --> A[Risk-of-bias appraisal]
-	A --> R[Reports: Modul 4, Anhänge 4-A to 4-F, PRISMA, AI disclosure]
+	A --> R[Reports: PRISMA, RIS, AI disclosure, bundle, profile targets]
 	L[(Ledger)] -.- P & S & C & TA & ST & FS & X & A & R
 ```
 
@@ -103,31 +120,33 @@ The protocol is the source of truth for every later decision. It is versioned JS
 hash. Kittum publishes it only with a recorded approval.
 
 ```text
-Dossier(active_substance, trade_name, version)
-	Anwendungsgebiet(code)
-		Teilpopulation(id, definition, G-BA consultation reference)
-			zVT(options, "nach ärztlicher Maßgabe" flag, source document, qualifying comparator arms)
-			jca_pico_links[]
-		Endpoint(category: Mortalität | Morbidität | Lebensqualität | Nebenwirkungen,
-			operationalization, patient-relevance rationale, surrogate validation reference)
-		EffectModifier[] (default: sex, age, disease severity, centre or country)
-		SearchTopic(kind: RCT with the drug | RCT for indirect comparison | non-randomized | other)
-			Criterion[] (id, PICO slot, polarity, text_de, text_en, positive and negative examples,
-				decidable_at: title-abstract | full-text | both, applies_to: scopes)
-			SourcePlan (databases, registries, G-BA website search, justified deviations)
-			ReferenceSet (development and validation known-includes, PRESS record)
-			ScreeningMode (M1 | M2 | M3) with AuditPlan and StoppingPlan
-			FreshnessPolicy (maximum age three months before submission)
+Review(title, version, profile: id and version, or none)
+	Scope(id, definition, parent scope, consultation or source reference)
+		Comparator(options, source document, qualifying comparator arms)
+	Endpoint(category from the profile's vocabulary or free text,
+		operationalization, relevance rationale, surrogate validation reference)
+	EffectModifier[] (default: sex, age, disease severity, centre or country)
+	SearchTopic(kind: RCT with the intervention | RCT for indirect comparison | non-randomized | other)
+		Criterion[] (id, PICO slot, polarity, text per language, positive and negative examples,
+			decidable_at: title-abstract | full-text | both, applies_to: scopes)
+		SourcePlan (databases, registries, other methods, justified deviations)
+		ReferenceSet (development and validation known-includes, PRESS record)
+		ScreeningMode (M1 | M2 | M3) with AuditPlan, StoppingPlan, and a justification
+		FreshnessPolicy (maximum search age at submission)
+	extensions (per profile, validated by the profile's schema)
 ```
 
 Criteria are executable. Each criterion compiles to a question that a human answers with a key
 and that the AI judge answers as `met`, `not_met`, or `unclear` with a quote. Exclusion reasons are
-criterion IDs, so Anhang 4-C and 4-D reasons come from data instead of free text.
+criterion IDs, so every exclusion list in every report comes from data instead of free text.
+
+A profile extends this schema. It can, for example, wrap scopes in a hierarchy of indications and
+subpopulations with an assigned comparator, and fix the freshness limit.
 
 ### Search
 
-The documented primary search is Boolean, one strategy per database per topic, as PRISMA-S and
-Modul 4 require. Kittum never documents vector search or federated search as primary search.
+The documented primary search is Boolean, one strategy per database per topic, as PRISMA-S
+requires. Kittum never documents vector search or federated search as primary search.
 
 Each search run becomes a `SearchExecution`: the database, the platform, the verbatim strategy, the
 platform's own query translation (PubMed returns it), limits, coverage, UTC start and end, the
@@ -138,8 +157,8 @@ Two adapters sit behind the search seam from day one:
 
 - `LiveApi` for PubMed E-utilities and ClinicalTrials.gov v2.
 - `FileImport` for RIS, NBIB, XML, and CSV exports, together with a captured copy of the search
-  history. CENTRAL, Embase, EU-CTR, and CTIS have no free search interface, so the free proof of
-  concept cannot meet the Modul 4 minimum without this adapter.
+  history. CENTRAL, Embase, EU-CTR, and CTIS have no free search interface, so a free proof of
+  concept cannot meet a typical minimum source list without this adapter.
 
 Commercial interfaces (Embase, Scopus, Web of Science) become further `LiveApi` adapters when a
 contract grants automated access. A subscription does not imply that grant.
@@ -169,8 +188,8 @@ rotates keys or accounts to get around quotas.
 Deduplication of records matches on report identifiers (DOI, PMID) first, then on fuzzy title,
 author, journal, and year. Trial identifiers (NCT, EudraCT, CTIS numbers) never merge records: a
 primary paper, a follow-up, and a subgroup analysis share them. They drive study-link proposals
-instead. Kittum keeps every source occurrence even after merging, because Anhang
-4-A counts all hits per database and Anhang 4-D requires an undeduplicated RIS file.
+instead. Kittum keeps every source occurrence even after merging, because a report may count all
+hits per database or ask for an undeduplicated RIS file.
 
 Identity is versioned. An `IdentityRevision` records which occurrences belong to which report and
 which reports belong to which study. A human confirms record-to-study links, and the
@@ -196,8 +215,8 @@ The AI excludes a record only when three conditions hold:
 3. The quote passes the criterion's keyword and negation checks.
 
 If any check fails, the criterion becomes `unclear`. At title and abstract, `unclear` means include.
-IQWiG excludes at title and abstract only records that are certainly irrelevant, so this rule
-matches the method.
+Standard method guidance excludes at title and abstract only records that are certainly
+irrelevant, so this rule matches it.
 
 The PoC runs the judge on every record. A topic of 3,000 records costs a few thousand model calls,
 which is cheap enough to skip the seed brief's ranker cascade. That cascade used BM25, dense
@@ -251,7 +270,7 @@ Each field in the extraction schema has a verification policy:
 
 | Policy | Fields | Gate |
 | --- | --- | --- |
-| `critical` | N randomized and analysed, events, effect estimates, CI bounds, p-values, follow-up for Modul 4 results | A human always verifies against the highlighted source. When the paths disagree, a second human extracts independently. |
+| `critical` | N randomized and analysed, events, effect estimates, CI bounds, p-values, follow-up for reported results | A human always verifies against the highlighted source. When the paths disagree, a second human extracts independently. |
 | `standard` | Baseline characteristics, doses, durations | A human may accept agreeing, validated fields as a group after viewing the list. A random 10% go to a re-check queue. |
 | `descriptive` | Population descriptions, prior therapy, endpoint definitions | One human reviews the LLM value and its span. |
 
@@ -261,27 +280,28 @@ visible.
 
 ### Appraisal
 
-Modul 4 rates risk of bias as *niedrig* (low) or *hoch* (high), at study level (Tabelle 4-9) and per
-endpoint (Tabelle 4-12). Anhang 4-F holds one *Bewertungsbogen* (assessment form) per study.
-JCA uses RoB 2 and ROBINS-I V2. Kittum stores the forms as data. The AI assembles quotes for each
-signalling question and never judges. A named human answers, and Kittum renders the answers onto
-every instrument the dossier needs.
+The core instruments are RoB 2 for randomized trials and ROBINS-I V2 for non-randomized studies.
+Profiles register further instruments, such as an agency's own assessment form with a low-or-high
+rating at study and endpoint level. Kittum stores the forms as data. The AI assembles quotes for
+each signalling question and never judges. A named human answers, and Kittum renders the answers
+onto every instrument the review needs.
 
-Certainty of evidence follows IQWiG's scale of *Beleg*, *Hinweis*, and *Anhaltspunkt* (proof,
-indication, hint), not GRADE.
+The certainty-of-evidence vocabulary comes from the profile. GRADE is not modelled in the PoC.
 
 ### Reports
 
-Kittum renders every report from the ledger. Nobody types counts.
+Kittum renders every report from the ledger. Nobody types counts. The core targets are:
 
-- Modul 4 sections 4.2 and 4.3: the method text, including the §4.2.3.5 justification for the
-  screening mode, and the results tables per endpoint and subgroup.
-- Anhang 4-A (bibliographic strategies), 4-B (registry strategies), 4-C (full-text exclusions with
-  reasons), 4-D (excluded registry entries with reasons), 4-E (methods of included RCTs), and 4-F
-  (risk-of-bias forms).
-- The Anlage II.1 directory tree with its exact RIS file names.
-- The PRISMA 2020 flow per scope, the PRISMA-S table, and an AI-use disclosure.
-- A validation pack for client vendor audits.
+| Target | Content |
+| --- | --- |
+| `prisma` | The PRISMA 2020 flow per scope with the update-search delta, the PRISMA-S table, the search strategies, the exclusion lists with criterion reasons, and the methods text, including the reason for the screening mode |
+| `ris` | RIS files for every search, undeduplicated, and for every reference list |
+| `ai_disclosure` | The AI-use disclosure |
+| `bundle` | The handover bundle, with a validation pack for client vendor audits |
+
+Profiles register further targets: an agency's dossier sections and annexes, a submission
+directory tree with fixed file names, or a written justification in the agency's wording. Each
+profile's doc lists its targets.
 
 The AI-use disclosure is data first. The PRISMA executive does not endorse PRISMA-trAIce, and RAISE
 is still changing, so Kittum renders the same disclosure record into whichever template a client
@@ -296,7 +316,7 @@ hypothetical seam, so Kittum does not add a port for it.
 
 | Module | Interface | Hides | Adapters at the seam |
 | --- | --- | --- | --- |
-| `protocol` | `compile(source) -> Protocol`, `diff(a, b) -> ProtocolDiff` | Validation, zVT consistency with Modul 3, criterion rendering for humans and models, versioning | None |
+| `protocol` | `compile(source) -> Protocol`, `diff(a, b) -> ProtocolDiff` | Validation, profile rules and schema extensions, criterion rendering for humans and models, versioning | Profiles |
 | `search` | `run(plan) -> SearchExecution` | Query dialects, paging, the PubMed 10,000-record cap, retries, raw capture, PRISMA-S fields | `LiveApi` (PubMed, ClinicalTrials.gov), `FileImport` |
 | `enrich` | `enrich(records) -> Enrichment` | Source choice, token buckets, response cache, retraction checks | OpenAlex, Crossref, Europe PMC, Unpaywall, PubTator |
 | `corpus` | `ingest(executions) -> CorpusRevision`, `link(proposal, receipt) -> IdentityRevision` | Dedupe, record-to-study clustering, occurrence retention | None |
@@ -304,16 +324,19 @@ hypothetical seam, so Kittum does not add a port for it.
 | `screening` | `next(reviewer, scope)`, `decide(assignment, decision, expected_revision)`, `status(scope)` | Mode rules, blinding, reveal-after-commit, queue order, sentinels, audit sampling, conflicts | None. The workbench is a thin client of this module. |
 | `documents` | `derive(document, recipe) -> Layer`, `resolve(anchor, layer) -> Resolution` | Acquisition, parsing, OCR fallback, coordinate frames, text maps, re-anchoring | `Parser`: PyMuPDF, pypdfium2, Docling, GROBID |
 | `extraction` | `extract(layer, field_specs) -> ProposalSet` | Janus path, LLM path, validators, reconciliation | Janus and the LLM agent |
-| `appraisal` | `draft(study, instrument) -> AppraisalDraft` | Quote assembly per signalling question, forms as data | None |
+| `appraisal` | `draft(study, instrument) -> AppraisalDraft` | Quote assembly per signalling question, forms as data | Instruments: core (RoB 2, ROBINS-I V2) and profile-registered |
 | `stats` | Pure functions: `elusion_estimate`, `stop_test`, `capture_recapture`, `conformal_threshold`, `agreement` | Exact and Bayesian intervals, simulation tests | None |
 | `runs` | `run(spec) -> RunRef`, `resume(run)`, `diff(a, b) -> RunDiff` | Job leases, cache keys, manifests, idempotent publication | None |
 | `ledger` | `append(event)`, `verify()`, `seal(revision, profile) -> Bundle` | Hash chain, checkpoints, signatures, bundle export | Postgres (live), SQLite (handover and tests) |
-| `report` | `render(target, scope) -> Artifact` | Modul 4 and annex layouts, Anlage II.1 naming, PRISMA, disclosure templates | Targets: G-BA, JCA, PRISMA |
+| `report` | `render(target, scope) -> Artifact` | PRISMA, RIS, disclosure templates, bundle layout, the target registry | Targets: core (`prisma`, `ris`, `bundle`, `ai_disclosure`) and profile-registered |
+
+The `profile` argument of `ledger.seal` is the rights profile that decides which artifacts may
+leave, not a jurisdiction profile.
 
 The deletion test favours `screening`, `documents`, and `report` most. Without `screening`, the mode
-rules and blinding would leak into the UI and every stage. Without `report`, G-BA naming rules would
-spread across callers. `runs` stays small on purpose. It is a job table, not an orchestration
-framework with its own vocabulary.
+rules and blinding would leak into the UI and every stage. Without `report`, file naming rules and
+report layouts would spread across callers. `runs` stays small on purpose. It is a job table, not an
+orchestration framework with its own vocabulary.
 
 Kittum uses no agent framework. Plain Python with Pydantic-validated structured output covers the
 judge and the extraction agent. PydanticAI (MIT) is acceptable if a model-agnostic client helps.
@@ -332,6 +355,61 @@ is. Kittum's own base reader is also PyMuPDF, which means Janus and Kittum see t
 Kittum maps Janus statuses (`extracted`, `missing`, `ambiguous`, `invalid`, `error`) without
 collapsing them. It reuses Janus's UI patterns but not its mutable review storage, which the ledger
 replaces.
+
+## Profiles
+
+A profile adapts the core to one agency's or jurisdiction's rules. The core works without one: a
+review with no profile gets the core targets, the core instruments, and free-text vocabularies.
+
+### What a profile can supply
+
+| Part | Example |
+| --- | --- |
+| Protocol schema extensions | Extra levels above or around scopes, such as indications with subpopulations and an assigned comparator |
+| Vocabularies | Endpoint categories, certainty-of-evidence levels, risk-of-bias ratings |
+| Validation and method rules | A maximum search age, a minimum source list, a required screening mode, a written justification for any other mode, sources that must not be searched routinely |
+| Labels for core concepts | What a scope, an exclusion list, or a source plan is called in the agency's templates |
+| Report targets | Dossier sections, annexes, and submission directory trees with fixed file names |
+| Appraisal instruments | An agency's own risk-of-bias form |
+
+A profile can also name gold data for evaluation and add "other methods" searches, such as a lookup
+on an agency's website.
+
+### How a profile registers
+
+A profile is a package `kittum.profiles.<id>`. The protocol names its profile by ID and version, so
+both are part of the protocol hash and every ledger event that references the protocol. The
+registry lives in `kittum.protocol`. Report targets register with `kittum.report.register_target`
+under IDs of the form `<profile id>.<name>`, and instruments with
+`kittum.appraisal.register_instrument` in the same form.
+
+Core modules never import a profile. Profiles register at the entry points (the API app factory and
+the CLI), which import each installed profile and hand it to the registries. That keeps the
+dependency one-way: a profile depends on the core, never the other way round.
+
+### What the core guarantees regardless of profile
+
+A profile can add rules and make existing ones stricter. It cannot weaken these:
+
+- The approved protocol is the source of truth, and every exclusion reason is a criterion ID.
+- A human commits a decision before seeing AI output, and blinding is enforced by the backend.
+- No mode lets the AI exclude a record that no human saw, and an AI exclusion needs a verified
+  verbatim quote.
+- Every mode other than M1 runs with a pre-specified statistical audit.
+- Every accepted value carries an anchor or a reviewed grounding exception, and anchors survive
+  re-parsing.
+- Every state change writes an event to the hash-chained ledger, and the handover bundle verifies
+  offline.
+- Every result names its reproducibility tier.
+- Confidentiality tiers, local inference by default, and the licence rules for code and weights.
+
+### Profiles
+
+| Profile | ID | Status | Doc |
+| --- | --- | --- | --- |
+| G-BA benefit dossier (German AMNOG procedure) | `gba_amnog` | First profile, in progress | [gba-amnog.md](docs/profiles/gba-amnog.md) |
+| EU joint clinical assessment | Not yet named | Idea. Today part of the first profile. | None yet |
+| Cochrane intervention review (MECIR conduct and reporting standards, GRADE summary-of-findings tables) | Not yet named | Idea | None yet |
 
 ## Provenance that survives re-parsing
 
@@ -466,13 +544,14 @@ The deliverable is "the result plus the database". Kittum seals a bundle at even
 - `kittum.sqlite` with the ledger, the relational revisions, and the artifact index.
 - `artifacts/` with every object the rights profile allows to transfer. Restricted artifacts
   appear as hashes with a reason.
-- `dossier/` with the Anlage II.1 tree, the annexes, PRISMA reports, and the AI disclosure.
+- `reports/` with the PRISMA reports, the RIS files, the AI disclosure, and every profile target
+  the review renders, such as an agency's directory tree and annexes.
 - `registry/` with model versions, prompts, parser recipes, dependency lockfiles, and an SBOM.
 - `manifest.json` with every file hash and the signed checkpoint, plus its timestamp token.
 - `verify`, a small offline tool. It checks signatures, chain continuity, artifact hashes, count
   reconciliation, and that every accepted value has an anchor.
 
-The acceptance test for the bundle: pick any cell in an exported Modul 4 table and trace it to the
+The acceptance test for the bundle: pick any cell in an exported results table and trace it to the
 accepted value, its PDF regions, and the human approval.
 
 ## Runs and reproducibility
@@ -497,7 +576,7 @@ Kittum makes three different promises and names each in writing:
 vLLM batching is not bitwise deterministic at temperature zero. Kittum does not claim otherwise.
 
 A model or prompt change creates a branch run on the same frozen inputs. `runs.diff` aligns outputs
-by semantic key and lists decision flips, value changes, anchor changes, and the dossier cells they
+by semantic key and lists decision flips, value changes, anchor changes, and the report cells they
 affect. Flips on relevant records come first. Promoting the branch needs a human review of affected
 decisions and a recorded release approval.
 
@@ -529,11 +608,14 @@ Protocol-derived highlights are allowed before the decision, because they come f
 and not from the AI. They mark protocol terms in the abstract, and drug and disease entities from
 PubTator or the local OpenMed taggers.
 
+Screens show the profile's labels for core concepts where a profile supplies them, so reviewers see
+the terms of their own templates.
+
 ### Screens
 
 | Screen | Shows | Default action and keys |
 | --- | --- | --- |
-| Protocol editor | PICO blocks per subpopulation, the criteria table, version diff, protocol hash, and a test bench that runs the judge on calibration records to show which criteria it misreads | `n` new criterion, `Ctrl+Enter` run the test bench. **Publish** freezes and signs a version. |
+| Protocol editor | PICO blocks per scope, the criteria table, version diff, protocol hash, and a test bench that runs the judge on calibration records to show which criteria it misreads | `n` new criterion, `Ctrl+Enter` run the test bench. **Publish** freezes and signs a version. |
 | Search review | One tab per database with the line-numbered strategy, limits, date, and hit count; the translation diff against the PubMed master; the PRESS checklist; which reference-set records the strategy finds and misses | `a` approve, `r` request changes |
 | Title and abstract queue | One record at a time: title, year, journal, publication type, registry ID, the abstract with structured labels and Methods first, and a criteria strip | `i` include, `e` then `1` to `9` exclude on a criterion, `u` unclear, `Backspace` undo, `Space` next. The next five records prefetch. Target median 15 to 25 seconds. |
 | Studies | Proposed record-to-study clusters with the linking evidence (shared NCT number, DOI family, title similarity) | `Enter` confirm, `s` split, `m` merge |
@@ -541,7 +623,7 @@ PubTator or the local OpenMed taggers.
 | Extraction | Fields grouped by endpoint, arm, and timepoint, with value, unit, status, origin path, agreement, and validator results; the source region on the PDF | `Tab` next field, `Enter` accept after viewing the source, `e` edit (needs a span), `1` or `2` pick a path when they disagree |
 | Adjudication | Reviewers A and B side by side, pseudonymized, each with outcome, criterion, span, and comment. The AI column opens after the adjudicator commits. | `1` adopt A, `2` adopt B, `i`, `e`, `u` own decision |
 | AI-exclusion audit | Strata, sample sizes, misses found, estimated missed relevant records with a 95% upper bound, pass or fail against the protocol's threshold | A found miss creates a queue of the 20 nearest AI-excluded records for human rescreening. |
-| Risk of bias | Signalling questions on the left with assembled quotes, the PDF on the right; the Anhang 4-F form and RoB 2 rendering | `1` to `5` for yes, probably yes, probably no, no, no information. `o` override with a reason. |
+| Risk of bias | Signalling questions on the left with assembled quotes, the PDF on the right; the rendering on each instrument the review needs (RoB 2, ROBINS-I V2, or a profile's form) | `1` to `5` for yes, probably yes, probably no, no, no information. `o` override with a reason. |
 | Progress | The live PRISMA flow per scope with the update-search delta, throughput, kappa and PABAK for human pairs and human-AI pairs, conflict rate, the audit gauge, and the disclosure summary | Read only |
 
 Kittum renders PDF pages as images, as Janus does, and lays an invisible text layer from the
@@ -581,22 +663,22 @@ recall claim meaningless.
   provisional decisions only. It is a sensitivity analysis and probably a lower bound on missed
   records, because hard records are hard for every source.
 - **Search recall.** Kittum checks search recall separately, against the validation half of the
-  reference set, as IQWiG describes. Search recall and screening recall are different quantities,
-  and the report shows both.
+  reference set, as the objective search approach describes. Search recall and screening recall
+  are different quantities, and the report shows both.
 
 ## Evaluation
 
-Study-level recall is the primary metric, because IQWiG checks the study pool. Record-level recall
-is secondary. Each miss gets a materiality flag: would it have changed the study pool for any
+Study-level recall is the primary metric, because checkers assess the study pool. Record-level
+recall is secondary. Each miss gets a materiality flag: would it have changed the study pool for any
 endpoint or subpopulation?
 
 | Tier | Gold data | Strength | Weakness |
 | --- | --- | --- | --- |
-| G1 | The firm's past dossiers with per-record screening logs | Exact domain | Only if the firm kept logs. Client confidentiality applies. |
-| G2 | Public G-BA dossiers (Anhang 4-A strategies and counts, 4-C and 4-D exclusions) and IQWiG assessments. Studies that IQWiG found and the company missed are labelled hard positives. | Domain-matched, free, many topics | Searches can be reconstructed only approximately. Internal TDM use needs a legal check. |
-| G3 | SYNERGY (26 reviews, CC0), CLEF eHealth TAR | Statistical power | Not zVT-specific |
+| G1 | The firm's past reviews with per-record screening logs | Exact domain | Only if the firm kept logs. Client confidentiality applies. |
+| G2 | Public reviews that publish their strategies, counts, and exclusions, together with the independent assessments of them. Studies that the assessor found and the authors missed are labelled hard positives. A profile names its corpus. | Domain-matched, free, many topics | Searches can be reconstructed only approximately. Internal TDM use needs a legal check. |
+| G3 | SYNERGY (26 reviews, CC0), CLEF eHealth TAR | Statistical power | Not specific to any one review setting |
 
-To support a miss rate below 2.5%, pool 15 to 30 topics. Three dossiers are a demo, not evidence.
+To support a miss rate below 2.5%, pool 15 to 30 topics. Three reviews are a demo, not evidence.
 Pre-register the benchmark: hypotheses, primary metric, a non-inferiority margin against dual
 human screening, and the analysis plan. Split development and test sets by topic, never by record.
 Adjudicators are blind to which process flagged a record. They also receive decoys from the pool
@@ -654,8 +736,8 @@ contracts often bind more tightly than GDPR.
   model gateway refuses to send those documents to an external API.
 - External APIs are EU-hosted with a data processing agreement, zero retention, and no training on
   inputs.
-- Kittum ingests the CSR core report and section 14 tables. Anlage II.1 allows leaving out patient
-  listings, so Kittum does.
+- Kittum ingests the CSR core report and section 14 tables, and leaves out patient listings unless
+  a review needs them.
 - The firm acts as processor for the client. A data protection impact assessment comes before the
   first real CSR.
 
@@ -667,6 +749,7 @@ Build for one firm with one deployment. These parts change for a product:
 - Per-tenant licence entitlements for commercial sources.
 - A published RAISE evaluation record and validation pack per release.
 - ISO/IEC 42001 if buyers ask for it.
+- Further profiles, each in its own package.
 
 The data model already keys everything by project, so a tenant is one more key, not a redesign.
 
@@ -674,30 +757,32 @@ The data model already keys everything by project, so a tenant is one more key, 
 
 | Risk | Likelihood and impact | Response |
 | --- | --- | --- |
-| IQWiG finds a study the AI-assisted process missed | Low, severe | M1 by default; study-level recall on hard positives; materiality review of every AI-only exclusion |
+| An external assessor finds a study the AI-assisted process missed | Low, severe | M1 by default; study-level recall on hard positives; materiality review of every AI-only exclusion |
 | Recall claims cannot be backed statistically | High, high | Pool evidence across topics; sell the M1 recall gain; pre-register the benchmark |
 | AI output anchors reviewers and breaks independence | Medium, high | Human first, reveal on disagreement, provisional decisions logged |
 | A model or tool with restrictive weights terms enters the stack | Medium, medium | Licence CI job; weights allowlist |
 | The free PoC cannot reach CENTRAL, Embase, or CTIS | Certain, low | `FileImport` from day one |
-| JCA PICOs arrive late and multiply | High, high | Scope-keyed decisions and delta screening |
+| New scopes arrive late and multiply | High, high | Scope-keyed decisions and delta screening |
 | Records conflated across studies, subpopulations, or data cuts | Medium, high | Human-confirmed study links; full semantic keys on every value |
 | Silent anchor drift after a parser upgrade | Medium, high | Immutable layers; mapping records; review of ambiguous matches |
 | Run-to-run variation questioned | Medium, medium | Name the reproducibility tier; report kappa across runs |
 | PRISMA-trAIce or RAISE changes | High, low | Disclosure stored as data, rendered per template |
+| Agency rules leak into core modules | Medium, medium | Profiles in their own packages; core never imports a profile |
 
 ## Two-week spike
 
 The spike answers one question: which AI role is defensible, and with which numbers? It uses one
-search topic from a completed dossier, ideally one where IQWiG found a study the company missed.
+search topic from a completed review, ideally one where an external assessor found a study the
+authors missed. A profile can add deliverables; each profile's doc lists them.
 
 | Days | Deliverable |
 | --- | --- |
 | 1 to 2 | Protocol schema with scopes, criteria, and modes. Ledger with hash chain in Postgres. Licence CI job and weights allowlist. |
-| 3 to 4 | PubMed and ClinicalTrials.gov live adapters; `FileImport` for the original dossier's CENTRAL, Embase, and CTIS exports; dedupe; Anlage II.1 RIS tree with exact names. Gold data: the topic plus three SYNERGY reviews. |
+| 3 to 4 | PubMed and ClinicalTrials.gov live adapters; `FileImport` for the original review's CENTRAL, Embase, and CTIS exports; dedupe; RIS export per search. Gold data: the topic plus three SYNERGY reviews. |
 | 5 to 6 | `judge` on two local model families with constrained JSON and quote verification. Per-judge recall and specificity, the double-fault matrix, and run-to-run kappa. |
 | 7 | `stats`: stratified elusion estimate, hypergeometric stop test, three-source capture-recapture. A simulation curve of certifiable savings against the number of relevant records. |
 | 8 to 9 | Blind title and abstract queue with reveal on disagreement, sentinels, and adjudication. Two reviewers screen a slice. |
-| 10 | Full text and extraction on ten included PDFs through both paths. Bundle export with PRISMA flow, Anhang 4-A and 4-C drafts, the generated §4.2.3.5 text, and `verify`. |
+| 10 | Full text and extraction on ten included PDFs through both paths. Bundle export with PRISMA flow, the strategy and exclusion lists, the generated screening-mode methods text, and `verify`. |
 
 The exit criterion is a one-page memo. Per topic type, it states which mode is defensible, the
 measured recall gain under M1, and M2 performance with intervals pooled over G2 and G3 data. One
