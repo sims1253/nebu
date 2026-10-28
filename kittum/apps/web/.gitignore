@@ -1,3 +1,6 @@
 scripts/.cache/
 screenshots/*.tmp.png
 .vitest/
+.stack.json
+test-results/
+playwright-report/

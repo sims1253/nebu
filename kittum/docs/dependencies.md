@@ -110,6 +110,7 @@ moving it over is a separate change.
 | Tailwind 4.3 | MIT | 12 | 64 | | **Use** |
 | Legend List 3.7 (`@legendapp/list` 3.7.0) | MIT | 32 | about 220 | Virtualized lists for screening queues and page strips. The PDF viewer virtualizes pages with it (`@legendapp/list/react`). | **Use** |
 | Vitest browser mode with Playwright (`@vitest/browser-playwright` 5.0.5, MIT; `playwright` 1.64.1, Apache-2.0) | MIT and Apache-2.0 | 14 | about 690 | Component and end-to-end tests. The workbench flow tests run in headless Chromium through Vite+; a pnpm override keeps one Vite. The same `playwright` takes the screenshots. | **Use** |
+| `@playwright/test` 1.64.1 | Apache-2.0 | 14 | about 690 | The end-to-end journey (`apps/web/e2e/`) against a started server, worker, and Postgres; the same release as `playwright` | **Use** |
 | IBM Plex Sans variable (`@fontsource-variable/ibm-plex-sans` 5.3.0) | OFL-1.1 | 1 | | The workbench face, as in Janus. The variable font carries the weight axis and the width axis down to 75%, so dense strips and tables use the condensed width of the same family. | **Use** |
 | Third-party licence notices | | | | t3code generates them with a script (`licenses:sync`). Kittum needs the same for AGPL distribution. | **Use** |
 
