@@ -21,7 +21,7 @@ The two-week spike in [DESIGN.md](../DESIGN.md#two-week-spike) picks from these 
 | 07 | `corpus` | Dedupe, link proposals, immutable identity revisions, PRISMA counts done |
 | 08 | `judge` and `models` | Done; ledger store and job wiring wait for WP-01 and WP-02 |
 | 09 | `screening` | Types done; open |
-| 10 | `documents` | Types done; open |
+| 10 | `documents` | Parsers, layers, anchors, re-anchoring, viewer routes, and acquisition done; source resolvers for the waterfall open |
 | 11 | `extraction` | Types done; open |
 | 12 | `appraisal` | Types done; open |
 | 13 | `stats` | Done: intervals, stopping, capture-recapture, conformal threshold, agreement |
@@ -334,6 +334,60 @@ Module `kittum.documents`. Needs: `gateway`, `ledger`.
 - The full-text waterfall (docs/sources.md).
 - Acceptance: fixture PDFs with multi-column text and a merged-header table; anchors survive a
   re-parse with a different engine.
+
+Done:
+
+- `triage`: pdf-inspector's page classification and garbled-text flag, plus a PyMuPDF count of
+  characters a working ToUnicode map never yields. Each page is `text`, `ocr`, or
+  `broken_encoding`, and the layer keeps the verdict.
+- `PyMuPDFParser` (the base layer), `PdfiumParser` (differential checks, `compare_layers`), and
+  `DoclingParser` (the `docling` extra: Heron layout order and TableFormer grids, every character
+  from PyMuPDF). All share one assembler: NFC text, ligatures expanded, line-end soft hyphens kept as
+  "-" so `find_quote` joins them, multi-column reading order, running headers first, tables as
+  rows of cells. Boxes are unrotated top-left PDF points; the reading frame follows the text
+  direction, so sideways landscape pages and pages turned by /Rotate both read in order.
+- Tables without PyMuPDF's Layout model (`find_tables(use_layout=False)`, per
+  docs/document-tools.md): ruled tables from `find_tables`, three-rule tables from their "Table N"
+  caption and full-width rules. The grid comes from the words: rows are printed lines, columns are
+  gaps most rows leave empty, header phrases crossing a gap or underlined by a rule span columns,
+  and empty header cells merge upwards. Cells carry spans and header paths.
+- `OcrMyPdfParser` OCRs the pages triage flags. It needs `ocrmypdf` and `tesseract`; without them
+  `ocr_available()` is False and the parser refuses to start. Not exercised here (not installed).
+- Storage (migration `20261028025000_documents_layers.sql`): `document` by SHA-256, `acquisition`,
+  immutable `layer` (unique per document and recipe hash, JSON in the artifact store, output hash
+  = artifact hash) and `anchor`, `anchor_mapping`, and `page_render`. `derive(tx, document, parser,
+  artifacts=...)` is idempotent per recipe. `ingest` refuses truncated PDFs.
+- `make_anchor(layer, span)`: quote with 32 characters of context, one box per printed line (partial
+  words cut along their reading direction, so sideways words too), and cell refs.
+  `resolve(anchor, layer)` gives `exact` (same place, unchanged context), `candidate` (unique match
+  elsewhere, changed context, or a fuzzy respelling whose numbers are unchanged), `ambiguous` (with
+  every match as an alternative), or `unresolved`; repeated values resolve by region. Matches must
+  start and end on token boundaries, so "12" never matches inside "123" or "12.5". `resolve` and
+  `remap` raise `DifferentDocument` for a layer of another document: a revised PDF is a different
+  document and needs a document-revision mapping, which never carries acceptance across. `remap`
+  records the mapping once per anchor, layer, and method version (now `resolve.v2`).
+- Viewer routes in `api/routes/documents.py`: upload, document with pages and triage, page PNG at a
+  scale (unrotated, cached in the artifact store), word boxes per page, create and get anchors.
+- `acquire` walks a list of `FullTextLocation`s through the gateway, keeps the first readable PDF,
+  stores source, licence, and terms URL, and writes `document.acquired` or
+  `document.acquisition_failed` with every attempt.
+- Fake: `kittum.documents.testing.TextParser` builds layers from plain text, no PDF needed.
+- Fixtures: two CC BY 4.0 BMC Medicine RCTs (tests/documents/fixtures/ATTRIBUTION.md).
+
+Open:
+
+- Source resolvers that turn a record into `FullTextLocation`s (Europe PMC, Unpaywall, OpenAlex,
+  publisher TDM) and the human upload queue; `acquire` takes the list.
+- The upload route stores the document and its base layer but no acquisition: it has no project
+  or actor yet (needs API auth and the Postgres ledger store).
+- Ask Artifex where the PyMuPDF Layout source is. With it, `find_tables` could gate borderless
+  tables itself; until then the caption-and-rules finder covers three-rule journal tables only.
+- OCR on a machine with Tesseract; RapidOCR; PaddleOCR-VL adapters; GROBID metadata.
+- `core.find_quote` either joins every hyphenated line break or none, so a quote that crosses a
+  split word ("resid-" / "ing") and a compound broken at its hyphen ("middle-" / "income") in the
+  same passage does not match. A change in `core`, not here.
+- Docling runs per document (about 30 s per page on a CPU here); run it as a job, on pages with
+  tables first.
 
 ## WP-11 Extraction
 

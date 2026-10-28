@@ -80,6 +80,7 @@ retention, and set and lift a legal hold.
 | dbmate | MIT | 16 | | Plain SQL migrations | **Use**. The SQLAlchemy ORM would get in the way of hash-chained writes. |
 | scipy | BSD-3-Clause | 9 | | Clopper-Pearson through `binomtest(...).proportion_ci("exact")`; `hypergeom` for the stop test | **Use**. Capture-recapture and split-conformal thresholds are about 50 lines each, written in `stats`. |
 | rapidfuzz | MIT | 6 | | Quote verification and dedupe | **Use** |
+| pdf-inspector 1.25.2 (Firecrawl) | MIT | Weekly (1.25.2 on 28.09.2026) | | Page triage in `documents`: which pages need OCR and which have garbled text. Rust with PyO3 bindings and prebuilt abi3 wheels; Kittum calls only `process_pdf_bytes`, which never loads its OCR runtime or downloads models. See [Document and model tools](document-tools.md). | **Use** |
 | rfc8785 (Trail of Bits) | Apache-2.0 | 0 (0.1.4, September 2024) | 7 | Small and finished. Pin it and test against the RFC vectors. | **Use** |
 | rfc3161-client (Trail of Bits) | Apache-2.0 | 4 | 33 | | **Use** |
 | cryptography | Apache-2.0 or BSD | 11 | | Ed25519 checkpoint signatures | **Use**. PyNaCl would duplicate it. |

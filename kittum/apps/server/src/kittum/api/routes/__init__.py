@@ -2,9 +2,9 @@
 
 from typing import TYPE_CHECKING
 
-from kittum.api.routes import corpus, protocol, search
+from kittum.api.routes import corpus, documents, protocol, search
 
 if TYPE_CHECKING:
     from fastapi import APIRouter
 
-ROUTERS: list[APIRouter] = [corpus.router, protocol.router, search.router]
+ROUTERS: list[APIRouter] = [corpus.router, documents.router, protocol.router, search.router]

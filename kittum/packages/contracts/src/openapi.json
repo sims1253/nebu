@@ -1,6 +1,87 @@
 {
   "components": {
     "schemas": {
+      "Anchor": {
+        "additionalProperties": false,
+        "properties": {
+          "boxes": {
+            "items": {
+              "$ref": "#/components/schemas/Box"
+            },
+            "title": "Boxes",
+            "type": "array"
+          },
+          "cells": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CellRef"
+            },
+            "title": "Cells",
+            "type": "array"
+          },
+          "document_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "layer_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "quote": {
+            "$ref": "#/components/schemas/TextQuote"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          },
+          "text_hash": {
+            "$ref": "#/components/schemas/Sha256"
+          }
+        },
+        "required": [
+          "id",
+          "layer_id",
+          "document_id",
+          "quote",
+          "text_hash",
+          "start",
+          "end",
+          "boxes"
+        ],
+        "title": "Anchor",
+        "type": "object"
+      },
+      "AnchorRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "occurrence": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurrence"
+          },
+          "quote": {
+            "title": "Quote",
+            "type": "string"
+          }
+        },
+        "required": [
+          "quote"
+        ],
+        "title": "AnchorRequest",
+        "type": "object"
+      },
       "AuditPlan": {
         "additionalProperties": false,
         "properties": {
@@ -19,6 +100,82 @@
           }
         },
         "title": "AuditPlan",
+        "type": "object"
+      },
+      "Box": {
+        "additionalProperties": false,
+        "properties": {
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "x0": {
+            "title": "X0",
+            "type": "number"
+          },
+          "x1": {
+            "title": "X1",
+            "type": "number"
+          },
+          "y0": {
+            "title": "Y0",
+            "type": "number"
+          },
+          "y1": {
+            "title": "Y1",
+            "type": "number"
+          }
+        },
+        "required": [
+          "page",
+          "x0",
+          "y0",
+          "x1",
+          "y1"
+        ],
+        "title": "Box",
+        "type": "object"
+      },
+      "CellRef": {
+        "additionalProperties": false,
+        "properties": {
+          "col": {
+            "title": "Col",
+            "type": "integer"
+          },
+          "col_span": {
+            "default": 1,
+            "title": "Col Span",
+            "type": "integer"
+          },
+          "header_path": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Header Path",
+            "type": "array"
+          },
+          "row": {
+            "title": "Row",
+            "type": "integer"
+          },
+          "row_span": {
+            "default": 1,
+            "title": "Row Span",
+            "type": "integer"
+          },
+          "table_id": {
+            "title": "Table Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "table_id",
+          "row",
+          "col"
+        ],
+        "title": "CellRef",
         "type": "object"
       },
       "Comparator": {
@@ -153,6 +310,68 @@
           "justification"
         ],
         "title": "Deviation",
+        "type": "object"
+      },
+      "Document": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_hash": {
+            "$ref": "#/components/schemas/Sha256"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "media_type": {
+            "title": "Media Type",
+            "type": "string"
+          },
+          "page_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Count"
+          }
+        },
+        "required": [
+          "id",
+          "artifact_hash",
+          "media_type"
+        ],
+        "title": "Document",
+        "type": "object"
+      },
+      "DocumentView": {
+        "additionalProperties": false,
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/Document"
+          },
+          "layers": {
+            "items": {
+              "$ref": "#/components/schemas/LayerSummary"
+            },
+            "title": "Layers",
+            "type": "array"
+          },
+          "pages": {
+            "items": {
+              "$ref": "#/components/schemas/PageView"
+            },
+            "title": "Pages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "document",
+          "layers",
+          "pages"
+        ],
+        "title": "DocumentView",
         "type": "object"
       },
       "EffectModifier": {
@@ -362,6 +581,29 @@
         "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$",
         "type": "string"
       },
+      "LayerSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "engine": {
+            "title": "Engine",
+            "type": "string"
+          },
+          "engine_version": {
+            "title": "Engine Version",
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          }
+        },
+        "required": [
+          "id",
+          "engine",
+          "engine_version"
+        ],
+        "title": "LayerSummary",
+        "type": "object"
+      },
       "LinkProposal": {
         "additionalProperties": false,
         "properties": {
@@ -484,6 +726,132 @@
           "name"
         ],
         "title": "Outcome",
+        "type": "object"
+      },
+      "PageTriage": {
+        "additionalProperties": false,
+        "description": "Whether a page's text layer can be trusted (pdf-inspector plus a PyMuPDF check).",
+        "properties": {
+          "kind": {
+            "enum": [
+              "text",
+              "ocr",
+              "broken_encoding"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "reasons": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          }
+        },
+        "required": [
+          "page",
+          "kind"
+        ],
+        "title": "PageTriage",
+        "type": "object"
+      },
+      "PageView": {
+        "additionalProperties": false,
+        "properties": {
+          "height": {
+            "title": "Height",
+            "type": "number"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "rotation": {
+            "title": "Rotation",
+            "type": "integer"
+          },
+          "triage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PageTriage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "width": {
+            "title": "Width",
+            "type": "number"
+          }
+        },
+        "required": [
+          "number",
+          "width",
+          "height",
+          "rotation",
+          "label",
+          "triage"
+        ],
+        "title": "PageView",
+        "type": "object"
+      },
+      "PageWords": {
+        "additionalProperties": false,
+        "properties": {
+          "height": {
+            "title": "Height",
+            "type": "number"
+          },
+          "layer_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "rotation": {
+            "title": "Rotation",
+            "type": "integer"
+          },
+          "width": {
+            "title": "Width",
+            "type": "number"
+          },
+          "words": {
+            "items": {
+              "$ref": "#/components/schemas/WordBox"
+            },
+            "title": "Words",
+            "type": "array"
+          }
+        },
+        "required": [
+          "layer_id",
+          "page",
+          "width",
+          "height",
+          "rotation",
+          "words"
+        ],
+        "title": "PageWords",
         "type": "object"
       },
       "Percent": {
@@ -1540,6 +1908,47 @@
         "minLength": 1,
         "type": "string"
       },
+      "TextQuote": {
+        "additionalProperties": false,
+        "properties": {
+          "exact": {
+            "title": "Exact",
+            "type": "string"
+          },
+          "prefix": {
+            "default": "",
+            "title": "Prefix",
+            "type": "string"
+          },
+          "suffix": {
+            "default": "",
+            "title": "Suffix",
+            "type": "string"
+          }
+        },
+        "required": [
+          "exact"
+        ],
+        "title": "TextQuote",
+        "type": "object"
+      },
+      "UploadedDocument": {
+        "additionalProperties": false,
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/Document"
+          },
+          "layer_id": {
+            "$ref": "#/components/schemas/Id"
+          }
+        },
+        "required": [
+          "document",
+          "layer_id"
+        ],
+        "title": "UploadedDocument",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -1612,6 +2021,50 @@
         ],
         "title": "ValidationReport",
         "type": "object"
+      },
+      "WordBox": {
+        "additionalProperties": false,
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "x0": {
+            "title": "X0",
+            "type": "number"
+          },
+          "x1": {
+            "title": "X1",
+            "type": "number"
+          },
+          "y0": {
+            "title": "Y0",
+            "type": "number"
+          },
+          "y1": {
+            "title": "Y1",
+            "type": "number"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "text",
+          "x0",
+          "y0",
+          "x1",
+          "y1"
+        ],
+        "title": "WordBox",
+        "type": "object"
       }
     }
   },
@@ -1621,6 +2074,187 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/anchors/{anchor_id}": {
+      "get": {
+        "description": "An anchor with its quote, offsets, one box per line, and table cells.",
+        "operationId": "getAnchor",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "anchor_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Anchor Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Anchor"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Anchor View",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/documents": {
+      "post": {
+        "description": "Store a PDF and parse its base layer. Uploading the same bytes again is a no-op.",
+        "operationId": "uploadDocument",
+        "requestBody": {
+          "content": {
+            "application/pdf": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadedDocument"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Upload Document",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/documents/{document_id}": {
+      "get": {
+        "operationId": "getDocument",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Document View",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/documents/{document_id}/pages/{page}/image": {
+      "get": {
+        "description": "The page, unrotated, at `scale` pixels per PDF point.",
+        "operationId": "renderPage",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "page",
+            "required": true,
+            "schema": {
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scale",
+            "required": false,
+            "schema": {
+              "default": 1.0,
+              "maximum": 4.0,
+              "minimum": 0.25,
+              "title": "Scale",
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "image/png": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Render Document Page",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "operationId": "getHealth",
@@ -1637,6 +2271,112 @@
           }
         },
         "summary": "Health"
+      }
+    },
+    "/api/layers/{layer_id}/anchors": {
+      "post": {
+        "description": "Anchor a verbatim quote. 404 if the layer does not contain it, 409 if it occurs more than\nonce and no `occurrence` is given.",
+        "operationId": "createAnchor",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "layer_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Layer Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnchorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Anchor"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Anchor",
+        "tags": [
+          "documents"
+        ]
+      }
+    },
+    "/api/layers/{layer_id}/pages/{page}/words": {
+      "get": {
+        "operationId": "getPageWords",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "layer_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Layer Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "page",
+            "required": true,
+            "schema": {
+              "title": "Page",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageWords"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Page Words",
+        "tags": [
+          "documents"
+        ]
       }
     },
     "/api/projects/{project_id}/corpus/confirm": {
