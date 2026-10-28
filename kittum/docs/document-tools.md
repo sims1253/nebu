@@ -102,7 +102,7 @@ a proposal that Kittum re-anchors. The leaderboards disagree, which says more th
 
 | Tool | Licence | Fit | Momentum | Verdict |
 | --- | --- | --- | --- | --- |
-| PydanticAI (`pydantic-ai-slim` 2.63.0) | MIT | Typed, model-agnostic agent loop with tool calls and structured output | 2.63.0; 100 releases a year, so pin it | **Use** for the bounded extraction agent. Kittum runs it on its own `LlmBackend` through a `FunctionModel`, so every call keeps the confidentiality check, raw capture, and recorded replay. |
+| PydanticAI (`pydantic-ai-slim` 2.63.0) | MIT | Typed, model-agnostic agent loop with tool calls and structured output | 2.63.0; 100 releases a year, so pin it | **Use** for the bounded extraction agent. Kittum runs it on its own `LlmBackend` through a `FunctionModel`, so every call keeps raw capture, provenance (serving and endpoint), and recorded replay. |
 | LangExtract (Google) | Apache-2.0 | Few-shot extraction that aligns each value to a character interval | 10 releases; "not an officially supported Google product". Open alignment bugs: #289 (wrong `char_interval` on long extractions, open since December 2025), #591, #450. | **Optional**, for chunking or its HTML viewer. Not a source of provenance while its offsets are unreliable. |
 | Instructor | MIT | Pydantic-validated output with retries | Stable | Optional; PydanticAI covers it |
 | LangChain and LangGraph | MIT | General agent frameworks | | **Skip.** A shallow layer over `judge` and `extraction`. |

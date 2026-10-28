@@ -216,3 +216,26 @@ def test_a_hosted_judge_gets_its_key_from_the_environment_and_records_none_of_it
         "example-model-2026-10 (hosted at https://llm.example/v1)"
         in files["ai_disclosure.md"].decode()
     )
+
+
+def test_a_key_pasted_where_its_variable_name_belongs_is_refused_without_echoing_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """KITTUM_LLM_API_KEYS names variables. A key pasted there by mistake stops the process at
+    startup, and the error does not repeat it, so it never reaches a job error or a log."""
+    monkeypatch.setenv("KITTUM_DATABASE_URL", "postgresql://unused")
+    monkeypatch.setenv("KITTUM_LLM_ENDPOINTS", "example-hosted=https://llm.example/v1")
+    pasted = "sk-live-4f9c2e1d8b7a"
+    monkeypatch.setenv("KITTUM_LLM_API_KEYS", f"example-hosted={pasted}")
+    with pytest.raises(ValueError, match="must be the name of an environment variable") as e:
+        Settings.from_env()
+    assert pasted not in str(e.value)
+
+    # A key variable for a recipe no endpoint serves would never be read: refused too.
+    monkeypatch.setenv("KITTUM_LLM_API_KEYS", "other-recipe=OTHER_KEY")
+    with pytest.raises(ValueError, match="'other-recipe', which no KITTUM_LLM_ENDPOINTS entry"):
+        Settings.from_env()
+
+    monkeypatch.setenv("KITTUM_LLM_API_KEYS", "example-hosted=EXAMPLE_LLM_KEY")
+    (endpoint,) = Settings.from_env().llm_endpoints
+    assert endpoint.api_key_env == "EXAMPLE_LLM_KEY"
