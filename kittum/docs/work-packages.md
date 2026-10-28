@@ -27,7 +27,7 @@ The two-week spike in [DESIGN.md](../DESIGN.md#two-week-spike) picks from these 
 | 13 | `stats` | Done: intervals, stopping, capture-recapture, conformal threshold, agreement |
 | 14 | `report` | Types done; open |
 | 15 | `api` | Health route done; open |
-| 16 | Workbench | Shell done; open |
+| 16 | Workbench | Design system, title and abstract queue, full-text and extraction layouts on a typed mock; API wiring open |
 | 17 | Evaluation harness | Open |
 
 ## WP-01 Ledger
@@ -454,6 +454,37 @@ Module `kittum.api`. Needs: the modules it exposes.
 - Screens from DESIGN.md "Reviewer workbench", starting with the title and abstract queue and its
   keyboard flow. Base UI for components, Legend List for queues, server-rendered PDF pages with
   word-box text layers for full text.
+
+Done (branch `kittum/wp-16-workbench-design`):
+
+- Design system: tokens for light and dark, IBM Plex Sans with its condensed width, keycaps, the
+  status vocabulary, and the evidence marker that pairs a selected item with its source.
+  `apps/web/README.md` describes it.
+- Project switcher and stage navigation (`g` then a letter). Protocol, Search, Studies, Risk of
+  bias, Progress, and Reports are placeholders that say what they will show and what they wait on.
+  Profile labels (population, report, and so on) come from the protocol, never from the code.
+- Title and abstract queue, complete: human first, reveal only on disagreement after a
+  provisional decision, `i`, `e` then `1`-`9`, `u`, Backspace, Space, five records prefetched,
+  protocol-term and entity highlights, criteria strip, and per-item timing sent with each
+  decision.
+- Full-text screening: page images with an invisible word-box text layer, criteria with
+  mentions in document order, `[` and `]`, Enter to adopt a mention or a selection, `y` `n` `?`,
+  and `i` `e` `x` once every criterion has a verdict.
+- Extraction review: fields by endpoint, arm, and timepoint; value, unit, status, path agreement,
+  and validators; the source region on the page; Enter accepts only after the source was on
+  screen; `1` or `2` picks a path; `e` edits from a selection.
+- A typed mock (`apps/web/src/data/`) behind one `Workbench` interface, on recorded PubMed
+  records and the open-access ABC-06 trial rendered with PyMuPDF.
+- Browser tests in Vitest browser mode on Chromium, and screenshots in `apps/web/screenshots/`.
+
+Left:
+
+- Implement `Workbench` on the generated client once WP-15 serves these routes, and delete the
+  mock. The README lists what the API must add to the backend records.
+- Adjudication and AI-exclusion audit screens; the placeholder screens.
+- The full-text judge reveal, per-criterion verdict storage, and grounding exceptions.
+- A session break suggestion after a missed sentinel or a speed-up with an include-rate change.
+- Third-party licence notices for the web bundle (`licenses:sync`).
 
 ## WP-17 Evaluation harness
 
