@@ -964,6 +964,17 @@
               }
             ],
             "title": "Recipe Id"
+          },
+          "timeout_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeout Seconds"
           }
         },
         "required": [

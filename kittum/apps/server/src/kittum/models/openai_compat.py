@@ -100,6 +100,7 @@ class OpenAICompatibleBackend:
         self.endpoint = public_url(base_url)
         self._store = store
         self._api_key_env = api_key_env
+        self.timeout = timeout
         self._client = client or httpx2.Client(timeout=timeout)
         self._attempts = attempts
         self._wait_initial = wait_initial

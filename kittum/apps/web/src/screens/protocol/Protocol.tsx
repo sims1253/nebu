@@ -13,9 +13,8 @@ import { KeyHint } from "../../ui/Key.tsx";
 import { useKeys } from "../../ui/keys.ts";
 import { useProject } from "../project.tsx";
 import { Assistant } from "./Assistant.tsx";
-import type { Working } from "./Assistant.tsx";
-import { forSaving } from "./document.ts";
-import type { Doc } from "./document.ts";
+import type { Handover, Working } from "./Assistant.tsx";
+import { forSaving, toDoc } from "./document.ts";
 import { ProtocolEditor } from "./ProtocolEditor.tsx";
 
 export const MODES: Record<SearchTopic["mode"], string> = {
@@ -35,8 +34,14 @@ const date = (iso: string | null) =>
     : "Not published";
 
 type Writing =
-  | { readonly mode: "form"; readonly handover: Working | null }
-  | { readonly mode: "yaml"; readonly base: ProtocolRevision | null; readonly text: string | null };
+  | { readonly mode: "form"; readonly handover: Handover | null }
+  | {
+      readonly mode: "yaml";
+      readonly base: ProtocolRevision | null;
+      readonly text: string | null;
+      /** Where the form was, to go back to when the YAML stays as it was. */
+      readonly back: Handover | null;
+    };
 
 export function ProtocolScreen() {
   const { workbench } = useRouteContext({ from: "/p/$projectId" });
@@ -46,11 +51,14 @@ export function ProtocolScreen() {
   const [writing, setWriting] = useState<Writing>({ mode: "form", handover: null });
   const [switching, setSwitching] = useState<string | null>(null);
   // What each view holds now, so the other one opens the same protocol.
-  const form = useRef<Working | null>(null);
+  const form = useRef<(Handover & { readonly shown: Working | null }) | null>(null);
   const yaml = useRef<{ readonly text: string; readonly changed: boolean } | null>(null);
-  const onCurrent = useCallback((current: Working | null) => {
-    form.current = current;
-  }, []);
+  const onCurrent = useCallback(
+    (current: (Handover & { readonly shown: Working | null }) | null) => {
+      form.current = current;
+    },
+    [],
+  );
   const lead = has("lead");
   useKeys((event) => {
     if (event.key !== "v" || !lead || editing || !protocol) return false;
@@ -67,10 +75,11 @@ export function ProtocolScreen() {
     const toYaml = async () => {
       setSwitching(null);
       const current = form.current;
-      if (!current) return setWriting({ mode: "yaml", base: null, text: null });
+      const back = current ? { working: current.working, selected: current.selected } : null;
+      if (!current?.shown) return setWriting({ mode: "yaml", base: null, text: null, back });
       try {
-        const text = await run(workbench.protocolYaml(forSaving(current.doc)));
-        setWriting({ mode: "yaml", base: current.base, text });
+        const text = await run(workbench.protocolYaml(forSaving(current.shown.doc)));
+        setWriting({ mode: "yaml", base: current.shown.base, text, back });
       } catch (e) {
         setSwitching(failure(e, "Kittum could not turn the form into YAML."));
       }
@@ -78,8 +87,10 @@ export function ProtocolScreen() {
     const toForm = async () => {
       setSwitching(null);
       const text = yaml.current;
-      if (writing.mode !== "yaml" || !text?.changed || !text.text.trim()) {
-        return setWriting({ mode: "form", handover: null });
+      if (writing.mode !== "yaml") return;
+      // YAML left as it was: the form comes back as the lead left it, unsaved changes included.
+      if (!text?.changed || !text.text.trim()) {
+        return setWriting({ mode: "form", handover: writing.back });
       }
       try {
         const parsed = await run(workbench.parseProtocol(text.text));
@@ -89,9 +100,17 @@ export function ProtocolScreen() {
           );
           return;
         }
+        const read = toDoc(parsed.source);
+        if ("problem" in read) {
+          setSwitching(`The form cannot show this YAML. ${read.problem} Fix it in the YAML.`);
+          return;
+        }
         setWriting({
           mode: "form",
-          handover: { doc: parsed.source as unknown as Doc, base: writing.base },
+          handover: {
+            working: { doc: read.doc, base: writing.base },
+            selected: writing.base?.id ?? writing.back?.selected ?? null,
+          },
         });
       } catch (e) {
         setSwitching(failure(e, "Kittum could not read the YAML."));
@@ -146,7 +165,6 @@ export function ProtocolScreen() {
         <div className="min-h-0 flex-1">
           {writing.mode === "form" ? (
             <Assistant
-              key={writing.handover ? "handover" : "form"}
               handover={writing.handover}
               onCurrent={onCurrent}
               onPublished={published}

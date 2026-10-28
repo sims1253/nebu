@@ -80,6 +80,12 @@ test("a lead drafts with the model, sees what it wrote, steps back, restores, an
       "data-model",
       "glm-5.3-flash",
     );
+    // The choices it made are marked too: the screening mode and each criterion's.
+    await expect(form.getByTestId("mode").getByTestId("ai-mark")).toHaveAccessibleName(
+      "Written by glm-5.3-flash in revision 1.",
+    );
+    // Its kind, its part of the question, its stages, and its text.
+    await expect(form.getByTestId("criterion").first().getByTestId("ai-mark")).toHaveCount(4);
     const mark = medline.getByTestId("ai-written").last().getByTestId("ai-mark");
     await expect(mark).toHaveAccessibleName("Written by glm-5.3-flash in revision 1.");
     await mark.focus();
@@ -275,7 +281,11 @@ test("a lead writes the protocol by hand in the form, counts a query, and edits 
   });
 
   await test.step("the lead edits the PubMed query in place and counts it before saving", async () => {
-    await query.fill(MISTYPED);
+    // Key by key, as a person types: the first key starts the edit, and the rest must land too.
+    await query.selectText();
+    await page.keyboard.type(MISTYPED);
+    await expect(query).toBeFocused();
+    await expect(query).toHaveValue(MISTYPED);
     await expect(page.getByTestId("unsaved")).toHaveText(
       "Your changes to revision 1, not saved yet",
     );
@@ -306,27 +316,62 @@ test("a lead writes the protocol by hand in the form, counts a query, and edits 
     await expect(side.getByTestId("revision-change")).toContainText("strategy");
   });
 
-  await test.step("the YAML view shows the same protocol, and its edit comes back to the form", async () => {
-    await page.getByRole("tab", { name: "YAML" }).click();
-    const editor = page.getByRole("textbox", { name: "Protocol", exact: true });
-    await expect(editor).toHaveValue(/nicotine replacment zzqx/);
+  const editor = page.getByRole("textbox", { name: "Protocol", exact: true });
+  const title = form.getByRole("textbox", { name: "Title", exact: true });
+  const yamlTab = page.getByRole("tab", { name: "YAML" });
+  const formTab = page.getByRole("tab", { name: "Form" });
+  const unsaved = page.getByTestId("unsaved");
+
+  await test.step("the YAML view shows the same protocol, and the form comes back as the lead left it", async () => {
+    // An older revision on screen: the YAML shows it, and the form comes back to it.
+    await page.keyboard.press(",");
+    await expect(page.getByText("Revision 1 of 2")).toBeVisible();
+    await yamlTab.click();
+    await expect(editor).toHaveValue(/"nicotine replacement"\[tiab\] AND "smoking cessation"/);
+    await expect(editor).not.toHaveValue(/zzqx/);
+    await formTab.click();
+    await expect(page.getByText("Revision 1 of 2")).toBeVisible();
+    await expect(unsaved).toHaveCount(0);
+    await page.keyboard.press(".");
+    await expect(page.getByText("Revision 2 of 2")).toBeVisible();
+    // An edit not saved yet stays through a look at the YAML.
+    await title.click();
+    await page.keyboard.press("End");
+    await page.keyboard.type(" in adults");
+    await yamlTab.click();
     await expect(editor).toHaveValue(
-      /title:\n {2}en: Nicotine replacement therapy for smoking cessation/,
-    );
-    await editor.fill(
-      (await editor.inputValue()).replace(
-        "en: Nicotine replacement therapy for smoking cessation",
-        "en: Nicotine replacement therapy for quitting smoking",
-      ),
+      /title:\n {2}en: Nicotine replacement therapy for smoking cessation in adults\n/,
     );
     await shoot(page, "11-yaml");
-    await page.getByRole("tab", { name: "Form" }).click();
-    await expect(form.getByRole("textbox", { name: "Title", exact: true })).toHaveValue(
-      "Nicotine replacement therapy for quitting smoking",
-    );
-    await expect(page.getByTestId("unsaved")).toHaveText(
-      "Your changes to revision 2, not saved yet",
-    );
+    await formTab.click();
+    await expect(title).toHaveValue("Nicotine replacement therapy for smoking cessation in adults");
+    await expect(unsaved).toHaveText("Your changes to revision 2, not saved yet");
+  });
+
+  await test.step("YAML the form only partly understands still opens in it, and saving says what is missing", async () => {
+    await yamlTab.click();
+    const full = await editor.inputValue();
+    // A mapping with a title alone: the form opens with empty lists, and saving lists the rest.
+    await editor.fill("title:\n  en: Only a title\n");
+    await formTab.click();
+    await expect(title).toHaveValue("Only a title");
+    await expect(form.getByTestId("question")).toHaveCount(0);
+    await page.keyboard.press("Control+Enter");
+    await expect(
+      side.getByTestId("protocol-issue").filter({ hasText: "default_language" }),
+    ).toContainText("Field required");
+    await expect(page.getByText("Revision 3 of 3")).toHaveCount(0);
+    // A valid protocol may leave out a question's comparators.
+    await yamlTab.click();
+    const without = full
+      .replace(/^ {2}comparators:\n(?: {2}- .*\n| {4,}.*\n)+/m, "")
+      .replace("smoking cessation in adults", "quitting smoking");
+    expect(without).not.toMatch(/^ {2}comparators:$/m);
+    await editor.fill(without);
+    await formTab.click();
+    await expect(title).toHaveValue("Nicotine replacement therapy for quitting smoking");
+    await expect(form.getByRole("textbox", { name: "Comparator 1" })).toHaveCount(0);
+    await expect(unsaved).toHaveText("Your changes to revision 2, not saved yet");
     await page.keyboard.press("Control+Enter");
     await expect(page.getByText("Revision 3 of 3")).toBeVisible();
     await expect(rail.first().getByTestId("author")).toContainText("Morgan Lee");

@@ -37,6 +37,7 @@ import {
   PUBMED,
   SOURCE_NAME,
   strategyPath,
+  toDoc,
   valueAt,
 } from "./document.ts";
 import type { Criterion, Doc, Localized, Question, Source, Topic } from "./document.ts";
@@ -45,6 +46,12 @@ import type { Criterion, Doc, Localized, Question, Source, Topic } from "./docum
 export interface Working {
   readonly doc: Doc;
   readonly base: ProtocolRevision | null;
+}
+
+/** Where the form was: its unsaved protocol, if any, and the revision on screen. */
+export interface Handover {
+  readonly working: Working | null;
+  readonly selected: string | null;
 }
 
 const KIND: Record<ProtocolRevision["kind"], string> = {
@@ -151,11 +158,12 @@ export function Assistant({
   onCurrent,
   onPublished,
 }: {
-  /** A protocol from the YAML view, not saved yet. */
-  handover: Working | null;
+  /** Where to open: the form as the lead left it, or a protocol from the YAML view. */
+  handover: Handover | null;
   onYaml: (doc: Doc, base: ProtocolRevision | null) => void;
-  /** What the form shows now, so the YAML view opens the same protocol. */
-  onCurrent: (current: Working | null) => void;
+  /** Where the form is and what it shows, so the YAML view opens the same protocol and the
+   * form comes back to the same place. */
+  onCurrent: (current: (Handover & { readonly shown: Working | null }) | null) => void;
   onPublished: (message: string) => void;
 }) {
   const { workbench } = useRouteContext({ from: "/p/$projectId" });
@@ -171,7 +179,8 @@ export function Assistant({
   );
   const [revisions, setRevisions] = useState<ReadonlyArray<ProtocolRevision> | null>(null);
   const [at, setAt] = useState(0);
-  const [working, setWorking] = useState<Working | null>(handover);
+  const [working, setWorking] = useState<Working | null>(handover?.working ?? null);
+  const [selected] = useState(handover?.selected ?? null);
   const [issues, setIssues] = useState<ReadonlyArray<ProtocolIssue>>([]);
   const [saving, setSaving] = useState(false);
   const [model, setModel] = useState<AssistModel | null>(null);
@@ -197,7 +206,8 @@ export function Assistant({
       (found) => {
         if (!live) return;
         setRevisions(found);
-        setAt(Math.max(0, found.length - 1));
+        const index = selected ? found.findIndex((r) => r.id === selected) : -1;
+        setAt(index >= 0 ? index : Math.max(0, found.length - 1));
       },
       (e) => live && setError(failure(e, "Kittum could not load the revisions.")),
     );
@@ -208,7 +218,7 @@ export function Assistant({
     return () => {
       live = false;
     };
-  }, [workbench, caller]);
+  }, [workbench, caller, selected]);
 
   const count = useCallback(
     (dialect: QueryDialect, strategy: string) => {
@@ -237,7 +247,12 @@ export function Assistant({
   const shown: Working | null =
     working ?? (current ? { doc: docOf(current), base: current } : null);
   useEffect(
-    () => onCurrent(working ?? (current ? { doc: docOf(current), base: current } : null)),
+    () =>
+      onCurrent({
+        working,
+        selected: current?.id ?? null,
+        shown: working ?? (current ? { doc: docOf(current), base: current } : null),
+      }),
     [onCurrent, working, current],
   );
 
@@ -339,7 +354,9 @@ export function Assistant({
       const parsed = await run(
         workbench.parseProtocol(await run(workbench.protocolSource(project.id))),
       );
-      if (parsed.source) setWorking({ doc: parsed.source as unknown as Doc, base: null });
+      const read = parsed.source ? toDoc(parsed.source) : null;
+      if (read && "doc" in read) setWorking({ doc: read.doc, base: null });
+      else setError(read?.problem ?? "Kittum could not read the published version.");
     } catch (e) {
       setError(failure(e, "Kittum could not load the published version."));
     }
@@ -391,7 +408,7 @@ export function Assistant({
         onDescribe={model?.configured ? () => setDescribing(true) : null}
       />
       <FormView
-        key={working ? "working" : (current?.id ?? "new")}
+        key={working?.base?.id ?? current?.id ?? "new"}
         working={working}
         shown={shown}
         revisions={revisions}
@@ -592,8 +609,11 @@ function Waiting({
         so far.
       </p>
       <p className="mt-0.5 text-xs text-ink-2">
-        A model that reasons at length can take up to 10 minutes. Kittum then checks the answer and
-        sends any problems back to the model, at most twice. You can leave this page open and wait.
+        {model?.timeout_seconds
+          ? `Kittum waits up to ${Math.round(model.timeout_seconds / 60)} minutes for each answer. `
+          : ""}
+        Kittum checks the answer and sends any problems back to the model, at most twice. You can
+        leave this page open and wait.
       </p>
     </div>
   );
@@ -735,6 +755,9 @@ function AiTag({ label }: { label: string }) {
     </button>
   );
 }
+
+/** The AI mark beside a choice a model made, while its value is still the model's. */
+const Mark = ({ text }: { text: string | null }) => (text ? <AiTag label={text} /> : null);
 
 /** Who wrote a field, as the AI mark says it: the model, and the person who accepted it. */
 function useMarkLabel(
@@ -890,7 +913,7 @@ function FormView({
   const seconds = useElapsed(improving !== null);
   const d = shown.doc;
   const base = shown.base;
-  const lang = d.default_language;
+  const lang = d.default_language || "en";
   const t = (text: Localized | undefined) =>
     text ? (text[lang] ?? Object.values(text)[0] ?? "") : "";
   const label = useMarkLabel(revisions, people);
@@ -1200,8 +1223,8 @@ function FormView({
                     comparators: [],
                   },
                 ];
-                const first = topicAt(x, 0);
-                first.scopes = [...first.scopes, id];
+                const first = x.search_topics[0] as Mutable<Topic> | undefined;
+                if (first) first.scopes = [...first.scopes, id];
               })
             }
           >
@@ -1272,16 +1295,26 @@ function FormView({
                   value: t(topic.label),
                   onChange: (v) => editTopic((x) => (x.label = localized(x.label, v))),
                 })}
-                <label className="grid gap-1">
-                  <span className="text-xs font-semibold text-ink-2">Screening mode</span>
+                <div className="grid gap-1" data-testid="mode">
+                  <span className="flex items-center gap-1.5">
+                    <label
+                      htmlFor={`mode-${topic.id}`}
+                      className="text-xs font-semibold text-ink-2"
+                    >
+                      Screening mode
+                    </label>
+                    <Mark text={label(marks(`search_topics[${topic.id}].mode`))} />
+                  </span>
                   <Select
-                    value={topic.mode}
+                    id={`mode-${topic.id}`}
+                    value={topic.mode ?? ""}
                     disabled={suggestion}
                     onChange={(e) => {
                       const mode = e.currentTarget.value;
                       editTopic((x) => (x.mode = mode));
                     }}
                   >
+                    {topic.mode ? null : <option value="">Choose a mode</option>}
                     {MODES.map(([value, text]) => (
                       <option key={value} value={value}>
                         {text}
@@ -1295,7 +1328,7 @@ function FormView({
                       issuesAt(issues, `${tat}.stopping`),
                     )}
                   />
-                </label>
+                </div>
               </div>
 
               <h3 className="mt-6 text-md font-semibold">Sources and their queries</h3>
@@ -1479,9 +1512,10 @@ function FormView({
                           <option value="include">Inclusion</option>
                           <option value="exclude">Exclusion</option>
                         </Select>
+                        <Mark text={label(marks(`${part}.polarity`))} />
                         <Select
                           aria-label={`Part of the question for criterion ${c.id}`}
-                          value={c.slot}
+                          value={c.slot ?? ""}
                           disabled={suggestion}
                           onChange={(e) => {
                             const v = e.currentTarget.value;
@@ -1489,12 +1523,14 @@ function FormView({
                           }}
                           className="!w-auto !py-0.5 !text-xs"
                         >
+                          {c.slot ? null : <option value="">Choose a part</option>}
                           {Object.entries(SLOTS).map(([value, text]) => (
                             <option key={value} value={value}>
                               {text}
                             </option>
                           ))}
                         </Select>
+                        <Mark text={label(marks(`${part}.slot`))} />
                         <span className="text-ink-2">Decided at</span>
                         {STAGES.map(([stage, text]) => (
                           <label key={stage} className="inline-flex items-center gap-1">
@@ -1516,6 +1552,7 @@ function FormView({
                             {text}
                           </label>
                         ))}
+                        <Mark text={label(marks(`${part}.decidable_at`))} />
                         <span className="ml-auto flex items-center gap-2">
                           {ask(part, `criterion ${c.id}`)}
                           {suggestion || topic.criteria.length < 2 ? null : (

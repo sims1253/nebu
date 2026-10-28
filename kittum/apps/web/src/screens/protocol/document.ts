@@ -182,3 +182,94 @@ export const partName = (doc: Doc, part: string) => {
   const q = doc.questions.find((x) => `questions[${x.id}]` === part);
   return q ? `question ${q.id}` : part;
 };
+
+type Json = Record<string, unknown>;
+const isObject = (v: unknown): v is Json =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
+
+/** A source from the YAML view as the form can show it: the lists and texts the schema lets a
+ * protocol leave out filled in empty, everything else kept as it is. The compiler judges the
+ * rest when the lead saves. Returns why not when the shape is one the form cannot show, such as
+ * a list given as text or an entry without an ID. */
+export const toDoc = (source: unknown): { readonly doc: Doc } | { readonly problem: string } => {
+  const problems: string[] = [];
+  const list = (owner: Json, key: string, at: string): Json[] => {
+    const value = owner[key] ?? [];
+    if (!Array.isArray(value)) {
+      problems.push(`${at}${key} must be a list.`);
+      return [];
+    }
+    return value.map((item, i) => {
+      if (!isObject(item)) problems.push(`${at}${key}[${i}] must be a mapping of fields.`);
+      return isObject(item) ? item : {};
+    });
+  };
+  const text = (owner: Json, key: string, at: string) => {
+    const value = owner[key] ?? {};
+    if (!isObject(value)) problems.push(`${at}${key} must give the text per language, as en: ...`);
+    return isObject(value) ? value : {};
+  };
+  const values = (owner: Json, key: string, at: string): unknown[] => {
+    const value = owner[key] ?? [];
+    if (!Array.isArray(value)) problems.push(`${at}${key} must be a list.`);
+    return Array.isArray(value) ? value : [];
+  };
+  const withId = (item: Json, at: string) => {
+    if (typeof item["id"] !== "string" || !item["id"])
+      problems.push(`${at} needs an id for the form to show it.`);
+  };
+  if (!isObject(source)) return { problem: "The protocol must be a mapping of fields." };
+  const doc: Json = {
+    ...source,
+    title: text(source, "title", ""),
+    questions: list(source, "questions", "").map((q, i) => {
+      const at = `questions[${i}]`;
+      withId(q, at);
+      return {
+        ...q,
+        label: text(q, "label", `${at}.`),
+        population: text(q, "population", `${at}.`),
+        intervention: text(q, "intervention", `${at}.`),
+        comparators: list(q, "comparators", `${at}.`).map((c, j) => {
+          withId(c, `${at}.comparators[${j}]`);
+          return { ...c, text: text(c, "text", `${at}.comparators[${j}].`) };
+        }),
+      };
+    }),
+    outcomes: list(source, "outcomes", "").map((o, i) => {
+      withId(o, `outcomes[${i}]`);
+      return { ...o, name: text(o, "name", `outcomes[${i}].`) };
+    }),
+    search_topics: list(source, "search_topics", "").map((t, i) => {
+      const at = `search_topics[${i}]`;
+      withId(t, at);
+      const plan = t["source_plan"] ?? {};
+      if (!isObject(plan)) problems.push(`${at}.source_plan must be a mapping of fields.`);
+      const sourcePlan = isObject(plan) ? plan : {};
+      return {
+        ...t,
+        label: text(t, "label", `${at}.`),
+        scopes: values(t, "scopes", `${at}.`),
+        criteria: list(t, "criteria", `${at}.`).map((c, j) => {
+          const cat = `${at}.criteria[${j}]`;
+          withId(c, cat);
+          return {
+            polarity: "include",
+            ...c,
+            text: text(c, "text", `${cat}.`),
+            decidable_at: values(c, "decidable_at", `${cat}.`),
+            applies_to: values(c, "applies_to", `${cat}.`),
+          };
+        }),
+        source_plan: {
+          ...sourcePlan,
+          sources: list(sourcePlan, "sources", `${at}.source_plan.`).map((s, j) => {
+            withId(s, `${at}.source_plan.sources[${j}]`);
+            return { name: "", ...s };
+          }),
+        },
+      };
+    }),
+  };
+  return problems.length ? { problem: problems.join(" ") } : { doc: doc as unknown as Doc };
+};

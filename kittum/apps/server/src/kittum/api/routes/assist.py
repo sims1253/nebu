@@ -63,6 +63,8 @@ class AssistModel(Record):
     recipe_id: str | None = None
     endpoint: str | None = None
     """Where the model server is; None for recorded answers."""
+    timeout_seconds: float | None = None
+    """How long Kittum waits for one answer; None for recorded answers."""
 
 
 class CountRequest(Record):
@@ -109,6 +111,7 @@ def model(project_id: Id, viewer: Viewer, ctx: Context) -> AssistModel:
         configured=True,
         recipe_id=ctx.assistant.recipe_id,
         endpoint=getattr(ctx.assistant.backend, "endpoint", None),
+        timeout_seconds=getattr(ctx.assistant.backend, "timeout", None),
     )
 
 
