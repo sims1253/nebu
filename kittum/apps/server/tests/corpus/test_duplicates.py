@@ -378,3 +378,82 @@ def test_a_bulk_and_a_single_confirmation_at_once_neither_deadlock_nor_confirm_t
     latest = client.get(f"{base}/corpus/revisions/latest", headers=as_lead).json()["revision"]
     counts = client.get(f"{base}/corpus/revisions/{latest['id']}/counts").json()
     assert counts["duplicates_removed"] == 1
+
+
+def test_a_split_keeps_the_reasons_for_the_records_it_leaves_together(
+    api: tuple[TestClient, str, str],
+) -> None:
+    """A split takes its own records out of each link and nothing else. A record split out of
+    its report keeps its study, and the reason it joined it. Records a middle record joined into
+    one study stay one study when it leaves, with both reasons that held them."""
+    client, project, lead = api
+    base = f"/api/projects/{project}"
+    as_lead = {"X-Kittum-Reviewer": lead}
+    for source, platform, strategy in SEARCHES:
+        plan = {"topic_id": "nrt", "source": source, "platform": platform, "strategy": strategy}
+        assert client.post(f"{base}/search/run", json={"plan": plan, "actor_id": lead}).is_success
+    assert client.post(f"{base}/corpus/ingest", json={"actor_id": lead}).status_code == 201
+
+    def view() -> dict[str, Any]:
+        return client.get(f"{base}/corpus/revisions/latest", headers=as_lead).json()
+
+    def post(path: str, **body: Any) -> None:
+        body |= {"revision_id": view()["revision"]["id"], "actor_id": lead}
+        resp = client.post(f"{base}/corpus/{path}", json=body)
+        assert resp.status_code == 200, resp.text
+
+    post("confirm-exact")
+    records = {
+        (r["source"], r["provider_record_id"]): r["occurrence_id"]
+        for report in view()["reports"]
+        for r in report["records"]
+    }
+    ecig_pubmed = records[("pubmed", "38354139")]
+    ecig_epmc = records[("europepmc", "MED:38354139")]
+
+    def reasons(occurrence: str) -> list[tuple[str, list[str], list[str]]]:
+        """The links that name a record: relation, evidence, and the records they hold."""
+        return sorted(
+            (link["relation"], link["evidence"], sorted(link["occurrence_ids"]))
+            for link in view()["links"]
+            if occurrence in link["occurrence_ids"]
+        )
+
+    def study_of(occurrence: str) -> str:
+        return next(
+            r["study_id"]
+            for r in view()["reports"]
+            if occurrence in {x["occurrence_id"] for x in r["records"]}
+        )
+
+    # P1: the Europe PMC copy leaves the paper's report but not its study. The DOI that made it
+    # a duplicate still explains why it is in the study.
+    post("split", occurrence_ids=[ecig_epmc], level="report")
+    assert study_of(ecig_epmc) == study_of(ecig_pubmed)
+    assert reasons(ecig_epmc) == [
+        ("same_study", ["Same DOI 10.1056/nejmoa2308815"], sorted([ecig_pubmed, ecig_epmc]))
+    ]
+
+    # P2: the paper and another trial's paper, each joined to the registry entry by a reason of
+    # its own. The registry entry leaves; the two papers stay one study, and both reasons stay.
+    registry = records[("ctgov", "NCT03589989")]
+    other = records[("pubmed", "38482972")]
+    post(
+        "merge",
+        occurrence_ids=[ecig_pubmed, registry],
+        relation="same_study",
+        reason="Same NCT ID NCT-A",
+    )
+    post(
+        "merge", occurrence_ids=[registry, other], relation="same_study", reason="Same NCT ID NCT-B"
+    )
+    post("split", occurrence_ids=[registry], level="study")
+    assert study_of(other) == study_of(ecig_pubmed) != study_of(registry)
+    held = [
+        (link["evidence"], set(link["occurrence_ids"]))
+        for link in view()["links"]
+        if link["linked_by"] == "merged_by_hand"
+    ]
+    assert sorted(e for e, _ in held) == [["Same NCT ID NCT-A"], ["Same NCT ID NCT-B"]]
+    assert all({ecig_pubmed, other} <= ids and registry not in ids for _, ids in held)
+    assert reasons(registry) == []

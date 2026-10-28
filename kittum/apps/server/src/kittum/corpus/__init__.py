@@ -551,10 +551,10 @@ def searches(tx: Tx, project_id: Id) -> list[CorpusSearch]:
 def links(tx: Tx, project_id: Id, revision_id: Id, *, ledger: Ledger) -> list[CorpusLink]:
     """Why the records of an identity revision that share a report or a study are together: each
     confirmation and merge by hand on the way to the revision whose records are still together.
-    A split undoes, for good, every earlier link it took records out of: a later merge of the same
-    records shows only its own reason. A link whose records were split in part keeps the records
-    still together, if they still make it: two records of a report, or records of two reports of
-    a study."""
+    A split takes the records it moved out of every earlier link for good, so a later merge of the
+    same records shows only its own reason (see `_after_split` for what it leaves). A link keeps
+    the records still together if they still make it: two records of a report, or records of two
+    reports of a study."""
     with tx.cursor() as cur:
         chain: list[dict[str, Any]] = []
         at: Id | None = revision_id
@@ -586,7 +586,11 @@ def links(tx: Tx, project_id: Id, revision_id: Id, *, ledger: Ledger) -> list[Co
             continue
         payload = event.payload
         if event.type == "corpus.split":
-            found = _still_together(found, _links_by_occurrence(tx, project_id, revision["id"]))
+            found = _after_split(
+                found,
+                _links_by_occurrence(tx, project_id, revision["parent_id"]),
+                _links_by_occurrence(tx, project_id, revision["id"]),
+            )
             continue
         if event.type not in ("corpus.confirmed", "corpus.merged"):
             continue
@@ -612,6 +616,58 @@ def links(tx: Tx, project_id: Id, revision_id: Id, *, ledger: Ledger) -> list[Co
 def _links_by_occurrence(tx: Tx, project_id: Id, revision_id: Id) -> dict[Id, dict[str, Any]]:
     with tx.cursor() as cur:
         return {row["occurrence_id"]: row for row in _parent_links(cur, project_id, revision_id)}
+
+
+def _after_split(
+    found: list[CorpusLink],
+    before: Mapping[Id, Mapping[str, Any]],
+    after: Mapping[Id, Mapping[str, Any]],
+) -> list[CorpusLink]:
+    """The links a split leaves. It takes out of each link only the records it moved at the
+    link's level (out of a report, or out of a study). A record moved out of a report but kept in
+    its study keeps the report link's reason as a study reason. Links that shared a moved record
+    keep their reasons for the records they still hold together between them: two papers each
+    joined to one registry entry stay one study when the entry leaves."""
+    kept: list[CorpusLink] = []
+    touched: list[tuple[CorpusLink, set[Id], str]] = []
+    for link in found:
+        level = "study_id" if link.relation == "same_study" else "report_id"
+        moved = {
+            o
+            for o in link.occurrence_ids
+            if o in before and o in after and before[o][level] != after[o][level]
+        }
+        if not moved:
+            kept.append(link)
+            continue
+        if level == "report_id":
+            kept.append(link.model_copy(update={"relation": "same_study"}))
+        touched.append((link, set(link.occurrence_ids) - moved, level))
+    # Touched links of one level that shared a record keep the records they still hold together.
+    while touched:
+        link, remaining, level = touched.pop()
+        component = [(link, remaining)]
+        shared = set(link.occurrence_ids)
+        while joined := [t for t in touched if t[2] == level and shared & set(t[0].occurrence_ids)]:
+            for other in joined:
+                touched.remove(other)
+                component.append((other[0], other[1]))
+                shared |= set(other[0].occurrence_ids)
+        together: dict[Id, set[Id]] = {}
+        for _, rest in component:
+            for oid in rest:
+                if oid in after:
+                    together.setdefault(after[oid][level], set()).add(oid)
+        for group in together.values():
+            holds = {after[o]["report_id"] for o in group} if level == "study_id" else group
+            if len(holds) < 2:
+                continue
+            kept += [
+                each.model_copy(update={"occurrence_ids": tuple(sorted(group))})
+                for each, rest in component
+                if rest & group
+            ]
+    return kept
 
 
 def _still_together(
