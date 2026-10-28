@@ -22,8 +22,8 @@ const when = (iso: string) =>
 
 export function SearchScreen() {
   const { workbench } = useRouteContext({ from: "/p/$projectId" });
-  const { project, me, has } = useProject();
-  const lead = has("lead");
+  const { project, me, seesLeadData } = useProject();
+  const lead = seesLeadData;
   const [executions, setExecutions] = useState<ReadonlyArray<SearchExecution> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState(0);

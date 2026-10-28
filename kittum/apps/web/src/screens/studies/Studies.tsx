@@ -50,8 +50,8 @@ type Target =
 
 export function StudiesScreen() {
   const { workbench } = useRouteContext({ from: "/p/$projectId" });
-  const { project, me, has, labels } = useProject();
-  const lead = has("lead");
+  const { project, me, seesLeadData, labels } = useProject();
+  const lead = seesLeadData;
   const [corpus, setCorpus] = useState<CorpusView | null | undefined>(undefined);
   const [proposals, setProposals] = useState<ReadonlyArray<LinkProposal>>([]);
   const [selected, setSelected] = useState(0);

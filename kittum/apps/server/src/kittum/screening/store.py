@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 from kittum.core import NotFoundError
 from kittum.judge import CriterionVerdict
+from kittum.people import is_lead
 from kittum.protocol import ScreeningMode
 from kittum.screening.rules import Reading
 from kittum.screening.types import (
@@ -19,6 +20,21 @@ from kittum.screening.types import (
 if TYPE_CHECKING:
     from kittum.core import Id
     from kittum.db import Tx
+
+
+def sees_lead_data(tx: Tx, project_id: Id, actor_id: Id) -> bool:
+    """Whether the person may see what only the methods lead sees: every record, a stage's
+    agreement and audit figures, outcomes, and reports. A project lead (`kittum.people`) who
+    screens, audits, or adjudicates no stage of the project. A lead who also screens is a
+    screener first: with the catalogue they could tell the sentinels in their own queue."""
+    if not is_lead(tx, project_id, actor_id):
+        return False
+    takes_part = tx.execute(
+        "select 1 from screening_stage where project_id = %s"
+        " and (%s = any(screeners) or auditor_id = %s or %s = any(adjudicators)) limit 1",
+        (project_id, actor_id, actor_id, actor_id),
+    ).fetchone()
+    return takes_part is None
 
 
 def stage_info(row: dict[str, Any]) -> StageInfo:

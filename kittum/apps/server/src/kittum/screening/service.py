@@ -11,7 +11,6 @@ from psycopg.types.json import Jsonb
 from kittum.core import SystemClock, content_hash, new_id, sha256_hex
 from kittum.judge import ScreeningItem
 from kittum.ledger import EventDraft
-from kittum.people import is_lead
 from kittum.protocol import ScreeningMode, get_version
 from kittum.runs import (
     Command,
@@ -1268,8 +1267,8 @@ class Screening:
     ) -> ScopeStatus:
         """Progress for the viewer. Someone who screens or audits the stage sees only their own
         counts; an adjudicator the progress and their conflicts. The whole stage (its agreement,
-        the audit gauge, and the M3 stop test) is for a methods lead of the project
-        (`kittum.people`) only. Anyone else, another reviewer of the project included, is not
+        the audit gauge, and the M3 stop test) is for a methods lead who takes no part in any
+        stage (`sees_lead_data`). Anyone else, another reviewer of the project included, is not
         assigned."""
         row = store.find_stage(tx, project_id, scope_id, stage, topic_id)
         viewer = tx.execute("select kind from actor where id = %s", (viewer_id,)).fetchone()
@@ -1308,7 +1307,7 @@ class Screening:
                 conflicts=None,
                 metrics=None,
             )
-        if not is_lead(tx, project_id, viewer_id):
+        if not store.sees_lead_data(tx, project_id, viewer_id):
             raise NotAssigned(f"actor {viewer_id} has no part in this stage")
         protocol = self._protocol(tx, project_id, row["protocol_version_id"])
         topic = topic_for(protocol, scope_id, row["topic_id"])

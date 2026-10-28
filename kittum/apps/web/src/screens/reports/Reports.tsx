@@ -32,8 +32,8 @@ const ROWS: ReadonlyArray<readonly [string, string]> = [
 
 export function ReportsScreen() {
   const { workbench } = useRouteContext({ from: "/p/$projectId" });
-  const { project, me, has, scopeLabel } = useProject();
-  const lead = has("lead");
+  const { project, me, seesLeadData, scopeLabel } = useProject();
+  const lead = seesLeadData;
   const caller = { projectId: project.id, as: me.actor_id };
   const [flows, setFlows] = useState<ReadonlyArray<{ flow: Flow; svg: string | null }> | null>(
     null,

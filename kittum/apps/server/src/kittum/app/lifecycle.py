@@ -41,6 +41,7 @@ from kittum.screening import (
     Sentinel,
     StageInfo,
     StageSpec,
+    sees_lead_data,
     topic_for,
 )
 from kittum.search import list_executions
@@ -512,9 +513,10 @@ def open_screening(
 
 
 def require_lead(tx: Tx, project_id: Id, actor_id: Id) -> None:
-    """Refuse reads of the whole catalogue to anyone but a lead: a reviewer who could list every
-    record could tell which records in their queue are sentinels by their absence."""
-    if not is_lead(tx, project_id, actor_id):
+    """Refuse reads of the whole catalogue to anyone but a lead who screens nothing
+    (`sees_lead_data`): whoever could list every record and has a queue could tell which records
+    in it are sentinels by their absence."""
+    if not sees_lead_data(tx, project_id, actor_id):
         raise NotLead(f"only the project's methods lead may read this; {actor_id} is not one")
 
 
@@ -522,7 +524,7 @@ def progress(tx: Tx, project_id: Id, viewer_id: Id, screening: Screening) -> Pro
     """Each stage the viewer has a part in, as `Screening.status` shows it to them, and, for the
     methods lead, the identification counts and each record's outcome. Stages the viewer has no
     part in are left out."""
-    lead = is_lead(tx, project_id, viewer_id)
+    lead = sees_lead_data(tx, project_id, viewer_id)
     revision = latest_revision(tx, project_id) if lead else None
     stages = []
     for info in screening.stages(tx, project_id):

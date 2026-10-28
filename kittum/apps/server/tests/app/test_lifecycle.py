@@ -9,13 +9,14 @@ whose judge is a different one refuses them before any model call.
 
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
 import pytest
 import yaml
 from fastapi.testclient import TestClient
 
 from kittum.api import AppContext, create_app
-from kittum.app import Judge, job_handlers, judge_config
+from kittum.app import Judge, add_member, job_handlers, judge_config
 from kittum.app.demo import DATA, PROTOCOL, SENTINELS, demo_judge
 from kittum.extraction import JOB_KIND as EXTRACTION_JOB
 from kittum.ledger import PostgresLedger
@@ -142,7 +143,7 @@ def test_a_project_from_nothing_to_an_open_stage(database: Database, tmp_path: P
             backend=other,
         ),
     )
-    assert set(job_handlers(stranger)) == {JUDGE_JOB}  # no model server, so no extraction
+    assert set(job_handlers(stranger)) == {JUDGE_JOB}  # no job queue, so no extraction
     with_models = replace(
         stranger,
         backends={"qwen3.5-4b-ollama": other},
@@ -224,7 +225,30 @@ def test_a_project_from_nothing_to_an_open_stage(database: Database, tmp_path: P
     )
     assert downloaded["records_identified"] == 10 and downloaded["records_awaiting_screening"] == 10
 
+    # A lead who also screens a stage (here the auditor, made a lead too) is a screener first:
+    # with the catalogue or the counts, they could tell the sentinels in their own queue.
+    auditor = people["Rita Nunes"]
+    with database.transaction() as tx:
+        add_member(
+            tx,
+            pid,
+            display_name="Rita Nunes",
+            roles=("lead",),
+            added_by=lead,
+            ledger=ctx.require_ledger(),
+            actor_id=UUID(auditor),
+        )
+    as_auditor = {"X-Kittum-Reviewer": auditor}
+    for path in catalogue:
+        read = client.get(f"/api/projects/{pid}/{path}", headers=as_auditor)
+        assert read.status_code == 403, path
+    hers = ok(client.get(f"/api/projects/{pid}/progress", headers=as_auditor))
+    assert hers["identification"] is None
+    assert [s["status"]["view"] for s in hers["stages"]] == ["reviewer"]
+    assert hers["stages"][0]["outcomes"] is None
+    assert client.post(render, json={"actor_id": auditor}).status_code == 403
+
     ledger = ok(client.get(f"/api/projects/{pid}/ledger/verify"))
     assert ledger["verify"]["ok"]
-    assert ledger["by_type"]["project.member_added"] == 5
+    assert ledger["by_type"]["project.member_added"] == 6  # five people and a second role
     assert ledger["by_type"]["judge.verdict_recorded"] == 11

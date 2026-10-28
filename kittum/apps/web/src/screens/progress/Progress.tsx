@@ -23,12 +23,12 @@ const STAGE_LABEL = { title_abstract: "Title and abstract", full_text: "Full tex
 export function ProgressScreen() {
   const { workbench } = useRouteContext({ from: "/p/$projectId" });
   const router = useRouter();
-  const { project, me, has, labels, scopeLabel } = useProject();
+  const { project, me, seesLeadData, labels, scopeLabel } = useProject();
   const [progress, setProgress] = useState<Progress | null>(null);
   const [ledger, setLedger] = useState<LedgerSummary | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
-  const lead = has("lead");
+  const lead = seesLeadData;
 
   useEffect(() => {
     let live = true;

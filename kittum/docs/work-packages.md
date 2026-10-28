@@ -697,15 +697,17 @@ Modules `kittum.api`, `kittum.app`, and `kittum.people`. Needs: the modules it e
 - `kittum serve` serves the API and, with `KITTUM_WEB_DIST` or `--web-dist`, the built workbench
   (files under `/assets` immutable, `index.html` for every other non-API path).
   `kittum worker` runs a `Worker` with every registered job kind (`register_job_handler(kind,
-  factory)`): the screening judge, and extraction's `run_handler` once a model server is
-  configured. A judge worker
+  factory)`): the screening judge, and extraction's `run_handler`. Without a model server an
+  extraction run takes the Janus path; one that asks for the agent gets LLM proposals recorded
+  as errors that name the missing backend. A judge worker
   refuses, before any model call, the jobs of a stage that names another judge config.
 - `kittum.people` owns who works on a project and in which roles (lead, reviewer, auditor,
-  adjudicator; migration `20261029040000_app_projects.sql`, table `project_member`). `is_lead`
-  decides who sees the whole review: `Screening.status` gives a stage's whole view only to a
-  project lead (anyone else outside the stage gets 404), `report.require_lead` refuses anyone but
-  a lead, and the catalogue routes below answer 403 to anyone else. Screening and report may
-  import it (the `ALLOWED` table).
+  adjudicator; migration `20261029040000_app_projects.sql`, table `project_member`); screening
+  and report may import it (the `ALLOWED` table). `kittum.screening.sees_lead_data` is the one
+  rule for what only the lead sees: a project lead who screens, audits, or adjudicates no stage.
+  `Screening.status`'s whole-stage view (anyone else outside the stage gets 404),
+  `report.require_lead`, the catalogue routes below (403), and progress's identification counts
+  and outcomes all use it, so a lead who also screens is a screener first.
 - The project lifecycle (`kittum.app.lifecycle`), each step a function on the caller's
   transaction with a ledger event, a route, and a `kittum project` command: create a project and
   its lead, add people with roles, publish a protocol, run or import
@@ -752,7 +754,9 @@ Modules `kittum.api`, `kittum.app`, and `kittum.people`. Needs: the modules it e
   database paired with another store used to fail on read).
 - Tests: `tests/app/test_lifecycle.py` drives a project from nothing to an open stage over HTTP,
   with the judge-mismatch refusal, and a third reviewer outside the stage who gets no catalogue,
-  no stage, and no reports; `tests/app/test_cli.py` sets a review up from the command line; the
+  no stage, and no reports, and a lead who also audits and gets none of the lead's data either;
+  `tests/app/test_worker.py` runs extraction jobs with no model server;
+  `tests/app/test_cli.py` sets a review up from the command line; the
   end-to-end journey (WP-16) covers the rest on the real stack.
 
 Open:

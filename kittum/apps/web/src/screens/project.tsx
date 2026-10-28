@@ -95,6 +95,16 @@ function compute(state: ProjectState) {
       (s) =>
         s.stage === stage && (s.screeners.includes(me.actor_id) || s.auditor_id === me.actor_id),
     ) ?? null;
+  /** The server's rule: a lead who screens, audits, or adjudicates no stage sees what only
+   * the lead sees (every record, the stages' figures, the reports). */
+  const seesLeadData =
+    has("lead") &&
+    !state.project.stages.some(
+      (s) =>
+        s.screeners.includes(me.actor_id) ||
+        s.auditor_id === me.actor_id ||
+        s.adjudicators.includes(me.actor_id),
+    );
   const adjudicatedStages = state.project.stages.filter((s) =>
     s.adjudicators.includes(me.actor_id),
   );
@@ -111,6 +121,7 @@ function compute(state: ProjectState) {
     labels,
     scopes,
     has,
+    seesLeadData,
     screeningStage,
     adjudicatedStages,
     scopeLabel,
