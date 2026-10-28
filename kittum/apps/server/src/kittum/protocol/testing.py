@@ -6,7 +6,8 @@ is a human actor, because it has no actor table, so it trusts the ID.
 
 from typing import TYPE_CHECKING
 
-from kittum.core import Clock, Id, NotFoundError, SystemClock, new_id
+from kittum.core import Clock, Id, KittumError, NotFoundError, SystemClock, new_id
+from kittum.protocol.compiler import ProtocolVersion, protocol_hash
 from kittum.protocol.store import (
     StoredProtocol,
     check_publishable,
@@ -17,7 +18,6 @@ from kittum.protocol.store import (
 if TYPE_CHECKING:
     from kittum.db import Tx
     from kittum.ledger import Ledger
-    from kittum.protocol.compiler import ProtocolVersion
 
 
 class InMemoryProtocolStore:
@@ -40,7 +40,8 @@ class InMemoryProtocolStore:
             project_id=project_id,
             parent_id=parent.id if parent else None,
             status="draft",
-            version=version,
+            # A snapshot validated from JSON, as the Postgres store keeps the document.
+            version=ProtocolVersion.model_validate(version.model_dump(mode="json")),
             created_at=self._clock.now(),
         )
         self._versions[stored.id] = stored
@@ -61,6 +62,8 @@ class InMemoryProtocolStore:
         stored = self._versions.get(version_id)
         if stored is None or stored.project_id != project_id:
             raise NotFoundError(f"protocol version {version_id} not found in project {project_id}")
+        if protocol_hash(stored.version.protocol) != stored.version.content_hash:
+            raise KittumError(f"protocol version {version_id} does not match its content hash")
         return stored
 
     def list_versions(self, tx: Tx, project_id: Id) -> list[StoredProtocol]:

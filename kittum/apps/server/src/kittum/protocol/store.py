@@ -172,7 +172,15 @@ def publish(
     ledger: Ledger,
     reason: str | None = None,
 ) -> StoredProtocol:
-    """Freeze a draft with a human approval and append `protocol.published`."""
+    """Freeze a draft with a human approval and append `protocol.published`.
+
+    Publications serialize per project, so the version compared against is the one in force when
+    this one commits: two concurrent publications cannot both skip the mode-change reason.
+    """
+    tx.execute(
+        "select pg_advisory_xact_lock(hashtext('kittum.protocol.publish'), hashtext(%s))",
+        (str(project_id),),
+    )
     row = tx.execute(
         f"select {_COLUMNS} from protocol_version where id = %s and project_id = %s for update",
         (version_id, project_id),

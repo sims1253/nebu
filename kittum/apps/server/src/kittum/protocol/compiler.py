@@ -16,6 +16,7 @@ author can find it.
 import re
 from collections import Counter
 from collections.abc import Iterator, Mapping
+from decimal import Decimal
 from typing import Any
 
 import yaml
@@ -98,7 +99,7 @@ def compile(
                 m.model_dump(mode="json") for m in profile.default_effect_modifiers
             ]
 
-    issues += _resolve_topic_scopes(raw)
+    _resolve_topic_scopes(raw)
     try:
         protocol = ReviewProtocol.model_validate(raw)
     except ValidationError as e:
@@ -175,7 +176,14 @@ def _issues_from_pydantic(
     error: ValidationError, prefix: tuple[str | int, ...] = ()
 ) -> list[ProtocolIssue]:
     issues = []
-    for err in error.errors():
+    errors = error.errors()
+    nested = [tuple(e["loc"]) for e in errors]
+    for err in errors:
+        here = tuple(err["loc"])
+        if err["type"] == "too_short" and any(
+            len(loc) > len(here) and loc[: len(here)] == here for loc in nested
+        ):
+            continue  # a container is "too short" only because an item inside it failed
         loc = [p for p in err["loc"] if not (isinstance(p, str) and p.startswith("function-"))]
         message = err["msg"]
         if err["type"] not in {"missing", "extra_forbidden"} and "input" in err:
@@ -190,59 +198,42 @@ def _issues_from_pydantic(
 # Scope resolution
 
 
-def _resolve_topic_scopes(raw: dict[str, Any]) -> list[ProtocolIssue]:
-    """Let authors name a topic's scopes by question ID. Expands each ID into the full `Scope`.
+def _sequence(value: Any) -> list[Any] | tuple[Any, ...] | None:
+    return value if isinstance(value, list | tuple) else None
 
-    A full scope object (as a dumped protocol contains) is checked against the question instead,
-    so `compile(version.protocol.model_dump())` round-trips.
+
+def _resolve_topic_scopes(raw: dict[str, Any]) -> None:
+    """Let authors name a topic's scopes by question ID: expands each ID into a `Scope` object.
+
+    This is a convenience only. Malformed input is left for schema validation to report, and
+    `_check_topic` checks every scope against its question after parsing, whatever the source
+    looked like.
     """
-    issues: list[ProtocolIssue] = []
     lang = raw.get("default_language")
-    declared: dict[str, dict[str, str]] = {}
-    for question in raw.get("questions") or []:
+    labels: dict[str, str] = {}
+    for question in _sequence(raw.get("questions")) or ():
         if isinstance(question, Mapping) and isinstance(question.get("id"), str):
             label = question.get("label")
-            text = label.get(lang) if isinstance(label, Mapping) else None
-            declared[question["id"]] = {
-                "id": question["id"],
-                "label": text if isinstance(text, str) else "",
-                "kind": "question",
-            }
-    topics = raw.get("search_topics")
-    if not isinstance(topics, list):
-        return issues
+            text = label.get(lang) if isinstance(label, Mapping) and isinstance(lang, str) else None
+            labels[question["id"]] = text if isinstance(text, str) else ""
+    topics = _sequence(raw.get("search_topics"))
+    if topics is None:
+        return
     new_topics: list[Any] = []
-    for ti, topic in enumerate(topics):
-        if isinstance(topic, Mapping) and isinstance(topic.get("scopes"), list):
-            topic = dict(topic)
-            resolved: list[Any] = []
-            for si, scope in enumerate(topic["scopes"]):
-                here = path_of("search_topics", ti, "scopes", si)
-                scope_id = scope.get("id") if isinstance(scope, Mapping) else scope
-                if not isinstance(scope_id, str):
-                    resolved.append(scope)
-                    continue
-                if scope_id not in declared:
-                    known = ", ".join(declared) or "none"
-                    issues.append(
-                        ProtocolIssue(
-                            path=here,
-                            message=f"unknown scope {scope_id!r}; a topic covers review "
-                            f"questions ({known})",
-                        )
-                    )
-                    continue
-                if isinstance(scope, Mapping) and dict(scope) != declared[scope_id]:
-                    issues.append(
-                        ProtocolIssue(
-                            path=here, message=f"scope {scope_id!r} does not match its question"
-                        )
-                    )
-                resolved.append(declared[scope_id])
-            topic["scopes"] = resolved
+    for topic in topics:
+        scopes = _sequence(topic.get("scopes")) if isinstance(topic, Mapping) else None
+        if scopes is not None:
+            topic = {
+                **topic,
+                "scopes": [
+                    {"id": s, "label": labels.get(s, ""), "kind": "question"}
+                    if isinstance(s, str)
+                    else s
+                    for s in scopes
+                ],
+            }
         new_topics.append(topic)
     raw["search_topics"] = new_topics
-    return issues
 
 
 # Core cross-checks
@@ -322,6 +313,7 @@ def _cross_check(protocol: ReviewProtocol) -> list[ProtocolIssue]:
         (path_of("search_topics", i, "id"), t.id) for i, t in enumerate(protocol.search_topics)
     ]
     issues += _duplicates(scope_ids, "scope ID")
+    questions = {q.id: q.label.get(lang, "") for q in protocol.questions}
     criterion_ids: list[tuple[str, str]] = []
     covered: set[str] = set()
     for ti, topic in enumerate(protocol.search_topics):
@@ -330,7 +322,7 @@ def _cross_check(protocol: ReviewProtocol) -> list[ProtocolIssue]:
         criterion_ids += [
             (path_of(*here, "criteria", ci, "id"), c.id) for ci, c in enumerate(topic.criteria)
         ]
-        issues += _check_topic(topic, here)
+        issues += _check_topic(topic, here, questions)
     issues += _duplicates(criterion_ids, "criterion ID")
     for qi, question in enumerate(protocol.questions):
         if question.id not in covered:
@@ -344,18 +336,22 @@ def _cross_check(protocol: ReviewProtocol) -> list[ProtocolIssue]:
     return issues
 
 
-def _check_topic(topic: SearchTopic, here: tuple[str | int, ...]) -> list[ProtocolIssue]:
+def _check_topic(
+    topic: SearchTopic, here: tuple[str | int, ...], questions: dict[str, str]
+) -> list[ProtocolIssue]:
+    """`questions` maps each question ID to its label in the default language."""
     issues = _duplicates(
         [(path_of(*here, "scopes", si), s.id) for si, s in enumerate(topic.scopes)], "scope"
     )
     for si, scope in enumerate(topic.scopes):
-        if scope.kind != "question":
-            issues.append(
-                ProtocolIssue(
-                    path=path_of(*here, "scopes", si),
-                    message="a topic's scopes are review questions",
-                )
-            )
+        path = path_of(*here, "scopes", si)
+        if scope.id not in questions:
+            known = ", ".join(questions) or "none"
+            message = f"unknown scope {scope.id!r}; a topic covers review questions ({known})"
+            issues.append(ProtocolIssue(path=path, message=message))
+        elif scope.kind != "question" or scope.label != questions[scope.id]:
+            message = f"scope {scope.id!r} does not match its question"
+            issues.append(ProtocolIssue(path=path, message=message))
     valid_targets = {s.id for s in topic.scopes} | {topic.id}
     screenable: set[str] = set()
     for ci, criterion in enumerate(topic.criteria):
@@ -425,6 +421,27 @@ def _check_mode(topic: SearchTopic, here: tuple[str | int, ...]) -> list[Protoco
             ProtocolIssue(
                 path=path_of(*here, "stopping"),
                 message=f"mode {topic.mode} screens every record; only M3 may have a stopping plan",
+            )
+        )
+    # DESIGN.md, "Screening modes" and "Statistics": M1 adjudicates records the AI includes and
+    # both humans exclude; M2 and M3 audit AI exclusions with a census and a random sample.
+    if not topic.audit.census_of_disagreements:
+        why = (
+            "records the AI includes and both humans exclude go to adjudication"
+            if topic.mode == ScreeningMode.M1
+            else "every human-AI disagreement goes into the audit census"
+        )
+        issues.append(
+            ProtocolIssue(
+                path=path_of(*here, "audit", "census_of_disagreements"),
+                message=f"mode {topic.mode} needs census_of_disagreements: {why}",
+            )
+        )
+    if topic.mode != ScreeningMode.M1 and Decimal(topic.audit.random_audit_percent) == 0:
+        issues.append(
+            ProtocolIssue(
+                path=path_of(*here, "audit", "random_audit_percent"),
+                message=f"mode {topic.mode} needs a random audit of exclusions above 0 percent",
             )
         )
     return issues

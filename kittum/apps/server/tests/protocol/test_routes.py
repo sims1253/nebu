@@ -126,3 +126,46 @@ def test_api_rejects_an_invalid_draft(api: tuple[TestClient, dict[str, Any]]) ->
         "message": "the zVT options are the comparators; list at least one",
     }
     assert client.get(f"/api/projects/{ids['project']}/protocol-versions").json() == []
+
+
+MALFORMED = {
+    "questions is not a list": (
+        lambda s: s.__setitem__("questions", 1),
+        "questions",
+        "Input should be a valid tuple, got 1",
+    ),
+    "default language is a list": (
+        lambda s: s.__setitem__("default_language", ["de"]),
+        "default_language",
+        "Input should be a valid string",
+    ),
+    "a topic is not a mapping": (
+        lambda s: s["search_topics"].append(7),
+        "search_topics[1]",
+        "Input should be a valid dictionary or instance of SearchTopic",
+    ),
+}
+
+
+@pytest.mark.parametrize("case", MALFORMED.keys())
+def test_validate_reports_malformed_sources_as_issues(case: str) -> None:
+    edit, path, message = MALFORMED[case]
+    source = example_source()
+    edit(source)
+    response = TestClient(create_app()).post("/api/protocol/validate", json=source)
+    assert response.status_code == 200
+    report = response.json()
+    assert report["ok"] is False
+    assert any(i["path"] == path and message in i["message"] for i in report["issues"]), report
+
+
+@pytest.mark.postgres
+def test_api_rejects_a_malformed_draft_with_422(api: tuple[TestClient, dict[str, Any]]) -> None:
+    client, ids = api
+    source = example_source()
+    source["questions"] = 1
+    source["default_language"] = ["de"]
+    response = client.post(f"/api/projects/{ids['project']}/protocol-versions", json=source)
+    assert response.status_code == 422
+    paths = {i["path"] for i in response.json()["detail"]["issues"]}
+    assert {"questions", "default_language"} <= paths

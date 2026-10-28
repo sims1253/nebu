@@ -11,6 +11,7 @@ def test_diff_reports_a_changed_criterion_and_a_mode_change() -> None:
     topic["mode"] = "M2"
     topic["mode_rationale"] = {"en": "The update search returned 6,000 records."}
     topic["validation_pack"] = "kittum-validation-pack/2026-10"
+    topic["audit"] = {"sentinel_percent": "1", "random_audit_percent": "10"}
     design = next(c for c in topic["criteria"] if c["id"] == "DESIGN")
     design["text"]["en"] = "Randomized controlled trial, including cluster-randomized trials."
     topic["criteria"] = [c for c in topic["criteria"] if c["id"] != "FOLLOWUP"]

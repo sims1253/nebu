@@ -16,22 +16,83 @@ every tuple is part of the content hash: authors control it, and Kittum never re
 """
 
 from datetime import date
+from decimal import Decimal
 from enum import StrEnum
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, NoReturn
 
-from pydantic import Field, StringConstraints
+from pydantic import AfterValidator, Field, StringConstraints
 
 from kittum.core import Record
 
 type Identifier = Annotated[str, StringConstraints(pattern=r"^[A-Za-z][A-Za-z0-9_.-]{0,63}$")]
 type Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 type LanguageCode = Annotated[str, StringConstraints(pattern=r"^[a-z]{2,3}(-[A-Z]{2})?$")]
-type LocalizedText = Annotated[dict[LanguageCode, Text], Field(min_length=1)]
+
+
+class FrozenDict(dict[str, Any]):
+    """A dict that cannot change, so a frozen record cannot change through a nested mapping."""
+
+    def _immutable(self, *_args: Any, **_kwargs: Any) -> NoReturn:
+        raise TypeError("protocol mappings are immutable")
+
+    __setitem__ = __delitem__ = __ior__ = _immutable
+    clear = pop = popitem = setdefault = update = _immutable
+
+    def __copy__(self) -> FrozenDict:
+        return self
+
+    def __deepcopy__(self, _memo: dict[int, Any]) -> FrozenDict:
+        return self
+
+    def __reduce__(self) -> tuple[type[FrozenDict], tuple[dict[str, Any]]]:
+        return FrozenDict, (dict(self),)
+
+
+def deep_freeze(value: Any) -> Any:
+    """Mappings become `FrozenDict`s and lists become tuples, all the way down."""
+    if isinstance(value, dict):
+        return FrozenDict({k: deep_freeze(v) for k, v in value.items()})
+    if isinstance(value, list | tuple):
+        return tuple(deep_freeze(v) for v in value)
+    return value
+
+
+type LocalizedText = Annotated[
+    dict[LanguageCode, Text], Field(min_length=1), AfterValidator(deep_freeze)
+]
 """Text in one or more languages, e.g. `{en: ..., de: ...}`. It must include the default language."""
-type Percent = Annotated[str, StringConstraints(pattern=r"^(100|[0-9]{1,2})(\.[0-9]+)?$")]
-"""A percentage as an exact decimal string, "0" to "100"."""
-type Extensions = dict[str, Any]
+type Extensions = Annotated[dict[str, Any], AfterValidator(deep_freeze)]
 """Profile-defined fields. Empty unless the protocol names a profile that defines them."""
+
+
+def _percent_between(low: Decimal, high: Decimal, *, low_open: bool, high_open: bool) -> Any:
+    def check(value: str) -> str:
+        number = Decimal(value)
+        if (
+            number < low
+            or number > high
+            or (low_open and number == low)
+            or (high_open and number == high)
+        ):
+            left, right = "(" if low_open else "[", ")" if high_open else "]"
+            raise ValueError(f"must be in {left}{low}, {high}{right}")
+        return value
+
+    return AfterValidator(check)
+
+
+_DECIMAL = StringConstraints(pattern=r"^[0-9]{1,3}(\.[0-9]+)?$")
+_0, _100 = Decimal(0), Decimal(100)
+type Percent = Annotated[str, _DECIMAL, _percent_between(_0, _100, low_open=False, high_open=False)]
+"""A percentage as an exact decimal string, from 0 to 100 inclusive."""
+type PositivePercent = Annotated[
+    str, _DECIMAL, _percent_between(_0, _100, low_open=True, high_open=False)
+]
+"""Above 0, up to 100: a recall target."""
+type ConfidencePercent = Annotated[
+    str, _DECIMAL, _percent_between(_0, _100, low_open=True, high_open=True)
+]
+"""Strictly between 0 and 100: a confidence level."""
 
 type PicoSlot = Literal[
     "population", "intervention", "comparator", "outcome", "study_type", "other"
@@ -169,8 +230,8 @@ class StoppingPlan(Record):
     """When an M3 topic may stop screening in AI order."""
 
     method: Literal["buscar"]  # Callaghan and Müller-Hansen 2020
-    target_recall_percent: Percent
-    confidence_percent: Percent
+    target_recall_percent: PositivePercent
+    confidence_percent: ConfidencePercent
     minimum_screened_percent: Percent
 
 

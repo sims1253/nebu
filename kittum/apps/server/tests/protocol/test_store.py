@@ -1,8 +1,12 @@
+import os
+import threading
+import time
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import psycopg
 import pytest
+from psycopg.rows import dict_row
 
 from kittum.core import FixedClock, Id, KittumError, NotFoundError, new_id
 from kittum.db.testing import null_tx
@@ -14,6 +18,7 @@ from kittum.protocol import (
     ProtocolStore,
     compile,
     get_version,
+    protocol_hash,
     publish,
     save_draft,
 )
@@ -32,6 +37,7 @@ def _switch_to_m2() -> dict:
     topic["mode"] = "M2"
     topic["mode_rationale"] = {"en": "The update search returned 6,000 records."}
     topic["validation_pack"] = "kittum-validation-pack/2026-10"
+    topic["audit"] = {"sentinel_percent": "1", "random_audit_percent": "10"}
     return source
 
 
@@ -94,7 +100,7 @@ def test_example_publishes_into_postgres_with_a_ledger_event(pg: Tx) -> None:
     row = pg.execute(
         "select v.content_hash, e.type, e.payload ->> 'content_hash' as event_hash"
         " from protocol_version v join audit_event e on e.event_id = v.approved_event_id"
-        " where v.project_id = %s order by v.created_at limit 1",
+        " where v.project_id = %s order by v.created_at, v.id limit 1",
         (project,),
     ).fetchone()
     assert row == {
@@ -141,3 +147,81 @@ def test_only_a_human_can_approve(pg: Tx) -> None:
         publish(pg, project, draft.id, system, ledger=SqlLedger())
     with pytest.raises(NotFoundError):
         publish(pg, project, new_id(), system, ledger=SqlLedger())
+
+
+def test_returned_protocols_cannot_change_what_the_store_holds() -> None:
+    clock = FixedClock(datetime(2026, 10, 28, 9, 0, tzinfo=UTC))
+    store = InMemoryProtocolStore(InMemoryLedger(clock), clock)
+    project = new_id()
+    version = compile(example_text())
+    published = store.publish(
+        null_tx(), project, store.save_draft(null_tx(), project, version).id, new_id()
+    )
+
+    with pytest.raises(TypeError, match="immutable"):
+        published.version.protocol.criteria[0].text["en"] = "Children who smoke."
+    with pytest.raises(TypeError, match="immutable"):
+        version.protocol.questions[0].label.update(en="Everyone")
+    with pytest.raises(TypeError, match="immutable"):
+        published.version.protocol.extensions["note"] = "x"
+
+    again = store.get_version(null_tx(), project, published.id)
+    assert again.version.protocol.criteria[0].text["en"] == (
+        "Adults (18 years or older) who smoke tobacco."
+    )
+    assert (
+        protocol_hash(again.version.protocol)
+        == again.version.content_hash
+        == (version.content_hash)
+    )
+
+
+@pytest.mark.postgres
+def test_concurrent_publications_cannot_skip_the_mode_change_reason(pg: Tx) -> None:
+    """B's draft keeps M1. Against the M2 version A is publishing, that is a mode change."""
+    del pg  # skips without a database; the test needs its own committing connections
+    url = os.environ["KITTUM_DATABASE_URL"]
+    ledger = SqlLedger()
+    with psycopg.connect(url, row_factory=dict_row) as setup:
+        project, approver, _ = seed_project(setup)
+        first = save_draft(setup, project, compile(example_text()))
+        publish(setup, project, first.id, approver, ledger=ledger)
+        to_m2 = save_draft(setup, project, compile(_switch_to_m2()))
+        back_to_m1 = example_source()
+        back_to_m1["version_label"] = "0.5"
+        still_m1 = save_draft(setup, project, compile(back_to_m1))
+        setup.commit()
+
+    outcome: list[object] = []
+    with (
+        psycopg.connect(url, row_factory=dict_row) as a,
+        psycopg.connect(url, row_factory=dict_row) as b,
+        psycopg.connect(url, autocommit=True) as monitor,
+    ):
+        publish(a, project, to_m2.id, approver, ledger=ledger, reason="Validation pack approved.")
+
+        def publish_b() -> None:
+            try:
+                outcome.append(publish(b, project, still_m1.id, approver, ledger=ledger))
+                b.commit()
+            except ProtocolStateError as e:
+                outcome.append(e)
+                b.rollback()
+
+        worker = threading.Thread(target=publish_b)
+        worker.start()
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            waiting = monitor.execute(
+                "select 1 from pg_stat_activity where pid = %s and wait_event_type = 'Lock'",
+                (b.info.backend_pid,),
+            ).fetchone()
+            if waiting:
+                break
+            time.sleep(0.02)
+        a.commit()
+        worker.join(timeout=10)
+
+    (result,) = outcome
+    assert isinstance(result, ProtocolStateError)
+    assert "needs a reason (TRIALS M2→M1)" in str(result)

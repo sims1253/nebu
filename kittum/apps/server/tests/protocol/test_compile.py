@@ -82,6 +82,13 @@ def _break(edit: Any) -> ProtocolError:
     return caught.value
 
 
+STOPPING = {
+    "method": "buscar",
+    "target_recall_percent": "95",
+    "confidence_percent": "95",
+    "minimum_screened_percent": "10",
+}
+
 INVALID = {
     "unknown scope in applies_to": (
         lambda s: _criterion(s, "COMP-SINGLE").__setitem__("applies_to", ["nrt-vs-placebo"]),
@@ -225,6 +232,81 @@ INVALID = {
         "profile",
         "unknown profile 'nice'; registered: none",
     ),
+    "M1 without the disagreement census": (
+        lambda s: _topic(s)["audit"].__setitem__("census_of_disagreements", False),
+        "search_topics[0].audit.census_of_disagreements",
+        "mode M1 needs census_of_disagreements: records the AI includes and both humans "
+        "exclude go to adjudication",
+    ),
+    "M2 without the disagreement census": (
+        lambda s: _topic(s).update(
+            mode="M2",
+            mode_rationale={"en": "Large search."},
+            validation_pack="pack-1",
+            audit={"random_audit_percent": "10", "census_of_disagreements": False},
+        ),
+        "search_topics[0].audit.census_of_disagreements",
+        "mode M2 needs census_of_disagreements: every human-AI disagreement goes into the audit "
+        "census",
+    ),
+    "M2 without a random exclusion audit": (
+        lambda s: _topic(s).update(
+            mode="M2", mode_rationale={"en": "Large search."}, validation_pack="pack-1"
+        ),
+        "search_topics[0].audit.random_audit_percent",
+        "mode M2 needs a random audit of exclusions above 0 percent",
+    ),
+    "M3 without a random exclusion audit": (
+        lambda s: _topic(s).update(
+            mode="M3", mode_rationale={"en": "Very large search."}, stopping=dict(STOPPING)
+        ),
+        "search_topics[0].audit.random_audit_percent",
+        "mode M3 needs a random audit of exclusions above 0 percent",
+    ),
+    "M3 stopping plan without a target recall": (
+        lambda s: _topic(s).update(
+            mode="M3",
+            mode_rationale={"en": "Very large search."},
+            audit={"random_audit_percent": "5"},
+            stopping={k: v for k, v in STOPPING.items() if k != "target_recall_percent"},
+        ),
+        "search_topics[0].stopping.target_recall_percent",
+        "Field required",
+    ),
+    "M3 stopping plan without a confidence": (
+        lambda s: _topic(s).update(
+            mode="M3",
+            mode_rationale={"en": "Very large search."},
+            audit={"random_audit_percent": "5"},
+            stopping={k: v for k, v in STOPPING.items() if k != "confidence_percent"},
+        ),
+        "search_topics[0].stopping.confidence_percent",
+        "Field required",
+    ),
+    "scope object in a tuple naming no question": (
+        lambda s: _topic(s).__setitem__(
+            "scopes",
+            (
+                "nrt-vs-control",
+                "combination-vs-single",
+                {"id": "ghost", "label": "Ghost", "kind": "question"},
+            ),
+        ),
+        "search_topics[0].scopes[2]",
+        "unknown scope 'ghost'; a topic covers review questions (nrt-vs-control, "
+        "combination-vs-single)",
+    ),
+    "scope object in a tuple with another label": (
+        lambda s: _topic(s).__setitem__(
+            "scopes",
+            (
+                {"id": "nrt-vs-control", "label": "All smokers", "kind": "question"},
+                "combination-vs-single",
+            ),
+        ),
+        "search_topics[0].scopes[0]",
+        "scope 'nrt-vs-control' does not match its question",
+    ),
 }
 
 
@@ -249,6 +331,7 @@ def test_every_problem_is_reported_at_once() -> None:
         "search_topics[0].criteria[1].applies_to[0]",
         "search_topics[0].mode_rationale",
         "search_topics[0].stopping",
+        "search_topics[0].audit.random_audit_percent",
     }
 
 
@@ -345,3 +428,62 @@ def test_a_profile_validates_its_extensions_vocabularies_and_rules() -> None:
     assert _toy_issues(
         lambda s: s["questions"][1]["extensions"].__setitem__("registration_id", "CRD420")
     ) == [("questions[1].extensions.registration_id", "registration 'CRD420' is used twice")]
+
+
+def test_m3_with_its_stopping_plan_and_audit_compiles() -> None:
+    source = example_source()
+    _topic(source).update(
+        mode="M3",
+        mode_rationale={"en": "Very large search."},
+        stopping=dict(STOPPING),
+        audit={"random_audit_percent": "5"},
+    )
+    assert _compile(source).protocol.search_topics[0].stopping is not None
+
+
+def test_scopes_as_a_tuple_of_ids_resolve_like_a_list() -> None:
+    source = example_source()
+    _topic(source)["scopes"] = tuple(_topic(source)["scopes"])
+    assert _compile(source).content_hash == _compile(example_text()).content_hash
+
+
+PERCENT_EDGES = [
+    ("audit", "sentinel_percent", "0", None),
+    ("audit", "sentinel_percent", "100", None),
+    ("audit", "sentinel_percent", "100.0", None),
+    ("audit", "sentinel_percent", "100.9", "Value error, must be in [0, 100], got '100.9'"),
+    ("audit", "sentinel_percent", "100.0001", "Value error, must be in [0, 100]"),
+    ("audit", "sentinel_percent", "1000", "String should match pattern"),
+    ("audit", "sentinel_percent", "-1", "String should match pattern"),
+    ("stopping", "target_recall_percent", "0", "Value error, must be in (0, 100], got '0'"),
+    ("stopping", "target_recall_percent", "0.1", None),
+    ("stopping", "target_recall_percent", "100", None),
+    ("stopping", "confidence_percent", "0", "Value error, must be in (0, 100)"),
+    ("stopping", "confidence_percent", "99.99", None),
+    ("stopping", "confidence_percent", "100", "Value error, must be in (0, 100), got '100'"),
+    ("stopping", "minimum_screened_percent", "0", None),
+    ("stopping", "minimum_screened_percent", "100.5", "Value error, must be in [0, 100]"),
+]
+
+
+@pytest.mark.parametrize(("part", "field", "value", "error"), PERCENT_EDGES)
+def test_percentages_are_exact_decimals_in_range(
+    part: str, field: str, value: str, error: str | None
+) -> None:
+    source = example_source()
+    topic = _topic(source)
+    topic.update(
+        mode="M3",
+        mode_rationale={"en": "Very large search."},
+        stopping=dict(STOPPING),
+        audit={"random_audit_percent": "5"},
+    )
+    topic[part][field] = value
+    if error is None:
+        _compile(source)
+        return
+    with pytest.raises(ProtocolError) as caught:
+        _compile(source)
+    (issue,) = caught.value.issues
+    assert issue.path == f"search_topics[0].{part}.{field}"
+    assert error in issue.message

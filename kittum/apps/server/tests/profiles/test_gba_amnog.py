@@ -265,6 +265,7 @@ def test_example_publishes_into_postgres_with_a_ledger_event(pg: Tx) -> None:
         mode="M2",
         mode_rationale={"de": "Update-Recherche mit großer Treffermenge."},
         validation_pack="kittum-validation-pack/2026-10",
+        audit={"sentinel_percent": "1", "random_audit_percent": "10"},
     )
     v2 = save_draft(pg, project, _compile(source))
     with pytest.raises(ProtocolStateError, match=r"RCT M1→M2"):
@@ -274,3 +275,14 @@ def test_example_publishes_into_postgres_with_a_ledger_event(pg: Tx) -> None:
         {"topic_id": "RCT", "before": "M1", "after": "M2"}
     ]
     assert ledger.verify(pg, project).ok
+
+
+def test_profile_extensions_are_frozen_all_the_way_down() -> None:
+    protocol = _compile(example_text(NAME)).protocol
+    zvt = protocol.questions[2].extensions["zvt"]
+    with pytest.raises(TypeError, match="immutable"):
+        zvt["nach_aerztlicher_massgabe"] = False
+    with pytest.raises(TypeError, match="immutable"):
+        protocol.extensions["anwendungsgebiete"][0]["questions"] = ["a1"]
+    assert isinstance(zvt["qualifying_comparator_arms"], tuple)
+    assert _compile(protocol.model_dump(mode="json")).protocol == protocol
