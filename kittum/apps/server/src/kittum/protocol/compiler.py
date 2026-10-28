@@ -215,7 +215,7 @@ def _resolve_topic_scopes(raw: dict[str, Any]) -> None:
         if isinstance(question, Mapping) and isinstance(question.get("id"), str):
             label = question.get("label")
             text = label.get(lang) if isinstance(label, Mapping) and isinstance(lang, str) else None
-            labels[question["id"]] = text if isinstance(text, str) else ""
+            labels[question["id"]] = text.strip() if isinstance(text, str) else ""
     topics = _sequence(raw.get("search_topics"))
     if topics is None:
         return

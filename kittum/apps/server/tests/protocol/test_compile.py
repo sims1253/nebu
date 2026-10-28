@@ -447,6 +447,15 @@ def test_scopes_as_a_tuple_of_ids_resolve_like_a_list() -> None:
     assert _compile(source).content_hash == _compile(example_text()).content_hash
 
 
+def test_question_labels_with_surrounding_whitespace_still_resolve_as_scopes() -> None:
+    source = example_source()
+    question = source["questions"][1]
+    lang = source["default_language"]
+    question["label"][lang] = f"  {question['label'][lang]}\n"
+    protocol = _compile(source).protocol
+    assert protocol.search_topics[0].scopes[1].label == "Combination NRT versus a single form"
+
+
 PERCENT_EDGES = [
     ("audit", "sentinel_percent", "0", None),
     ("audit", "sentinel_percent", "100", None),
