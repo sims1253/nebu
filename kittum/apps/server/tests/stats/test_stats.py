@@ -10,6 +10,7 @@ import math
 import random
 
 import pytest
+from scipy.stats import hypergeom
 
 from kittum.stats import (
     Interval,
@@ -342,7 +343,7 @@ def test_elusion_estimate_covers_the_stratified_miss_total() -> None:
         lower=7.0,
         upper=7.0,
         confidence=0.95,
-        method="stratified Horvitz-Thompson with simultaneous one-sided Clopper-Pearson bounds",
+        method="stratified Horvitz-Thompson with simultaneous exact hypergeometric bounds",
     )
 
     rng = random.Random(5)
@@ -368,6 +369,42 @@ def test_elusion_estimate_covers_the_stratified_miss_total() -> None:
 
     assert sum(errors) / len(errors) < 0.2 * truth
     assert covered / len(errors) >= 0.95
+
+
+def test_elusion_upper_bound_inverts_the_hypergeometric() -> None:
+    # Six relevant records in a sample of seven from 137. The binomial bound stops at
+    # 135.9998 and excludes 136, but P(X <= 6 | N=137, K=136, n=7) = 7/137 > 0.05.
+    interval = elusion_estimate((Stratum(population=137, sampled=7, relevant_found=6),))
+    assert interval.upper == 136.0
+    assert hypergeom.cdf(6, 137, 136, 7) > 0.05
+    assert interval.lower < 136.0
+
+
+def test_elusion_bounds_cover_every_small_population() -> None:
+    """Exhaustive one-sided coverage of the hypergeometric inversion, without replacement."""
+
+    alpha = 0.05
+    for population in range(2, 17):
+        for sampled in range(1, population):
+            bounds = {
+                found: elusion_estimate(
+                    (Stratum(population=population, sampled=sampled, relevant_found=found),)
+                )
+                for found in range(0, sampled + 1)
+            }
+            for relevant in range(population + 1):
+                upper_coverage = sum(
+                    hypergeom.pmf(found, population, relevant, sampled)
+                    for found in range(0, min(sampled, relevant) + 1)
+                    if relevant <= bounds[found].upper
+                )
+                lower_coverage = sum(
+                    hypergeom.pmf(found, population, relevant, sampled)
+                    for found in range(0, min(sampled, relevant) + 1)
+                    if relevant >= bounds[found].lower
+                )
+                assert upper_coverage >= 1.0 - alpha - 1e-9, (population, sampled, relevant)
+                assert lower_coverage >= 1.0 - alpha - 1e-9, (population, sampled, relevant)
 
 
 def test_capture_recapture_two_sources_recovers_the_population() -> None:
@@ -411,6 +448,54 @@ def test_capture_recapture_two_sources_recovers_the_population() -> None:
 
     assert sum(errors) / len(errors) < 0.05
     assert covered / len(errors) >= 0.90
+
+
+def test_chapman_interval_handles_sparse_sources() -> None:
+    # Two singleton sources that never overlap: no finite population is excluded, so the
+    # upper end must be unbounded and must cover a population of 100.
+    singleton = capture_recapture({frozenset({"a"}): 1, frozenset({"b"}): 1})
+    assert singleton.estimate == 3.0
+    assert singleton.lower == 2.0
+    assert singleton.upper == math.inf
+
+    # Complete overlap of two singletons used to give a zero-width interval [1, 1].
+    overlap = capture_recapture({frozenset({"a", "b"}): 1})
+    assert overlap.lower == 1.0
+    assert overlap.upper > 1.0
+
+    # At a true population of 100 the two intervals cover in 99% of draws; the old
+    # log-normal interval covered in none of them.
+    coverage = sum(
+        hypergeom.pmf(overlap_count, 100, 1, 1)
+        for overlap_count, interval in ((0, singleton), (1, overlap))
+        if interval.lower <= 100 <= interval.upper
+    )
+    assert coverage >= 0.95
+
+
+def test_chapman_interval_covers_sparse_populations() -> None:
+    """Exhaustively check the exact overlap inversion on small, sparse tables."""
+
+    alpha = 0.05
+    for n1 in range(1, 8):
+        for n2 in range(1, 8):
+            intervals = {
+                overlap: capture_recapture(
+                    {
+                        frozenset({"a"}): n1 - overlap,
+                        frozenset({"b"}): n2 - overlap,
+                        frozenset({"a", "b"}): overlap,
+                    }
+                )
+                for overlap in range(0, min(n1, n2) + 1)
+            }
+            for population in range(max(n1, n2), 31):
+                covered = sum(
+                    hypergeom.pmf(overlap, population, n1, n2)
+                    for overlap, interval in intervals.items()
+                    if interval.lower <= population <= interval.upper
+                )
+                assert covered >= 1.0 - alpha - 1e-9, (n1, n2, population)
 
 
 def test_capture_recapture_three_sources_recovers_the_population() -> None:
@@ -472,6 +557,33 @@ def test_capture_recapture_three_sources_recovers_the_population() -> None:
     assert sum(errors) / len(errors) < 0.02
     assert max(errors) < 0.05
     assert covered / len(errors) >= 0.85
+
+
+def test_three_source_model_rejects_zero_cells() -> None:
+    # All observable cells are 10 except the {a, b}-only cell. That forces a pairwise
+    # interaction onto the boundary; the old code overflowed while forming the interval.
+    counts = {
+        frozenset({"a"}): 10,
+        frozenset({"b"}): 10,
+        frozenset({"c"}): 10,
+        frozenset({"a", "b"}): 0,
+        frozenset({"a", "c"}): 10,
+        frozenset({"b", "c"}): 10,
+        frozenset({"a", "b", "c"}): 10,
+    }
+    with pytest.raises(ValueError, match=r"\{a, b\}"):
+        capture_recapture(counts)
+
+    sources = ("a", "b", "c")
+    for zero_mask in range(1, 8):
+        sparse = {
+            frozenset(
+                source for position, source in enumerate(sources) if mask & (1 << position)
+            ): 0 if mask == zero_mask else 10
+            for mask in range(1, 8)
+        }
+        with pytest.raises(ValueError, match="not estimable"):
+            capture_recapture(sparse)
 
 
 def test_conformal_threshold_reaches_its_coverage() -> None:

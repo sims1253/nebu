@@ -165,18 +165,61 @@ def recall_needed(target_recall: float, *, confidence: float = 0.95, sided: Side
     return max(1, math.ceil(math.log(alpha) / math.log(target_recall)))
 
 
+def _hypergeometric_bounds(
+    population: int, sampled: int, found: int, alpha: float
+) -> tuple[int, int]:
+    """One-sided exact bounds for a relevant count in a finite population.
+
+    Sampling is without replacement, so the sample count is hypergeometric, not binomial. The
+    lower bound is the smallest population count ``K`` whose upper tail
+    ``P(X >= found | N, K, n)`` exceeds ``alpha``; the upper bound is the largest ``K`` whose
+    lower tail ``P(X <= found | N, K, n)`` exceeds ``alpha``. Both are integral and are the
+    finite-population analogue of inverting the Clopper-Pearson tails (Clopper and Pearson
+    1934).
+    """
+
+    def upper_tail(relevant: int) -> float:
+        return float(hypergeom.sf(found - 1, population, relevant, sampled))
+
+    def lower_tail(relevant: int) -> float:
+        return float(hypergeom.cdf(found, population, relevant, sampled))
+
+    low, high = found, population
+    while low < high:
+        middle = (low + high) // 2
+        if upper_tail(middle) > alpha:
+            high = middle
+        else:
+            low = middle + 1
+    lower_bound = low
+
+    if lower_tail(population) > alpha:
+        upper_bound = population
+    else:
+        low, high = found, population
+        while low < high:
+            middle = (low + high) // 2
+            if lower_tail(middle) <= alpha:
+                high = middle
+            else:
+                low = middle + 1
+        upper_bound = low - 1
+
+    return lower_bound, upper_bound
+
+
 def elusion_estimate(strata: Sequence[Stratum], *, confidence: float = 0.95) -> Interval:
     """Horvitz-Thompson estimate of relevant records among AI-excluded ones.
 
     Each stratum is a simple random sample without replacement from a known population. The
     point estimate is the stratified Horvitz-Thompson total
     ``sum(N_h * y_h / n_h)`` (Horvitz and Thompson 1952, *JASA* 47). Bounds are simultaneous
-    one-sided 95% Clopper-Pearson bounds: each stratum gets a one-sided bound at
+    one-sided exact bounds from inverting each stratum's hypergeometric distribution at
     ``1 - alpha/H``, so a union bound over the ``H`` strata covers each side of the total with
     probability at least ``1 - alpha``. The upper bound is the one that certifies how many
     relevant records the AI could have missed. This is deliberately conservative, as
-    DESIGN.md requires; a census stratum (``sampled == population``) is exact. Intervals are
-    never Wald, which would put mass below zero on zero-count strata.
+    DESIGN.md requires; a census stratum (``sampled == population``) is exact. A binomial
+    bound would be wrong here because the audit draws records without replacement.
     """
 
     _check_proportion(confidence, "confidence")
@@ -186,7 +229,7 @@ def elusion_estimate(strata: Sequence[Stratum], *, confidence: float = 0.95) -> 
             lower=0.0,
             upper=0.0,
             confidence=confidence,
-            method="stratified Horvitz-Thompson with simultaneous one-sided Clopper-Pearson bounds",
+            method="stratified Horvitz-Thompson with simultaneous exact hypergeometric bounds",
         )
 
     alpha = 1.0 - confidence
@@ -214,16 +257,16 @@ def elusion_estimate(strata: Sequence[Stratum], *, confidence: float = 0.95) -> 
             lower += y
             upper += y
         else:
-            low_p, high_p = _exact_bounds(y, n, tail=tail)
-            lower += n_h * low_p
-            upper += n_h * high_p
+            low_k, high_k = _hypergeometric_bounds(n_h, n, y, tail)
+            lower += low_k
+            upper += high_k
 
     return Interval(
         estimate=estimate,
         lower=lower,
         upper=upper,
         confidence=confidence,
-        method="stratified Horvitz-Thompson with simultaneous one-sided Clopper-Pearson bounds",
+        method="stratified Horvitz-Thompson with simultaneous exact hypergeometric bounds",
     )
 
 
@@ -337,23 +380,77 @@ def stop_test(
 
 
 def _chapman_interval(n1: int, n2: int, overlap: int, confidence: float) -> Interval:
-    """Chapman's two-source estimator with a log-normal interval."""
+    """Chapman's two-source estimator with an exact hypergeometric interval.
+
+    Conditional on the source sizes, the overlap is ``M ~ Hypergeometric(N, n1, n2)``. The
+    confidence set for the population ``N`` is every value that is not rejected by either tail
+    at ``alpha / 2``: ``P(M <= m) > alpha / 2`` and ``P(M >= m) > alpha / 2``. This is the
+    finite-population analogue of the Clopper-Pearson interval and is valid for sparse counts,
+    where a normal or log-normal approximation has no coverage. If ``m = 0`` the upper end is
+    unbounded, because no finite population is excluded by never observing an overlap.
+    """
 
     estimate = (n1 + 1) * (n2 + 1) / (overlap + 1) - 1
-    observed = n1 + n2 - overlap
-    variance = (
-        (n1 + 1) * (n2 + 1) * (n1 - overlap) * (n2 - overlap) / ((overlap + 1) ** 2 * (overlap + 2))
-    )
-    z = float(norm.ppf(1.0 - (1.0 - confidence) / 2.0))
-    se_log = math.sqrt(variance) / estimate if estimate > 0 else 0.0
-    lower = max(float(observed), estimate * math.exp(-z * se_log))
-    upper = estimate * math.exp(z * se_log)
+    tail = (1.0 - confidence) / 2.0
+    minimum = max(n1, n2, n1 + n2 - overlap)
+
+    def lower_tail(population: int) -> float:
+        return float(hypergeom.cdf(overlap, population, n1, n2))
+
+    def upper_tail(population: int) -> float:
+        if overlap == 0:
+            return 1.0
+        return float(hypergeom.sf(overlap - 1, population, n1, n2))
+
+    if overlap == 0:
+        cap = max(minimum, math.ceil(n1 * n2 / (1.0 - tail)) + 2)
+    else:
+        # Markov's inequality on the overlap bounds the last population that can be compatible.
+        cap = max(minimum, math.ceil(n1 * n2 / (tail * overlap)) + 2)
+
+    if lower_tail(cap) <= tail:
+        raise ValueError(
+            f"the observed overlap {overlap} is not compatible with any population size "
+            f"at confidence {confidence}"
+        )
+
+    low, high = minimum, cap
+    while low < high:
+        middle = (low + high) // 2
+        if lower_tail(middle) > tail:
+            high = middle
+        else:
+            low = middle + 1
+    lower_bound = low
+
+    if overlap == 0:
+        upper_bound = math.inf
+    else:
+        if upper_tail(minimum) <= tail:
+            raise ValueError(
+                f"the observed overlap {overlap} is not compatible with any population size "
+                f"at confidence {confidence}"
+            )
+        low, high = minimum, cap
+        while low < high:
+            middle = (low + high) // 2
+            if upper_tail(middle) <= tail:
+                high = middle
+            else:
+                low = middle + 1
+        upper_bound = low - 1
+        if lower_bound > upper_bound:
+            raise ValueError(
+                f"the observed overlap {overlap} is not compatible with any population size "
+                f"at confidence {confidence}"
+            )
+
     return Interval(
         estimate=float(estimate),
-        lower=lower,
-        upper=upper,
+        lower=float(lower_bound),
+        upper=float(upper_bound),
         confidence=confidence,
-        method="Chapman two-source capture-recapture with log-normal interval",
+        method="Chapman two-source capture-recapture with exact hypergeometric interval",
     )
 
 
@@ -368,6 +465,22 @@ def _loglinear_three_source(
     *Biometrika* 59. The interval uses the observed information for the intercept on the log
     scale, then maps the unobserved cell back to a population total.
     """
+
+    zero_cells = []
+    for mask in range(1, 8):
+        if counts[mask] == 0:
+            present = [
+                sources[position]
+                for position in range(len(sources))
+                if mask & (1 << (len(sources) - 1 - position))
+            ]
+            zero_cells.append("{" + ", ".join(present) + "}")
+    if zero_cells:
+        raise ValueError(
+            "three-source log-linear model is not estimable: zero observed cell(s) "
+            + ", ".join(zero_cells)
+            + "; their pairwise interactions are on the boundary"
+        )
 
     # Cells are (i, j, k) in {0,1}^3, the all-zero cell being the unobserved one.
     design: list[list[float]] = []
@@ -409,6 +522,13 @@ def _loglinear_three_source(
     if not fitted.success:
         raise ValueError(f"three-source log-linear fit did not converge: {fitted.message}")
     beta_hat = [float(value) for value in fitted.x]
+    if not all(math.isfinite(value) for value in beta_hat):
+        raise ValueError("three-source log-linear model is not estimable: a parameter diverged")
+    if max(abs(value) for value in beta_hat) >= 49.0:
+        raise ValueError(
+            "three-source log-linear model is not estimable: a parameter reached the search "
+            "bound, usually from a zero or near-zero cell"
+        )
     means = [math.exp(sum(x * b for x, b in zip(row, beta_hat, strict=True))) for row in design]
     information = [
         [
@@ -433,6 +553,10 @@ def _loglinear_three_source(
     unseen = math.exp(beta_hat[0])
     z = float(norm.ppf(1.0 - (1.0 - confidence) / 2.0))
     se = math.sqrt(intercept_variance)
+    if not math.isfinite(se) or beta_hat[0] + z * se > 700.0:
+        raise ValueError(
+            "three-source log-linear model is not estimable: the predicted unseen cell diverges"
+        )
     return Interval(
         estimate=float(observed_total + unseen),
         lower=float(observed_total + math.exp(beta_hat[0] - z * se)),
@@ -451,10 +575,12 @@ def capture_recapture(
     """Estimate the total number of relevant records from overlapping sources.
 
     Two sources use Chapman's bias-corrected estimator (Chapman 1951, *University of
-    California Publications in Statistics* 1) with a log-normal interval. Three sources fit a
-    Poisson log-linear model with main effects and pairwise interactions but no three-way
-    interaction (Fienberg 1972, *Biometrika* 59), which predicts the records no source found.
-    The point estimate is the estimated population total, including records all sources caught.
+    California Publications in Statistics* 1) with an exact interval obtained by inverting the
+    hypergeometric distribution of the overlap; the upper end is unbounded when the observed
+    overlap is zero. Three sources fit a Poisson log-linear model with main effects and pairwise
+    interactions but no three-way interaction (Fienberg 1972, *Biometrika* 59), which predicts
+    the records no source found. The point estimate is the estimated population total, including
+    records all sources caught.
     """
 
     _check_proportion(confidence, "confidence")

@@ -254,13 +254,16 @@ Module `kittum.stats`. Needs: nothing.
 - Every function in the module, with scipy where it helps. Done.
 - `clopper_pearson` defaults to one-sided bounds, as Kittum states every bound: 10 of 10 gives
   a lower bound of 0.741, and the two-sided 0.692 figure remains available with `sided="two"`.
-- `elusion_estimate` is a stratified Horvitz-Thompson total with simultaneous one-sided
-  Clopper-Pearson bounds (Bonferroni over strata, exact on census strata).
+- `elusion_estimate` is a stratified Horvitz-Thompson total with simultaneous one-sided exact
+  hypergeometric bounds (Bonferroni over strata, exact on census strata). Sampling is without
+  replacement, so the bounds invert the hypergeometric tail rather than a binomial one.
 - `stop_test` implements Callaghan and Müller-Hansen (2020) with the suffix-minimum p-value from
   the reference implementation. Pass `order` for the exact reference result; without it the
   test uses the whole sequence and is conservative.
-- `capture_recapture` uses Chapman for two sources and a Poisson log-linear model without a
-  three-way interaction for three sources.
+- `capture_recapture` uses Chapman for two sources with an exact hypergeometric overlap
+  inversion (the upper end is unbounded when the overlap is zero), and a Poisson log-linear
+  model without a three-way interaction for three sources. Zero observed cells make that model
+  non-estimable and raise a `ValueError` naming the cell.
 - `conformal_threshold` is a split-conformal order statistic with a binomial coverage guarantee;
   `recall_needed` gives its calibration size for zero misses.
 - `cohen_kappa`, `fleiss_kappa`, and `pabak` cover two raters and three or more runs.
