@@ -31,12 +31,12 @@ _LABELS = {
 
 
 class Annotation(Record):
-    """One annotation in PubTator's coordinate frame for its passage."""
+    """One annotation positioned relative to the start of its passage."""
 
     pmid: str
     passage: str  # "title" or "abstract"
     text: str
-    offset: int
+    offset: int  # BioC document offset minus the passage offset
     length: int
     label: str
     normalized_id: str | None = None
@@ -53,8 +53,11 @@ def _annotations(pmid: str, document: dict[str, Any]) -> list[Annotation]:
             continue
         infons = passage.get("infons") or {}
         passage_type = infons.get("type") if isinstance(infons, dict) else None
+        passage_offset = passage.get("offset")
         if passage_type not in {"title", "abstract"}:
             continue
+        if not isinstance(passage_offset, int):
+            passage_offset = 0
         for annotation in passage.get("annotations") or []:
             if not isinstance(annotation, dict):
                 continue
@@ -67,6 +70,9 @@ def _annotations(pmid: str, document: dict[str, Any]) -> list[Annotation]:
             offset = location.get("offset")
             length = location.get("length")
             if not isinstance(offset, int) or not isinstance(length, int) or length < 1:
+                continue
+            offset -= passage_offset
+            if offset < 0:
                 continue
             normalized = annotation_infons.get("identifier") or annotation_infons.get(
                 "normalized_id"

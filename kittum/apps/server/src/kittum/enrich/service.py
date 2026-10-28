@@ -317,6 +317,8 @@ def _entities(state: _State, annotations: tuple[pubtator.Annotation, ...]) -> tu
         start = _passage_offset(passage, annotation, rank, spans)
         if start is None:
             continue
+        if passage[start : start + len(annotation.text)] != annotation.text:
+            continue
         ranks[key] = rank + 1
         spans.add(start)
         base = 0 if annotation.passage == "title" else title_length + 1
@@ -336,19 +338,28 @@ def _passage_offset(
     passage: str, annotation: pubtator.Annotation, rank: int, used: set[int]
 ) -> int | None:
     """Where one annotation sits in Kittum's version of its passage, or `None` if it is absent."""
-    text = annotation.text
-    if (
-        passage[annotation.offset : annotation.offset + len(text)] == text
-        and annotation.offset not in used
-    ):
+    positions = _word_positions(passage, annotation.text)
+    if annotation.offset in positions and annotation.offset not in used:
         return annotation.offset
-    position = -1
-    for _ in range(rank + 1):
+    index = rank
+    while index < len(positions) and positions[index] in used:
+        index += 1
+    return positions[index] if index < len(positions) else None
+
+
+def _word_positions(passage: str, text: str) -> list[int]:
+    """Offsets of whole-word occurrences, so `chloroquine` never matches inside another word."""
+    positions = []
+    position = passage.find(text)
+    while position >= 0:
+        end = position + len(text)
+        before = passage[position - 1] if position else ""
+        after = passage[end] if end < len(passage) else ""
+        if not _is_word_char(before) and not _is_word_char(after):
+            positions.append(position)
         position = passage.find(text, position + 1)
-        if position < 0:
-            return None
-    while position in used:
-        position = passage.find(text, position + 1)
-        if position < 0:
-            return None
-    return position
+    return positions
+
+
+def _is_word_char(value: str) -> bool:
+    return bool(value) and (value.isalnum() or value == "_")

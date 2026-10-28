@@ -316,6 +316,53 @@ def test_entity_offsets_keep_repeated_mentions_distinct(pg: Tx) -> None:
         assert entity.end <= title_end or entity.start >= title_end + 1
 
 
+def test_bioc_offsets_map_chloroquine_mentions_to_whole_words(pg: Tx) -> None:
+    result = _enrich(pg, source_records())
+    record = _by_pmid(result.records)[_RETRACTED_PMID]
+    source = next(item for item in source_records() if item.pmid == _RETRACTED_PMID)
+    text = f"{source.title}\n{record.abstract}"
+
+    spans = sorted(
+        (entity.start, entity.end, text[entity.start : entity.end])
+        for entity in record.entities
+        if text[entity.start : entity.end].lower() in {"chloroquine", "hydroxychloroquine"}
+    )
+    assert spans == [
+        (11, 29, "Hydroxychloroquine"),
+        (33, 44, "chloroquine"),
+        (146, 164, "Hydroxychloroquine"),
+        (168, 179, "chloroquine"),
+        (582, 600, "hydroxychloroquine"),
+        (604, 615, "chloroquine"),
+        (992, 1003, "chloroquine"),
+        (1011, 1022, "chloroquine"),
+        (1041, 1059, "hydroxychloroquine"),
+        (1070, 1088, "hydroxychloroquine"),
+        (1799, 1810, "chloroquine"),
+        (1826, 1837, "chloroquine"),
+        (1870, 1888, "hydroxychloroquine"),
+        (1908, 1926, "hydroxychloroquine"),
+        (2350, 2368, "hydroxychloroquine"),
+        (2418, 2436, "hydroxychloroquine"),
+        (2483, 2494, "chloroquine"),
+        (2528, 2539, "chloroquine"),
+        (2709, 2727, "hydroxychloroquine"),
+        (2756, 2774, "hydroxychloroquine"),
+        (2820, 2831, "chloroquine"),
+        (2864, 2875, "chloroquine"),
+        (3085, 3103, "hydroxychloroquine"),
+        (3107, 3118, "chloroquine"),
+    ]
+
+    chloroquine = [span for span in spans if span[2].lower() == "chloroquine"]
+    hydroxychloroquine = [span for span in spans if span[2].lower() == "hydroxychloroquine"]
+    assert not any(
+        outer[0] <= inner[0] and inner[1] <= outer[1]
+        for outer in hydroxychloroquine
+        for inner in chloroquine
+    )
+
+
 def test_retraction_notice_is_not_flagged_but_the_original_is() -> None:
     gateway, _ = replay_gateway()
     notice = crossref.work(gateway, RETRACTION_NOTICE, email=CONTACT_EMAIL)
