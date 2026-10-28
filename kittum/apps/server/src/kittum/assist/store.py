@@ -30,7 +30,7 @@ from kittum.assist.model import (
     RevisionKind,
     Suggestion,
 )
-from kittum.assist.paths import changed_written, steps, written
+from kittum.assist.paths import changed_written, objects, steps, written
 from kittum.core import Id, NotFoundError, new_id
 from kittum.ledger import EventDraft
 from kittum.protocol import (
@@ -79,15 +79,25 @@ class _History:
     """What models wrote, by field and value, in revision order, and where a person first kept it.
 
     Free text (a title, a criterion's text, a population, a strategy, an outcome's name, a
-    rationale) is matched by the kind of field, its path without the IDs of the objects on the
-    way (`search_topics[*].criteria[*].text.en`): the words stay the model's when their criterion
-    is renamed or moved, or their question reordered. Choices (IDs, a polarity, a mode, a kind, a
-    source's name and platform), numbers, and booleans are matched at their exact path, so a
-    lead's own protocol that happens to choose what a model chose elsewhere is not the model's.
-    Free text errs on the side of naming the model, the safe side for a disclosure."""
+    rationale, a reference's note) is matched by the kind of field, its path without the IDs or
+    positions of the objects on the way (`search_topics[*].criteria[*].text.en`): the words stay
+    the model's when their criterion is renamed or moved, or their question reordered.
+
+    Choices (a polarity, a mode, a kind, a source's name and platform), numbers, and booleans are
+    the model's at the exact path where it wrote them, and in an object that corresponds to one
+    the model wrote: an object of the same kind (a topic, a criterion, a source) whose own free
+    text says, in some field, what that model object said there. A renamed topic keeps the marks
+    on its mode and its numbers so; a lead's own protocol that merely chooses what a model chose
+    elsewhere is not the model's. Free text errs on the side of naming the model, the safe side
+    for a disclosure."""
 
     def __init__(self) -> None:
         self._written: dict[tuple[str, str], ProtocolRevision] = {}
+        # By kind of object: its free text where the model wrote it, and the choices it made.
+        self._objects: dict[
+            str, list[tuple[set[tuple[str, str]], dict[str, str], ProtocolRevision]]
+        ]
+        self._objects = {}
         self._kept: dict[tuple[str, str], Id] = {}
         self._revisions: dict[Id, ProtocolRevision] = {}
 
@@ -105,17 +115,41 @@ class _History:
                 author = self._revisions[revision.accepted.suggestion_id]
         for key in map(_key, wrote.items()):
             self._written.setdefault(key, author)
+        for path, fields in objects(revision.document):
+            chose = {
+                field: _json(value)
+                for field, value in fields.items()
+                if path + field in wrote and not _free_text(_kind(path + field))
+            }
+            if chose:
+                self._objects.setdefault(_kind(path), []).append(
+                    (_said(path, fields), chose, author)
+                )
         if revision.model is None:  # a revision of the lead's keeps what it holds
-            for key in map(_key, values.items()):
-                if key in self._written:
-                    self._kept.setdefault(key, revision.id)
+            for path, value, _ in self._attribute(revision.document):
+                self._kept.setdefault(_key((path, value)), revision.id)
+
+    def _attribute(self, document: dict[str, Any]) -> list[tuple[str, Any, ProtocolRevision]]:
+        """Every field of `document` a model wrote: its path, its value, and the model's revision."""
+        found: dict[str, tuple[Any, ProtocolRevision]] = {}
+        for path, value in written(document).items():
+            source = self._written.get(_key((path, value)))
+            if source is not None:
+                found[path] = (value, source)
+        for path, fields in objects(document):
+            said = _said(path, fields)
+            for model_said, chose, source in self._objects.get(_kind(path), ()):
+                if not said & model_said:
+                    continue  # another object of the same kind
+                for field, value in fields.items():
+                    if path + field not in found and chose.get(field) == _json(value):
+                        found[path + field] = (value, source)
+        return [(path, value, source) for path, (value, source) in found.items()]
 
     def marks(self, document: dict[str, Any]) -> tuple[AiMark, ...]:
         found = []
-        for path, value in written(document).items():
-            key = _key((path, value))
-            source = self._written.get(key)
-            if source is None or source.model is None:
+        for path, value, source in self._attribute(document):
+            if source.model is None:
                 continue
             found.append(
                 AiMark(
@@ -125,10 +159,23 @@ class _History:
                     model_identity=source.model.model_identity,
                     serving=source.model.serving,
                     endpoint=source.model.endpoint,
-                    accepted_in=self._kept.get(key),
+                    accepted_in=self._kept.get(_key((path, value))),
                 )
             )
         return tuple(found)
+
+
+def _said(path: str, fields: dict[str, Any]) -> set[tuple[str, str]]:
+    """An object's own free text, by field: what identifies it across renames."""
+    return {(field, _json(v)) for field, v in fields.items() if _free_text(_kind(path + field))}
+
+
+def _json(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, ensure_ascii=False)
+
+
+def _kind(path: str) -> str:
+    return _IDS.sub("[*]", path)
 
 
 _IDS = re.compile(r"\[[^\]]*\]")
@@ -145,8 +192,8 @@ _CHOSEN = frozenset(
 def _key(item: tuple[str, Any]) -> tuple[str, str]:
     """Where a value counts as the same field: its kind for free text, its path otherwise."""
     path, value = item
-    kind = _IDS.sub("[*]", path)
-    return kind if _free_text(kind) else path, json.dumps(value, sort_keys=True, ensure_ascii=False)
+    kind = _kind(path)
+    return kind if _free_text(kind) else path, _json(value)
 
 
 @functools.cache

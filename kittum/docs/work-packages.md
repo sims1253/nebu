@@ -173,7 +173,9 @@ Done:
   document was saved. Free text (a string field of the schema without enumeration, constant, or
   pattern) matches by kind of field, its path without object IDs, so renamed and moved objects
   keep their marks; choices (enums, a source's name and platform), numbers, and booleans match at
-  the exact path; IDs are never marked. `kittum.protocol.publish` asks every registered `Attribution`; importing
+  the exact path, or in an object corresponding to one a model wrote (same kind of object, some
+  free text of its own equal), so a renamed topic keeps its mode and numbers; IDs are never
+  marked. Entries of lists without IDs (reference sets, deviations) are fields by position. `kittum.protocol.publish` asks every registered `Attribution`; importing
   `kittum.assist` registers the assistant's, so publications from the workbench, an assistant
   revision, and the CLI all record `ai_parts`. With none registered, publishing a project that has
   assistant revisions raises `ProtocolStateError`. The `ai_disclosure` report lists them with every assistant request.

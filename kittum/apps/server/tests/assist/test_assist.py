@@ -23,6 +23,7 @@ import pytest
 import yaml
 from fastapi.testclient import TestClient
 
+from kittum import assist
 from kittum.api import AppContext, create_app
 from kittum.app import Assistant, recorded_backend
 from kittum.assist import ASSIST_EVENT, StrategyAnswer, strict_schema, value_at
@@ -76,6 +77,16 @@ class Stubborn:
     def complete(self, request: Any) -> Any:
         first = request.model_copy(update={"messages": request.messages[:2]})
         return self._inner.complete(first).model_copy(update={"text": self._first})
+
+
+def renamed_topic(topic: dict[str, Any], name: str) -> dict[str, Any]:
+    """`topic` under another ID, its criteria applying to it under that ID."""
+
+    def applies(criterion: dict[str, Any]) -> dict[str, Any]:
+        targets = [name if t == topic["id"] else t for t in criterion["applies_to"]]
+        return {**criterion, "applies_to": targets}
+
+    return {**topic, "id": name, "criteria": [applies(c) for c in topic["criteria"]]}
 
 
 def test_a_lead_drafts_improves_and_publishes_a_protocol_with_the_assistant(pg: Tx) -> None:
@@ -217,6 +228,23 @@ def test_a_lead_drafts_improves_and_publishes_a_protocol_with_the_assistant(pg: 
     renamed = mark(moved, f"search_topics[{topic['id']}].criteria[renumbered].text.en")
     assert renamed and renamed["revision_id"] == draft["id"]
     assert mark(moved, f"search_topics[{topic['id']}].criteria[renumbered].id") is None
+    # A renamed topic is still the model's topic: its words say so, and its mode, numbers, and
+    # other choices stay the model's, at their new place. What the lead changed is theirs.
+    longer = {**topic["freshness"], "max_age_months": 24}
+    renamed_one = {**renamed_topic(topic, "renamed"), "freshness": longer}
+    retopic = save({**draft["document"], "search_topics": [renamed_one]}, moved)
+    for field in (
+        "mode",
+        "audit.random_audit_percent",
+        f"criteria[{first['id']}].polarity",
+        f"criteria[{first['id']}].slot",
+        "source_plan.sources[medline].platform",
+        "label.en",
+        "source_plan.sources[medline].strategy",
+    ):
+        chosen = mark(retopic, f"search_topics[renamed].{field}")
+        assert chosen and chosen["revision_id"] == draft["id"], field
+    assert mark(retopic, "search_topics[renamed].freshness.max_age_months") is None
 
     # A model that never fixes its answer: three attempts, the problems and the raw answer come
     # back, and no revision is stored; the ledger keeps the attempts.
@@ -275,7 +303,7 @@ def test_a_lead_drafts_improves_and_publishes_a_protocol_with_the_assistant(pg: 
     # example's choices and numbers are its own, though the draft chose the same elsewhere.
     example = yaml.safe_load(EXAMPLE.read_text())
     mine = save(example)
-    assert (mine["kind"], mine["parent_id"]) == ("edit", moved["id"])
+    assert (mine["kind"], mine["parent_id"]) == ("edit", retopic["id"])
     shared = {m["path"] for m in mine["ai_parts"]}
     assert shared == {"outcomes[sae].name.en"}
 
@@ -394,7 +422,7 @@ def test_a_lead_drafts_improves_and_publishes_a_protocol_with_the_assistant(pg: 
     again = ok(client.post(f"{url}/revisions/{accepted['id']}/restore", headers=lead), 201)
     assert again["document"] == accepted["document"] and again["ai_parts"] == accepted["ai_parts"]
     seqs = [r["seq"] for r in ok(client.get(f"{url}/revisions", headers=lead))]
-    assert seqs == list(range(1, 11))
+    assert seqs == list(range(1, 12))
 
     # Publish: the lead's approval, with the model's fields in the ledger event.
     assert (
@@ -590,3 +618,73 @@ def test_a_publisher_without_the_assistant_refuses_rather_than_hide_what_a_model
     assert with_assist.returncode == 0, with_assist.stderr
     (event,) = published()
     assert {p["path"] for p in event["ai_parts"]} == {m["path"] for m in drafted["ai_parts"]}
+
+
+def test_the_entries_of_lists_without_ids_stay_the_models_when_their_topic_is_renamed(
+    pg: Tx,
+) -> None:
+    db = savepoint_db(pg)
+    artifacts = MemoryStore()
+    recipe_id, backend = recorded_backend(artifacts)
+    ctx = AppContext(
+        settings=Settings(database_url="postgresql://unused", artifact_dir=Path("unused")),
+        db=db,
+        artifacts=artifacts,
+        ledger=PostgresLedger(),
+        assistant=Assistant(recipe_id=recipe_id, backend=backend),
+    )
+    client = TestClient(create_app(ctx))
+    project = client.post("/api/projects", json={"name": "NRT", "lead_name": "Morgan Lee"}).json()
+    pid, lead = project["id"], project["members"][0]["actor_id"]
+
+    # GLM's recorded draft, as if it had also named a known trial and left a source out with a
+    # reason: entries of lists without IDs, each with free text and choices.
+    answer = assist.draft(backend, recipe_id, DESCRIPTION)
+    assert answer.document is not None
+    topic = answer.document["search_topics"][0]
+    extended = {
+        **topic,
+        "reference_set": {
+            "development": [
+                {"kind": "pmid", "value": "20029105", "note": "A pivotal trial of the patch"}
+            ],
+            "validation": [],
+        },
+        "source_plan": {
+            **topic["source_plan"],
+            "deviations": [
+                {"source_id": "embase", "justification": {"en": "No subscription to Embase."}}
+            ],
+        },
+    }
+    document = compile({**answer.document, "search_topics": [extended]}).protocol
+    with db.transaction() as tx:
+        outcome = assist.record(
+            tx,
+            pid,
+            lead,
+            answer.model_copy(update={"document": document.model_dump(mode="json")}),
+            ledger=PostgresLedger(),
+        )
+    assert outcome.revision is not None
+    drafted = outcome.revision.model_dump(mode="json")
+
+    body = {
+        "source": {
+            **drafted["document"],
+            "search_topics": [renamed_topic(drafted["document"]["search_topics"][0], "renamed")],
+        },
+        "base_id": drafted["id"],
+    }
+    renamed = client.post(
+        f"/api/projects/{pid}/assist/revisions", json=body, headers={"X-Kittum-Reviewer": lead}
+    ).json()
+    marks = {m["path"]: m["revision_id"] for m in renamed["ai_parts"]}
+    for field in (
+        "reference_set.development[0].note",
+        "reference_set.development[0].value",
+        "reference_set.development[0].kind",
+        "source_plan.deviations[0].justification.en",
+        "source_plan.deviations[0].source_id",
+    ):
+        assert marks.get(f"search_topics[renamed].{field}") == drafted["id"], field

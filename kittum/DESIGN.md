@@ -154,9 +154,11 @@ suggestion, accepted selection of changes, edit, and restore is an append-only r
 lead steps between them and publishes one. What a model wrote is attributed by value: a field is
 the model's while its value is one a model wrote in any draft, suggestion, or accepted selection
 of the project, however the document was saved since. Free text (a title, a criterion's text, a
-population, a strategy) counts for that kind of field wherever its object moved or whatever it
-is now called, which errs towards naming the model; choices, numbers, and booleans count only at
-the same place, and IDs never. A person who changes the value takes the field over. A publication of a project
+population, a strategy, a reference's note) counts for that kind of field wherever its object
+moved or whatever it is now called, which errs towards naming the model. Choices, numbers, and
+booleans count at the same place, or in an object that is recognisably the model's: one of the
+same kind whose own words say what the model's object said, such as a renamed topic. IDs never
+count. A person who changes the value takes the field over. A publication of a project
 with assistant revisions that nothing can attribute is refused. Every publication, from the workbench, an assistant revision, or
 the command line, records these fields (which field, which revision, which model) in its ledger
 event, and every request to the assistant is a ledger event with each attempt's raw request and

@@ -2,7 +2,9 @@
 with an `id` are addressed by ID (`search_topics[TRIALS].criteria[POP].text.en`).
 
 `leaves` lists every field value of a document under its path, which is what an AI mark names.
-A list of plain values (keywords, stages) is one leaf.
+Objects in a list without IDs (the entries of a reference set, the deviations of a source plan)
+are addressed by position (`reference_set.development[0].note`); a list of plain values
+(keywords, stages) is one leaf. `objects` lists every object with an ID with its own fields.
 """
 
 import re
@@ -24,9 +26,43 @@ def leaves(node: Any, path: str = "") -> dict[str, Any]:
     elif isinstance(node, list) and _keyed(node):
         for item in node:
             out |= leaves(item, f"{path}[{item['id']}]")
+    elif _unkeyed(node):
+        for index, item in enumerate(node):
+            out |= leaves(item, f"{path}[{index}]")
     else:
         out[path] = node
     return out
+
+
+def _unkeyed(node: Any) -> bool:
+    """A list of objects without (unique) IDs, addressed by position."""
+    return isinstance(node, list) and bool(node) and all(isinstance(i, dict) for i in node)
+
+
+def objects(document: Any) -> list[tuple[str, dict[str, Any]]]:
+    """Every object with an ID, by path, with the fields someone wrote in it, by their path
+    relative to it (`.label.en`, `.reference_set.development[0].note`). An object with an ID
+    inside it (a topic's criteria) is an object of its own, not a field of its parent."""
+    found: list[tuple[str, dict[str, Any]]] = []
+
+    def walk(node: Any, path: str, own: dict[str, Any] | None, base: str) -> None:
+        if isinstance(node, dict) and node:
+            for key, value in node.items():
+                walk(value, f"{path}.{key}" if path else key, own, base)
+        elif isinstance(node, list) and _keyed(node):
+            for item in node:
+                here = f"{path}[{item['id']}]"
+                fields: dict[str, Any] = {}
+                found.append((here, fields))
+                walk(item, here, fields, here)
+        elif _unkeyed(node):
+            for index, item in enumerate(node):
+                walk(item, f"{path}[{index}]", own, base)
+        elif own is not None and _writes(path, node):
+            own[path.removeprefix(base)] = node
+
+    walk(document, "", None, "")
+    return found
 
 
 def steps(path: str) -> list[str | tuple[str]]:
@@ -77,11 +113,13 @@ _UNWRITTEN = frozenset({"schema_version", "default_language", "profile"})
 
 def written(document: Any) -> dict[str, Any]:
     """The leaves someone wrote: everything but format fields, IDs, and empty values."""
-    return {
-        p: v
-        for p, v in leaves(document).items()
-        if p not in _UNWRITTEN and p.rsplit(".", 1)[-1] != "id" and v not in (None, [], {})
-    }
+    return {p: v for p, v in leaves(document).items() if _writes(p, v)}
+
+
+def _writes(path: str, value: Any) -> bool:
+    return (
+        path not in _UNWRITTEN and path.rsplit(".", 1)[-1] != "id" and value not in (None, [], {})
+    )
 
 
 def changed_written(before: Any, after: Any) -> set[str]:
