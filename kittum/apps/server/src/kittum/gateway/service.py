@@ -24,6 +24,7 @@ from kittum.gateway.errors import (
     UnknownSource,
 )
 from kittum.gateway.policies import default_policies
+from kittum.gateway.recorded import NotRecorded
 from kittum.gateway.types import (
     HttpRequest,
     HttpResponse,
@@ -223,6 +224,8 @@ class SourceGateway:
             )
         except _Retryable as error:
             raise SourceUnavailable(source, error.status, attempts[0]) from error
+        except NotRecorded as error:
+            raise SourceUnavailable(source, None, attempts[0], str(error)) from error
 
         if 200 <= response.status < 300:
             self._remember(source, key, response)

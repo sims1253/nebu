@@ -410,6 +410,13 @@ def test_a_lead_drafts_improves_and_publishes_a_protocol_with_the_assistant(pg: 
             'PubMed did not find the quoted phrase: "nicotine replacment zzqx"[tiab]',
         ],
     )
+    # Offline, a strategy nobody recorded is an unreachable source, named by its request.
+    unrecorded = count("nicotine lozenge[tiab]")
+    assert unrecorded.status_code == 502, unrecorded.text
+    assert re.fullmatch(
+        r"pubmed is unreachable: no recorded response for https://eutils\.ncbi\.nlm\.nih\.gov/\S+",
+        unrecorded.json()["detail"],
+    )
 
     # Accept two of three: the base with exactly those, the field marked as the model's.
     assert (
