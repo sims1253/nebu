@@ -6,6 +6,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 
 import type {
+  Acceptance,
   AdjudicationItem,
   AdjudicationResult,
   Anchor,
@@ -15,9 +16,12 @@ import type {
   DecideResult,
   Decision,
   DecisionTiming,
+  Assertion,
   DiffPreview,
   ExampleProtocol,
   ExtractionReview,
+  ExtractionRun,
+  ExtractionSchema,
   FullText,
   FullTextAssignment,
   IdentityRevision,
@@ -32,7 +36,9 @@ import type {
   ProjectSummary,
   ProtocolSource,
   RenderedReport,
+  ReportInfo,
   RetrievalItem,
+  RunListing,
   RevealSetting,
   Role,
   SealedBundle,
@@ -231,16 +237,53 @@ export interface Workbench {
   readonly reportFile: (request: Caller & { readonly sha256: string }) => Call<Uint8Array>;
   readonly sealBundle: (caller: Caller) => Call<SealedBundle>;
 
-  /** Extraction review; null until there is something to review. Not served yet (WP-11). */
-  readonly extraction: (projectId: string) => Call<ExtractionReview | null>;
-  readonly accept: (request: {
-    readonly fieldId: string;
-    readonly path: "janus" | "llm";
-    /** The reviewer's own value and the span it came from, when they edited the path's value. */
-    readonly edit: AcceptedEdit | null;
-    /** How long the source region was on screen before the reviewer accepted. */
-    readonly sourceViewedMs: number;
-  }) => Call<void>;
+  // Extraction. The lead requests runs on reports with a full text (`fullTexts` names them); a
+  // worker fills each run; a reviewer accepts each value after viewing its source.
+
+  readonly extractionRuns: (projectId: string) => Call<ReadonlyArray<RunListing>>;
+  /** The model recipes the LLM path can use here; empty means the Janus path only. */
+  readonly extractionModels: (projectId: string) => Call<ReadonlyArray<string>>;
+  /** An extraction schema file (YAML or JSON) as the server reads it. */
+  readonly parseExtractionSchema: (
+    request: Caller & { readonly text: string },
+  ) => Call<ExtractionSchema>;
+  readonly requestExtraction: (
+    request: Caller & {
+      readonly layerId: string;
+      readonly studyId: string;
+      readonly reportId: string;
+      readonly schema: ExtractionSchema;
+      /** The model for the LLM path, or null for the Janus path only. */
+      readonly modelId: string | null;
+      readonly report: ReportInfo;
+    },
+  ) => Call<ExtractionRun>;
+  readonly extraction: (request: {
+    readonly projectId: string;
+    readonly runId: string;
+  }) => Call<ExtractionReview>;
+  readonly accept: (
+    request: Caller & {
+      readonly fieldId: string;
+      readonly path: "janus" | "llm";
+      /** The reviewer's own value and the span it came from, when they edited the path's value. */
+      readonly edit: AcceptedEdit | null;
+      /** How long the source region was on screen before the reviewer accepted. */
+      readonly sourceViewedMs: number;
+      /** The reviewer checked the source although a validator failed on the value. */
+      readonly override: boolean;
+    },
+  ) => Call<Acceptance>;
+  /** Agreeing, validated standard fields together, after the list was on screen. */
+  readonly groupAccept: (
+    request: Caller & {
+      readonly runId: string;
+      readonly fieldIds: ReadonlyArray<string>;
+      readonly listViewedMs: number;
+    },
+  ) => Call<ReadonlyArray<Acceptance>>;
+  /** The accepted values of the project, the latest per semantic key: what reports use. */
+  readonly assertions: (projectId: string) => Call<ReadonlyArray<Assertion>>;
 }
 
 export const run = <A>(call: Call<A>): Promise<A> => Effect.runPromise(call);

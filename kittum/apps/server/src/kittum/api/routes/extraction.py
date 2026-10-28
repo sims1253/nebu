@@ -1,4 +1,5 @@
-"""Extraction routes for the workbench: run a layer, review its fields, accept values.
+"""Extraction routes for the workbench: read a schema, run a layer, list runs, review their
+fields, accept values.
 
 A run is a job: `POST .../runs` answers 202 with the queued run, and a worker running
 `kittum.extraction.run_handler` fills it. Accepting needs the time the source was on screen;
@@ -26,12 +27,16 @@ from kittum.extraction import (
     Path,
     ReportInfo,
     ReviewField,
+    RunListing,
     RunRequest,
+    SchemaError,
     accept,
     assertions,
     get_run,
     group_accept,
     list_fields,
+    list_runs,
+    load_schema,
     request_run,
     review,
 )
@@ -41,6 +46,11 @@ if TYPE_CHECKING:
     from collections.abc import Generator
 
 router = APIRouter(prefix="/api/projects/{project_id}/extraction", tags=["extraction"])
+
+
+class SchemaText(Record):
+    text: str
+    """An extraction schema as YAML or JSON."""
 
 
 class RunBody(Record):
@@ -94,6 +104,30 @@ def _commands(ctx: AppContext) -> Commands:
     if ctx.ledger is None or ctx.queue is None or ctx.receipts is None:
         raise HTTPException(status_code=503, detail="no ledger or job queue is configured")
     return Commands(ctx.ledger, ctx.queue, ctx.receipts, ctx.clock)
+
+
+@router.post("/schemas/parse", operation_id="parseExtractionSchema")
+def parse_schema_route(project_id: Id, body: SchemaText) -> ExtractionSchema:  # noqa: ARG001
+    """Read and check a schema for `requestExtractionRun`; 422 with the problem."""
+    try:
+        return load_schema(body.text)
+    except SchemaError as e:
+        # FastAPI's validation-error shape, so clients read one 422 format.
+        detail = [{"loc": ["body", "text"], "msg": str(e), "type": "invalid_schema"}]
+        raise HTTPException(status_code=422, detail=detail) from e
+
+
+@router.get("/models", operation_id="listExtractionModels")
+def list_models_route(project_id: Id, ctx: Context) -> list[str]:  # noqa: ARG001
+    """The model recipes with a configured server, for the LLM path; empty means Janus only."""
+    return sorted(ctx.backends)
+
+
+@router.get("/runs", operation_id="listExtractionRuns")
+def list_runs_route(project_id: Id, ctx: Context) -> list[RunListing]:
+    """The project's runs, newest first, with their report and review counts."""
+    with ctx.db.transaction() as tx:
+        return list_runs(tx, project_id)
 
 
 @router.post("/runs", operation_id="requestExtractionRun", status_code=202)

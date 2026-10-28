@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, test } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 
+import { MOCK_RUN_ID } from "../../data/mock/index.ts";
 import { mount, press } from "../../test/app.tsx";
 import { VIEW_MS } from "./ExtractionReview.tsx";
+
+const RUN = `/p/ivosidenib-cca/extraction/${MOCK_RUN_ID}`;
 
 let unmount: (() => void) | undefined;
 afterEach(() => unmount?.());
@@ -15,7 +18,7 @@ const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 describe("extraction review", () => {
   test("accepts a value only after its source was on screen, and makes the reviewer pick between paths", async () => {
     const accepted: Array<{ fieldId: string; path: string; sourceViewedMs: number }> = [];
-    const app = mount("/p/ivosidenib-cca/extraction", {
+    const app = mount(RUN, {
       log: (call, detail) => {
         if (call === "accept") accepted.push(detail as (typeof accepted)[number]);
       },
@@ -50,7 +53,7 @@ describe("extraction review", () => {
   });
 
   test("does not count time before the page image has drawn", async () => {
-    const app = mount("/p/ivosidenib-cca/extraction", { latency: { page: 2500 } });
+    const app = mount(RUN, { latency: { page: 2500 } });
     unmount = app.unmount;
     await expect.element(page.getByText("1 of 19 accepted")).toBeVisible();
     await press("Tab"); // patients randomised to ASC alone, on page 6
@@ -70,7 +73,7 @@ describe("extraction review", () => {
   });
 
   test("never accepts a value whose page image failed to load", async () => {
-    const app = mount("/p/ivosidenib-cca/extraction", { brokenPages: [6] });
+    const app = mount(RUN, { brokenPages: [6] });
     unmount = app.unmount;
     await expect.element(page.getByText("1 of 19 accepted")).toBeVisible();
     await press("Tab");
@@ -82,7 +85,7 @@ describe("extraction review", () => {
   });
 
   test("time on one path's source does not count for the other path's", async () => {
-    const app = mount("/p/ivosidenib-cca/extraction");
+    const app = mount(RUN);
     unmount = app.unmount;
     await expect.element(page.getByText("1 of 19 accepted")).toBeVisible();
     for (let i = 0; i < 8; i++) await press("Tab");
@@ -103,7 +106,7 @@ describe("extraction review", () => {
   });
 
   test("accepting an edited value keeps the edit and the span it came from", async () => {
-    const app = mount("/p/ivosidenib-cca/extraction");
+    const app = mount(RUN);
     unmount = app.unmount;
     await expect.element(page.getByText("1 of 19 accepted")).toBeVisible();
     for (let i = 0; i < 3; i++) await press("Tab");
@@ -134,7 +137,7 @@ describe("extraction review", () => {
   });
 
   test("needs every line of a multi-line source on screen, not only the first", async () => {
-    const app = mount("/p/ivosidenib-cca/extraction");
+    const app = mount(RUN);
     unmount = app.unmount;
     // `expect.poll` and `expect.element` give up after 1 s by default; under a full
     // `pnpm check` the page images and the scroll can take longer than that, so the waits get room.

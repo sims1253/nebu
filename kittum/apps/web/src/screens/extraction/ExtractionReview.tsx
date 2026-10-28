@@ -1,10 +1,11 @@
-// Extraction review (DESIGN.md, "Extraction"): fields grouped by endpoint, arm, and timepoint
-// beside the report. The selected field and its source region share the marker, and Enter
-// accepts only once that region has been on screen.
-import { useRouteContext } from "@tanstack/react-router";
+// Extraction review (DESIGN.md, "Extraction"): one run's fields grouped by endpoint, arm, and
+// timepoint beside the report. The selected field and its source region share the marker, and
+// Enter accepts only once that region has been on screen. An edit needs a span: the reviewer
+// selects the value on the page, confirms the number Kittum read from it, and accepts.
+import { Link, useRouteContext } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { Anchor, ExtractionReview, Proposal, ReviewField } from "../../data/schema.ts";
+import type { ExtractionReview, Proposal, ReviewField } from "../../data/schema.ts";
 import { run, WorkbenchError } from "../../data/workbench.ts";
 import { Key, KeyHint } from "../../ui/Key.tsx";
 import { useKeys } from "../../ui/keys.ts";
@@ -13,7 +14,7 @@ import { PdfViewer } from "../pdf/PdfViewer.tsx";
 import type { PageHighlight, TextSelection } from "../pdf/PdfViewer.tsx";
 import { useProject } from "../project.tsx";
 
-/** How long the source must be on screen before Enter accepts. */
+/** How long the source must be on screen before Enter accepts; the server checks it too. */
 export const VIEW_MS = 400;
 
 type Path = "janus" | "llm";
@@ -22,45 +23,65 @@ const PATH_NAME: Record<Path, string> = { janus: "Janus", llm: "LLM" };
 interface FieldState {
   readonly picked: Path | null;
   readonly accepted: Path | null;
+  /** The accepted value, when it is the reviewer's own. */
+  readonly value: string | null;
   readonly edited: TextSelection | null;
 }
 
-const agreement = (field: ReviewField) => {
-  const [a, b] = field.proposals;
-  if (!a || !b) return "single" as const;
-  return a.value === b.value && a.unit === b.unit ? ("agree" as const) : ("differ" as const);
-};
-
-export function ExtractionScreen({ review }: { review: ExtractionReview | null }) {
-  if (!review) {
-    return (
-      <div className="mx-auto max-w-[640px] px-10 py-16">
-        <h1 className="text-xl font-semibold">Nothing to review</h1>
-        <p className="mt-2 text-md text-ink-2">
-          Extraction starts once a full text is included and both extraction paths have run.
-        </p>
-      </div>
-    );
-  }
-  return <Review review={review} />;
+/** An edit in progress: the selection and the value the reviewer confirms from it. */
+interface Editing {
+  readonly selection: TextSelection;
+  readonly value: string;
 }
 
-function Review({ review }: { review: ExtractionReview }) {
+const agreement = (field: ReviewField) =>
+  field.agreement === "disagree" && field.proposals.length > 1
+    ? ("differ" as const)
+    : field.agreement === "agree"
+      ? ("agree" as const)
+      : ("single" as const);
+
+const SINGLE: Record<ReviewField["agreement"], string> = {
+  janus_only: "Janus only",
+  llm_only: "LLM only",
+  neither: "Neither path",
+  agree: "Both agree",
+  disagree: "The paths disagree",
+};
+
+/** The first number in a selection, as the value an edit proposes. */
+const firstNumber = (text: string) => /[-−–]?\d+(?:[.,·]\d+)*/u.exec(text)?.[0] ?? text.trim();
+
+const failedChecks = (p: Proposal | undefined) =>
+  (p?.validators ?? []).filter((v) => !v.passed).map((v) => v.message ?? v.validator);
+
+export function ExtractionScreen({ review }: { review: ExtractionReview }) {
   const { workbench } = useRouteContext({ from: "/p/$projectId" });
-  const { labels } = useProject();
+  const { project, me, labels } = useProject();
   const anchors = useMemo(() => new Map(review.anchors.map((a) => [a.id, a])), [review.anchors]);
   const [selected, setSelected] = useState(0);
   const [fields, setFields] = useState<Record<string, FieldState>>(() =>
     Object.fromEntries(
-      review.fields.map((f) => [f.id, { picked: null, accepted: f.accepted, edited: null }]),
+      review.fields.map((f) => [
+        f.id,
+        {
+          picked: null,
+          accepted: f.accepted,
+          value: f.acceptance?.edited ? f.acceptance.value : null,
+          edited: null,
+        },
+      ]),
     ),
   );
   const [selection, setSelection] = useState<TextSelection | null>(null);
+  const [editing, setEditing] = useState<Editing | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   // On-screen time per source identity (field, path, and anchor or edited span), so time spent on
   // one source never counts for another.
   const viewed = useRef(new Map<string, number>());
   const visible = useRef<{ key: string; since: number } | null>(null);
+  const listShownAt = useRef(performance.now());
   const [nudge, setNudge] = useState(0);
   const rows = useRef(new Map<string, HTMLElement>());
 
@@ -76,7 +97,7 @@ function Review({ review }: { review: ExtractionReview }) {
     );
   };
   const shown = field ? proposal(field, state) : undefined;
-  const source: Anchor | undefined = shown?.anchor_ids.map((id) => anchors.get(id)).find(Boolean);
+  const source = shown?.anchor_ids.map((id) => anchors.get(id)).find(Boolean);
   const other =
     field && status === "differ"
       ? field.proposals
@@ -85,7 +106,8 @@ function Review({ review }: { review: ExtractionReview }) {
           .find(Boolean)
       : undefined;
 
-  const sourceBoxes = state?.edited?.boxes ?? source?.boxes;
+  const edited = editing?.selection ?? state?.edited ?? null;
+  const sourceBoxes = edited?.boxes ?? source?.boxes;
   const highlights = useMemo((): PageHighlight[] => {
     const out: PageHighlight[] = [];
     if (other && other.id !== source?.id) {
@@ -104,7 +126,6 @@ function Review({ review }: { review: ExtractionReview }) {
   const target =
     field && firstBox ? { key: `${field.id}-${shown?.path}-${nudge}`, box: firstBox } : null;
 
-  const edited = state?.edited;
   const sourceKey = field
     ? `${field.id}|${shown?.path}|${edited ? `edit:${edited.start}-${edited.end}` : (source?.id ?? "none")}`
     : "";
@@ -133,18 +154,30 @@ function Review({ review }: { review: ExtractionReview }) {
 
   const move = (step: number) => {
     setSelected((s) => Math.max(0, Math.min(review.fields.length - 1, s + step)));
+    setEditing(null);
     setNotice(null);
   };
 
-  const accept = async () => {
-    if (!field || !shown) return;
-    if (status === "differ" && !state?.picked && !state?.accepted) {
+  const accept = async ({ override = false }: { override?: boolean } = {}) => {
+    if (!field || !shown || busy) return;
+    if (state?.accepted) {
+      setNotice("This value is accepted already.");
+      return;
+    }
+    if (status === "differ" && !state?.picked && !editing) {
       setNotice("The paths disagree. Pick one with 1 or 2 after checking both sources.");
       return;
     }
     if (!sourceBoxes) {
       setNotice(
-        "This value has no source on the page. It needs a grounding exception, which is not built yet.",
+        "This value has no source on the page. Select it on the page and press e to edit it with its span; a grounding exception is not built yet.",
+      );
+      return;
+    }
+    const failed = editing ? [] : failedChecks(shown);
+    if (failed.length && !override) {
+      setNotice(
+        `A check failed: ${failed.join(" ")} Confirm the value against the source and press o to accept it anyway, or edit it.`,
       );
       return;
     }
@@ -154,28 +187,80 @@ function Review({ review }: { review: ExtractionReview }) {
       setNudge((n) => n + 1);
       return;
     }
+    setBusy(true);
     try {
-      await run(
+      const acceptance = await run(
         workbench.accept({
+          projectId: project.id,
+          as: me.actor_id,
           fieldId: field.id,
           path: shown.path,
-          edit: edited
+          edit: editing
             ? {
-                value: edited.quote.trim(),
-                start: edited.start,
-                end: edited.end,
-                quote: edited.quote,
-                boxes: edited.boxes,
+                value: editing.value.trim(),
+                start: editing.selection.start,
+                end: editing.selection.end,
+                quote: editing.selection.quote,
+                boxes: editing.selection.boxes,
               }
             : null,
           sourceViewedMs: Math.round(ms),
+          override,
         }),
       );
-      setFields((all) => ({ ...all, [field.id]: { ...all[field.id]!, accepted: shown.path } }));
+      setFields((all) => ({
+        ...all,
+        [field.id]: {
+          ...all[field.id]!,
+          accepted: acceptance.path,
+          value: acceptance.edited ? acceptance.value : null,
+          edited: editing?.selection ?? null,
+        },
+      }));
+      setEditing(null);
       setNotice(null);
       move(1);
     } catch (e) {
       setNotice(e instanceof WorkbenchError ? e.message : "The value was not accepted. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Agreeing, validated standard fields may be accepted together once the list was on screen.
+  const groupable = review.fields.filter(
+    (f) => f.gate === "group_accept" && !fields[f.id]?.accepted,
+  );
+  const acceptGroup = async () => {
+    if (!groupable.length || busy) return;
+    const ms = Math.round(performance.now() - listShownAt.current);
+    if (ms < VIEW_MS) {
+      setNotice("Look over the list before accepting it as a group.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const accepted = await run(
+        workbench.groupAccept({
+          projectId: project.id,
+          as: me.actor_id,
+          runId: review.run.id,
+          fieldIds: groupable.map((f) => f.id),
+          listViewedMs: ms,
+        }),
+      );
+      setFields((all) => {
+        const next = { ...all };
+        for (const a of accepted) next[a.field_id] = { ...next[a.field_id]!, accepted: a.path };
+        return next;
+      });
+      setNotice(
+        `Accepted ${accepted.length} agreeing standard ${accepted.length === 1 ? "field" : "fields"} as a group. A random tenth of them go to a re-check.`,
+      );
+    } catch (e) {
+      setNotice(e instanceof WorkbenchError ? e.message : "The group was not accepted.");
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -198,25 +283,31 @@ function Review({ review }: { review: ExtractionReview }) {
       void accept();
       return true;
     }
+    if (key === "o") {
+      void accept({ override: true });
+      return true;
+    }
+    if (key === "a") {
+      void acceptGroup();
+      return true;
+    }
     if ((key === "1" || key === "2") && status === "differ") {
       const path = field.proposals[Number(key) - 1]?.path ?? null;
-      setFields((all) => ({
-        ...all,
-        [field.id]: { ...all[field.id]!, picked: path, accepted: null },
-      }));
+      setFields((all) => ({ ...all, [field.id]: { ...all[field.id]!, picked: path } }));
       setNotice(null);
       return true;
     }
     if (key === "e") {
+      if (state?.accepted) {
+        setNotice("This value is accepted already.");
+        return true;
+      }
       if (!selection) {
         setNotice("Select the value on the page first; an edit needs a source span.");
         return true;
       }
-      setFields((all) => ({
-        ...all,
-        [field.id]: { ...all[field.id]!, edited: selection, accepted: null },
-      }));
-      setNotice(`Edited to “${selection.quote.trim()}”. Press Enter to accept.`);
+      setEditing({ selection, value: firstNumber(selection.quote) });
+      setNotice(`Edited to “${firstNumber(selection.quote)}”. Press Enter to accept.`);
       return true;
     }
     return false;
@@ -229,10 +320,10 @@ function Review({ review }: { review: ExtractionReview }) {
       parts: Array<{ title: string; fields: ReviewField[] }>;
     }> = [];
     for (const f of review.fields) {
-      let group = out.find((g) => g.endpoint === f.key.endpoint && g.set === f.key.analysis_set);
+      let group = out.find((g) => g.endpoint === f.labels.endpoint && g.set === f.key.analysis_set);
       if (!group)
-        out.push((group = { endpoint: f.key.endpoint, set: f.key.analysis_set, parts: [] }));
-      const title = `${f.key.arm}, ${f.key.timepoint.toLowerCase()}`;
+        out.push((group = { endpoint: f.labels.endpoint, set: f.key.analysis_set, parts: [] }));
+      const title = `${f.labels.arm}, ${f.labels.timepoint.toLowerCase()}`;
       let part = group.parts.find((p) => p.title === title);
       if (!part) group.parts.push((part = { title, fields: [] }));
       part.fields.push(f);
@@ -251,13 +342,23 @@ function Review({ review }: { review: ExtractionReview }) {
         <header className="flex items-baseline gap-4 border-b border-rule px-5 pt-4 pb-3">
           <div className="min-w-0">
             <p className="text-xs text-ink-3">
+              <Link
+                to="/p/$projectId/extraction"
+                params={{ projectId: project.id }}
+                className="text-petrol hover:underline"
+              >
+                Runs
+              </Link>{" "}
               {labels.report} {review.report.study_label}, data cut {field?.key.data_cut}
             </p>
             <h1 className="mt-0.5 truncate text-sm font-semibold" title={review.report.title}>
               {review.report.title}
             </h1>
           </div>
-          <span className="ml-auto text-xs whitespace-nowrap text-ink-2">
+          <span
+            className="ml-auto text-xs whitespace-nowrap text-ink-2"
+            data-testid="accepted-count"
+          >
             {done} of {review.fields.length} accepted
           </span>
         </header>
@@ -282,9 +383,13 @@ function Review({ review }: { review: ExtractionReview }) {
                       key={f.id}
                       field={f}
                       state={fields[f.id]}
+                      editing={f.id === field?.id ? editing : null}
                       shown={proposal(f, fields[f.id])}
                       selected={f.id === field?.id}
-                      onSelect={() => setSelected(review.fields.indexOf(f))}
+                      onSelect={() => {
+                        setSelected(review.fields.indexOf(f));
+                        setEditing(null);
+                      }}
                       rowRef={(el) => {
                         if (el) rows.current.set(f.id, el);
                         else rows.current.delete(f.id);
@@ -297,6 +402,30 @@ function Review({ review }: { review: ExtractionReview }) {
           ))}
         </div>
         <footer className="border-t border-rule-strong bg-sheet-2 px-5 py-2.5 text-sm">
+          {editing ? (
+            <label className="mb-2 flex items-center gap-3">
+              <span className="text-xs font-semibold text-ink-2">Value from your selection</span>
+              <input
+                autoFocus
+                aria-label="Edited value"
+                value={editing.value}
+                onChange={(e) => setEditing({ ...editing, value: e.currentTarget.value })}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void accept();
+                  } else if (e.key === "Escape") {
+                    setEditing(null);
+                    setNotice("Edit dropped.");
+                  }
+                }}
+                className="w-32 rounded-[3px] border border-petrol bg-sheet px-2 py-0.5 text-sm outline-none"
+              />
+              <span className="min-w-0 truncate text-xs text-ink-3" title={editing.selection.quote}>
+                from “{editing.selection.quote.trim()}”
+              </span>
+            </label>
+          ) : null}
           <div className="flex flex-wrap gap-x-4 gap-y-1.5">
             <KeyHint keys={["Tab"]}>Next field</KeyHint>
             <KeyHint keys={["Enter"]}>Accept</KeyHint>
@@ -305,6 +434,12 @@ function Review({ review }: { review: ExtractionReview }) {
             </KeyHint>
             <KeyHint keys={["e"]} muted={!selection}>
               Edit from selection
+            </KeyHint>
+            <KeyHint keys={["o"]} muted={!failedChecks(shown).length}>
+              Accept despite a failed check
+            </KeyHint>
+            <KeyHint keys={["a"]} muted={!groupable.length}>
+              Accept {groupable.length || "no"} agreeing standard fields
             </KeyHint>
           </div>
           <p
@@ -323,7 +458,7 @@ function Review({ review }: { review: ExtractionReview }) {
         target={target}
         onSelection={setSelection}
         onCurrentVisible={onCurrentVisible}
-        label={`${review.report.study_label}, ${review.report.citation}`}
+        label={`${review.report.study_label}, ${review.report.citation || review.report.licence}`}
       />
     </div>
   );
@@ -331,21 +466,25 @@ function Review({ review }: { review: ExtractionReview }) {
 
 const describe = (field: ReviewField, shown: Proposal | undefined) => {
   const failed = field.proposals.flatMap((p) =>
-    p.validators.filter((v) => !v.passed).map((v) => `${PATH_NAME[p.path]}: ${v.message}`),
+    failedChecks(p).map((message) => `${PATH_NAME[p.path]}: ${message}`),
   );
   if (failed.length) return failed.join(" ");
   const policy =
     field.spec.policy === "critical"
       ? "Critical: verify against the highlighted source."
       : field.spec.policy === "standard"
-        ? "Standard: agreeing, validated values may be accepted after viewing the list."
+        ? "Standard: agreeing, validated values may be accepted together after viewing the list."
         : "Descriptive: one review of the value and its span.";
-  return shown?.status === "missing" ? `Reported as missing. ${policy}` : policy;
+  const why = shown?.message ? ` ${shown.message}.` : "";
+  return shown && shown.status !== "extracted"
+    ? `${PROPOSAL_STATUS[shown.status].label}.${why} ${policy}`
+    : policy;
 };
 
 function FieldRow({
   field,
   state,
+  editing,
   shown,
   selected,
   onSelect,
@@ -353,15 +492,17 @@ function FieldRow({
 }: {
   field: ReviewField;
   state: FieldState | undefined;
+  editing: Editing | null;
   shown: Proposal | undefined;
   selected: boolean;
   onSelect: () => void;
   rowRef: (el: HTMLElement | null) => void;
 }) {
   const status = agreement(field);
-  const failed = field.proposals.some((p) => p.validators.some((v) => !v.passed));
-  const value = state?.edited ? state.edited.quote.trim() : shown?.value;
-  const unit = state?.edited ? field.spec.unit : shown?.unit;
+  const failed = field.proposals.some((p) => failedChecks(p).length > 0);
+  const own = editing?.value ?? state?.value ?? null;
+  const value = own ?? (shown?.status === "extracted" ? shown.value : null);
+  const unit = own ? field.spec.unit : shown?.unit;
   return (
     <div
       ref={rowRef}
@@ -377,12 +518,7 @@ function FieldRow({
           <span className="ml-2 text-2xs text-ink-3">{field.spec.policy}</span>
         ) : null}
       </span>
-      <span className="text-right whitespace-nowrap">
-        {shown && shown.status !== "extracted" && value ? (
-          <span className="mr-1.5 inline-flex align-middle">
-            <Mark term={PROPOSAL_STATUS[shown.status]} />
-          </span>
-        ) : null}
+      <span className="text-right whitespace-nowrap" data-testid="field-value">
         {value ??
           (shown ? (
             <Status term={PROPOSAL_STATUS[shown.status]} />
@@ -392,28 +528,28 @@ function FieldRow({
         {value && unit ? <span className="ml-1 text-ink-3">{unit}</span> : null}
       </span>
       <span className="narrow flex items-center gap-1.5 text-xs whitespace-nowrap">
-        {status === "agree" ? (
-          <span className="text-ink-2">Both agree</span>
-        ) : status === "single" ? (
-          <span className="text-ink-3">{PATH_NAME[field.proposals[0]?.path ?? "janus"]} only</span>
-        ) : (
+        {status === "differ" ? (
           field.proposals.map((p, i) => (
             <span
               key={p.path}
               className={`flex items-center gap-1 ${state?.picked === p.path || state?.accepted === p.path ? "font-semibold text-ink" : "text-unclear"}`}
             >
               <Key k={String(i + 1)} />
-              {p.value}
+              {p.value ?? PROPOSAL_STATUS[p.status].label}
               {/* Same number, different unit: the unit is the disagreement. */}
               {field.proposals.some((q) => q.unit !== p.unit) && p.unit ? ` ${p.unit}` : ""}
             </span>
           ))
+        ) : (
+          <span className={status === "agree" ? "text-ink-2" : "text-ink-3"}>
+            {SINGLE[field.agreement]}
+          </span>
         )}
         {failed ? <Mark term={PROPOSAL_STATUS.invalid} title="A validator failed" /> : null}
       </span>
       <span className="text-xs">
         {state?.accepted ? (
-          <Status term={ACCEPTED} />
+          <Status term={ACCEPTED}>{state.value !== null ? "Edited" : "Accepted"}</Status>
         ) : (
           <span className="text-ink-3">
             {status === "differ" && !state?.picked ? "Pick a path" : "To verify"}

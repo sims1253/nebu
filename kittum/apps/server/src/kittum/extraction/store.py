@@ -141,6 +141,15 @@ class ExtractionRun(Record):
     completed_at: datetime | None
 
 
+class RunListing(Record):
+    """A run as the run list shows it: its report and how far review has come."""
+
+    run: ExtractionRun
+    report: ReportInfo
+    fields: int
+    accepted: int
+
+
 class FieldLabels(Record):
     endpoint: str
     timepoint: str
@@ -330,6 +339,28 @@ def get_run(tx: Tx, project_id: Id, run_id: Id) -> ExtractionRun:
     if row is None:
         raise NotFoundError(f"extraction run {run_id}")
     return _run(row)
+
+
+def list_runs(tx: Tx, project_id: Id) -> list[RunListing]:
+    """The project's runs, newest first, with their field and acceptance counts."""
+    rows = tx.execute(
+        "select r.*, j.status as job_status,"
+        " (select count(*) from extraction_field f where f.run_id = r.id) as n_fields,"
+        " (select count(*) from extraction_acceptance a where a.run_id = r.id) as n_accepted"
+        " from extraction_run r"
+        " left join job j on j.stage_key = 'extraction.run:' || r.id::text"
+        " where r.project_id = %s order by r.created_at desc, r.id desc",
+        (project_id,),
+    ).fetchall()
+    return [
+        RunListing(
+            run=_run(row),
+            report=ReportInfo.model_validate(row["report"]),
+            fields=row["n_fields"],
+            accepted=row["n_accepted"],
+        )
+        for row in rows
+    ]
 
 
 def get_run_by_command(tx: Tx, command_id: Id) -> ExtractionRun:

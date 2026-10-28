@@ -8,7 +8,7 @@ from kittum.core import new_id
 from kittum.extraction import PROPOSALS_RECORDED, RUN_REQUESTED, VALUE_ACCEPTED
 from kittum.ledger import SigningKey, seal, verify_bundle
 from kittum.models.testing import RecordedBackend
-from tests.extraction.support import AGENT, recorded, recording_path, schema
+from tests.extraction.support import AGENT, FIXTURES, recorded, recording_path, schema
 
 STUDY = UUID("019a3c10-0000-7000-8000-000000000001")
 REPORT = UUID("019a3c10-0000-7000-8000-000000000002")
@@ -351,3 +351,54 @@ def test_only_agreeing_validated_standard_fields_are_accepted_as_a_group(env):
         assert all(
             a in anchors for f in view["fields"] for p in f["proposals"] for a in p["anchor_ids"]
         )
+
+
+def test_the_workbench_reads_a_schema_requests_a_janus_only_run_and_lists_it(env):
+    """The workbench's path to a run: the schema file read by the server (a broken one is
+    refused with the reason), no model server configured so the run takes the Janus path only,
+    and the run list showing its report and how many of its fields are accepted."""
+    base = f"/api/projects/{env.project_id}/extraction"
+    with env.client:
+        text = (FIXTURES / "lesotho_schema.yaml").read_text()
+        broken = env.client.post(
+            f"{base}/schemas/parse",
+            json={"text": text.replace("schema_version: 1", "schema_version: [")},
+        )
+        assert broken.status_code == 422 and "line" in broken.json()["detail"][0]["msg"]
+        unknown = env.client.post(f"{base}/schemas/parse", json={"text": text + "\nextra: 1\n"})
+        assert unknown.status_code == 422 and "extra" in unknown.json()["detail"][0]["msg"]
+        parsed = env.client.post(f"{base}/schemas/parse", json={"text": text})
+        assert parsed.status_code == 200 and parsed.json() == schema("lesotho").model_dump(
+            mode="json"
+        )
+        assert env.client.get(f"{base}/models").json() == []  # this context has no model server
+
+        assert env.client.get(f"{base}/runs").json() == []
+        body = {
+            "command_id": str(new_id()),
+            "actor_id": str(env.requester),
+            "layer_id": str(env.stored["lesotho"].layer.id),
+            "study_id": str(STUDY),
+            "report_id": str(REPORT),
+            "extraction_schema": parsed.json(),
+            "report": {"study_label": "NCT05596773", "title": "CHW-led care in Lesotho"},
+        }
+        run = env.client.post(f"{base}/runs", json=body).json()
+        (listed,) = env.client.get(f"{base}/runs").json()
+        assert (listed["run"]["id"], listed["run"]["status"], listed["fields"]) == (
+            run["id"],
+            "queued",
+            0,
+        )
+        assert listed["report"]["study_label"] == "NCT05596773"
+
+        assert env.worker().run_once() is True
+        (listed,) = env.client.get(f"{base}/runs").json()
+        assert (listed["run"]["status"], listed["run"]["model_identity"]) == ("succeeded", None)
+        assert (listed["fields"], listed["accepted"]) == (10, 0)
+        fields = _fields(env, run["id"])
+        assert {p["path"] for f in fields.values() for p in f["proposals"]} == {"janus"}
+        intervention = fields[("participants", "intervention", "n_analysed")]
+        assert _accept(env, intervention, "janus").json()["value"] == "52"
+        (listed,) = env.client.get(f"{base}/runs").json()
+        assert listed["accepted"] == 1

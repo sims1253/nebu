@@ -20,7 +20,6 @@ import type {
   QueueItem,
   Reveal,
   RevealSetting,
-  ReviewField,
   ScopeStatus,
   Stage,
 } from "../schema.ts";
@@ -30,6 +29,9 @@ import anchorsJson from "./fixtures/abc06/anchors.json";
 import layerJson from "./fixtures/abc06/layer.json";
 import recordsJson from "./fixtures/records.json";
 import { extractionFields, REPORT_ID, STUDY_ID } from "./extraction.ts";
+
+/** The recorded extraction run, for the mock's routes. */
+export const MOCK_RUN_ID = "0192f0c4-5a10-7d1e-9c3a-abc06abc0603";
 import { tag } from "./highlights.ts";
 import { verdictsFor } from "./judge.ts";
 import { CRITERIA, PROJECTS, PROTOCOL, SCOPE_A } from "./protocol.ts";
@@ -186,6 +188,31 @@ const report = {
   licence: "CC BY 4.0",
 };
 const valueAnchors = anchorsJson.values as Record<string, Anchor>;
+const anchorId = (name: string) => {
+  const anchor = valueAnchors[name];
+  if (!anchor) throw new Error(`fixture has no anchor ${name}`);
+  return anchor.id;
+};
+/** The fixture's anchors as the server sends them, with their document and text hash. */
+const asServerAnchor = (anchor: Anchor) => ({
+  ...anchor,
+  document_id: layerJson.layer.document_id,
+  text_hash: layerJson.layer.output_hash,
+});
+const extractionRun = {
+  id: MOCK_RUN_ID,
+  project_id: PROJECTS[0]?.id ?? "",
+  layer_id: layerJson.layer.id,
+  document_id: layerJson.document.id,
+  study_id: STUDY_ID,
+  report_id: REPORT_ID,
+  status: "succeeded",
+  schema_hash: layerJson.layer.recipe_hash,
+  model_identity: "recorded:qwen3.5-4b",
+  janus_version: "0.1",
+  created_at: "2026-10-20T09:00:00Z",
+  completed_at: "2026-10-20T09:04:00Z",
+};
 const mentionAnchors = anchorsJson.mentions as Record<string, Anchor[]>;
 
 type Item = {
@@ -462,19 +489,43 @@ export const makeMockWorkbench = (
     reportFile: unavailable,
     sealBundle: unavailable,
 
-    extraction: (projectId) =>
-      call("other", "extraction", projectId, () => {
-        if (!hasData(projectId)) return null;
-        const fields: ReviewField[] = extractionFields((name) => {
-          const anchor = valueAnchors[name];
-          if (!anchor) throw new Error(`fixture has no anchor ${name}`);
-          return anchor.id;
-        }).map((field) => ({ ...field, accepted: accepted.get(field.id) ?? field.accepted }));
+    extractionRuns: (projectId) =>
+      call("other", "extractionRuns", projectId, () =>
+        hasData(projectId)
+          ? [
+              {
+                run: extractionRun,
+                report,
+                fields: extractionFields(anchorId).length,
+                accepted: extractionFields(anchorId).filter((f) => accepted.get(f.id) ?? f.accepted)
+                  .length,
+              },
+            ]
+          : [],
+      ),
+    extractionModels: () => call("other", "extractionModels", null, () => []),
+    parseExtractionSchema: unavailable,
+    requestExtraction: unavailable,
+
+    extraction: ({ projectId, runId }) =>
+      call("other", "extraction", { projectId, runId }, () => {
+        if (!hasData(projectId) || runId !== extractionRun.id) {
+          throw new Error(`no extraction run ${runId}`);
+        }
+        const fields = extractionFields(anchorId).map((field) => ({
+          ...field,
+          accepted: accepted.get(field.id) ?? field.accepted,
+        }));
         return Schema.decodeUnknownSync(ExtractionReview)({
+          run: extractionRun,
           report: { ...report, study_id: STUDY_ID },
           document: layerJson.document,
-          layer,
-          anchors: Object.values(valueAnchors),
+          layer: {
+            ...layer,
+            recipe_hash: layerJson.layer.recipe_hash,
+            output_hash: layerJson.layer.output_hash,
+          },
+          anchors: Object.values(valueAnchors).map(asServerAnchor),
           fields,
         });
       }),
@@ -483,6 +534,28 @@ export const makeMockWorkbench = (
       call("decide", "accept", request, () => {
         accepted.set(request.fieldId, request.path);
         acceptances.push(request);
+        const field = extractionFields(anchorId).find((f) => f.id === request.fieldId);
+        if (!field) throw new Error(`no field ${request.fieldId}`);
+        const proposal = field.proposals.find((p) => p.path === request.path);
+        return {
+          id: `acceptance-${acceptances.length}`,
+          field_id: field.id,
+          run_id: extractionRun.id,
+          key: field.key,
+          path: request.path,
+          edited: request.edit !== null,
+          group: false,
+          value: request.edit?.value ?? proposal?.value ?? null,
+          unit: proposal?.unit ?? field.spec.unit,
+          anchor_id: proposal?.anchor_ids[0] ?? "",
+          reviewer_id: request.as,
+          source_viewed_ms: request.sourceViewedMs,
+          accepted_at: new Date().toISOString(),
+          recheck: false,
+          event_seq: acceptances.length,
+        };
       }),
+    groupAccept: unavailable,
+    assertions: () => call("other", "assertions", null, () => []),
   };
 };

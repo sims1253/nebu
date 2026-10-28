@@ -3,8 +3,7 @@
 // Server records come from @kittum/contracts, generated from the server's OpenAPI document, so the
 // Pydantic models stay the single source of truth. This file adds what the screens compose from
 // several responses (a full-text assignment, a page with its words), the protocol as the screens
-// read it, and the extraction records, which the server does not serve yet (WP-11). Both
-// Workbench implementations, the API one and the mock, return these shapes.
+// read it. Both Workbench implementations, the API one and the mock, return these shapes.
 import { KittumApi } from "@kittum/contracts";
 import * as Schema from "effect/Schema";
 
@@ -267,80 +266,20 @@ export const FullTextAssignment = Schema.Struct({
 });
 export type FullTextAssignment = typeof FullTextAssignment.Type;
 
-// kittum.extraction: not served yet (WP-11), so only the mock implements it.
+// kittum.extraction, as the server serves it: runs, their fields with both paths' proposals,
+// and the accepted values.
 
-export const Policy = Schema.Literals(["critical", "standard", "descriptive"]);
-export type Policy = typeof Policy.Type;
-
-export const ProposalStatus = Schema.Literals([
-  "extracted",
-  "missing",
-  "ambiguous",
-  "invalid",
-  "error",
-]);
-export type ProposalStatus = typeof ProposalStatus.Type;
-
-export const SemanticKey = Schema.Struct({
-  study_id: Id,
-  report_id: Id,
-  subpopulation: Schema.String,
-  analysis_set: Schema.String,
-  data_cut: Schema.String,
-  arm: Schema.String,
-  endpoint: Schema.String,
-  timepoint: Schema.String,
-  quantity: Schema.String,
-});
-export type SemanticKey = typeof SemanticKey.Type;
-
-export const FieldSpec = Schema.Struct({
-  quantity: Schema.String,
-  unit: Schema.NullOr(Schema.String),
-  policy: Policy,
-  description: Schema.String,
-});
-export type FieldSpec = typeof FieldSpec.Type;
-
-const ValidatorResult = Schema.Struct({
-  validator: Schema.String,
-  passed: Schema.Boolean,
-  message: Schema.NullOr(Schema.String),
-});
-
-export const Proposal = Schema.Struct({
-  key: SemanticKey,
-  value: Schema.NullOr(Schema.String),
-  unit: Schema.NullOr(Schema.String),
-  status: ProposalStatus,
-  path: Schema.Literals(["janus", "llm"]),
-  anchor_ids: Schema.Array(Id),
-  validators: Schema.Array(ValidatorResult),
-});
-export type Proposal = typeof Proposal.Type;
-
-/** One field to review: the proposals of both paths for one semantic key. */
-export const ReviewField = Schema.Struct({
-  id: Id,
-  spec: FieldSpec,
-  key: SemanticKey,
-  proposals: Schema.Array(Proposal),
-  accepted: Schema.NullOr(Schema.Literals(["janus", "llm"])),
-});
-export type ReviewField = typeof ReviewField.Type;
-
-export const ExtractionReview = Schema.Struct({
-  report: Schema.Struct({
-    id: Id,
-    study_id: Id,
-    study_label: Schema.String,
-    title: Schema.String,
-    citation: Schema.String,
-    licence: Schema.String,
-  }),
-  document: Document,
-  layer: LayerSummary,
-  anchors: Schema.Array(Anchor),
-  fields: Schema.Array(ReviewField),
-});
-export type ExtractionReview = typeof ExtractionReview.Type;
+export const ExtractionReview = KittumApi.ExtractionReview;
+export type ExtractionReview = KittumApi.ExtractionReview;
+export type ReviewField = KittumApi.ReviewField;
+export type Proposal = KittumApi.Proposal;
+export type ProposalStatus = KittumApi.Kittum__extraction__model__ProposalStatus;
+export type Policy = KittumApi.Policy;
+export type SemanticKey = KittumApi.SemanticKey;
+export type FieldSpec = KittumApi.FieldSpec;
+export type ExtractionRun = KittumApi.ExtractionRun;
+export type RunListing = KittumApi.RunListing;
+export type ExtractionSchema = KittumApi.ExtractionSchema;
+export type ReportInfo = KittumApi.ReportInfo;
+export type Acceptance = KittumApi.Acceptance;
+export type Assertion = KittumApi.Assertion;

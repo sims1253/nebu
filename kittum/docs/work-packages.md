@@ -22,12 +22,12 @@ The two-week spike in [DESIGN.md](../DESIGN.md#two-week-spike) picks from these 
 | 08 | `judge` and `models` | Done; ledger store and job wiring wait for WP-01 and WP-02 |
 | 09 | `screening` | Done: M1 to M3, blinding, reveal, sentinels, audits, adjudication, judge jobs, metrics, routes; open items listed |
 | 10 | `documents` | Parsers, layers, anchors, re-anchoring, viewer routes, and acquisition done; source resolvers for the waterfall open |
-| 11 | `extraction` | Types done; open |
+| 11 | `extraction` | Done: schema, both paths, validators, reconciliation, runs as jobs, acceptance, bundle exporter, routes, workbench screen; open items listed |
 | 12 | `appraisal` | Types done; open |
 | 13 | `stats` | Done: intervals, stopping, capture-recapture, conformal threshold, agreement |
 | 14 | `report` | Done: PRISMA flow, RIS, search report, AI disclosure, bundle exporters and `seal_bundle`, `gba_amnog` targets, routes; open items listed |
 | 15 | `api`, `app` | Done: composition root, project lifecycle (service, routes, CLI), `serve` with the workbench, `worker`, `demo seed`; authentication open |
-| 16 | Workbench | Done: wired to the API with a reviewer picker; setup from an empty review (people, protocol editor, searches, corpus, stages, full texts); screening, full text, adjudication, progress, protocol, search, studies, report rendering and sealing; end-to-end journeys in CI. Extraction review on the server waits on WP-11's screen wiring |
+| 16 | Workbench | Done: wired to the API with a reviewer picker; setup from an empty review (people, protocol editor, searches, corpus, stages, full texts); screening, full text, adjudication, progress, protocol, search, studies, extraction runs and review, report rendering and sealing; end-to-end journeys in CI |
 | 17 | Evaluation harness | Open |
 
 ## WP-01 Ledger
@@ -568,13 +568,13 @@ Module `kittum.extraction`. Needs: `documents`, `protocol`, `models`, `runs`.
 - Runs are jobs (`request_run`, `run_handler`), published with the job through
   `Commands.execute`. `accept`, edit-and-accept with a source span, and `group_accept` write one
   `extraction.value_accepted` event each; `assertions` is the accepted set. A bundle exporter adds
-  the tables and their anchors. HTTP routes in `api/routes/extraction.py`. Done.
+  the tables and their anchors. HTTP routes in `api/routes/extraction.py`, with the run list
+  (`list_runs`), a schema reader, and the models the LLM path can use, for the workbench. Done.
 - Acceptance: the Lesotho and Vitamin C trial PDFs with a real schema; Janus anchors checked by
   reading the PDF under the box; agent answers recorded from `qwen3.5:4b` on Ollama
   (`tests/extraction/record_fixtures.py`); planted validator errors; a real disagreement (the
   agent read 51 for the arm Table 1 prints as 52). Done.
-- Open: a `kittum worker` entry point that registers `run_handler` with configured backends;
-  grounding exceptions (a value read from a figure); the second, independent extraction a
+- Open: grounding exceptions (a value read from a figure); the second, independent extraction a
   critical disagreement requires; the re-check queue itself (only the draw is recorded);
   re-anchoring accepted values when a project promotes a new parser.
 
@@ -881,12 +881,23 @@ Done (branch `kittum/wp-16-workbench-design`, then `kittum/wp-15-integration`):
   review, runs the same steps through `kittum project`, and checks that both reviews open the same
   stage (mode, reveal, protocol hash, judge, the people in each role) and fill the screeners'
   queues with the same records and sentinel; the first reviewer then picks themselves and screens.
+- Extraction on the server: the lead requests a run (`n`) on a report with a full text, with an
+  extraction schema the server reads and the Janus path only or the LLM path on a configured
+  model; the list follows the worker until the run is ready. The review shows the server's fields
+  grouped by their labels: `Enter` accepts once the source was on screen, `1`/`2` pick a path,
+  `e` turns a selection on the page into an edit (the first number in it, to confirm in a field,
+  then `Enter`), `o` accepts despite a failed check, `a` accepts the agreeing standard fields
+  together. The accepted values, the latest per semantic key, are listed under the runs.
+  `apps/web/e2e/extraction.spec.ts` uploads the Lesotho trial on Retrieval, requests a Janus-only
+  run, accepts Table 1's 52, and edits the 12-month HbA1c from a mouse selection on page 5; the
+  assertion's anchor is that span.
 - Browser unit tests in Vitest browser mode on the mock, and screenshots in `apps/web/screenshots/`.
 
 Left:
 
-- Extraction review on the server (WP-11), the other report targets on the Reports screen, and
-  the Risk of bias and AI-exclusion audit screens; the full-text judge's per-criterion reading in adjudication; grounding exceptions.
+- The other report targets on the Reports screen, and the Risk of bias (WP-12 has no server
+  implementation) and AI-exclusion audit screens; extraction runs are visible to every member of
+  the project, so the lead requests them once full-text screening of the report is done; the full-text judge's per-criterion reading in adjudication; grounding exceptions.
 - Adjudication shows a full-text column's evidence as counts, not the quotes on the page.
 - Update searches: a second corpus ingest needs the corpus diff, so Search and Studies refuse it.
 - Removing a person or a role, and renaming a review, are not built in the server either.

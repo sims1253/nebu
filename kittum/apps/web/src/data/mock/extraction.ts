@@ -288,14 +288,37 @@ export const extractionFields = (anchorId: (name: string) => string): ReviewFiel
         return { validator, passed: message === undefined, message: message ?? null };
       }),
     });
+    const proposals = [
+      ...(def.janus ? [proposal("janus", def.janus)] : []),
+      ...(def.llm ? [proposal("llm", def.llm)] : []),
+    ];
+    const [janus, llm] = [def.janus, def.llm];
+    const agreement: ReviewField["agreement"] =
+      janus && llm
+        ? janus[0] === llm[0] && janus[1] === llm[1]
+          ? "agree"
+          : "disagree"
+        : janus
+          ? "janus_only"
+          : llm
+            ? "llm_only"
+            : "neither";
     return {
       id: `field-${String(index + 1).padStart(2, "0")}`,
       spec,
       key,
-      proposals: [
-        ...(def.janus ? [proposal("janus", def.janus)] : []),
-        ...(def.llm ? [proposal("llm", def.llm)] : []),
-      ],
+      proposals,
       accepted: def.accepted ?? null,
+      labels: { endpoint: def.endpoint, timepoint: def.timepoint, arm: def.arm },
+      agreement,
+      gate:
+        def.policy === "critical"
+          ? "human_verify"
+          : def.policy === "standard" && agreement === "agree"
+            ? "group_accept"
+            : "human_review",
+      second_extractor: def.policy === "critical" && agreement === "disagree",
+      recheck: false,
+      acceptance: null,
     };
   });

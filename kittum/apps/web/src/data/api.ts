@@ -489,13 +489,71 @@ export const makeApiWorkbench = (): Workbench => ({
   sealBundle: ({ projectId, as }) =>
     call((api) => api.sealReportBundle(projectId, { payload: { actor_id: as } })),
 
-  // The server serves extraction (WP-11), but this screen is not wired to it yet: it shows what
-  // it will do.
-  extraction: () => Effect.succeed(null),
-  accept: () =>
-    Effect.fail(
-      new WorkbenchError({ reason: "unavailable", message: "Extraction is not served yet." }),
+  extractionRuns: (projectId) => call((api) => api.listExtractionRuns(projectId, undefined)),
+
+  extractionModels: (projectId) => call((api) => api.listExtractionModels(projectId, undefined)),
+
+  parseExtractionSchema: ({ projectId, text }) =>
+    call((api) => api.parseExtractionSchema(projectId, { payload: { text } })),
+
+  requestExtraction: ({ projectId, as, layerId, studyId, reportId, schema, modelId, report }) =>
+    call((api) =>
+      api.requestExtractionRun(projectId, {
+        payload: {
+          command_id: commandId(),
+          actor_id: as,
+          layer_id: layerId,
+          study_id: studyId,
+          report_id: reportId,
+          extraction_schema: schema,
+          agent: modelId ? { model_id: modelId } : null,
+          report,
+        },
+      }),
     ),
+
+  extraction: ({ projectId, runId }) =>
+    call((api) => api.getExtractionReview(projectId, runId, undefined)),
+
+  accept: ({ projectId, as, fieldId, path, edit, sourceViewedMs, override }) =>
+    call((api): Effect.Effect<KittumApi.Acceptance, unknown> =>
+      edit
+        ? api.editAndAcceptExtractionField(projectId, fieldId, {
+            payload: {
+              command_id: commandId(),
+              reviewer_id: as,
+              path,
+              source_viewed_ms: sourceViewedMs,
+              value: edit.value,
+              start: edit.start,
+              end: edit.end,
+              quote: edit.quote,
+            },
+          })
+        : api.acceptExtractionField(projectId, fieldId, {
+            payload: {
+              command_id: commandId(),
+              reviewer_id: as,
+              path,
+              source_viewed_ms: sourceViewedMs,
+              override_failed_checks: override,
+            },
+          }),
+    ),
+
+  groupAccept: ({ projectId, as, runId, fieldIds, listViewedMs }) =>
+    call((api) =>
+      api.groupAcceptExtractionFields(projectId, runId, {
+        payload: {
+          command_id: commandId(),
+          reviewer_id: as,
+          field_ids: fieldIds,
+          list_viewed_ms: listViewedMs,
+        },
+      }),
+    ),
+
+  assertions: (projectId) => call((api) => api.listExtractionAssertions(projectId, undefined)),
 });
 
 /** The server's health, for the start page. */
