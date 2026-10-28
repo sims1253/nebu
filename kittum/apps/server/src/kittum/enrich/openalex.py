@@ -7,7 +7,7 @@ key never appears in a cached request URL. See docs/sources.md.
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlencode
 
-from kittum.core import Record
+from kittum.core import Record, canonical_doi
 from kittum.enrich._http import SourceUnavailable, chunks, fetch_json
 from kittum.enrich.types import OaLocation, OaVersion
 
@@ -46,9 +46,7 @@ def _url(filter_value: str) -> str:
 
 
 def _strip_doi(value: Any) -> str | None:
-    if not isinstance(value, str) or not value:
-        return None
-    return value.removeprefix("https://doi.org/").removeprefix("http://doi.org/").lower()
+    return canonical_doi(value) if isinstance(value, str) else None
 
 
 def _pmid(ids: dict[str, Any]) -> str | None:
@@ -153,7 +151,7 @@ def works(
 ) -> list[Work]:
     """Look works up in batches. DOI and PMID filters cannot be combined, so one request each."""
     found: list[Work] = []
-    doi_values = [doi.lower() for doi in dict.fromkeys(dois) if doi]
+    doi_values = [d for d in dict.fromkeys(canonical_doi(doi) for doi in dois) if d]
     for batch in chunks(doi_values, batch_size):
         found += _fetch(gateway, api_key, "doi:" + "|".join(batch))
     pmid_values = [str(pmid) for pmid in dict.fromkeys(pmids) if pmid]

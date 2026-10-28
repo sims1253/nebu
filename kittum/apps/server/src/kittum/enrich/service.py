@@ -13,6 +13,7 @@ transaction and `store` the result in one; `enrich` does both.
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from kittum.core import canonical_doi
 from kittum.enrich import crossref, europepmc, openalex, pubtator, unpaywall
 from kittum.enrich._http import SourceUnavailable
 from kittum.enrich.store import store
@@ -32,6 +33,11 @@ if TYPE_CHECKING:
     from kittum.db import Tx
     from kittum.gateway import Gateway
     from kittum.search import SourceRecord
+
+
+def _plain(value: str | None) -> str | None:
+    """A PMID or PMCID as compared: trimmed and case-folded."""
+    return value.strip().casefold() or None if value else None
 
 
 @dataclass
@@ -56,7 +62,7 @@ class _State:
     def start(cls, record: SourceRecord) -> _State:
         state = cls(
             record=record,
-            doi=record.doi.lower() if record.doi else None,
+            doi=canonical_doi(record.doi),
             pmid=record.pmid,
             abstract=record.abstract,
         )
@@ -87,12 +93,12 @@ class _State:
     ) -> bool:
         """Record a failure and return True when an answer names another work than this one."""
         for name, mine, theirs in (
-            ("DOI", self.doi, doi),
-            ("PMID", self.pmid, pmid),
-            ("PMCID", self.pmcid, pmcid),
+            ("DOI", self.doi, canonical_doi(doi)),
+            ("PMID", _plain(self.pmid), _plain(pmid)),
+            ("PMCID", _plain(self.pmcid), _plain(pmcid)),
         ):
-            if mine and theirs and mine.lower() != theirs.lower():
-                self.fail(source, f"answered for {name} {theirs.lower()}, not {mine.lower()}")
+            if mine and theirs and mine != theirs:
+                self.fail(source, f"answered for {name} {theirs}, not {mine}")
                 return True
         return False
 
@@ -100,6 +106,7 @@ class _State:
         self.field_sources.setdefault((name, source), FieldSource(field=name, source=source))
 
     def identity(self, doi: str | None, pmid: str | None, source: str) -> None:
+        doi = canonical_doi(doi)
         if doi and not self.doi:
             self.doi = doi
             self.note("doi", source)

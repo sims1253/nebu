@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 from rapidfuzz import fuzz
 
-from kittum.core import Id, new_id
+from kittum.core import Id, canonical_doi, new_id
 from kittum.corpus.models import LinkProposal
 
 if TYPE_CHECKING:
@@ -23,23 +23,6 @@ if TYPE_CHECKING:
     from kittum.search import SourceRecord
 
 _ROMAN_TO_NUM = {"i": "1", "ii": "2", "iii": "3", "iv": "4", "v": "5"}
-
-
-def normalize_doi(doi: str | None) -> str | None:
-    if not doi:
-        return None
-    d = doi.strip().lower()
-    for prefix in (
-        "https://doi.org/",
-        "http://doi.org/",
-        "https://dx.doi.org/",
-        "http://dx.doi.org/",
-        "doi:",
-    ):
-        if d.startswith(prefix):
-            d = d[len(prefix) :]
-    d = d.strip()
-    return d or None
 
 
 def normalize_pmid(pmid: str | None) -> str | None:
@@ -194,8 +177,8 @@ def check_same_record(rec_a: SourceRecord, rec_b: SourceRecord) -> tuple[bool, s
 
     Trial identifiers must NEVER merge records or reports.
     """
-    doi_a = normalize_doi(rec_a.doi)
-    doi_b = normalize_doi(rec_b.doi)
+    doi_a = canonical_doi(rec_a.doi)
+    doi_b = canonical_doi(rec_b.doi)
     if doi_a and doi_b:
         if doi_a == doi_b:
             return True, f"exact DOI {doi_a}"
@@ -251,7 +234,7 @@ class _DisjointSet:
 
     def add(self, rec: SourceRecord) -> None:
         root = self.find(rec.occurrence_id)
-        if doi := normalize_doi(rec.doi):
+        if doi := canonical_doi(rec.doi):
             self.dois[root].add(doi)
         if pmid := normalize_pmid(rec.pmid):
             self.pmids[root].add(pmid)

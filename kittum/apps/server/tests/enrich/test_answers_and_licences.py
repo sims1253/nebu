@@ -10,8 +10,17 @@ import json
 import uuid
 from datetime import date
 
+import pytest
+
 from kittum.core import sha256_hex
-from kittum.enrich import crossref, europepmc, full_text_candidates, lookup, unpaywall
+from kittum.enrich import (
+    crossref,
+    europepmc,
+    full_text_candidates,
+    lookup,
+    openalex,
+    unpaywall,
+)
 from kittum.gateway import HttpRequest, HttpResponse, RecordedTransport
 from kittum.gateway.testing import PassThroughGateway, response
 from kittum.search import SourceRecord
@@ -161,3 +170,64 @@ def test_a_publisher_pdf_needs_a_creative_commons_licence_for_its_own_version_in
                 entry["URL"] = "https://creativecommons.org/licenses/by-nc/4.0"
 
     assert [link.licence for link in _crossref_links(nc_for_tdm)] == ["cc-by-4.0"]
+
+
+DRESSES = {
+    "https": lambda doi: f"https://doi.org/{doi}",
+    "dx": lambda doi: f"http://dx.doi.org/{doi}",
+    "bare host": lambda doi: f"doi.org/{doi}",
+    "doi scheme, upper case, spaces": lambda doi: f"  doi:{doi.upper()} ",
+}
+
+
+@pytest.mark.parametrize("dress", DRESSES.values(), ids=DRESSES.keys())
+def test_a_doi_in_any_dress_is_the_same_work_to_every_source(dress) -> None:
+    gateway = PassThroughGateway(RecordedTransport(STACK))
+    bare = lookup(RECORDS, gateway, config=enrichment_config()).records
+    dressed = tuple(r.model_copy(update={"doi": dress(r.doi)}) for r in RECORDS)
+    found = lookup(dressed, gateway, config=enrichment_config()).records
+    for plain, record in zip(bare, found, strict=True):
+        # The same requests (the recordings answer them), the same answers, no failure.
+        assert record.failures == ()
+        assert record.sources_asked == (
+            "openalex",
+            "europepmc",
+            "crossref",
+            "unpaywall",
+            "pubtator",
+        )
+        assert record.doi == plain.doi == plain.doi.casefold()
+        assert (record.pmid, record.pmcid, record.abstract) == (
+            plain.pmid,
+            plain.pmcid,
+            plain.abstract,
+        )
+        assert record.oa_locations == plain.oa_locations
+        assert record.field_sources == plain.field_sources
+    # The clients that compare an answer with the DOI asked about take any dress too.
+    for record in dressed:
+        assert record.doi is not None
+        assert crossref.work(gateway, record.doi, email=CONTACT_EMAIL) is not None
+        assert unpaywall.best_oa_location(gateway, record.doi, email=CONTACT_EMAIL) is not None
+
+
+def test_a_prefixed_doi_with_its_pmid_keeps_its_abstract_and_fails_no_source() -> None:
+    """The reported case: a DOI with its resolver prefix, the PMID, and the search's abstract.
+    OpenAlex answers with the bare DOI and the same PMID: the same work."""
+    abstract = "BACKGROUND: Type 2 diabetes poses a growing public health burden."
+    records = (
+        RECORDS[0].model_copy(
+            update={"doi": f"https://doi.org/{LESOTHO}", "pmid": "42174613", "abstract": abstract}
+        ),
+        RECORDS[1].model_copy(update={"pmid": VITAMIN_C_PMID}),
+    )
+    # OpenAlex is asked by DOI and, now that the PMIDs are known, by PMID; it answers both with
+    # the same two works (the PMID request was not recorded, the DOI request was).
+    by_doi = _body(openalex._url(f"doi:{LESOTHO}|{VITAMIN_C}"))
+    swapped = Swapped({openalex._url(f"pmid:42174613|{VITAMIN_C_PMID}"): by_doi})
+    lesotho, _ = lookup(records, PassThroughGateway(swapped), config=enrichment_config()).records
+    assert lesotho.failures == ()
+    assert lesotho.doi == LESOTHO
+    assert lesotho.abstract == abstract
+    assert ("abstract", "citation_search") in {(f.field, f.source) for f in lesotho.field_sources}
+    assert "openalex" in lesotho.sources_used and "europepmc" in lesotho.sources_used

@@ -811,8 +811,11 @@ Enrichment and open-access retrieval (branch `kittum/enrichment-ui`):
   that record with the reason, from `RecordEnrichment.failures`), and an
   `enrichment.records_enriched` event naming every field's source. `enrichment.requested` and
   `enrichment.finished` frame the run.
-- `kittum.enrich` refuses an answer that names another work (DOI case-folded, PMID, PMCID) as a
-  failure of that source for that record, and uses none of it. A Crossref PDF link needs a
+- `kittum.enrich` refuses an answer that names another work (DOI, PMID, PMCID) as a failure of
+  that source for that record, and uses none of it. A DOI is reduced to one canonical form
+  (`kittum.core.canonical_doi`: no `https://doi.org/`, `http://dx.doi.org/`, `doi.org/`, or `doi:`,
+  no surrounding space, case-folded) before every lookup and every comparison, by every source and
+  by corpus dedupe, so dressed and bare forms of one DOI are one work. A Crossref PDF link needs a
   Creative Commons licence for exactly its content version; the licence's start date travels with
   the location, and `full_text_candidates(..., on=)` skips it until then.
 - `kittum.app.open_access`: `POST .../retrieval/open-access` (or `kittum project

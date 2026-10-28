@@ -18,7 +18,7 @@ from datetime import date
 from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import quote, urlencode
 
-from kittum.core import Record
+from kittum.core import Record, canonical_doi
 from kittum.enrich._http import SourceUnavailable, fetch_json
 from kittum.enrich._text import strip_markup
 from kittum.enrich.types import OaLocation, OaVersion, WorkUpdate
@@ -58,7 +58,7 @@ class Work(Record):
 
 
 def _url(doi: str, email: str | None) -> str:
-    base = f"{BASE}/{quote(doi.lower(), safe='')}"
+    base = f"{BASE}/{quote(canonical_doi(doi) or doi, safe='')}"
     if not email:
         return base
     return f"{base}?{urlencode({'mailto': email})}"
@@ -68,9 +68,10 @@ def _updates(message: dict[str, Any]) -> tuple[WorkUpdate, ...]:
     found: dict[tuple[str, str, str], WorkUpdate] = {}
 
     def add(doi: Any, kind: str, direction: Direction) -> None:
-        if not isinstance(doi, str) or not doi or not kind:
+        found_doi = canonical_doi(doi) if isinstance(doi, str) else None
+        if not found_doi or not kind:
             return
-        update = WorkUpdate(doi=doi.lower(), kind=kind, direction=direction)
+        update = WorkUpdate(doi=found_doi, kind=kind, direction=direction)
         found.setdefault((update.doi, update.kind, update.direction), update)
 
     for entry in message.get("update-to") or []:
@@ -175,9 +176,10 @@ def work(gateway: Gateway, doi: str, *, email: str | None = None) -> Work | None
     if not isinstance(body, dict) or not isinstance(body.get("message"), dict):
         raise SourceUnavailable(SOURCE, "response has no work")
     message = body["message"]
-    answered = str(message.get("DOI") or doi).lower()
-    if answered != doi.lower():
-        raise SourceUnavailable(SOURCE, f"answered for DOI {answered}, not {doi.lower()}")
+    asked = canonical_doi(doi) or doi
+    answered = canonical_doi(str(message.get("DOI") or doi)) or asked
+    if answered != asked:
+        raise SourceUnavailable(SOURCE, f"answered for DOI {answered}, not {asked}")
     title = message.get("title")
     return Work(
         doi=answered,

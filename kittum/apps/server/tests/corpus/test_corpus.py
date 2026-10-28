@@ -113,6 +113,14 @@ def test_dedupe_same_record_exact_doi() -> None:
     is_match, ev = check_same_record(rec1, rec2)
     assert is_match
     assert ev == "exact DOI 10.1056/nejmoa1606774"
+    # Every dress of the same DOI is the same record (kittum.core.canonical_doi).
+    for dressed in (
+        "http://dx.doi.org/10.1056/NEJMOA1606774",
+        "doi.org/10.1056/nejmoa1606774",
+        "  doi:10.1056/NEJMoa1606774 ",
+    ):
+        is_match, ev = check_same_record(rec1, make_record(doi=dressed, title="Pembrolizumab"))
+        assert (is_match, ev) == (True, "exact DOI 10.1056/nejmoa1606774"), dressed
 
 
 def test_dedupe_same_record_exact_pmid() -> None:
