@@ -1,1 +1,274 @@
+@import "@fontsource-variable/ibm-plex-sans/wdth.css";
+@import "@fontsource-variable/ibm-plex-sans/wdth-italic.css";
 @import "tailwindcss";
+
+/*
+ * Kittum's reading desk. Cool paper and petrol ink for structure, one highlighter yellow for
+ * evidence: the selected item and its source always share it, and nothing else uses it.
+ * Status colours pair with the key letter that sets them, so colour is never the only signal.
+ */
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root {
+  color-scheme: light;
+  --paper: #eaeeec;
+  --sheet: #f9faf9;
+  --sheet-2: #f1f4f2;
+  --ink: #18252a;
+  --ink-2: #47565b;
+  --ink-3: #5f6d72;
+  --rule: #d3dad8;
+  --rule-strong: #aeb9b7;
+  --petrol: #0b5963;
+  --petrol-ink: #ffffff;
+  --petrol-wash: #d9e9ea;
+  --marker: #f3c22c;
+  --marker-wash: rgb(243 194 44 / 0.42);
+  --marker-soft: rgb(243 194 44 / 0.16);
+  --marker-edge: #8f6a00;
+  --include: #1f6a3d;
+  --include-wash: #dcefe2;
+  --exclude: #a12f2a;
+  --exclude-wash: #f6e1df;
+  --unclear: #4d479b;
+  --unclear-wash: #e5e3f4;
+  --insufficient: #2c5d89;
+  --insufficient-wash: #dde8f2;
+  --page-filter: none;
+  --page-blend: multiply;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #172024;
+  --sheet: #1e292d;
+  --sheet-2: #243136;
+  --ink: #dbe4e2;
+  --ink-2: #a8b5b4;
+  --ink-3: #8d9b9b;
+  --rule: #31403f;
+  --rule-strong: #4b5b5a;
+  --petrol: #6cc1c9;
+  --petrol-ink: #10292d;
+  --petrol-wash: #1b3a3f;
+  --marker: #e8bf45;
+  --marker-wash: rgb(240 198 72 / 0.36);
+  --marker-soft: rgb(232 191 69 / 0.12);
+  --marker-edge: #e8bf45;
+  --include: #7ccb97;
+  --include-wash: #1d3a2a;
+  --exclude: #f08b85;
+  --exclude-wash: #452423;
+  --unclear: #aca6f2;
+  --unclear-wash: #2c2a4d;
+  --insufficient: #8fb9e3;
+  --insufficient-wash: #1f3247;
+  /* Pages stay paper-white but step down so they do not glare against the dark desk. */
+  --page-filter: brightness(0.88) contrast(1.04);
+  --page-blend: normal;
+}
+
+@theme inline {
+  --font-sans: "IBM Plex Sans Variable", "IBM Plex Sans", system-ui, sans-serif;
+  --color-paper: var(--paper);
+  --color-sheet: var(--sheet);
+  --color-sheet-2: var(--sheet-2);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-petrol: var(--petrol);
+  --color-petrol-ink: var(--petrol-ink);
+  --color-petrol-wash: var(--petrol-wash);
+  --color-marker: var(--marker);
+  --color-marker-wash: var(--marker-wash);
+  --color-marker-soft: var(--marker-soft);
+  --color-marker-edge: var(--marker-edge);
+  --color-include: var(--include);
+  --color-include-wash: var(--include-wash);
+  --color-exclude: var(--exclude);
+  --color-exclude-wash: var(--exclude-wash);
+  --color-unclear: var(--unclear);
+  --color-unclear-wash: var(--unclear-wash);
+  --color-insufficient: var(--insufficient);
+  --color-insufficient-wash: var(--insufficient-wash);
+}
+
+/* A type scale on a 1.15 step from a 13.5px interface size; reading text sits a step above. */
+@theme {
+  --text-2xs: 11.5px;
+  --text-2xs--line-height: 16px;
+  --text-xs: 12.5px;
+  --text-xs--line-height: 18px;
+  --text-sm: 13.5px;
+  --text-sm--line-height: 20px;
+  --text-md: 15.5px;
+  --text-md--line-height: 25px;
+  --text-lg: 18px;
+  --text-lg--line-height: 25px;
+  --text-xl: 21px;
+  --text-xl--line-height: 28px;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 13.5px;
+    line-height: 20px;
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  [data-theme="dark"] body {
+    /* Light text on dark reads heavier; take a little weight off. */
+    font-weight: 380;
+  }
+  :focus-visible {
+    outline: 2px solid var(--petrol);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: var(--petrol-wash);
+  }
+}
+
+@layer components {
+  /* Condensed width of the same family, for strips and tables that must stay on one line. */
+  .narrow {
+    font-stretch: 87.5%;
+  }
+
+  /* Keycap. The bottom edge is thicker, like a physical key. */
+  .key {
+    display: inline-flex;
+    min-width: 1.6em;
+    height: 1.6em;
+    align-items: center;
+    justify-content: center;
+    padding: 0 0.35em;
+    border: 1px solid var(--rule-strong);
+    border-bottom-width: 2px;
+    border-radius: 3px;
+    background: var(--sheet);
+    color: var(--ink-2);
+    font-size: 11.5px;
+    font-weight: 560;
+    line-height: 1;
+    font-stretch: 100%;
+    white-space: nowrap;
+  }
+  .key[data-on] {
+    border-color: currentColor;
+    background: currentColor;
+  }
+  .key[data-on] > span {
+    color: var(--sheet);
+  }
+
+  /* Status mark: the key letter that sets a status, in that status's colour. */
+  .mark {
+    display: inline-flex;
+    width: 18px;
+    height: 18px;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+    font-size: 11.5px;
+    font-weight: 620;
+    line-height: 1;
+  }
+
+  /* Evidence: the selected item and its source share the marker. */
+  .evidence-item {
+    box-shadow: inset 3px 0 0 var(--marker-edge);
+    background: var(--marker-soft);
+  }
+  mark.evidence,
+  .evidence-text {
+    background: var(--marker-wash);
+    color: inherit;
+    border-radius: 2px;
+    box-shadow: 0 1.5px 0 var(--marker-edge);
+    padding: 0 1px;
+    margin: 0 -1px;
+  }
+  .evidence-box {
+    position: absolute;
+    background: var(--marker-wash);
+    outline: 1.5px solid var(--marker-edge);
+    outline-offset: 1px;
+    border-radius: 1px;
+    mix-blend-mode: var(--page-blend);
+    pointer-events: none;
+  }
+  .evidence-box[data-kind="adopted"] {
+    background: transparent;
+    outline-style: dashed;
+  }
+  .evidence-box[data-kind="mention"] {
+    background: transparent;
+    outline: none;
+    box-shadow: 0 2px 0 var(--marker-edge);
+    opacity: 0.6;
+  }
+
+  /* Protocol terms and entities: line styles, never fills, so they never look like evidence. */
+  .term {
+    text-decoration-line: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 4px;
+    text-decoration-color: color-mix(in oklab, var(--petrol) 60%, transparent);
+  }
+  .entity {
+    text-decoration-line: underline;
+    text-decoration-style: dotted;
+    text-decoration-thickness: 1.5px;
+    text-underline-offset: 4px;
+    text-decoration-color: color-mix(in oklab, var(--ink-3) 80%, transparent);
+  }
+  .term.entity {
+    text-decoration-style: solid;
+  }
+
+  /* The invisible text layer over a page image. */
+  .text-layer {
+    position: absolute;
+    inset: 0;
+    line-height: 1;
+  }
+  .text-layer > span {
+    position: absolute;
+    color: transparent;
+    white-space: pre;
+    transform-origin: 0 0;
+    cursor: text;
+  }
+  .text-layer > span::selection {
+    background: color-mix(in oklab, var(--petrol) 30%, transparent);
+  }
+  .page-image {
+    filter: var(--page-filter);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .reveal-enter {
+    animation: reveal-enter 140ms ease-out;
+  }
+}
+@keyframes reveal-enter {
+  from {
+    transform: translateY(6px);
+    opacity: 0;
+  }
+}

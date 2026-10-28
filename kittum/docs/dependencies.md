@@ -106,10 +106,11 @@ moving it over is a separate change.
 | React 19.3 | MIT | 31 | about 140 | | **Use** |
 | TanStack Router | MIT | 100 | about 280 | Typed routes | **Use** |
 | Effect 4 with Effect Schema and `@effect/atom-react` | MIT | 100 | about 1,900 | Contracts, typed client, and client state. `@effect/openapi-generator` builds the client from FastAPI's OpenAPI. | **Use** |
-| Base UI 1.9 | MIT | 15 | about 450 | Accessible unstyled components, styled with Tailwind | **Use** |
+| Base UI 1.9 (`@base-ui/react` 1.9.0) | MIT | 15 | about 450 | Accessible unstyled components, styled with Tailwind. The workbench uses Menu (project switcher) and Dialog (keys). | **Use** |
 | Tailwind 4.3 | MIT | 12 | 64 | | **Use** |
-| Legend List 3.7 | MIT | 32 | about 220 | Virtualized lists for screening queues and page strips | **Use** |
-| Vitest browser mode with Playwright | Apache-2.0 | 14 | about 690 | Component and end-to-end tests | **Use** |
+| Legend List 3.7 (`@legendapp/list` 3.7.0) | MIT | 32 | about 220 | Virtualized lists for screening queues and page strips. The PDF viewer virtualizes pages with it (`@legendapp/list/react`). | **Use** |
+| Vitest browser mode with Playwright (`@vitest/browser-playwright` 5.0.5, MIT; `playwright` 1.64.1, Apache-2.0) | MIT and Apache-2.0 | 14 | about 690 | Component and end-to-end tests. The workbench flow tests run in headless Chromium through Vite+; a pnpm override keeps one Vite. The same `playwright` takes the screenshots. | **Use** |
+| IBM Plex Sans variable (`@fontsource-variable/ibm-plex-sans` 5.3.0) | OFL-1.1 | 1 | | The workbench face, as in Janus. The variable font carries the weight axis and the width axis down to 75%, so dense strips and tables use the condensed width of the same family. | **Use** |
 | Third-party licence notices | | | | t3code generates them with a script (`licenses:sync`). Kittum needs the same for AGPL distribution. | **Use** |
 
 The PDF viewer decides how fast a reviewer can check an anchor, so it got a closer look:

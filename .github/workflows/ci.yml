@@ -157,6 +157,7 @@ jobs:
         with:
           enable-cache: true
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir apps/web exec playwright install --with-deps chromium
       - run: pnpm check
       - name: Generated contracts match the server
         run: pnpm contracts:generate && git diff --exit-code -- packages/contracts

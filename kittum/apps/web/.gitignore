@@ -1,0 +1,3 @@
+scripts/.cache/
+screenshots/*.tmp.png
+.vitest/

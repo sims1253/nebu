@@ -1,0 +1,978 @@
+{
+ "source": "NCBI E-utilities efetch, db=pubmed",
+ "retrieved": "2026-10-28",
+ "records": [
+  {
+   "pmid": "32416072",
+   "doi": "10.1016/S1470-2045(20)30157-1",
+   "title": "Ivosidenib in IDH1-mutant, chemotherapy-refractory cholangiocarcinoma (ClarIDHy): a multicentre, randomised, double-blind, placebo-controlled, phase 3 study",
+   "journal": "Lancet Oncol",
+   "year": 2020,
+   "publication_types": [
+    "Clinical Trial, Phase III",
+    "Journal Article",
+    "Multicenter Study",
+    "Randomized Controlled Trial",
+    "Research Support, Non-U.S. Gov't"
+   ],
+   "registry_ids": [
+    "NCT02989857"
+   ],
+   "language": "eng",
+   "sections": [
+    {
+     "label": "Background",
+     "text": "Isocitrate dehydrogenase 1 (IDH1) mutations occur in approximately 13% of patients with intrahepatic cholangiocarcinoma, a relatively uncommon cancer with a poor clinical outcome. The aim of this international phase 3 study was to assess the efficacy and safety of ivosidenib (AG-120)-a small-molecule targeted inhibitor of mutated IDH1-in patients with previously treated IDH1-mutant cholangiocarcinoma."
+    },
+    {
+     "label": "Methods",
+     "text": "This multicentre, randomised, double-blind, placebo-controlled, phase 3 study included patients from 49 hospitals in six countries aged at least 18 years with histologically confirmed, advanced, IDH1-mutant cholangiocarcinoma who had progressed on previous therapy, and had up to two previous treatment regimens for advanced disease, an Eastern Cooperative Oncology Group performance status score of 0 or 1, and a measurable lesion as defined by Response Evaluation Criteria in Solid Tumors version 1.1. Patients were randomly assigned (2:1) with a block size of 6 and stratified by number of previous systemic treatment regimens for advanced disease to oral ivosidenib 500 mg or matched placebo once daily in continuous 28-day cycles, by means of an interactive web-based response system. Placebo to ivosidenib crossover was permitted on radiological progression per investigator assessment. The primary endpoint was progression-free survival by independent central review. The intention-to-treat population was used for the primary efficacy analyses. Safety was assessed in all patients who had received at least one dose of ivosidenib or placebo. Enrolment is complete; this study is registered with ClinicalTrials.gov, NCT02989857."
+    },
+    {
+     "label": "Findings",
+     "text": "Between Feb 20, 2017, and Jan 31, 2019, 230 patients were assessed for eligibility, and as of the Jan 31, 2019 data cutoff date, 185 patients were randomly assigned to ivosidenib (n=124) or placebo (n=61). Median follow-up for progression-free survival was 6·9 months (IQR 2·8-10·9). Progression-free survival was significantly improved with ivosidenib compared with placebo (median 2·7 months [95% CI 1·6-4·2] vs 1·4 months [1·4-1·6]; hazard ratio 0·37; 95% CI 0·25-0·54; one-sided p<0·0001). The most common grade 3 or worse adverse event in both treatment groups was ascites (four [7%] of 59 patients receiving placebo and nine [7%] of 121 patients receiving ivosidenib). Serious adverse events were reported in 36 (30%) of 121 patients receiving ivosidenib and 13 (22%) of 59 patients receiving placebo. There were no treatment-related deaths."
+    },
+    {
+     "label": "Interpretation",
+     "text": "Progression-free survival was significantly improved with ivosidenib compared with placebo, and ivosidenib was well tolerated. This study shows the clinical benefit of targeting IDH1 mutations in advanced, IDH1-mutant cholangiocarcinoma."
+    },
+    {
+     "label": "Funding",
+     "text": "Agios Pharmaceuticals."
+    }
+   ]
+  },
+  {
+   "pmid": "33798493",
+   "doi": "10.1016/S1470-2045(21)00027-9",
+   "title": "Second-line FOLFOX chemotherapy versus active symptom control for advanced biliary tract cancer (ABC-06): a phase 3, open-label, randomised, controlled trial",
+   "journal": "Lancet Oncol",
+   "year": 2021,
+   "publication_types": [
+    "Clinical Trial, Phase III",
+    "Comparative Study",
+    "Journal Article",
+    "Randomized Controlled Trial",
+    "Research Support, Non-U.S. Gov't"
+   ],
+   "registry_ids": [
+    "NCT01926236"
+   ],
+   "language": "eng",
+   "sections": [
+    {
+     "label": "Background",
+     "text": "Advanced biliary tract cancer has a poor prognosis. Cisplatin and gemcitabine is the standard first-line chemotherapy regimen, but no robust evidence is available for second-line chemotherapy. The aim of this study was to determine the benefit derived from second-line FOLFOX (folinic acid, fluorouracil, and oxaliplatin) chemotherapy in advanced biliary tract cancer."
+    },
+    {
+     "label": "Methods",
+     "text": "The ABC-06 clinical trial was a phase 3, open-label, randomised trial done in 20 sites with expertise in managing biliary tract cancer across the UK. Adult patients (aged ≥18 years) who had histologically or cytologically verified locally advanced or metastatic biliary tract cancer (including cholangiocarcinoma and gallbladder or ampullary carcinoma) with documented radiological disease progression to first-line cisplatin and gemcitabine chemotherapy and an Eastern Cooperative Oncology Group performance status of 0-1 were randomly assigned (1:1) centrally to active symptom control (ASC) and FOLFOX or ASC alone. FOLFOX chemotherapy was administered intravenously every 2 weeks for a maximum of 12 cycles (oxaliplatin 85 mg/m2, L-folinic acid 175 mg [or folinic acid 350 mg], fluorouracil 400 mg/m2 [bolus], and fluorouracil 2400 mg/m2 as a 46-h continuous intravenous infusion). Randomisation was done following a minimisation algorithm using platinum sensitivity, serum albumin concentration, and stage as stratification factors. The primary endpoint was overall survival, assessed in the intention-to-treat population. Safety was also assessed in the intention-to-treat population. The study is complete and the final results are reported. This trial is registered with ClinicalTrials.gov, NCT01926236, and EudraCT, 2013-001812-30."
+    },
+    {
+     "label": "Findings",
+     "text": "Between March 27, 2014, and Jan 4, 2018, 162 patients were enrolled and randomly assigned to ASC plus FOLFOX (n=81) or ASC alone (n=81). Median follow-up was 21·7 months (IQR 17·2-30·8). Overall survival was significantly longer in the ASC plus FOLFOX group than in the ASC alone group, with a median overall survival of 6·2 months (95% CI 5·4-7·6) in the ASC plus FOLFOX group versus 5·3 months (4·1-5·8) in the ASC alone group (adjusted hazard ratio 0·69 [95% CI 0·50-0·97]; p=0·031). The overall survival rate in the ASC alone group was 35·5% (95% CI 25·2-46·0) at 6 months and 11·4% (5·6-19·5) at 12 months, compared with 50·6% (39·3-60·9) at 6 months and 25·9% (17·0-35·8) at 12 months in the ASC plus FOLFOX group. Grade 3-5 adverse events were reported in 42 (52%) of 81 patients in the ASC alone group and 56 (69%) of 81 patients in the ASC plus FOLFOX group, including three chemotherapy-related deaths (one each due to infection, acute kidney injury, and febrile neutropenia). The most frequently reported grade 3-5 FOLFOX-related adverse events were neutropenia (ten [12%] patients), fatigue or lethargy (nine [11%] patients), and infection (eight [10%] patients)."
+    },
+    {
+     "label": "Interpretation",
+     "text": "The addition of FOLFOX to ASC improved median overall survival in patients with advanced biliary tract cancer after progression on cisplatin and gemcitabine, with a clinically meaningful increase in 6-month and 12-month overall survival rates. To our knowledge, this trial is the first prospective, randomised study providing reliable, high-quality evidence to allow an informed discussion with patients of the potential benefits and risks from second-line FOLFOX chemotherapy in advanced biliary tract cancer. Based on these findings, FOLFOX should become standard-of-care chemotherapy in second-line treatment for advanced biliary tract cancer and the reference regimen for further clinical trials."
+    },
+    {
+     "label": "Funding",
+     "text": "Cancer Research UK, StandUpToCancer, AMMF (The UK Cholangiocarcinoma Charity), and The Christie Charity, with additional funding from The Cholangiocarcinoma Foundation and the Conquer Cancer Foundation Young Investigator Award for translational research."
+    }
+   ]
+  },
+  {
+   "pmid": "20375404",
+   "doi": "10.1056/NEJMoa0908721",
+   "title": "Cisplatin plus gemcitabine versus gemcitabine for biliary tract cancer",
+   "journal": "N Engl J Med",
+   "year": 2010,
+   "publication_types": [
+    "Clinical Trial, Phase III",
+    "Comparative Study",
+    "Journal Article",
+    "Multicenter Study",
+    "Randomized Controlled Trial",
+    "Research Support, Non-U.S. Gov't"
+   ],
+   "registry_ids": [
+    "NCT00262769"
+   ],
+   "language": "eng",
+   "sections": [
+    {
+     "label": "Background",
+     "text": "There is no established standard chemotherapy for patients with locally advanced or metastatic biliary tract cancer. We initially conducted a randomized, phase 2 study involving 86 patients to compare cisplatin plus gemcitabine with gemcitabine alone. After we found an improvement in progression-free survival, the trial was extended to the phase 3 trial reported here."
+    },
+    {
+     "label": "Methods",
+     "text": "We randomly assigned 410 patients with locally advanced or metastatic cholangiocarcinoma, gallbladder cancer, or ampullary cancer to receive either cisplatin (25 mg per square meter of body-surface area) followed by gemcitabine (1000 mg per square meter on days 1 and 8, every 3 weeks for eight cycles) or gemcitabine alone (1000 mg per square meter on days 1, 8, and 15, every 4 weeks for six cycles) for up to 24 weeks. The primary end point was overall survival."
+    },
+    {
+     "label": "Results",
+     "text": "After a median follow-up of 8.2 months and 327 deaths, the median overall survival was 11.7 months among the 204 patients in the cisplatin-gemcitabine group and 8.1 months among the 206 patients in the gemcitabine group (hazard ratio, 0.64; 95% confidence interval, 0.52 to 0.80; P<0.001). The median progression-free survival was 8.0 months in the cisplatin-gemcitabine group and 5.0 months in the gemcitabine-only group (P<0.001). In addition, the rate of tumor control among patients in the cisplatin-gemcitabine group was significantly increased (81.4% vs. 71.8%, P=0.049). Adverse events were similar in the two groups, with the exception of more neutropenia in the cisplatin-gemcitabine group; the number of neutropenia-associated infections was similar in the two groups."
+    },
+    {
+     "label": "Conclusions",
+     "text": "As compared with gemcitabine alone, cisplatin plus gemcitabine was associated with a significant survival advantage without the addition of substantial toxicity. Cisplatin plus gemcitabine is an appropriate option for the treatment of patients with advanced biliary cancer. (ClinicalTrials.gov number, NCT00262769.)"
+    }
+   ]
+  },
+  {
+   "pmid": "34656226",
+   "doi": "10.1016/S1470-2045(21)00486-1",
+   "title": "Liposomal irinotecan plus fluorouracil and leucovorin versus fluorouracil and leucovorin for metastatic biliary tract cancer after progression on gemcitabine plus cisplatin (NIFTY): a multicentre, open-label, randomised, phase 2b study",
+   "journal": "Lancet Oncol",
+   "year": 2021,
+   "publication_types": [
+    "Clinical Trial, Phase II",
+    "Journal Article",
+    "Multicenter Study",
+    "Randomized Controlled Trial",
+    "Research Support, Non-U.S. Gov't"
+   ],
+   "registry_ids": [
+    "NCT03524508"
+   ],
+   "language": "eng",
+   "sections": [
+    {
+     "label": "Background",
+     "text": "The prognosis of patients with advanced biliary tract cancer who have progressed on gemcitabine plus cisplatin is dismal. We aimed to investigate the efficacy and safety of second-line liposomal irinotecan plus fluorouracil and leucovorin in patients with metastatic biliary tract cancer that has progressed on gemcitabine plus cisplatin."
+    },
+    {
+     "label": "Methods",
+     "text": "This multicentre, open-label, randomised, phase 2b (NIFTY) study was done at five academic institutions in South Korea and included patients aged 19 years or older with histologically or cytologically confirmed metastatic biliary tract cancer that had progressed on first-line gemcitabine plus cisplatin and an Eastern Cooperative Oncology Group performance status of 0 or 1. By use of an interactive web-based response system integrated with an electronic data capture system, patients were randomly assigned (1:1) using permuted blocks (block size 4) to receive either intravenous liposomal irinotecan (70 mg/m2 for 90 min) plus intravenous leucovorin (400 mg/m2 for 30 min) and intravenous fluorouracil (2400 mg/m2 for 46 h) every 2 weeks or leucovorin and fluorouracil only every 2 weeks, and were stratified by primary tumour site, previous surgery with curative intent, and participating centre. Study treatment was continued until the patient had disease progression or unacceptable toxicities, or withdrew consent. The primary endpoint was blinded independent central review (BICR)-assessed progression-free survival. The primary endpoint and safety were assessed in the full analysis set and the safety analysis set, respectively, both of which comprised all randomly assigned patients who received at least one dose of the study treatment. This trial is registered with ClinicalTrials.gov, NCT03524508, and enrolment is complete."
+    },
+    {
+     "label": "Findings",
+     "text": "Between Sept 5, 2018, and Feb 18, 2020, 193 patients were screened for eligibility, of whom 174 (88 in the liposomal irinotecan plus fluorouracil and leucovorin group and 86 in the fluorouracil plus leucovorin group) were enrolled and included in the full analysis and safety analysis sets. At a median follow-up of 11·8 months (IQR 7·7-18·7), the median BICR-assessed progression-free survival was significantly longer in the liposomal irinotecan plus fluorouracil and leucovorin group (7·1 months, 95% CI 3·6-8·8) than in the fluorouracil and leucovorin group (1·4 months, 1·2-1·5; hazard ratio 0·56, 95% CI 0·39-0·81; p=0·0019). The most common grade 3-4 adverse events were neutropenia (21 [24%] of 88 in the liposomal irinotecan plus fluorouracil and leucovorin group vs one [1%] of 86 in the fluorouracil and leucovorin group) and fatigue or asthenia (11 [13%] vs three [3%]). Serious adverse events occurred in 37 (42%) patients receiving liposomal irinotecan plus fluorouracil and leucovorin and 21 (24%) patients receiving fluorouracil and leucovorin. There were no treatment-related deaths."
+    },
+    {
+     "label": "Interpretation",
+     "text": "Adding liposomal irinotecan to fluorouracil and leucovorin significantly improved BICR-assessed progression-free survival in patients with advanced biliary tract cancer. Liposomal irinotecan plus fluorouracil and leucovorin could be considered a standard-of-care second-line therapy for advanced biliary tract cancer."
+    },
+    {
+     "label": "Funding",
+     "text": "Servier and HK inno."
+    }
+   ]
+  },
+  {
+   "pmid": "37075781",
+   "doi": "10.1016/S0140-6736(23)00727-4",
+   "title": "Pembrolizumab in combination with gemcitabine and cisplatin compared with gemcitabine and cisplatin alone for patients with advanced biliary tract cancer (KEYNOTE-966): a randomised, double-blind, placebo-controlled, phase 3 trial",
+   "journal": "Lancet",
+   "year": 2023,
+   "publication_types": [
+    "Randomized Controlled Trial",
+    "Clinical Trial, Phase III",
+    "Journal Article",
+    "Research Support, Non-U.S. Gov't"
+   ],
+   "registry_ids": [
+    "NCT04003636"
+   ],
+   "language": "eng",
+   "sections": [
+    {
+     "label": "Background",
+     "text": "Biliary tract cancers, which arise from the intrahepatic or extrahepatic bile ducts and the gallbladder, generally have a poor prognosis and are rising in incidence worldwide. The standard-of-care treatment for advanced biliary tract cancer is chemotherapy with gemcitabine and cisplatin. Because most biliary tract cancers have an immune-suppressed microenvironment, immune checkpoint inhibitor monotherapy is associated with a low objective response rate. We aimed to assess whether adding the immune checkpoint inhibitor pembrolizumab to gemcitabine and cisplatin would improve outcomes compared with gemcitabine and cisplatin alone in patients with advanced biliary tract cancer."
+    },
+    {
+     "label": "Methods",
+     "text": "KEYNOTE-966 was a randomised, double-blind, placebo-controlled, phase 3 trial done at 175 medical centres globally. Eligible participants were aged 18 years or older; had previously untreated, unresectable, locally advanced or metastatic biliary tract cancer; had disease measurable per Response Evaluation Criteria in Solid Tumours version 1.1; and had an Eastern Cooperative Oncology Group performance status of 0 or 1. Eligible participants were randomly assigned (1:1) to pembrolizumab 200 mg or placebo, both administered intravenously every 3 weeks (maximum 35 cycles), in combination with gemcitabine (1000 mg/m2 intravenously on days 1 and 8 every 3 weeks; no maximum duration) and cisplatin (25 mg/m2 intravenously on days 1 and 8 every 3 weeks; maximum 8 cycles). Randomisation was done using a central interactive voice-response system and stratified by geographical region, disease stage, and site of origin in block sizes of four. The primary endpoint of overall survival was evaluated in the intention-to-treat population. The secondary endpoint of safety was evaluated in the as-treated population. This study is registered at ClinicalTrials.gov, NCT04003636."
+    },
+    {
+     "label": "Findings",
+     "text": "Between Oct 4, 2019, and June 8, 2021, 1564 patients were screened for eligibility, 1069 of whom were randomly assigned to pembrolizumab plus gemcitabine and cisplatin (pembrolizumab group; n=533) or placebo plus gemcitabine and cisplatin (placebo group; n=536). Median study follow-up at final analysis was 25·6 months (IQR 21·7-30·4). Median overall survival was 12·7 months (95% CI 11·5-13·6) in the pembrolizumab group versus 10·9 months (9·9-11·6) in the placebo group (hazard ratio 0·83 [95% CI 0·72-0·95]; one-sided p=0·0034 [significance threshold, p=0·0200]). In the as-treated population, the maximum adverse event grade was 3 to 4 in 420 (79%) of 529 participants in the pembrolizumab group and 400 (75%) of 534 in the placebo group; 369 (70%) participants in the pembrolizumab group and 367 (69%) in the placebo group had treatment-related adverse events with a maximum grade of 3 to 4. 31 (6%) participants in the pembrolizumab group and 49 (9%) in the placebo group died due to adverse events, including eight (2%) in the pembrolizumab group and three (1%) in the placebo group who died due to treatment-related adverse events."
+    },
+    {
+     "label": "Interpretation",
+     "text": "Based on a statistically significant, clinically meaningful improvement in overall survival compared with gemcitabine and cisplatin without any new safety signals, pembrolizumab plus gemcitabine and cisplatin could be a new treatment option for patients with previously untreated metastatic or unresectable biliary tract cancer."
+    },
+    {
+     "label": "Funding",
+     "text": "Merck Sharp & Dohme, a subsidiary of Merck & Co, Rahway, NJ, USA."
+    }
+   ]
+  },
+  {
+   "pmid": "36652354",
+   "doi": "10.1056/NEJMoa2206834",
+   "title": "Futibatinib for FGFR2-Rearranged Intrahepatic Cholangiocarcinoma",
+   "journal": "N Engl J Med",
+   "year": 2023,
+   "publication_types": [
+    "Clinical Trial, Phase II",
+    "Journal Article",
+    "Multicenter Study",
+    "Research Support, Non-U.S. Gov't"
+   ],
+   "registry_ids": [
+    "NCT02052778"
+   ],
+   "language": "eng",
+   "sections": [
+    {
+     "label": "Background",
+     "text": "Alterations in fibroblast growth factor receptor 2 (FGFR2) have emerged as promising drug targets for intrahepatic cholangiocarcinoma, a rare cancer with a poor prognosis. Futibatinib, a next-generation, covalently binding FGFR1-4 inhibitor, has been shown to have both antitumor activity in patients with FGFR-altered tumors and strong preclinical activity against acquired resistance mutations associated with ATP-competitive FGFR inhibitors."
+    },
+    {
+     "label": "Methods",
+     "text": "In this multinational, open-label, single-group, phase 2 study, we enrolled patients with unresectable or metastatic FGFR2 fusion-positive or FGFR2 rearrangement-positive intrahepatic cholangiocarcinoma and disease progression after one or more previous lines of systemic therapy (excluding FGFR inhibitors). The patients received oral futibatinib at a dose of 20 mg once daily in a continuous regimen. The primary end point was objective response (partial or complete response), as assessed by independent central review. Secondary end points included the response duration, progression-free and overall survival, safety, and patient-reported outcomes."
+    },
+    {
+     "label": "Results",
+     "text": "Between April 16, 2018, and November 29, 2019, a total of 103 patients were enrolled and received futibatinib. A total of 43 of 103 patients (42%; 95% confidence interval, 32 to 52) had a response, and the median duration of response was 9.7 months. Responses were consistent across patient subgroups, including patients with heavily pretreated disease, older adults, and patients who had co-occurring TP53 mutations. At a median follow-up of 17.1 months, the median progression-free survival was 9.0 months and overall survival was 21.7 months. Common treatment-related grade 3 adverse events were hyperphosphatemia (in 30% of the patients), an increased aspartate aminotransferase level (in 7%), stomatitis (in 6%), and fatigue (in 6%). Treatment-related adverse events led to permanent discontinuation of futibatinib in 2% of the patients. No treatment-related deaths occurred. Quality of life was maintained throughout treatment."
+    },
+    {
+     "label": "Conclusions",
+     "text": "In previously treated patients with FGFR2 fusion or rearrangement-positive intrahepatic cholangiocarcinoma, the use of futibatinib, a covalent FGFR inhibitor, led to measurable clinical benefit. (Funded by Taiho Oncology and Taiho Pharmaceutical; FOENIX-CCA2 ClinicalTrials.gov number, NCT02052778.)."
+    }
+   ]
+  },
+  {
+   "pmid": "30922733",
+   "doi": "10.1016/S1470-2045(18)30915-X",
+   "title": "Capecitabine compared with observation in resected biliary tract cancer (BILCAP): a randomised, controlled, multicentre, phase 3 study",
+   "journal": "Lancet Oncol",
+   "year": 2019,
+   "publication_types": [
+    "Clinical Trial, Phase III",
+    "Comparative Study",
+    "Journal Article",
+    "Multicenter Study",
+    "Randomized Controlled Trial",
+    "Research Support, Non-U.S. Gov't"
+   ],
+   "registry_ids": [],
+   "language": "eng",
+   "sections": [
+    {
+     "label": "Background",
+     "text": "Despite improvements in multidisciplinary management, patients with biliary tract cancer have a poor outcome. Only 20% of patients are eligible for surgical resection with curative intent, with 5-year overall survival of less than 10% for all patients. To our knowledge, no studies have described a benefit of adjuvant therapy. We aimed to determine whether adjuvant capecitabine improved overall survival compared with observation following surgery for biliary tract cancer."
+    },
+    {
+     "label": "Methods",
+     "text": "This randomised, controlled, multicentre, phase 3 study was done across 44 specialist hepatopancreatobiliary centres in the UK. Eligible patients were aged 18 years or older and had histologically confirmed cholangiocarcinoma or muscle-invasive gallbladder cancer who had undergone a macroscopically complete resection (which includes liver resection, pancreatic resection, or, less commonly, both) with curative intent, and an Eastern Cooperative Oncology Group performance status of less than 2. Patients who had not completely recovered from previous surgery or who had previous chemotherapy or radiotherapy for biliary tract cancer were also excluded. Patients were randomly assigned 1:1 to receive oral capecitabine (1250 mg/m2 twice daily on days 1-14 of a 21-day cycle, for eight cycles) or observation commencing within 16 weeks of surgery. Treatment was not masked, and allocation concealment was achieved with a computerised minimisation algorithm that stratified patients by surgical centre, site of disease, resection status, and performance status. The primary outcome was overall survival. As prespecified, analyses were done by intention to treat and per protocol. This study is registered with EudraCT, number 2005-003318-13."
+    },
+    {
+     "label": "Findings",
+     "text": "Between March 15, 2006, and Dec 4, 2014, 447 patients were enrolled; 223 patients with biliary tract cancer resected with curative intent were randomly assigned to the capecitabine group and 224 to the observation group. The data cutoff for this analysis was March 6, 2017. The median follow-up for all patients was 60 months (IQR 37-60). In the intention-to-treat analysis, median overall survival was 51·1 months (95% CI 34·6-59·1) in the capecitabine group compared with 36·4 months (29·7-44·5) in the observation group (adjusted hazard ratio [HR] 0·81, 95% CI 0·63-1·04; p=0·097). In a protocol-specified sensitivity analysis, adjusting for minimisation factors and nodal status, grade, and gender, the overall survival HR was 0·71 (95% CI 0·55-0·92; p=0·010). In the prespecified per-protocol analysis (210 patients in the capecitabine group and 220 in the observation group), median overall survival was 53 months (95% CI 40 to not reached) in the capecitabine group and 36 months (30-44) in the observation group (adjusted HR 0·75, 95% CI 0·58-0·97; p=0·028). In the intention-to-treat analysis, median recurrence-free survival was 24·4 months (95% CI 18·6-35·9) in the capecitabine group and 17·5 months (12·0-23·8) in the observation group. In the per-protocol analysis, median recurrence-free survival was 25·9 months (95% CI 19·8-46·3) in the capecitabine group and 17·4 months (12·0-23·7) in the observation group. Adverse events were measured in the capecitabine group only, and of the 213 patients who received at least one cycle, 94 (44%) had at least one grade 3 toxicity, the most frequent of which were hand-foot syndrome in 43 (20%) patients, diarrhoea in 16 (8%) patients, and fatigue in 16 (8%) patients. One (<1%) patient had grade 4 cardiac ischaemia or infarction. Serious adverse events were observed in 47 (21%) of 223 patients in the capecitabine group and 22 (10%) of 224 patients in the observation group. No deaths were deemed to be treatment related."
+    },
+    {
+     "label": "Interpretation",
+     "text": "Although this study did not meet its primary endpoint of improving overall survival in the intention-to-treat population, the prespecified sensitivity and per-protocol analyses suggest that capecitabine can improve overall survival in patients with resected biliary tract cancer when used as adjuvant chemotherapy following surgery and could be considered as standard of care. Furthermore, the safety profile is manageable, supporting the use of capecitabine in this setting."
+    },
+    {
+     "label": "Funding",
+     "text": "Cancer Research UK and Roche."
+    }
+   ]
+  },
+  {
+   "pmid": "26615328",
+   "doi": "10.1016/S0140-6736(15)00986-1",
+   "title": "Nanoliposomal irinotecan with fluorouracil and folinic acid in metastatic pancreatic cancer after previous gemcitabine-based therapy (NAPOLI-1): a global, randomised, open-label, phase 3 trial",
+   "journal": "Lancet",
+   "year": 2016,
+   "publication_types": [
+    "Clinical Trial, Phase III",
+    "Journal Article",
+    "Multicenter Study",
+    "Randomized Controlled Trial",
+    "Research Support, Non-U.S. Gov't"
+   ],
+   "registry_ids": [
+    "NCT01494506"
+   ],
+   "language": "eng",
+   "sections": [
+    {
+     "label": "Background",
+     "text": "Nanoliposomal irinotecan showed activity in a phase 2 study in patients with metastatic pancreatic ductal adenocarcinoma previously treated with gemcitabine-based therapies. We assessed the effect of nanoliposomal irinotecan alone or combined with fluorouracil and folinic acid in a phase 3 trial in this population."
+    },
+    {
+     "label": "Methods",
+     "text": "We did a global, phase 3, randomised, open-label trial at 76 sites in 14 countries. Eligible patients with metastatic pancreatic ductal adenocarcinoma previously treated with gemcitabine-based therapy were randomly assigned (1:1) using an interactive web response system at a central location to receive either nanoliposomal irinotecan monotherapy (120 mg/m(2) every 3 weeks, equivalent to 100 mg/m(2) of irinotecan base) or fluorouracil and folinic acid. A third arm consisting of nanoliposomal irinotecan (80 mg/m(2), equivalent to 70 mg/m(2) of irinotecan base) with fluorouracil and folinic acid every 2 weeks was added later (1:1:1), in a protocol amendment. Randomisation was stratified by baseline albumin, Karnofsky performance status, and ethnic origin. Treatment was continued until disease progression or intolerable toxic effects. The primary endpoint was overall survival, assessed in the intention-to-treat population. The primary analysis was planned after 305 events. Safety was assessed in all patients who had received study drug. This trial is registered at ClinicalTrials.gov, number NCT01494506."
+    },
+    {
+     "label": "Findings",
+     "text": "Between Jan 11, 2012, and Sept 11, 2013, 417 patients were randomly assigned either nanoliposomal irinotecan plus fluorouracil and folinic acid (n=117), nanoliposomal irinotecan monotherapy (n=151), or fluorouracil and folinic acid (n=149). After 313 events, median overall survival in patients assigned nanoliposomal irinotecan plus fluorouracil and folinic acid was 6.1 months (95% CI 4.8-8.9) vs 4.2 months (3.3-5.3) with fluorouracil and folinic acid (hazard ratio 0.67, 95% CI 0.49-0.92; p=0.012). Median overall survival did not differ between patients assigned nanoliposomal irinotecan monotherapy and those allocated fluorouracil and folinic acid (4.9 months [4.2-5.6] vs 4.2 months [3.6-4.9]; 0.99, 0.77-1.28; p=0.94). The grade 3 or 4 adverse events that occurred most frequently in the 117 patients assigned nanoliposomal irinotecan plus fluorouracil and folinic acid were neutropenia (32 [27%]), diarrhoea (15 [13%]), vomiting (13 [11%]), and fatigue (16 [14%])."
+    },
+    {
+     "label": "Interpretation",
+     "text": "Nanoliposomal irinotecan in combination with fluorouracil and folinic acid extends survival with a manageable safety profile in patients with metastatic pancreatic ductal adenocarcinoma who previously received gemcitabine-based therapy. This agent represents a new treatment option for this population."
+    },
+    {
+     "label": "Funding",
+     "text": "Merrimack Pharmaceuticals."
+    }
+   ]
+  },
+  {
+   "pmid": "40910862",
+   "doi": "10.1097/JS9.0000000000003367",
+   "title": "Comparison of second-line chemotherapy regimens in advanced biliary tract cancer: a systematic review, meta-analysis, and population-based cohort study",
+   "journal": "Int J Surg",
+   "year": 2026,
+   "publication_types": [
+    "Journal Article",
+    "Systematic Review",
+    "Meta-Analysis",
+    "Comparative Study"
+   ],
+   "registry_ids": [],
+   "language": "eng",
+   "sections": [
+    {
+     "label": "Background",
+     "text": "Biliary tract cancers (BTCs) are aggressive malignancies with limited treatment options, especially after first-line chemotherapy failure. FOLFIRINOX, though established for pancreatic cancer, has shown promise in advanced BTC, yet its role as a second-line treatment remains unclear. To address this gap, we conducted a retrospective cohort study to evaluate the efficacy and safety of FOLFIRINOX and performed a systematic review with meta-analysis to compare its outcomes with currently recommended regimens, including FOLFIRI, FOLFOX, and nal-IRI/FL."
+    },
+    {
+     "label": "Methods",
+     "text": "We retrospectively analyzed 54 patients with BTC treated with FOLFIRINOX as second-line therapy after progression on first-line chemotherapy at a single tertiary hospital between 2011 and 2022. A systematic review and meta-analysis, registered with PROSPERO, incorporated 21 studies comparing second-line regimens for BTC, assessing progression-free survival (PFS), overall survival (OS), objective response rate (ORR), disease control rate (DCR), and safety."
+    },
+    {
+     "label": "Results",
+     "text": "In our cohort, median PFS and OS were 2 · 7 and 8 · 9 months, respectively. ORR was 12 · 5%, and DCR was 52 · 1%, with 4 · 2% achieving complete response. Meta-analysis revealed pooled PFS and OS for FOLFIRINOX at 4 · 15 and 8 · 91 months, respectively, suggesting a potential benefit over FOLFIRI and FOLFOX. Grade 3-5 neutropenia occurred in 40 · 7% of patients, leading to dose reductions in 29.6% but low discontinuation rates (3 · 7%)."
+    },
+    {
+     "label": "Conclusion",
+     "text": "FOLFIRINOX demonstrates numerically favorable outcomes compared to current second-line regimens for advanced BTC, with manageable toxicities. These findings suggest FOLFIRINOX as a potential second-line option, warranting further prospective validation and patient selection refinement."
+    }
+   ]
+  },
+  {
+   "pmid": "29955136",
+   "doi": "10.1038/s41416-018-0138-2",
+   "title": "A randomised phase II study of second-line XELIRI regimen versus irinotecan monotherapy in advanced biliary tract cancer patients progressed on gemcitabine and cisplatin",
+   "journal": "Br J Cancer",
+   "year": 2018,
+   "publication_types": [
+    "Clinical Trial, Phase II",
+    "Journal Article",
+    "Randomized Controlled Trial",
+    "Research Support, Non-U.S. Gov't"
+   ],
+   "registry_ids": [],
+   "language": "eng",
+   "sections": [
+    {
+     "label": "Background",
+     "text": "The majority of advanced biliary tract cancer (ABTC) patients will progress after gemcitabine and cisplatin (GP) doublet therapy, while the standard second-line regimen has not been established. We conducted this study to assess the efficacy and safety of second-line irinotecan and capecitabine (XELIRI) regimen vs. irinotecan monotherapy in ABTC patients progressed on GP."
+    },
+    {
+     "label": "Methods",
+     "text": "Sixty-four GP refractory ABTC patients were randomised to either irinotecan 180 mg/m2 on day 1 plus capecitabine 1000 mg/m2 twice daily on days 1-10 of a 14-day cycle (XELIRI-arm) or single-agent irinotecan 180 mg/m2 on day 1 of a 14-day cycle (IRI-arm). Treatments were repeated until disease progression or unacceptable toxicity occurred."
+    },
+    {
+     "label": "Results",
+     "text": "A total of 60 patients were included in the analysis. For XELIRI and IRI-arms, respectively, the median PFS was 3.7 vs. 2.4 months, 9-month survival rate 60.9% vs. 32.0%, median OS 10.1 vs. 7.3 months, and disease control rate 63.3% vs. 50.0%. The most common grade 3 or 4 toxicities were leucopaenia and neutropaenia."
+    },
+    {
+     "label": "Conclusions",
+     "text": "This randomised, phase II study of irinotecan-containing regimens in good PS second-line ABTC patients showed a clear benefit of XELIRI regimen over irinotecan monotherapy in prolonging PFS, with acceptable toxicity."
+    }
+   ]
+  },
+  {
+   "pmid": "32464280",
+   "doi": "10.1016/j.annonc.2020.05.018",
+   "title": "Regorafenib after failure of gemcitabine and platinum-based chemotherapy for locally advanced/metastatic biliary tumors: REACHIN, a randomized, double-blind, phase II trial",
+   "journal": "Ann Oncol",
+   "year": 2020,
+   "publication_types": [
+    "Clinical Trial, Phase II",
+    "Journal Article",
+    "Multicenter Study",
+    "Randomized Controlled Trial",
+    "Research Support, Non-U.S. Gov't"
+   ],
+   "registry_ids": [
+    "NCT02162914"
+   ],
+   "language": "eng",
+   "sections": [
+    {
+     "label": "Background",
+     "text": "There is a high unmet clinical need for treatments of advanced/metastatic biliary tract cancers after progression on first-line chemotherapy. Regorafenib has demonstrated efficacy in some gastrointestinal tumors that progress on standard therapies."
+    },
+    {
+     "label": "Patients and methods",
+     "text": "REACHIN was a multicenter, double-blind, placebo-controlled, randomized phase II study designed to evaluate the safety and efficacy of regorafenib in patients with nonresectable/metastatic biliary tract cancer that progressed after gemcitabine/platinum chemotherapy. Patients were randomly assigned 1 : 1 to best supportive care plus either regorafenib 160 mg once daily 3 weeks on/1 week off or placebo until progression or unacceptable toxicity. No crossover was allowed. The primary objective was progression-free survival (PFS). Secondary objectives were response rate, overall survival, and translational analysis."
+    },
+    {
+     "label": "Results",
+     "text": "Sixty-six patients with intrahepatic (n = 42), perihilar (n = 6), or extrahepatic (n = 9) cholangiocarcinoma, or gallbladder carcinoma (n = 9) were randomized, 33 to each treatment group (33 per group). At a median follow-up of 24 months, all patients had progressed and six patients were alive. Median treatment duration was 11.0 weeks [95% confidence interval (CI): 6.0-15.9] in the regorafenib group and 6.3 weeks (95% CI: 3.9-7.0) in the placebo group (P = 0.002). Fourteen of 33 patients (42%) in the regorafenib group had a dose reduction. Stable disease rates were 74% (95% CI: 59-90) in the regorafenib group and 34% with placebo (95% CI: 18-51; P = 0.002). Median PFS in the regorafenib group was 3.0 months (95% CI: 2.3-4.9) and 1.5 months (95% CI: 1.2-2.0) in the placebo group (hazard ratio 0.49; 95% CI: 0.29-0.81; P = 0.004) and median overall survival was 5.3 months (95% CI: 2.7-10.5) and 5.1 months (95% CI: 3.0-6.4), respectively (P = 0.28). There were no unexpected/new safety signals."
+    },
+    {
+     "label": "Conclusion",
+     "text": "Regorafenib significantly improved PFS and tumor control in patients with previously treated metastatic/unresectable biliary tract cancer in the second- or third-line setting."
+    },
+    {
+     "label": "Clinical trial registration",
+     "text": "The trial is registered in the European Clinical Trials Register database (EudraCT 2012-005626-30) and at ClinicalTrials.gov (NCT02162914)."
+    }
+   ]
+  },
+  {
+   "pmid": "34554208",
+   "doi": "10.1001/jamaoncol.2021.3836",
+   "title": "Final Overall Survival Efficacy Results of Ivosidenib for Patients With Advanced Cholangiocarcinoma With IDH1 Mutation: The Phase 3 Randomized Clinical ClarIDHy Trial",
+   "journal": "JAMA Oncol",
+   "year": 2021,
+   "publication_types": [
+    "Clinical Trial, Phase III",
+    "Journal Article",
+    "Multicenter Study",
+    "Randomized Controlled Trial",
+    "Research Support, Non-U.S. Gov't"
+   ],
+   "registry_ids": [
+    "NCT02989857"
+   ],
+   "language": "eng",
+   "sections": [
+    {
+     "label": "Importance",
+     "text": "Isocitrate dehydrogenase 1 (IDH1) variations occur in up to approximately 20% of patients with intrahepatic cholangiocarcinoma. In the ClarIDHy trial, progression-free survival as determined by central review was significantly improved with ivosidenib vs placebo."
+    },
+    {
+     "label": "Objective",
+     "text": "To report the final overall survival (OS) results from the ClarIDHy trial, which aimed to demonstrate the efficacy of ivosidenib (AG-120)-a first-in-class, oral, small-molecule inhibitor of mutant IDH1-vs placebo for patients with unresectable or metastatic cholangiocarcinoma with IDH1 mutation."
+    },
+    {
+     "label": "Design, setting, and participants",
+     "text": "This multicenter, randomized, double-blind, placebo-controlled, clinical phase 3 trial was conducted from February 20, 2017, to May 31, 2020, at 49 hospitals across 6 countries among patients aged 18 years or older with cholangiocarcinoma with IDH1 mutation whose disease progressed with prior therapy."
+    },
+    {
+     "label": "Interventions",
+     "text": "Patients were randomized 2:1 to receive ivosidenib, 500 mg, once daily or matched placebo. Crossover from placebo to ivosidenib was permitted if patients had disease progression as determined by radiographic findings."
+    },
+    {
+     "label": "Main outcomes and measures",
+     "text": "The primary end point was progression-free survival as determined by blinded independent radiology center (reported previously). Overall survival was a key secondary end point. The primary analysis of OS followed the intent-to-treat principle. Other secondary end points included objective response rate, safety and tolerability, and quality of life."
+    },
+    {
+     "label": "Results",
+     "text": "Overall, 187 patients (median age, 62 years [range, 33-83 years]) were randomly assigned to receive ivosidenib (n = 126; 82 women [65%]; median age, 61 years [range, 33-80 years]) or placebo (n = 61; 37 women [61%]; median age, 63 years [range, 40-83 years]); 43 patients crossed over from placebo to ivosidenib. The primary end point of progression-free survival was reported elsewhere. Median OS was 10.3 months (95% CI, 7.8-12.4 months) with ivosidenib vs 7.5 months (95% CI, 4.8-11.1 months) with placebo (hazard ratio, 0.79 [95% CI, 0.56-1.12]; 1-sided P = .09). When adjusted for crossover, median OS with placebo was 5.1 months (95% CI, 3.8-7.6 months; hazard ratio, 0.49 [95% CI, 0.34-0.70]; 1-sided P < .001). The most common grade 3 or higher treatment-emergent adverse event (≥5%) reported in both groups was ascites (11 patients [9%] receiving ivosidenib and 4 patients [7%] receiving placebo). Serious treatment-emergent adverse events considered ivosidenib related were reported in 3 patients (2%). There were no treatment-related deaths. Patients receiving ivosidenib reported no apparent decline in quality of life compared with placebo."
+    },
+    {
+     "label": "Conclusions and relevance",
+     "text": "This randomized clinical trial found that ivosidenib was well tolerated and resulted in a favorable OS benefit vs placebo, despite a high rate of crossover. These data, coupled with supportive quality of life data and a tolerable safety profile, demonstrate the clinical benefit of ivosidenib for patients with advanced cholangiocarcinoma with IDH1 mutation."
+    },
+    {
+     "label": "Trial registration",
+     "text": "ClinicalTrials.gov Identifier: NCT02989857."
+    }
+   ]
+  },
+  {
+   "pmid": "37901200",
+   "doi": "10.1159/000529636",
+   "title": "Pembrolizumab as Second-Line Therapy for Advanced Hepatocellular Carcinoma: Longer Term Follow-Up from the Phase 3 KEYNOTE-240 Trial",
+   "journal": "Liver Cancer",
+   "year": 2023,
+   "publication_types": [
+    "Journal Article"
+   ],
+   "registry_ids": [],
+   "language": "eng",
+   "sections": [
+    {
+     "label": "Introduction",
+     "text": "KEYNOTE-240 showed a favorable benefit/risk profile for pembrolizumab versus placebo in patients with sorafenib-treated advanced hepatocellular carcinoma (HCC); however, prespecified statistical significance criteria for overall survival (OS) and progression-free survival (PFS) superiority were not met at the final analysis. Outcomes based on an additional 18 months of follow-up are reported."
+    },
+    {
+     "label": "Methods",
+     "text": "Adults with sorafenib-treated advanced HCC were randomized 2:1 to pembrolizumab 200 mg intravenously every 3 weeks or placebo. Dual primary endpoints were OS and PFS assessed per RECIST v1.1 by blinded independent central review (BICR). Secondary endpoints included objective response rate (ORR), assessed per RECIST v1.1 by BICR, and safety."
+    },
+    {
+     "label": "Results",
+     "text": "413 patients were randomized (pembrolizumab, n = 278; placebo, n = 135). As of July 13, 2020, median (range) time from randomization to data cutoff was 39.6 (31.7-48.8) months for pembrolizumab and 39.8 (31.7-47.8) months for placebo. Estimated OS rates (95% CI) were 17.7% (13.4-22.5%) for pembrolizumab and 11.7% (6.8-17.9%) for placebo at 36 months. The estimated PFS rate (95% CI) for pembrolizumab was 8.9% (5.3-13.6%) and 0% for placebo at 36 months. ORR (95% CI) was 18.3% (14.0-23.4%) for pembrolizumab and 4.4% (1.6-9.4%) for placebo. Immune-mediated hepatitis events did not increase with follow-up. No viral hepatitis flare events were reported."
+    },
+    {
+     "label": "Conclusion",
+     "text": "With extended follow-up, pembrolizumab continued to maintain improvement in OS and PFS and was associated with a consistent adverse event profile compared with placebo in patients with sorafenib-treated advanced HCC. Although KEYNOTE-240 did not meet prespecified statistical significance criteria at the final analysis, these results together with the antitumor activity of second-line pembrolizumab observed in KEYNOTE-224 and the statistically significant and clinically meaningful OS and PFS benefits of second-line pembrolizumab in patients from Asia observed in KEYNOTE-394 reinforce the clinical activity of pembrolizumab in previously treated patients with advanced HCC."
+    }
+   ]
+  },
+  {
+   "pmid": "41264278",
+   "doi": "10.1001/jamaoncol.2025.4736",
+   "title": "Zanidatamab in HER2-Positive Metastatic Biliary Tract Cancer: Final Results From HERIZON-BTC-01",
+   "journal": "JAMA Oncol",
+   "year": 2026,
+   "publication_types": [
+    "Journal Article"
+   ],
+   "registry_ids": [],
+   "language": "eng",
+   "sections": []
+  },
+  {
+   "pmid": "36951834",
+   "doi": "10.1001/jamaoncol.2023.0016",
+   "title": "Treatment With Liposomal Irinotecan Plus Fluorouracil and Leucovorin for Patients With Previously Treated Metastatic Biliary Tract Cancer: The Phase 2b NIFTY Randomized Clinical Trial",
+   "journal": "JAMA Oncol",
+   "year": 2023,
+   "publication_types": [
+    "Randomized Controlled Trial",
+    "Multicenter Study",
+    "Journal Article",
+    "Research Support, Non-U.S. Gov't"
+   ],
+   "registry_ids": [
+    "NCT03524508"
+   ],
+   "language": "eng",
+   "sections": [
+    {
+     "label": "Importance",
+     "text": "The NIFTY trial demonstrated the benefit of treatment with second-line liposomal irinotecan (nal-IRI) plus fluorouracil (FU) and leucovorin (LV) for patients with advanced biliary tract cancer (BTC)."
+    },
+    {
+     "label": "Objective",
+     "text": "To report the updated efficacy outcomes from the NIFTY trial with extended follow-up of 1.3 years with reperformed masked independent central review (MICR) with 3 newly invited radiologists."
+    },
+    {
+     "label": "Design, setting, and participants",
+     "text": "The NIFTY trial was a randomized, multicenter, open-label, phase 2b clinical trial conducted between September 5, 2018, and December 31, 2021, at 5 tertiary referral centers in South Korea. Patients with advanced BTC whose disease progressed while receiving first-line gemcitabine plus cisplatin with at least 1 measurable lesion per Response Evaluation Criteria in Solid Tumors, version 1.1, were eligible. Data analysis was completed on May 9, 2022."
+    },
+    {
+     "label": "Interventions",
+     "text": "Patients were randomized 1:1 to receive LV, 400 mg/m2, bolus and FU, 2400 mg/m2, for a 46-hour infusion intravenously every 2 weeks with or without nal-IRI, 70 mg/m2, before LV intravenously. Patients were treated until disease progression or unacceptable toxic effects."
+    },
+    {
+     "label": "Main outcomes and measures",
+     "text": "Primary end point was progression-free survival (PFS) as assessed by MICR. Secondary end points were PFS as assessed by the investigator, overall survival, and objective response rate."
+    },
+    {
+     "label": "Results",
+     "text": "A total of 178 patients (75 women [42.1%]; median [IQR] age, 64 [38-84] years) were randomly assigned, and 174 patients were included in the full analysis set (88 patients [50.6%] in the nal-IRI plus FU/LV group vs 86 patients [49.4%] in the FU/LV alone group). In this updated analysis, the median MICR-assessed PFS was 4.2 months (95% CI, 2.8-5.3) for the nal-IRI plus FU/LV group and 1.7 months (95% CI, 1.4-2.6) for the FU/LV alone group (hazard ratio, 0.61; 95% CI, 0.44-0.86; P = .004), in contrast to the 7.1 and 1.4 months reported in the previous study, respectively. The discordance rate for tumor progression date between the MICR and investigators was 17.8% (vs 30% in the previous study)."
+    },
+    {
+     "label": "Conclusions and relevance",
+     "text": "The NIFTY randomized clinical trial demonstrated significant improvement in PFS with treatment with nal-IRI plus FU/LV compared with FU/LV alone for patients with advanced BTC after progression to gemcitabine plus cisplatin. The combination of nal-IRI plus FU/LV could be considered as a second-line treatment option for patients with previously treated advanced BTC."
+    },
+    {
+     "label": "Trial registration",
+     "text": "clinicaltrials.gov Identifier: NCT03524508."
+    }
+   ]
+  },
+  {
+   "pmid": "38870977",
+   "doi": "10.1016/S2468-1253(24)00119-5",
+   "title": "Nanoliposomal irinotecan and fluorouracil plus leucovorin versus fluorouracil plus leucovorin in patients with cholangiocarcinoma and gallbladder carcinoma previously treated with gemcitabine-based therapies (AIO NALIRICC): a multicentre, open-label, randomised, phase 2 trial",
+   "journal": "Lancet Gastroenterol Hepatol",
+   "year": 2024,
+   "publication_types": [
+    "Journal Article",
+    "Multicenter Study",
+    "Clinical Trial, Phase II",
+    "Randomized Controlled Trial",
+    "Research Support, Non-U.S. Gov't"
+   ],
+   "registry_ids": [
+    "NCT03043547"
+   ],
+   "language": "eng",
+   "sections": [
+    {
+     "label": "Background",
+     "text": "There is an unmet need for effective therapies in pretreated advanced biliary tract cancer. We aimed to evaluate the efficacy of nanoliposomal irinotecan and fluorouracil plus leucovorin compared with fluorouracil plus leucovorin as second-line treatment for biliary tract cancer."
+    },
+    {
+     "label": "Methods",
+     "text": "NALIRICC was a multicentre, open-label, randomised, phase 2 trial done in 17 German centres for patients aged 18 years or older, with an Eastern Cooperative Oncology Group performance status of 0-1, metastatic biliary tract cancer, and progression on gemcitabine-based therapy. Patients were randomly assigned (1:1) to receive intravenous infusions of nanoliposomal irinotecan (70 mg/m2), fluorouracil (2400 mg/m2), and leucovorin (400 mg/m2) every 2 weeks (nanoliposomal irinotecan group) or fluorouracil (2400 mg/m2) plus leucovorin (400 mg/m2) every 2 weeks (control group). Randomisation was by permutated block randomisation in block sizes of four, stratified by primary tumour site. Investigator-assessed progression-free survival was the primary endpoint, which was evaluated in all randomly assigned patients. Secondary efficacy outcomes were overall survival, objective response rate, and quality of life. Safety was assessed in all randomly assigned patients who received at least one dose of the study treatment. Enrolment for this trial has been completed, and it is registered with ClinicalTrials.gov, NCT03043547."
+    },
+    {
+     "label": "Finding",
+     "text": "Between Dec 4, 2017, and Aug 2, 2021, 49 patients were randomly assigned to the nanoliposomal irinotecan group and 51 patients to the control group. Median age was 65 years (IQR 59-71); 45 (45%) of 100 patients were female. Median progression-free survival was 2·6 months (95% CI 1·7-3·6) in the nanoliposomal irinotecan group and 2·3 months (1·6-3·4) in the control group (hazard ratio [HR] 0·87 [0·56-1·35]). Median overall survival was 6·9 months (95% CI 5·3-10·6) in the nanoliposomal irinotecan group and 8·2 months (5·4-11·9) in the control group (HR 1·08 [0·68-1·72]). The objective response rate was 14% (95% CI 6-27; seven patients) in the nanoliposomal irinotecan group and 4% (1-14; two patients) in the control group. The most common grade 3 or worse adverse events in the nanoliposomal irinotecan group were neutropenia (eight [17%] of 48 vs none in the control group), diarrhoea (seven [15%] vs one [2%]), and nausea (four [8%] vs none). In the control group, the most common grade 3 or worse adverse events were cholangitis (four [8%] patients vs none in the nanoliposomal irinotecan group) and bile duct stenosis (four [8%] vs three [6%]). Treatment-related serious adverse events occurred in 16 (33%) patients in the nanoliposomal irinotecan group (grade 2-3 diarrhoea in five patients; one case each of abdominal infection, acute kidney injury, pancytopenia, increased blood bilirubin, colitis, dehydration, dyspnoea, infectious enterocolitis, ileus, oral mucositis, and nausea). One (2%) treatment-related serious adverse event occurred in the control group (worsening of general condition). Median duration until deterioration of global health status, characterised by the time from randomisation to the initial observation of a score decline exceeding 10 points, was 4·0 months (95% CI 2·2-not reached) in the nanoliposomal irinotecan group and 3·7 months (2·7-not reached) in the control group."
+    },
+    {
+     "label": "Interpretation",
+     "text": "The addition of nanoliposomal irinotecan to fluorouracil plus leucovorin did not improve progression-free survival or overall survival and was associated with higher toxicity compared with fluorouracil plus leucovorin. Further research is necessary to define the role of irinotecan-based combinations in second-line treatment of biliary tract cancer."
+    },
+    {
+     "label": "Funding",
+     "text": "Servier and AIO-Studien."
+    }
+   ]
+  },
+  {
+   "pmid": "34973222",
+   "doi": "10.1016/S1470-2045(21)00712-9",
+   "title": "Second-line liposomal irinotecan plus fluorouracil and leucovorin in metastatic biliary tract cancer - Author's reply",
+   "journal": "Lancet Oncol",
+   "year": 2022,
+   "publication_types": [
+    "Letter",
+    "Research Support, Non-U.S. Gov't"
+   ],
+   "registry_ids": [],
+   "language": "eng",
+   "sections": []
+  },
+  {
+   "pmid": "38838500",
+   "doi": "10.1016/j.esmoop.2024.103488",
+   "title": "An open-label study of pemigatinib in cholangiocarcinoma: final results from FIGHT-202",
+   "journal": "ESMO Open",
+   "year": 2024,
+   "publication_types": [
+    "Journal Article",
+    "Multicenter Study",
+    "Clinical Trial, Phase II"
+   ],
+   "registry_ids": [
+    "NCT02924376"
+   ],
+   "language": "eng",
+   "sections": [
+    {
+     "label": "Background",
+     "text": "Fibroblast growth factor receptor 2 (FGFR2) fusions and rearrangements are clinically actionable genomic alterations in cholangiocarcinoma (CCA). Pemigatinib is a selective, potent, oral inhibitor of FGFR1-3 and demonstrated efficacy in patients with previously treated, advanced/metastatic CCA with FGFR2 alterations in FIGHT-202 (NCT02924376). We report final outcomes from the extended follow-up period."
+    },
+    {
+     "label": "Patients and methods",
+     "text": "The multicenter, open-label, single-arm, phase II FIGHT-202 study enrolled patients ≥18 years old with previously treated advanced/metastatic CCA with FGFR2 fusions or rearrangements (cohort A), other FGF/FGFR alterations (cohort B), or no FGF/FGFR alterations (cohort C). Patients received once-daily oral pemigatinib 13.5 mg in 21-day cycles (2 weeks on, 1 week off) until disease progression or unacceptable toxicity. The primary endpoint was objective response rate (ORR) in cohort A assessed as per RECIST v1.1 by an independent review committee; secondary endpoints included duration of response (DOR), progression-free survival (PFS), overall survival (OS), and safety."
+    },
+    {
+     "label": "Results",
+     "text": "FIGHT-202 enrolled 147 patients (cohort A, 108; cohort B, 20; cohort C, 17; unconfirmed FGF/FGFR alterations, 2). By final analysis, 145 (98.6%) had discontinued treatment due to progressive disease (71.4%), withdrawal by patient (8.2%), or adverse events (AEs; 6.8%). Median follow-up was 45.4 months. The ORR in cohort A was 37.0% (95% confidence interval 27.9% to 46.9%); complete and partial responses were observed in 3 and 37 patients, respectively. Median DOR was 9.1 (6.0-14.5) months; median PFS and OS were 7.0 (6.1-10.5) months and 17.5 (14.4-22.9) months, respectively. The most common treatment-emergent AEs (TEAEs) were hyperphosphatemia (58.5%), alopecia (49.7%), and diarrhea (47.6%). Overall, 15 (10.2%) patients experienced TEAEs leading to pemigatinib discontinuation; intestinal obstruction and acute kidney injury (n = 2 each) occurred most frequently."
+    },
+    {
+     "label": "Conclusions",
+     "text": "Pemigatinib demonstrated durable response and prolonged OS with manageable AEs in patients with previously treated, advanced/metastatic CCA with FGFR2 alterations in the extended follow-up period of FIGHT-202."
+    }
+   ]
+  },
+  {
+   "pmid": "37751561",
+   "doi": "10.1200/JCO.23.00606",
+   "title": "Tucatinib and Trastuzumab for Previously Treated Human Epidermal Growth Factor Receptor 2-Positive Metastatic Biliary Tract Cancer (SGNTUC-019): A Phase II Basket Study",
+   "journal": "J Clin Oncol",
+   "year": 2023,
+   "publication_types": [
+    "Clinical Trial, Phase II",
+    "Journal Article",
+    "Research Support, Non-U.S. Gov't"
+   ],
+   "registry_ids": [
+    "NCT04579380"
+   ],
+   "language": "eng",
+   "sections": [
+    {
+     "label": "Purpose",
+     "text": "To evaluate the efficacy and safety of tucatinib and trastuzumab in patients with previously treated human epidermal growth factor receptor 2-positive (HER2+) metastatic biliary tract cancer (mBTC)."
+    },
+    {
+     "label": "Methods",
+     "text": "SGNTUC-019 (ClinicalTrials.gov identifier: NCT04579380) is an open-label phase II basket study evaluating the efficacy and safety of tucatinib and trastuzumab in patients with HER2-altered solid tumors. In the biliary tract cancer cohort, patients had previously treated HER2 overexpressing or amplified (HER2+) tumors (identified with local testing) with no prior HER2-directed therapy. The primary end point was confirmed objective response rate (cORR) per investigator assessment. Patients were treated on a 21-day cycle with tucatinib (300 mg orally twice daily) and trastuzumab (8 mg/kg intravenously followed by 6 mg/kg every 3 weeks)."
+    },
+    {
+     "label": "Results",
+     "text": "Thirty patients were enrolled. As of data cutoff (January 30, 2023), the median duration of follow-up was 10.8 months. The cORR was 46.7% (90% CI, 30.8 to 63.0), with a disease control rate of 76.7% (90% CI, 60.6 to 88.5). The median duration of response and progression-free survival were 6.0 months (90% CI, 5.5 to 6.9) and 5.5 months (90% CI, 3.9 to 8.1), respectively. At data cutoff, 15 patients (50.0%) had died, and the estimated 12-month overall survival rate was 53.6% (90% CI, 36.8 to 67.8). The two most common treatment-emergent adverse events (TEAEs) were pyrexia (43.3%) and diarrhea (40.0%). Grade ≥3 TEAEs were reported in 18 patients (60.0%), with the most common being cholangitis, decreased appetite, and nausea (all 10.0%), which were generally not treatment related. TEAEs led to treatment regimen discontinuation in one patient, and there were no deaths due to TEAEs."
+    },
+    {
+     "label": "Conclusion",
+     "text": "Tucatinib combined with trastuzumab had clinically significant antitumor activity and was well tolerated in patients with previously treated HER2+ mBTC."
+    }
+   ]
+  },
+  {
+   "pmid": "39438001",
+   "doi": "10.4143/crt.2024.652",
+   "title": "Second-Line Fluoropyrimidine-Based Chemotherapy in Advanced Biliary Tract Cancer: A Meta-analysis Based on Individual Patient-Level Data of Randomized Trials",
+   "journal": "Cancer Res Treat",
+   "year": 2025,
+   "publication_types": [
+    "Journal Article",
+    "Meta-Analysis"
+   ],
+   "registry_ids": [
+    "NCT03464968",
+    "NCT03542508"
+   ],
+   "language": "eng",
+   "sections": [
+    {
+     "label": "Purpose",
+     "text": "While fluoropyrimidine-based chemotherapy regimens are recommended second-line treatment for patients with advanced biliary tract cancer (BTC), there have been no studies comparing different regimens head-to-head."
+    },
+    {
+     "label": "Materials and methods",
+     "text": "We performed individual patient-level meta-analysis based on data from the intention-to-treat population of the phase 2b NIFTY trial (liposomal irinotecan [nal-IRI] plus fluorouracil and leucovorin [5-FU/LV] vs. 5-FU/LV; NCT03542508) and the phase 2 FIReFOX trial (modified oxaliplatin plus 5-FU/LV [mFOLFOX] vs. modified irinotecan plus 5-FU/LV [mFOLFIRI]; NCT03464968). Pairwise log-rank tests and multivariable analysis using Cox proportional hazards modeling with shared frailty to account for the trial's effect were used to compare overall survival (OS) between regimens."
+    },
+    {
+     "label": "Results",
+     "text": "A total of 277 patients were included. The nal-IRI plus 5-FU/LV group (n=88) showed significantly better OS compared to the mFOLFOX group (n=49, pairwise log-rank, p=0.02), and mFOLFIRI group (n=50, p=0.03). Multivariable analysis showed consistent trends in OS with adjusted hazard ratios of 1.39 (mFOLFOX vs. nal-IRI plus 5-FU/LV: 95% confidence interval [CI], 0.93 to 2.07; p=0.11) and 1.36 (mFOLFIRI vs. nal-IRI plus 5-FU/LV: 95% CI, 0.92 to 2.03; p=0.13), respectively. Compared to the 5-FU/LV group, the mFOLFOX group and the mFOLFIRI group did not show differences in terms of OS (pairwise log-rank p=0.83 and p=0.58, respectively). The nal-IRI plus 5-FU/LV group experienced more frequent diarrhea, while the mFOLFOX group experienced peripheral neuropathy."
+    },
+    {
+     "label": "Conclusion",
+     "text": "Nal-IRI plus 5-FU/LV showed favorable survival outcomes compared to mFOLFOX, mFOLFIRI, or 5-FU/LV. The safety profiles of these regimens should be considered along with efficacy."
+    }
+   ]
+  },
+  {
+   "pmid": "35510484",
+   "doi": "10.2217/fon-2022-0214",
+   "title": "Multicenter phase II trial of trastuzumab deruxtecan for HER2-positive unresectable or recurrent biliary tract cancer: HERB trial",
+   "journal": "Future Oncol",
+   "year": 2022,
+   "publication_types": [
+    "Journal Article",
+    "Clinical Trial Protocol"
+   ],
+   "registry_ids": [],
+   "language": "eng",
+   "sections": [
+    {
+     "label": null,
+     "text": "Trastuzumab deruxtecan (DS-8201) is an antibody-drug conjugate composed of a humanized monoclonal anti-HER2 antibody, a cleavable tetrapeptide-based linker and a potent topoisomerase I inhibitor. The drug's efficacy has been proven in HER2-positive breast and gastric cancers. The rate of HER2 positivity in biliary tract cancer (BTC) has been reported to be 5-20%, and case reports and clinical trials have suggested that HER2 inhibitors might be active in HER2-positive BTC. Here we describe the rationale and design of the phase II HERB trial that will evaluate the efficacy and safety of trastuzumab deruxtecan in patients with HER2-expressing unresectable or recurrent BTC. The primary end point will be the centrally assessed objective response rate in HER2-positive patients."
+    }
+   ]
+  },
+  {
+   "pmid": "41349554",
+   "doi": "10.1016/S2468-1253(25)00230-4",
+   "title": "Tinengotinib for adults with advanced or metastatic cholangiocarcinoma: a multicentre, open-label, phase 2 trial",
+   "journal": "Lancet Gastroenterol Hepatol",
+   "year": 2026,
+   "publication_types": [
+    "Journal Article",
+    "Clinical Trial, Phase II",
+    "Multicenter Study",
+    "Research Support, Non-U.S. Gov't"
+   ],
+   "registry_ids": [
+    "NCT04919642"
+   ],
+   "language": "eng",
+   "sections": [
+    {
+     "label": "Background",
+     "text": "Cholangiocarcinoma is a rare, aggressive cancer often driven by FGFR2 fusions, which are targetable with inhibitors such as pemigatinib and futibatinib. However, resistance frequently develops due to acquired FGFR2 mutations. In this study, we aimed to evaluate the efficacy and safety of tinengotinib in previously treated patients with advanced cholangiocarcinoma."
+    },
+    {
+     "label": "Methods",
+     "text": "This open-label, multicentre, phase 2 trial was done at 32 medical centres in the USA. Eligible patients were aged 18 years or older with advanced or metastatic cholangiocarcinoma, who had previous systemic chemotherapy, and an Eastern Cooperative Oncology Group score of 0-1. Patients were assigned to one of four cohorts on the basis of FGFR status: cohort A1, FGFR2 fusions with primary FGFR inhibitor resistance; cohort A2, FGFR2 fusions with acquired FGFR inhibitor resistance; cohort B, other FGFR alterations; or cohort C, FGFR wild-type. Patints orally self-administered tinengotinib 10 mg daily in 28-day cycles in 28-day treatment cycles until documented disease progression, unacceptable toxicity, or withdrawal of consent. The primary endpoint was objective response rate as per investigator assessment, defined as the proportion of patients with confirmed tumour response (complete response or partial response) that was redocumented 4 weeks or after initial assessment based on RECIST (version 1.1), as assessed by the investigator. The primary endpoint was assessed in the in the efficacy evaluable population, which included all patients who received at least one dose of tinengotinib, had measurable disease at baseline, and had at least one post-baseline tumour assessment. Safety assessed in all patients who received at least one dose of tinengotinib. This trial is registered with ClinicalTrials.gov, NCT04919642, and enrolment is complete."
+    },
+    {
+     "label": "Findings",
+     "text": "Between Nov 19, 2021, and March 5, 2024, 55 patients were enrolled and assigned to one of four cohorts (cohort A1 [n=18], cohort A2 [n=11], cohort B [n=13], and cohort C [n=13]); all received tinengotinib. Patients had a median age of 61 years (IQR 56-68); 31 (56%) patients were female. All patients had received at least one previous systemic therapy. Median follow-up was 11·3 months (IQR 6·5-17·3). Among 51 patients included in the efficacy evaluable set, the objective response rate was 6·3% (95% CI 0·2-30·2; one confirmed partial response) in cohort A1, 30·0% (6·7-65·3; three confirmed partial responses) in cohort A2, 23·1% (5·0-53·8; three confirmed partial responses) in cohort B, and 0% in cohort C. Grade 3 treatment-related adverse events included hypertension in 17 (31%) of 55 patients, palmar-plantar erythrodysesthesia syndrome in seven (13%) patients, and stomatitis in six (11%) patients. Grade 4 treatment-related adverse events occurred in two (4%) of 55 patients (increased lipase [n=1] and posterior reversible encephalopathy syndrome [n=1]); no grade 5 treatment-related adverse events were reported."
+    },
+    {
+     "label": "Interpretation",
+     "text": "These findings suggest that tinengotinib might have activity in patients with cholangiocarcinoma with FGFR2 fusions that progressed following FGFR inhibitor therapy. Anti-tumour activity was also observed in patients with other FGFR alterations. The data from this phase 2 study supported the initiation of a phase 3 registration trial."
+    },
+    {
+     "label": "Funding",
+     "text": "TransThera Sciences."
+    }
+   ]
+  },
+  {
+   "pmid": "40631456",
+   "doi": "10.1111/liv.70196",
+   "title": "Sunitinib as Second-Line Treatment in Advanced Intrahepatic Cholangiocarcinoma: Results From the SUN-CK GERCOR Phase II Trial",
+   "journal": "Liver Int",
+   "year": 2025,
+   "publication_types": [
+    "Journal Article",
+    "Clinical Trial, Phase II",
+    "Multicenter Study",
+    "Research Support, Non-U.S. Gov't"
+   ],
+   "registry_ids": [
+    "NCT01718327"
+   ],
+   "language": "eng",
+   "sections": [
+    {
+     "label": "Background & aims",
+     "text": "Angiogenesis is critical in intrahepatic cholangiocarcinoma (ICC), a highly lethal cancer with limited treatment options. Sunitinib, a multi-receptor tyrosine kinase inhibitor, has strong antiangiogenic and antitumor effects. We aimed to evaluate the efficacy and tolerability of sunitinib as a second-line treatment in chemotherapy-pretreated patients with advanced ICC."
+    },
+    {
+     "label": "Methods",
+     "text": "This open-label, single-arm, phase II trial was conducted across five French centres. Eligible patients were aged ≥ 18, had advanced ICC not suitable for curative surgery and had been pre-treated with gemcitabine and/or platinum. Patients received oral sunitinib at 37.5 mg daily. The primary endpoint was overall survival (OS), with secondary endpoints including progression-free survival (PFS), objective response rate (ORR), disease control rate (DCR) and safety. Tumour response was evaluated using RECIST v1.1, with exploratory analysis using Choi criteria. VEGF-A, VEGF-C and plasma sunitinib levels were measured."
+    },
+    {
+     "label": "Results",
+     "text": "Fifty-three patients were included. Median OS was 9.6 months (95% CI, 6.1-13.1), median PFS was 3.7 months (95% CI, 3.1-6.4), the ORR was 14% and the DCR was 84%. Grade 3-4 cytopenias occurred in 25% of patients, hypertension in 21% and fatigue in 19%. Higher baseline levels of VEGF-A and VEGF-C correlated with longer OS. Patients with dose reductions maintained adequate drug exposure. Choi criteria, applied to 24 patients, predicted response duration better than RECIST v1.1. Baseline tumour density, assessed in 14 patients, showed a potential association with treatment responses."
+    },
+    {
+     "label": "Conclusions",
+     "text": "Sunitinib demonstrated efficacy and manageable toxicity as a second-line treatment in patients with advanced ICC previously treated with chemotherapy, suggesting it may represent a viable therapeutic option for this population."
+    },
+    {
+     "label": "Trial registration",
+     "text": "ClinicalTrials.gov NCT01718327."
+    }
+   ]
+  },
+  {
+   "pmid": "38319896",
+   "doi": "10.1056/EVIDoa2200015",
+   "title": "Durvalumab plus Gemcitabine and Cisplatin in Advanced Biliary Tract Cancer",
+   "journal": "NEJM Evid",
+   "year": 2022,
+   "publication_types": [
+    "Journal Article",
+    "Randomized Controlled Trial",
+    "Clinical Trial, Phase III"
+   ],
+   "registry_ids": [
+    "NCT03875235"
+   ],
+   "language": "eng",
+   "sections": [
+    {
+     "label": null,
+     "text": "BACKGROUND: Patients with advanced biliary tract cancer have a poor prognosis, and first-line standard of care (gemcitabine plus cisplatin) has remained unchanged for more than 10 years. The TOPAZ-1 trial evaluated durvalumab plus chemotherapy for patients with advanced biliary tract cancer. METHODS: In this double-blind, placebo-controlled, phase 3 study, we randomly assigned patients with previously untreated unresectable or metastatic biliary tract cancer or with recurrent disease 1:1 to receive durvalumab or placebo in combination with gemcitabine plus cisplatin for up to eight cycles, followed by durvalumab or placebo monotherapy until disease progression or unacceptable toxicity. The primary objective was to assess overall survival. Secondary end points included progression-free survival, objective response rate, and safety. RESULTS: Overall, 685 patients were randomly assigned to durvalumab (n=341) or placebo (n=344) with chemotherapy. As of data cutoff, 198 patients (58.1%) in the durvalumab group and 226 patients (65.7%) in the placebo group had died. The hazard ratio for overall survival was 0.80 (95% confidence interval [CI], 0.66 to 0.97; P=0.021). The estimated 24-month overall survival rate was 24.9% (95% CI, 17.9 to 32.5) for durvalumab and 10.4% (95% CI, 4.7 to 18.8) for placebo. The hazard ratio for progression-free survival was 0.75 (95% CI, 0.63 to 0.89; P=0.001). Objective response rates were 26.7% with durvalumab and 18.7% with placebo. The incidences of grade 3 or 4 adverse events were 75.7% and 77.8% with durvalumab and placebo, respectively. CONCLUSIONS: Durvalumab plus chemotherapy significantly improved overall survival versus placebo plus chemotherapy and showed improvements versus placebo plus chemotherapy in prespecified secondary end points including progression-free survival and objective response rate. The safety profiles of the two treatment groups were similar. (Funded by AstraZeneca; ClinicalTrials.gov number, NCT03875235.)"
+    }
+   ]
+  },
+  {
+   "pmid": "41646284",
+   "doi": "10.1016/j.esmogo.2025.100159",
+   "title": "Quantitative benefit-risk assessment of data from the phase III ClarIDHy study of ivosidenib versus placebo in patients with mIDH1 cholangiocarcinoma",
+   "journal": "ESMO Gastrointest Oncol",
+   "year": 2025,
+   "publication_types": [
+    "Journal Article"
+   ],
+   "registry_ids": [
+    "NCT02989857"
+   ],
+   "language": "eng",
+   "sections": [
+    {
+     "label": "Background",
+     "text": "Quantitative drug benefit-risk assessment (BRA) helps assess the magnitude of benefit and risk of new cancer therapies. This BRA aimed to summarize the evidence for the benefits and risks of ivosidenib versus placebo for the treatment of previously treated, locally advanced or metastatic mutant isocitrate dehydrogenase-1 cholangiocarcinoma using data from the pivotal phase III ClarIDHy study."
+    },
+    {
+     "label": "Materials and methods",
+     "text": "Cholangiocarcinoma experts determined relevant key benefit and risk criteria for ivosidenib and placebo to create a value tree and determined scales and weights. Multi-Criteria Decision Analysis modelling approaches were then applied to the ClarIDHy data to estimate the probability that the benefit-risk profile of ivosidenib was better than that of placebo."
+    },
+    {
+     "label": "Results",
+     "text": "A total of 187 patients were randomly assigned to ivosidenib 500 mg (n = 126) or placebo (n = 61). The primary analysis [Scale Loss Score (SLoS) model] showed a 95.24% probability for the benefit-risk profile favoring ivosidenib versus placebo. Sensitivity analyses applying the SLoS model to alternative sets, and the linear and product models to the main and alternative sets, of benefit and risk criteria in the value tree also showed consistently high probability for the benefit-risk profile favoring ivosidenib versus placebo for all endpoints evaluated (SLoS model: >95%; linear model: >99%; product model: >94%). Similarly, the random weights analysis favored ivosidenib with all evaluated weights and results converging quickly towards the main analysis results."
+    },
+    {
+     "label": "Conclusions",
+     "text": "These results provide comprehensive evidence that ivosidenib is an effective treatment with a tolerable safety profile for this aggressive disease, supporting previous data (ClinicalTrials.gov NCT02989857)."
+    }
+   ]
+  },
+  {
+   "pmid": "38353044",
+   "doi": "10.2217/fon-2023-0006",
+   "title": "Clinical outcomes for previously treated patients with advanced biliary tract cancer: a meta-analysis",
+   "journal": "Future Oncol",
+   "year": 2024,
+   "publication_types": [
+    "Meta-Analysis",
+    "Systematic Review",
+    "Journal Article"
+   ],
+   "registry_ids": [],
+   "language": "eng",
+   "sections": [
+    {
+     "label": null,
+     "text": "Aim: A systematic review and meta-analysis were performed to evaluate the efficacy of treatments for previously treated advanced biliary tract cancer (BTC) patients. Materials & methods: Databases were searched for studies evaluating treatments for advanced (unresectable and/or metastatic) BTC patients who progressed on prior therapy. Pooled estimates of objective response rate (ORR), median overall survival (OS) and median progression-free survival (PFS) were calculated using random effects meta-analysis. Results: Across 31 studies evaluating chemotherapy or targeted treatment regimens in an unselected advanced BTC patient population, pooled ORR was 6.9%, median OS was 6.6 months and median PFS was 3.2 months. Conclusion: The efficacy of conventional treatments for previously treated advanced BTC patients is poor and could be improved by novel therapies."
+    }
+   ]
+  },
+  {
+   "pmid": "38278871",
+   "doi": "10.1007/s00280-023-04633-5",
+   "title": "Pharmacokinetics/pharmacodynamics of ivosidenib in advanced IDH1-mutant cholangiocarcinoma: findings from the phase III ClarIDHy study",
+   "journal": "Cancer Chemother Pharmacol",
+   "year": 2024,
+   "publication_types": [
+    "Journal Article",
+    "Randomized Controlled Trial",
+    "Clinical Trial, Phase III",
+    "Research Support, Non-U.S. Gov't",
+    "Multicenter Study"
+   ],
+   "registry_ids": [
+    "NCT02989857"
+   ],
+   "language": "eng",
+   "sections": [
+    {
+     "label": "Purpose",
+     "text": "Report pharmacokinetic (PK)/pharmacodynamic (PD) findings from the phase III ClarIDHy study and any association between PK/PD parameters and treatment outcomes in this population."
+    },
+    {
+     "label": "Methods",
+     "text": "Patients with mutant isocitrate dehydrogenase 1 (mIDH1) advanced cholangiocarcinoma were randomized at a 2:1 ratio to receive ivosidenib or matched placebo. Crossover from placebo to ivosidenib was permitted at radiographic disease progression. Blood samples for PK/PD analyses, a secondary endpoint, were collected pre-dose and up to 4 h post-dose on day (D) 1 of cycles (C) 1 - 2, pre-dose and 2 h post-dose on D15 of C1 - 2, and pre-dose on D1 from C3 onwards. Plasma ivosidenib and D-2-hydroxyglutarate (2-HG) were measured using liquid chromatography-tandem mass spectrometry. All clinical responses were centrally reviewed previously."
+    },
+    {
+     "label": "Results",
+     "text": "PK/PD analysis was available for samples from 156 ivosidenib-treated patients. Ivosidenib was absorbed rapidly following single and multiple oral doses (time of maximum observed plasma concentration [Tmax] of 2.63 and 2.07 h, respectively). Ivosidenib exposure was higher at C2D1 than after a single dose, with low accumulation. In ivosidenib-treated patients, mean plasma 2-HG concentration was reduced from 1108 ng/mL at baseline to 97.7 ng/mL at C2D1, close to levels previously observed in healthy individuals. An average 2-HG inhibition of 75.0% was observed at steady state. No plasma 2-HG decreases were seen with placebo. Plasma 2-HG reductions were observed in ivosidenib-treated patients irrespective of best overall response (progressive disease, or partial response and stable disease)."
+    },
+    {
+     "label": "Conclusion",
+     "text": "Once-daily ivosidenib 500 mg has a favorable PK/PD profile, attesting the 2-HG reduction mechanism of action and, thus, positive outcomes in treated patients with advanced mIDH1 cholangiocarcinoma."
+    },
+    {
+     "label": "Clinical trial registration",
+     "text": "NCT02989857 Registered February 20, 2017."
+    }
+   ]
+  },
+  {
+   "pmid": "40147791",
+   "doi": "10.1016/j.jhep.2025.03.013",
+   "title": "Liposomal irinotecan for previously treated patients with biliary tract cancer: A pooled analysis of NIFTY and NALIRICC trials",
+   "journal": "J Hepatol",
+   "year": 2025,
+   "publication_types": [
+    "Clinical Trial, Phase II",
+    "Journal Article",
+    "Randomized Controlled Trial"
+   ],
+   "registry_ids": [
+    "NCT03043547",
+    "NCT03524508"
+   ],
+   "language": "eng",
+   "sections": [
+    {
+     "label": "Background & aims",
+     "text": "Liposomal irinotecan (nal-IRI) combined with fluorouracil (5-FU)/leucovorin (LV) as a second-line treatment for biliary tract cancer (BTC) following progression on gemcitabine-based therapy yielded conflicting outcomes in the Korean NIFTY and German NALIRICC trials. This necessitated a comprehensive pooled analysis to evaluate its efficacy and safety."
+    },
+    {
+     "label": "Methods",
+     "text": "Individual patient data were pooled from the intention-to-treat populations of the NIFTY and NALIRICC trials. The primary endpoint was progression-free survival (PFS)."
+    },
+    {
+     "label": "Results",
+     "text": "A total of 278 patients were included: 137 in the nal-IRI plus 5-FU/LV group and 141 in the 5-FU/LV group. The nal-IRI plus 5-FU/LV group showed significantly longer median PFS (3.6 months [95% CI 2.7-4.4] vs. 1.8 months [95% CI 1.5-2.6]; hazard ratio 0.65, p <0.001). Median overall survival was 8.1 months (95% CI 6.0-8.9) and 6.1 months (95% CI 5.3-7.5), respectively (hazard ratio 0.77, p = 0.051). Objective response rates were also higher in the nal-IRI plus 5-FU/LV group than in the 5-FU/LV group (17.5% vs. 2.8%; p <0.001). Post-study irinotecan-containing therapy was administered in 4 (2.9%) and 21 (15.3%) patients in the nal-IRI plus 5-FU/LV group and 5-FU/LV group, respectively. Adverse events varied by ethnicity, with gastrointestinal toxicities more common in Germans and neutropenia more prevalent in Koreans; treatment discontinuation without disease progression occurred in 31.3% vs. 8.0%, respectively."
+    },
+    {
+     "label": "Conclusion",
+     "text": "The addition of nal-IRI to 5-FU/LV significantly improved PFS and objective response rates, supporting its potential as subsequent-line therapy. Differences in safety profiles underscore the relevance of ethnicity for nal-IRI in patients with BTC."
+    },
+    {
+     "label": "Impact and implications",
+     "text": "Current standard of care for second-line therapy in patients with advanced biliary tract cancer (BTC) is FOLFOX. This study provides robust evidence supporting the potential role of adding liposomal irinotecan (nal-IRI) to fluorouracil and leucovorin (5-FU/LV) as a subsequent therapy for patients with BTC who have progressed on gemcitabine-based regimens. The findings demonstrate significant improvements in progression-free survival and objective response rates in a patient population for whom treatment options are limited. Furthermore, the study underscores the necessity of considering ethnic differences in adverse event profiles to optimize treatment administration and patient outcomes."
+    },
+    {
+     "label": "Clinical trial registration number",
+     "text": "NCT03524508 and NCT03043547."
+    }
+   ]
+  }
+ ]
+}
