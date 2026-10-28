@@ -7,7 +7,8 @@ and reviewers. `checks` states the sums that must hold; a broken one is reported
 PRISMA 2020's "records marked as ineligible by automation tools" is always zero here: no
 screening mode lets the AI exclude a record that no human saw. What the AI did contribute is
 counted separately: exclusions the AI also proposed, exclusions decided after a reveal, and
-exclusions decided in an adjudication that an AI rule triggered.
+exclusions that stood after a blind extra screen the AI's disagreement triggered (whether the
+auditor upheld them or an adjudicator decided).
 """
 
 from collections import Counter
@@ -41,8 +42,9 @@ class AiInvolvement(Record):
     """The humans excluded, and the AI's verified reading also excluded."""
     excluded_after_ai_reveal: int
     """A screener saw the AI's reading before the final decision."""
-    excluded_after_ai_adjudication: int
-    """An AI rule sent the record to adjudication, which excluded it."""
+    excluded_after_ai_rescreen: int
+    """The AI's disagreement sent the record to the auditor's blind extra screen, and it was still
+    excluded."""
     excluded_with_ai_involvement: int
     """Any of the three; each record counts once."""
 
@@ -88,19 +90,19 @@ class PrismaFlow(Record):
 def _ai(excluded: list[ItemResult]) -> tuple[AiInvolvement, dict[str, tuple[str, ...]]]:
     proposal = [i.item_ref for i in excluded if i.ai_excludes]
     reveal = [i.item_ref for i in excluded if i.ai_revealed]
-    adjudicated = [i.item_ref for i in excluded if i.ai_adjudicated]
-    union = sorted(set(proposal) | set(reveal) | set(adjudicated))
+    rescreened = [i.item_ref for i in excluded if i.ai_rescreened]
+    union = sorted(set(proposal) | set(reveal) | set(rescreened))
     return (
         AiInvolvement(
             excluded_with_ai_proposal=len(proposal),
             excluded_after_ai_reveal=len(reveal),
-            excluded_after_ai_adjudication=len(adjudicated),
+            excluded_after_ai_rescreen=len(rescreened),
             excluded_with_ai_involvement=len(union),
         ),
         {
             "excluded_with_ai_proposal": tuple(sorted(proposal)),
             "excluded_after_ai_reveal": tuple(sorted(reveal)),
-            "excluded_after_ai_adjudication": tuple(sorted(adjudicated)),
+            "excluded_after_ai_rescreen": tuple(sorted(rescreened)),
             "excluded_with_ai_involvement": tuple(union),
         },
     )

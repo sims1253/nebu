@@ -3,8 +3,14 @@
 `load_review` reads the published protocol, the searches, one frozen identity revision, the
 screening stages with every human decision, and the judge configurations, keeping only what the
 ledger recorded at or before `cutoff_seq`. Screening state is replayed from the append-only
-decision, undo, conflict, and adjudication rows, not read from the mutable assignment columns, so
-a report rendered at an old cutoff shows the review as it stood then.
+decision, undo, and adjudication rows and from the ledger events of conflicts and extra screens,
+not read from mutable columns, so a report rendered at an old cutoff shows the review as it stood
+then.
+
+Conflicts are human disagreements only. An AI-only disagreement (the model saw nothing wrong with
+a record both humans excluded in M1, or the AI disagrees with the lone human in M2) sends the
+record to a blind extra screen by the stage's auditor (`Rescreen`); if the auditor disagrees with
+the screeners, that becomes a conflict like any other.
 
 Profiles render from a `Review` too; they never query the database themselves.
 """
@@ -25,7 +31,19 @@ from kittum.protocol import (
     StoredProtocol,
 )
 from kittum.protocol import get_version as get_protocol_version
-from kittum.screening import AuditGauge, AuditStratum, PairAgreement, RevealSetting
+from kittum.screening import (
+    ADJUDICATED,
+    AI_DISAGREEMENT_RESCREEN,
+    CONFLICT_OPENED,
+    CONFLICT_UPDATED,
+    CONFLICT_WITHDRAWN,
+    AuditGauge,
+    AuditStratum,
+    PairAgreement,
+    RescreenGauge,
+    RescreenReason,
+    RevealSetting,
+)
 from kittum.search import SearchExecution, get_execution
 from kittum.stats import Stratum, cohen_kappa, elusion_estimate, pabak
 
@@ -130,11 +148,22 @@ class Adjudication(Record):
 
 
 class Conflict(Record):
+    """A conflict between humans as its ledger events left it at the cutoff."""
+
     id: Id
-    kinds: tuple[str, ...]
+    kinds: tuple[str, ...]  # human_disagreement, exclusion_reason, audit_disagreement
     state: Literal["open", "resolved", "withdrawn"]
     opened_event_id: Id
     adjudication: Adjudication | None
+
+
+class Rescreen(Record):
+    """A blind extra screen by the auditor, because only the AI disagreed with the screeners."""
+
+    reason: RescreenReason
+    auditor_id: Id
+    event_id: Id
+    event_seq: int
 
 
 class ItemResult(Record):
@@ -146,6 +175,9 @@ class ItemResult(Record):
     audit: bool
     expected_outcome: str | None
     screeners: tuple[Id, ...]  # who was assigned to screen it
+    reviewers: tuple[Id, ...]
+    """Everyone assigned at the cutoff: the screeners, and the auditor of a sentinel, an audit
+    sample, or an extra screen already triggered."""
     outcome: FinalOutcome
     """Adjudicated, in conflict, agreed by the screeners, or pending. At title and abstract
     `unclear` counts as include."""
@@ -153,32 +185,56 @@ class ItemResult(Record):
     provisional: tuple[HumanDecision, ...]  # the screeners' blind decisions
     final: tuple[HumanDecision, ...]  # the screeners' and auditor's standing decisions
     conflicts: tuple[Conflict, ...]
+    rescreen: Rescreen | None
     ai_excludes: bool | None  # the verified AI reading; None if the AI has not read it
+    ai_includes_by_own_reading: bool | None
+    """The model's own reading: no criterion it answered `not_met` before the filter."""
     ai_reading_event_id: Id | None
     ai_raw_output_hash: str | None
 
     @property
     def screened(self) -> bool:
-        """Every screener has a standing decision."""
+        """Every screener has a standing decision, and the auditor too if the record went to an
+        extra screen."""
         done = {d.reviewer_id for d in self.final if d.role == "screener"}
-        return bool(self.screeners) and set(self.screeners) <= done
+        if not self.screeners or not set(self.screeners) <= done:
+            return False
+        return self.rescreen is None or self.rescreen_decision is not None
+
+    @property
+    def rescreen_decision(self) -> HumanDecision | None:
+        """The auditor's standing decision on an extra screen."""
+        if self.rescreen is None:
+            return None
+        return next((d for d in self.final if d.role == "auditor"), None)
+
+    @property
+    def rescreen_upheld(self) -> bool | None:
+        """Whether the auditor agreed with the screeners; None while the extra screen is open."""
+        auditor = self.rescreen_decision
+        if auditor is None:
+            return None
+        return all(
+            _label(auditor.outcome) == _label(d.outcome) for d in self.final if d.role == "screener"
+        )
+
+    @property
+    def genuine(self) -> tuple[Conflict, ...]:
+        """The conflicts that count: not withdrawn."""
+        return tuple(c for c in self.conflicts if c.state != "withdrawn")
 
     @property
     def adjudication(self) -> Adjudication | None:
-        settled = [c for c in self.conflicts if c.state != "withdrawn"]
-        return settled[-1].adjudication if settled else None
+        return self.genuine[-1].adjudication if self.genuine else None
 
     @property
     def ai_revealed(self) -> bool:
         return any(d.revealed for d in self.provisional)
 
     @property
-    def ai_adjudicated(self) -> bool:
-        """Sent to adjudication by an AI rule (the AI includes, or the AI disagrees)."""
-        return any(
-            c.state == "resolved" and {"ai_include", "ai_disagreement"} & set(c.kinds)
-            for c in self.conflicts
-        )
+    def ai_rescreened(self) -> bool:
+        """The AI's disagreement sent the record to an extra screen."""
+        return self.rescreen is not None
 
 
 class StageResult(Record):
@@ -197,12 +253,25 @@ class StageResult(Record):
     items: tuple[ItemResult, ...]
     agreement: tuple[PairAgreement, ...]
     audit: AuditGauge
+    rescreens: RescreenGauge
     reveals_shown: int
     revised_after_reveal: int
 
     @property
     def records(self) -> tuple[ItemResult, ...]:
         return tuple(i for i in self.items if i.kind == "record")
+
+    @property
+    def screened(self) -> int:
+        return sum(1 for i in self.records if i.screened)
+
+    @property
+    def conflicts_open(self) -> int:
+        return sum(1 for i in self.records if any(c.state == "open" for c in i.genuine))
+
+    @property
+    def conflicts_resolved(self) -> int:
+        return sum(1 for i in self.records for c in i.genuine if c.state == "resolved")
 
 
 class JudgeInfo(Record):
@@ -297,7 +366,7 @@ def load_review(
     sources = _sources(protocol.version.protocol) if protocol else {}
     searches = tuple(_searches(tx, project_id, events, sources))
     identity = _identity(tx, project_id, cutoff, identity_revision_id)
-    stages = tuple(_stages(tx, project_id, seq_of))
+    stages = tuple(_stages(tx, project_id, events))
     judges = tuple(_judges(tx, events, stages))
     actor_ids = {e.actor_id for e in events}
     actors = tx.execute(
@@ -401,16 +470,75 @@ def _label(outcome: str | None) -> str:
     return "exclude" if outcome == "exclude" else "include"
 
 
-def _stages(tx: Tx, project_id: Id, seq_of: Mapping[Id, int]) -> Iterable[StageResult]:
+CONFLICT_EVENTS = frozenset({CONFLICT_OPENED, CONFLICT_UPDATED, CONFLICT_WITHDRAWN, ADJUDICATED})
+
+
+def conflict_states(events: Iterable[tuple[str, dict[str, Any], Id]]) -> dict[str, dict[str, Any]]:
+    """Each conflict's state after the given (type, payload, event ID) events, in ledger order:
+    its kinds, and whether it is open, resolved, or withdrawn."""
+    states: dict[str, dict[str, Any]] = {}
+    for type, payload, event_id in events:
+        if type not in CONFLICT_EVENTS:
+            continue
+        cid = payload["conflict_id"]
+        if type == CONFLICT_OPENED:
+            states[cid] = {
+                "kinds": tuple(payload["kinds"]),
+                "state": "open",
+                "opened_event_id": event_id,
+                "closed_event_id": None,
+            }
+        elif (state := states.get(cid)) is None:
+            continue
+        elif type == CONFLICT_UPDATED:
+            state["kinds"] = tuple(payload["kinds"])
+        else:
+            state["state"] = "withdrawn" if type == CONFLICT_WITHDRAWN else "resolved"
+            state["closed_event_id"] = event_id
+    return states
+
+
+def rescreens(events: Iterable[AuditEvent]) -> dict[tuple[str, str], Rescreen]:
+    """The extra screens the ledger recorded, by (stage ID, item reference)."""
+    return {
+        (e.payload["stage_id"], e.payload["item_ref"]): Rescreen(
+            reason=e.payload["reason"],
+            auditor_id=e.payload["auditor_id"],
+            event_id=e.event_id,
+            event_seq=e.seq,
+        )
+        for e in events
+        if e.type == AI_DISAGREEMENT_RESCREEN
+    }
+
+
+def _stages(tx: Tx, project_id: Id, events: list[AuditEvent]) -> Iterable[StageResult]:
+    seq_of = {e.event_id: e.seq for e in events}
+    states = conflict_states((e.type, e.payload, e.event_id) for e in events)
+    extra = rescreens(events)
     stages = tx.execute(
         "select * from screening_stage where project_id = %s order by opened_at, id", (project_id,)
     ).fetchall()
     for stage in stages:
         if stage["opened_event_id"] in seq_of:
-            yield _stage(tx, stage, seq_of)
+            yield _stage(tx, stage, seq_of, states, extra)
 
 
-def _stage(tx: Tx, stage: dict[str, Any], seq_of: Mapping[Id, int]) -> StageResult:
+def _includes_by_own_reading(criteria: list[dict[str, Any]], flags: list[str]) -> bool:
+    """As screening reads it: no criterion the model answered `not_met`, before the filter; a
+    record that tried to instruct the model counts as included."""
+    if "injection_suspected" in flags:
+        return True
+    return not any((c.get("downgraded_from") or c["status"]) == "not_met" for c in criteria)
+
+
+def _stage(
+    tx: Tx,
+    stage: dict[str, Any],
+    seq_of: Mapping[Id, int],
+    states: Mapping[str, dict[str, Any]],
+    extra: Mapping[tuple[str, str], Rescreen],
+) -> StageResult:
     stage_id = stage["id"]
     items = tx.execute(
         "select item_ref, kind, expected_outcome, audit, title from screening_item"
@@ -467,7 +595,8 @@ def _stage(tx: Tx, stage: dict[str, Any], seq_of: Mapping[Id, int]) -> StageResu
     readings = {
         r["item_ref"]: r
         for r in tx.execute(
-            "select item_ref, excludes, event_id, raw_output_hash from screening_ai_reading"
+            "select item_ref, excludes, criteria, flags, event_id, raw_output_hash"
+            " from screening_ai_reading"
             " where stage_id = %s",
             (stage_id,),
         ).fetchall()
@@ -484,18 +613,18 @@ def _stage(tx: Tx, stage: dict[str, Any], seq_of: Mapping[Id, int]) -> StageResu
     }
     conflicts: dict[str, list[Conflict]] = defaultdict(list)
     for c in tx.execute(
-        "select * from screening_conflict where stage_id = %s", (stage_id,)
+        "select id, item_ref from screening_conflict where stage_id = %s", (stage_id,)
     ).fetchall():
-        if c["opened_event_id"] not in seq_of:
+        state = states.get(str(c["id"]))
+        if state is None:
             continue
         j = adjudications.get(c["id"])
-        closed = c["closed_event_id"] in seq_of
         conflicts[c["item_ref"]].append(
             Conflict(
                 id=c["id"],
-                kinds=tuple(c["kinds"]),
-                state="resolved" if j else ("withdrawn" if closed else "open"),
-                opened_event_id=c["opened_event_id"],
+                kinds=state["kinds"],
+                state=state["state"],
+                opened_event_id=state["opened_event_id"],
                 adjudication=Adjudication(
                     id=j["id"],
                     adjudicator_id=j["adjudicator_id"],
@@ -529,6 +658,11 @@ def _stage(tx: Tx, stage: dict[str, Any], seq_of: Mapping[Id, int]) -> StageResu
                 standing.append(standing_decision)
         screener_finals = [final.get(a["id"]) for a in screeners]
         reading = readings.get(ref)
+        rescreen = extra.get((str(stage_id), ref))
+        if rescreen is not None:
+            # The extra screen counts once the auditor has decided it.
+            auditor = next((a for a in mine if a["role"] == "auditor"), None)
+            screener_finals.append(final.get(auditor["id"]) if auditor else None)
         outcome, reasons = _outcome(stage["stage"], screener_finals, conflicts.get(ref, []))
         results.append(
             ItemResult(
@@ -538,17 +672,38 @@ def _stage(tx: Tx, stage: dict[str, Any], seq_of: Mapping[Id, int]) -> StageResu
                 audit=item["audit"],
                 expected_outcome=item["expected_outcome"],
                 screeners=tuple(a["reviewer_id"] for a in screeners),
+                reviewers=tuple(
+                    a["reviewer_id"]
+                    for a in mine
+                    if a["role"] == "screener"
+                    or item["kind"] == "sentinel"
+                    or item["audit"]
+                    or rescreen is not None
+                ),
                 outcome=outcome,
                 reason_criterion_ids=reasons,
                 provisional=tuple(sorted(blind, key=_by_seq)),
                 final=tuple(sorted(standing, key=_by_seq)),
                 conflicts=tuple(conflicts.get(ref, [])),
+                rescreen=rescreen,
                 ai_excludes=reading["excludes"] if reading else None,
+                ai_includes_by_own_reading=_includes_by_own_reading(
+                    reading["criteria"], reading["flags"]
+                )
+                if reading
+                else None,
                 ai_reading_event_id=reading["event_id"] if reading else None,
                 ai_raw_output_hash=reading["raw_output_hash"] if reading else None,
             )
         )
-    agreement, reveals, revised = _agreement(stage["screeners"], results)
+    agreement = _agreement(stage["screeners"], results)
+    # Reveals and revisions over every assignment, the auditor's and sentinels' included.
+    reveals = [d for d in provisional.values() if d is not None and d.revealed]
+    revised = [
+        d
+        for d in reveals
+        if (f := final.get(d.assignment_id)) is not None and f.id != d.id and f.outcome != d.outcome
+    ]
     return StageResult(
         id=stage_id,
         topic_id=stage["topic_id"],
@@ -565,8 +720,9 @@ def _stage(tx: Tx, stage: dict[str, Any], seq_of: Mapping[Id, int]) -> StageResu
         items=tuple(results),
         agreement=agreement,
         audit=_audit(ScreeningMode(stage["mode"]), results),
-        reveals_shown=reveals,
-        revised_after_reveal=revised,
+        rescreens=_rescreens(results),
+        reveals_shown=len(reveals),
+        revised_after_reveal=len(revised),
     )
 
 
@@ -577,7 +733,8 @@ def _by_seq(decision: HumanDecision) -> int:
 def _outcome(
     stage: str, finals: list[HumanDecision | None], conflicts: list[Conflict]
 ) -> tuple[FinalOutcome, tuple[str, ...]]:
-    """Adjudicated, in conflict, agreed by every screener, or pending."""
+    """Adjudicated, in conflict, agreed by every screener (and an extra screen's auditor), or
+    pending."""
     settled = [c for c in conflicts if c.state != "withdrawn"]
     if settled and settled[-1].state == "open":
         return "conflict", ()
@@ -602,9 +759,7 @@ def _normal(stage: str, outcome: str) -> FinalOutcome:
     return cast("FinalOutcome", outcome)
 
 
-def _agreement(
-    screeners: Iterable[Id], items: list[ItemResult]
-) -> tuple[tuple[PairAgreement, ...], int, int]:
+def _agreement(screeners: Iterable[Id], items: list[ItemResult]) -> tuple[PairAgreement, ...]:
     """Kappa and PABAK on the blind provisional decisions of records, as screening defines them:
     include against exclude, with unclear and insufficient information as include."""
     records = [i for i in items if i.kind == "record"]
@@ -639,24 +794,12 @@ def _agreement(
         )
     for person in people:
         read = [i for i in records if (person, i.item_ref) in blind and i.ai_excludes is not None]
-        pairs.append(
-            pair(
-                "human_ai",
-                (str(person), "ai"),
-                [_label(blind[person, i.item_ref]) for i in read],
-                ["exclude" if i.ai_excludes else "include" for i in read],
-            )
-        )
-    reveals = [d for i in items for d in i.provisional if d.revealed]
-    finals = {d.assignment_id: d for i in items for d in i.final}
-    revised = [
-        d
-        for d in reveals
-        if (f := finals.get(d.assignment_id)) is not None
-        and f.id != d.id
-        and f.outcome != d.outcome
-    ]
-    return tuple(pairs), len(reveals), len(revised)
+        human = [_label(blind[person, i.item_ref]) for i in read]
+        own = ["include" if i.ai_includes_by_own_reading else "exclude" for i in read]
+        verified = ["exclude" if i.ai_excludes else "include" for i in read]
+        pairs.append(pair("human_ai", (str(person), "ai"), human, own))
+        pairs.append(pair("human_ai_verified", (str(person), "ai"), human, verified))
+    return tuple(pairs)
 
 
 def _audit(mode: ScreeningMode, items: list[ItemResult]) -> AuditGauge:
@@ -669,7 +812,7 @@ def _audit(mode: ScreeningMode, items: list[ItemResult]) -> AuditGauge:
 
     def excluded_unseen(i: ItemResult) -> bool:
         """Excluded on the screeners' path alone, without an adjudicator looking at it."""
-        path = [c for c in i.conflicts if c.state != "withdrawn" and set(c.kinds) - {"audit_miss"}]
+        path = [c for c in i.genuine if set(c.kinds) - {"audit_disagreement"}]
         finals = [d for d in i.final if d.role == "screener"]
         return i.screened and not path and all(d.outcome == "exclude" for d in finals)
 
@@ -702,7 +845,7 @@ def _audit(mode: ScreeningMode, items: list[ItemResult]) -> AuditGauge:
         )
     audited = [i for i in records if i.audit]
     return AuditGauge(
-        sentinels=sum(len(i.screeners) for i in sentinels),
+        sentinels=sum(len(i.reviewers) for i in sentinels),
         sentinels_decided=len(sentinel_decisions),
         sentinels_correct=len(correct),
         audit_samples=len(audited),
@@ -711,6 +854,19 @@ def _audit(mode: ScreeningMode, items: list[ItemResult]) -> AuditGauge:
         audit_relevant_found=sum(s.relevant_found for s in strata),
         strata=tuple(strata),
         elusion=elusion,
+    )
+
+
+def _rescreens(items: list[ItemResult]) -> RescreenGauge:
+    """The extra screens AI-only disagreements triggered, as screening counts them."""
+    rescreened = [i for i in items if i.kind == "record" and i.rescreen is not None]
+    decided = [i for i in rescreened if i.rescreen_decision is not None]
+    upheld = sum(1 for i in decided if i.rescreen_upheld)
+    return RescreenGauge(
+        triggered=len(rescreened),
+        pending=len(rescreened) - len(decided),
+        upheld=upheld,
+        adjudicated=len(decided) - upheld,
     )
 
 

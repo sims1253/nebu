@@ -448,10 +448,25 @@ def disclosure(review: Review) -> dict[str, Any]:
                 ],
                 "reveals_shown": s.reveals_shown,
                 "revised_after_reveal": s.revised_after_reveal,
-                "conflicts_adjudicated": sum(
-                    1 for i in records for c in i.conflicts if c.state == "resolved"
-                ),
-                "adjudicated_on_ai_rules": sum(1 for i in records if i.ai_adjudicated),
+                "conflicts_resolved": s.conflicts_resolved,
+                "rescreens": s.rescreens.model_dump(mode="json"),
+                "rescreen_cases": [
+                    {
+                        "item_ref": i.item_ref,
+                        "reason": i.rescreen.reason,
+                        "auditor": names.get(
+                            str(i.rescreen.auditor_id), str(i.rescreen.auditor_id)
+                        ),
+                        "auditor_id": str(i.rescreen.auditor_id),
+                        "event_id": str(i.rescreen.event_id),
+                        "result": "pending"
+                        if i.rescreen_upheld is None
+                        else ("upheld" if i.rescreen_upheld else "adjudicated"),
+                        "outcome": i.outcome,
+                    }
+                    for i in records
+                    if i.rescreen is not None
+                ],
                 "excluded": len(excluded),
                 "excluded_with_ai_proposal": sum(1 for i in excluded if i.ai_excludes),
                 "excluded_by_ai_alone": 0,
@@ -468,6 +483,9 @@ def disclosure(review: Review) -> dict[str, Any]:
         "verifier_limits": list(VERIFIER_LIMITS),
         "reproducibility_tier": "replay",
     }
+
+
+_READING = {"human_ai": " (model's own reading)", "human_ai_verified": " (verified reading)"}
 
 
 def _fmt(value: float | None) -> str:
@@ -518,8 +536,12 @@ def render_disclosure(review: Review, scope_id: str | None) -> list[RenderedFile
         "## 2. Role of the AI and human oversight",
         "",
         "No screening mode lets the AI exclude a record that no human saw. A reviewer decides "
-        "before any AI output is shown; the AI's reading is revealed only as the stage's reveal "
-        "setting allows, and every disagreement the mode names goes to a human adjudicator.",
+        "before any AI output is shown, and the AI's reading is revealed only as the stage's "
+        "reveal setting allows. Adjudication holds only disagreements between humans. When only "
+        "the AI disagrees (in M1, the model saw no failing criterion in a record both humans "
+        "excluded; in M2, the AI disagrees with the lone human), the stage's auditor screens the "
+        "record once more, blind; if the auditor disagrees with the screeners, an adjudicator "
+        "decides.",
         "",
         md_table(
             ["Topic", "Mode", "Reason for the mode", "Validation pack"],
@@ -571,7 +593,7 @@ def render_disclosure(review: Review, scope_id: str | None) -> list[RenderedFile
                 [
                     s["scope_id"],
                     s["stage"],
-                    " and ".join(a["raters"]),
+                    " and ".join(a["raters"]) + _READING.get(a["kind"], ""),
                     a["items"],
                     _fmt(a["kappa"]),
                     _fmt(a["pabak"]),
@@ -589,7 +611,6 @@ def render_disclosure(review: Review, scope_id: str | None) -> list[RenderedFile
                 "Reveals shown",
                 "Revised after reveal",
                 "Adjudicated",
-                "On AI rules",
                 "Sentinels correct",
                 "Audit samples decided",
                 "Misses found",
@@ -601,12 +622,29 @@ def render_disclosure(review: Review, scope_id: str | None) -> list[RenderedFile
                     s["stage"],
                     s["reveals_shown"],
                     s["revised_after_reveal"],
-                    s["conflicts_adjudicated"],
-                    s["adjudicated_on_ai_rules"],
+                    s["conflicts_resolved"],
                     f"{s['audit']['sentinels_correct']} of {s['audit']['sentinels_decided']}",
                     f"{s['audit']['audit_decided']} of {s['audit']['audit_samples']}",
                     s["audit"]["audit_relevant_found"],
                     _elusion(s["audit"]["elusion"]),
+                ]
+                for s in d["stages"]
+            ],
+        ),
+        "Extra screens the AI triggered: records only the AI disagreed on, screened once more, "
+        "blind, by the stage's auditor. Upheld means the auditor agreed with the screeners and "
+        "their decision stands; otherwise an adjudicator decided.",
+        "",
+        md_table(
+            ["Scope", "Stage", "Triggered", "Upheld", "Sent to adjudication", "Pending"],
+            [
+                [
+                    s["scope_id"],
+                    s["stage"],
+                    s["rescreens"]["triggered"],
+                    s["rescreens"]["upheld"],
+                    s["rescreens"]["adjudicated"],
+                    s["rescreens"]["pending"],
                 ]
                 for s in d["stages"]
             ],

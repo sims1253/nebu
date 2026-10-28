@@ -355,7 +355,7 @@ def _kappa(value: float | None) -> str:
 def _stage_text(review: Review, stage: StageResult) -> list[str]:
     records = stage.records
     excluded = [i for i in records if i.outcome == "exclude"]
-    adjudicated = sum(1 for i in records for c in i.conflicts if c.state == "resolved")
+    adjudicated = sum(1 for i in records for c in i.genuine if c.state == "resolved")
     humans = [a for a in stage.agreement if a.kind == "human_human"]
     judge = next((j for j in review.judges if j.id == stage.judge_config_id), None)
     model = (
@@ -374,8 +374,12 @@ def _stage_text(review: Review, stage: StageResult) -> list[str]:
         "",
         f"- Ausgeschlossen: {len(excluded)}; davon mit Ausschlussvorschlag der KI: "
         f"{sum(1 for i in excluded if i.ai_excludes)}; allein durch die KI: 0.",
-        f"- Einer dritten Person zur Entscheidung vorgelegt: {adjudicated}; davon wegen einer "
-        f"Regel zur KI-Bewertung: {sum(1 for i in records if i.ai_adjudicated)}.",
+        f"- Abweichungen zwischen Personen, die eine weitere Person entschieden hat: "
+        f"{adjudicated}.",
+        f"- Zusätzliche verblindete Sichtung durch eine dritte Person, weil nur die KI abwich: "
+        f"{stage.rescreens.triggered}; Entscheidung bestätigt: {stage.rescreens.upheld}; "
+        f"abweichend und entschieden: {stage.rescreens.adjudicated}; offen: "
+        f"{stage.rescreens.pending}.",
     ]
     for a in humans:
         lines.append(
@@ -424,7 +428,8 @@ def justification_4235(review: Review, _scope: str | None) -> list[RenderedFile]
                 "Die Selektion erfolgte in jedem Schritt durch zwei Personen unabhängig "
                 "voneinander. Ein KI-Modell bewertete jedes Dokument zusätzlich als dritte, "
                 "unabhängige Instanz: Ein Dokument, das die KI einschloss und beide Personen "
-                "ausschlossen, wurde einer dritten Person vorgelegt. Ein von zwei Personen "
+                "ausschlossen, sichtete eine dritte Person ein weiteres Mal, ohne Kenntnis der "
+                "anderen Bewertungen; wich sie ab, entschied eine weitere Person. Ein von zwei Personen "
                 "unabhängig durchgeführtes Vorgehen bedarf keiner Begründung nach 4.2.3.5.",
                 "",
             ]
@@ -438,8 +443,9 @@ def justification_4235(review: Review, _scope: str | None) -> list[RenderedFile]
                 f"Abweichend von der Selektion durch zwei Personen wurde Modus {topic.mode.value} "
                 f"gewählt: {people} die Dokumente, ein KI-Modell "
                 + (
-                    "ersetzte die zweite Person; jede Abweichung zwischen KI und Person wurde einer "
-                    "dritten Person vorgelegt."
+                    "ersetzte die zweite Person; jedes Dokument, bei dem KI und Person voneinander "
+                    "abwichen, sichtete eine dritte Person verblindet ein weiteres Mal, und wich "
+                    "sie ab, entschied eine weitere Person."
                     if topic.mode.value == "M2"
                     else "legte nur die Reihenfolge fest; das Screening endet erst nach einem vorab "
                     "festgelegten statistischen Test."

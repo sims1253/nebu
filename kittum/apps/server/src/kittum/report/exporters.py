@@ -17,6 +17,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
+from kittum.report.review import conflict_states
+from kittum.screening import AI_DISAGREEMENT_RESCREEN
+
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
@@ -299,7 +302,8 @@ class ScreeningExporter:
     name: str = "screening"
 
     def export(self, tx: Tx, project_id: Id, cutoff_seq: int, bundle: BundleWriter) -> None:
-        events = {e["event_id"] for e in _events(tx, project_id, cutoff_seq)}
+        log = _events(tx, project_id, cutoff_seq)
+        events = {e["event_id"] for e in log}
         stages = [
             s
             for s in tx.execute(
@@ -327,24 +331,54 @@ class ScreeningExporter:
                 "seed",
                 "screeners",
                 "auditor_id",
+                "adjudicators",
                 "opened_event_id",
                 "opened_at",
             ],
         )
+        # `rescreen` is set when an AI-only disagreement sends a record to the auditor; the
+        # `screening.ai_disagreement_rescreen` events say which had been by the cutoff.
+        rescreened = {
+            (e["payload"]["stage_id"], e["payload"]["item_ref"])
+            for e in log
+            if e["type"] == AI_DISAGREEMENT_RESCREEN
+        }
+        items = tx.execute(
+            "select * from screening_item where stage_id = any(%s) order by stage_id, item_ref",
+            (stage_ids,),
+        ).fetchall()
         _write(
             bundle,
             "screening_item",
-            tx.execute(
-                "select * from screening_item where stage_id = any(%s) order by stage_id, item_ref",
-                (stage_ids,),
-            ).fetchall(),
-            ["stage_id", "item_ref", "kind", "expected_outcome", "audit", "title", "text", "facts"],
+            [{**i, "rescreen": (str(i["stage_id"]), i["item_ref"]) in rescreened} for i in items],
+            [
+                "stage_id",
+                "item_ref",
+                "kind",
+                "expected_outcome",
+                "audit",
+                "rescreen",
+                "title",
+                "text",
+                "facts",
+            ],
         )
-        # The assignment's state and revision change; the decisions and undos below replay it.
-        assignments = tx.execute(
-            "select * from screening_assignment where stage_id = any(%s) order by id",
-            (stage_ids,),
-        ).fetchall()
+        # The assignment's state, revision, and etag change; the decisions and undos below
+        # replay them. The auditor holds sentinels and audit samples from the stage's opening, and
+        # an extra screen from its event on.
+        audited = {
+            (str(i["stage_id"]), i["item_ref"])
+            for i in items
+            if i["audit"] or i["kind"] == "sentinel"
+        }
+        assignments = [
+            a
+            for a in tx.execute(
+                "select * from screening_assignment where stage_id = any(%s) order by id",
+                (stage_ids,),
+            ).fetchall()
+            if a["role"] != "auditor" or (str(a["stage_id"]), a["item_ref"]) in audited | rescreened
+        ]
         _write(
             bundle,
             "screening_assignment",
@@ -441,19 +475,15 @@ class ScreeningExporter:
             ).fetchall()
             if j["event_id"] in events
         ]
-        adjudicated = {j["conflict_id"] for j in adjudications}
+        # A conflict's kinds and state change; its ledger events replay them.
+        states = conflict_states((e["type"], e["payload"], e["event_id"]) for e in log)
         conflicts = []
         for c in tx.execute(
             "select * from screening_conflict where stage_id = any(%s) order by opened_at, id",
             (stage_ids,),
         ).fetchall():
-            if c["opened_event_id"] not in events:
-                continue
-            closed = c["closed_event_id"] in events
-            state = "resolved" if c["id"] in adjudicated else ("withdrawn" if closed else "open")
-            conflicts.append(
-                {**c, "state": state, "closed_event_id": c["closed_event_id"] if closed else None}
-            )
+            if (state := states.get(str(c["id"]))) is not None:
+                conflicts.append({**c, **state, "kinds": list(state["kinds"])})
         _write(
             bundle,
             "screening_conflict",
@@ -508,9 +538,10 @@ class ReportExporter:
         )
         named = {e["actor_id"] for e in events}
         for s in tx.execute(
-            "select screeners, auditor_id from screening_stage where project_id = %s", (project_id,)
+            "select screeners, auditor_id, adjudicators from screening_stage where project_id = %s",
+            (project_id,),
         ).fetchall():
-            named |= set(s["screeners"]) | ({s["auditor_id"]} - {None})
+            named |= set(s["screeners"]) | set(s["adjudicators"]) | ({s["auditor_id"]} - {None})
         _write(
             bundle,
             "actor",
