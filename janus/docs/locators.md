@@ -39,23 +39,31 @@ The first column supplies row labels; row 0 supplies column context and also rem
 candidate, so headerless tables retain their first row. Use printed aliases, including footnote
 markers such as `Junp` or `2025r`. Fuzzy matching tolerates close variants.
 
-Rows below row 0 with an empty first cell, and only header text without digits or group sizes
-in their other cells, continue the header. Directly under a spanning header, years and short
-numbers in the spanned columns are column labels too (`2023 | 2024` under `Revenue`). Any other
-number, an amount or a percentage, makes the row a data row. A column's context is then its whole header path: under `Primary analysis set` spanning
-`Control | Intervention | Total`, the first column's context is `Primary analysis set Control`,
-so `column_labels` can tell it from `All participants set Control`. A group size printed in a
-header row (`N = 355` under `Vitamin C group`) is a candidate whose label is the header above it:
-locate it with `labels: ["Vitamin C group"]`.
-
 Use `column_labels` when a label has several value columns. Use `section_labels` when labels
 repeat under different groups. The reader splits merged grouped rows into subrows and stamps
 the group name as section context. For example, `Group\nSub A\nSub B` becomes two subrows under
 `Group` when the value lines align. Borderless tables rebuilt from word geometry also use
-indentation to identify parent groups. A row whose values are all group sizes
-(`Primary analysis set | N = 51 | N = 52`) is the section context of the rows below it, up to the
-next such row or a row with a label and no values. A section the reader stamped on a row takes
-precedence: it ends a different inferred section, and the two are not combined. A section mismatch can lower the score by 30 percent.
+indentation to identify parent groups. A section mismatch can lower the score by 30 percent.
+
+That reading, with row 0 as the column context and only the reader's sections, stands whenever
+it selects one cell whose header carries the requested column words. Only when it selects
+nothing, ties, or selects a cell whose header lacks those words does Janus infer more of the
+table's structure for the field:
+
+- Rows below row 0 with an empty first cell, and only names or group sizes in their other cells,
+  continue the header. Digits beside words name things (`Dose 10 mg`, `Week 12`); a cell that
+  prints a number, an amount, a percentage, or a date makes the row a data row, unless every cell
+  is a year in the columns a spanning header covers (`2023 | 2024` under `Revenue`).
+- A column's context is then its whole header path: under `Primary analysis set` spanning
+  `Control | Intervention | Total`, the first column's context is `Primary analysis set Control`.
+- A group size printed in a header row (`N = 355` under `Vitamin C group`) is a candidate whose
+  label is the header above it: locate it with `labels: ["Vitamin C group"]`.
+- A row whose values are all group sizes (`Primary analysis set | N = 51 | N = 52`) is the
+  section of the rows below it, up to the next such row or a section the reader stamped. A row
+  with a label and no values inside it narrows it (`Primary analysis set / Women`). A section the
+  reader stamped is never combined with an inferred one.
+
+Rows generators use only the first reading.
 
 Tables continued across pages can inherit the preceding header. The reader also rebuilds
 borderless tables from text alignment and word positions; these inferred cells may have no

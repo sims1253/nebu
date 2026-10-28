@@ -333,80 +333,122 @@ def evidence_with(rows: list[list[str]], sections: list[str | None] | None = Non
 # understood: a text code is not a not-reported mark, a currency row is not a header, a reader's
 # section is not merged with an inferred one, a year under a spanning header names its column,
 # and a unit is not an estimator label.
-@pytest.mark.parametrize(
-    ("rows", "sections", "field", "expected"),
-    [
-        pytest.param(
-            [["Region", "NA"], ["Code", "NE"]],
-            None,
-            {"type": "text", "locate": {"strategy": "table_label", "labels": ["Region"]}},
-            ("extracted", "NA"),
-            id="text-field-keeps-NA",
-        ),
-        pytest.param(
-            [
-                ["Item", "Description", "Amount"],
-                ["", "Amount due", "$10.00"],
-                ["Total", "20", "30"],
-            ],
-            None,
-            table(["Total"], column_labels=["Amount"]),
-            ("extracted", 30),
-            id="currency-row-is-not-a-header",
-        ),
-        pytest.param(
-            [
-                ["Outcome", "Value"],
-                ["Primary", "N = 51"],
-                ["Deaths", "1"],
-                ["Secondary", ""],
-                ["Deaths", "2"],
-            ],
-            [None, None, "Primary", None, "Secondary"],
-            table(["Deaths"], section_labels=["Primary"]),
-            ("extracted", 1),
-            id="reader-section-ends-inferred-group",
-        ),
-        pytest.param(
-            [["Outcome", "Value"], ["Primary", "N = 51"], ["Deaths", "1"], ["Deaths", "2"]],
-            [None, None, "Primary", "Secondary"],
-            table(["Deaths"], section_labels=["Primary"]),
-            ("extracted", 1),
-            id="reader-section-is-never-merged-with-inferred-group",
-        ),
-        pytest.param(
-            [
-                ["Outcome", "Value"],
-                ["Primary", "N = 51"],
-                ["Deaths", "1"],
-                ["Adverse events", ""],
-                ["Deaths", "2"],
-            ],
-            None,
-            table(["Deaths"], section_labels=["Primary"]),
-            ("extracted", 1),
-            id="label-only-row-ends-inferred-group",
-        ),
-        pytest.param(
-            [
-                ["Metric", "Revenue", "", "Costs", ""],
-                ["", "2023", "2024", "2023", "2024"],
-                ["Total", "10", "20", "30", "40"],
-            ],
-            None,
-            table(["Total"], column_labels=["Revenue 2024"]),
-            ("extracted", 20),
-            id="years-under-spans-name-columns",
-        ),
-        pytest.param(
-            [["Weight", "kg:12 (34%)"]],
-            None,
-            table(["Weight"], source_shape="count_percentage", component="count"),
-            ("invalid", None),
-            id="unit-is-not-an-estimator-label",
-        ),
-    ],
-)
+LOOKALIKE_TABLES = [
+    pytest.param(
+        [["Region", "NA"], ["Code", "NE"]],
+        None,
+        {"type": "text", "locate": {"strategy": "table_label", "labels": ["Region"]}},
+        ("extracted", "NA"),
+        id="text-field-keeps-NA",
+    ),
+    pytest.param(
+        [
+            ["Item", "Description", "Amount"],
+            ["", "Amount due", "$10.00"],
+            ["Total", "20", "30"],
+        ],
+        None,
+        table(["Total"], column_labels=["Amount"]),
+        ("extracted", 30),
+        id="currency-row-is-not-a-header",
+    ),
+    pytest.param(
+        [
+            ["Outcome", "Value"],
+            ["Primary", "N = 51"],
+            ["Deaths", "1"],
+            ["Secondary", ""],
+            ["Deaths", "2"],
+        ],
+        [None, None, "Primary", None, "Secondary"],
+        table(["Deaths"], section_labels=["Primary"]),
+        ("extracted", 1),
+        id="reader-section-ends-inferred-group",
+    ),
+    pytest.param(
+        [["Outcome", "Value"], ["Primary", "N = 51"], ["Deaths", "1"], ["Deaths", "2"]],
+        [None, None, "Primary", "Secondary"],
+        table(["Deaths"], section_labels=["Primary"]),
+        ("extracted", 1),
+        id="reader-section-is-never-merged-with-inferred-group",
+    ),
+    pytest.param(
+        [
+            ["Outcome", "Value"],
+            ["Primary", "N = 51"],
+            ["Deaths", "1"],
+            ["Adverse events", ""],
+            ["Deaths", "2"],
+        ],
+        None,
+        table(["Deaths"], section_labels=["Primary"]),
+        ("ambiguous", None),
+        id="label-only-row-nests-inside-inferred-group",
+    ),
+    pytest.param(
+        [
+            ["Metric", "Revenue", "", "Costs", ""],
+            ["", "2023", "2024", "2023", "2024"],
+            ["Total", "10", "20", "30", "40"],
+        ],
+        None,
+        table(["Total"], column_labels=["Revenue 2024"]),
+        ("extracted", 20),
+        id="years-under-spans-name-columns",
+    ),
+    pytest.param(
+        [["Metric", "Count", ""], ["", "5", "6"], ["Total", "10", "20"]],
+        None,
+        table(["Total"], column_labels=["Count"]),
+        ("extracted", 10),
+        id="small-counts-are-not-headers",
+    ),
+    pytest.param(
+        # The original reading is not a complete column match, so the inferred one is
+        # consulted; "5 | 6" is still data, not a "Count 6" header.
+        [["Metric", "Count", ""], ["", "5", "6"], ["Total", "10", "20"]],
+        None,
+        table(["Total"], column_labels=["Count 6"]),
+        ("extracted", 10),
+        id="small-counts-do-not-name-columns",
+    ),
+    pytest.param(
+        [
+            ["Outcome", "Value"],
+            ["Primary analysis set", "N = 51"],
+            ["Women", ""],
+            ["Deaths", "1"],
+            ["All participants set", "N = 100"],
+            ["Women", ""],
+            ["Deaths", "2"],
+        ],
+        None,
+        table(["Deaths"], section_labels=["Primary analysis set"]),
+        ("extracted", 1),
+        id="label-only-subgroup-narrows-inferred-group",
+    ),
+    pytest.param(
+        [
+            ["Outcome", "Primary analysis set", "", "All participants set", ""],
+            ["", "Control", "Dose 10 mg", "Control", "Dose 10 mg"],
+            ["Deaths", "1", "2", "3", "4"],
+        ],
+        None,
+        table(["Deaths"], column_labels=["Primary analysis set Dose 10 mg"]),
+        ("extracted", 2),
+        id="header-text-may-carry-digits",
+    ),
+    pytest.param(
+        [["Weight", "kg:12 (34%)"]],
+        None,
+        table(["Weight"], source_shape="count_percentage", component="count"),
+        ("invalid", None),
+        id="unit-is-not-an-estimator-label",
+    ),
+]
+
+
+@pytest.mark.parametrize(("rows", "sections", "field", "expected"), LOOKALIKE_TABLES)
 def test_tables_that_only_look_like_trial_tables_keep_their_reading(
     rows, sections, field, expected
 ):
@@ -414,3 +456,64 @@ def test_tables_that_only_look_like_trial_tables_keep_their_reading(
     result = extract_evidence(evidence_with(rows, sections), spec)
     (only,) = result.fields
     assert (only.status, result.data["value"]) == expected, only.message
+
+
+def test_inferred_structure_never_overrides_a_unique_original_reading(tmp_path, monkeypatch):
+    """First do no harm. For every row label and column header of every table above, and of
+    the trial report, a field that the original reading (row-0 column context, no inferred
+    sections) resolves to one cell carrying the requested column words gets that cell."""
+    from janus.comparison import extractor
+
+    pdf = trial_report(tmp_path / "trial.pdf")
+    documents = [evidence_with(case.values[0], case.values[1]) for case in LOOKALIKE_TABLES]
+    documents.append(TextLayerDocumentReader().read(pdf, pdf.name, normalize_rotation=True))
+    candidates = extractor._table_candidates
+    checked = 0
+    for evidence in documents:
+        fields: dict[str, Any] = {}
+        for page in evidence.pages:
+            for table in page.tables:
+                labels = {c.text.strip() for c in table.cells if c.column == 0 and c.text.strip()}
+                headers = {c.text.strip() for c in table.cells if c.row == 0 and c.column}
+                for label in sorted(labels):
+                    fields[f"f{len(fields)}"] = {
+                        "type": "text",
+                        "not_reported": [],
+                        "locate": {"strategy": "table_label", "labels": [label]},
+                    }
+                    for header in sorted(h for h in headers if h):
+                        fields[f"f{len(fields)}"] = {
+                            "type": "text",
+                            "not_reported": [],
+                            "locate": {
+                                "strategy": "table_label",
+                                "labels": [label],
+                                "column_labels": [header],
+                            },
+                        }
+        spec = ExtractionSpecification.model_validate({"name": "All cells", "fields": fields})
+        current = {f.path: f for f in extract_evidence(evidence, spec).fields}
+        with monkeypatch.context() as patch:
+            patch.setattr(
+                extractor,
+                "_table_candidates",
+                lambda evidence, **_: candidates(evidence, inferred=False),
+            )
+            original = {f.path: f for f in extract_evidence(evidence, spec).fields}
+        for path, before in original.items():
+            locate = fields[path[1:]]["locate"]
+            source = before.source
+            if before.status != "extracted" or source is None:
+                continue
+            column_context = {
+                c.text.strip()
+                for c in evidence.pages[source.page].tables[source.table_index].cells
+                if c.row == 0 and c.column == source.column
+            }
+            wanted = set(" ".join(locate.get("column_labels", [])).casefold().split())
+            if not wanted <= set(" ".join(column_context).casefold().split()):
+                continue
+            after = current[path]
+            assert (after.status, after.source) == (before.status, before.source), path
+            checked += 1
+    assert checked >= 40
