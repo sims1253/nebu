@@ -2,8 +2,9 @@
 
 A recordings directory holds a `manifest.json` that maps each request URL to its recorded
 responses. An entry is a file name, `{"file": ..., "status": ..., "content_type": ...}`, or a list
-of those. A single entry, as in a hand-made manifest, answers every time; a list holds the
-responses in the order they came and is answered in that order, one per request, so a source that
+of those; `{"error": <kind>}` stands for a transport failure, such as httpx's `ConnectError`, and
+raises the same kind again. A single entry, as in a hand-made manifest, answers every time; a list
+holds the responses and failures in the order they came and is answered in that order, one per request, so a source that
 failed and later recovered fails and recovers again. A file name may point outside the directory
 (a PDF the repository holds elsewhere). A request with nothing (left) to answer it fails as an
 unreachable source would, so a stack that serves the gateway from recordings
@@ -21,6 +22,7 @@ hashes. Request headers, where API keys travel, are never written. Of the respon
 rate-limit headers offline would only slow the replay down.
 """
 
+import builtins
 import contextlib
 import fcntl
 import json
@@ -30,6 +32,8 @@ import threading
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote, quote_plus, urlencode, urlsplit
+
+import httpx2
 
 from kittum.core import sha256_hex
 from kittum.gateway.errors import GatewayError
@@ -121,7 +125,7 @@ class RecordedTransport:
         manifest = json.loads((directory / "manifest.json").read_text())
         self._contact_email = contact_email
         # A list answers in order, once each; a single entry answers every time.
-        self._responses: dict[str, tuple[list[tuple[Path, int, str | None]], bool]] = {}
+        self._responses: dict[str, tuple[list[_Entry], bool]] = {}
         for url, entry in manifest.items():
             entries = entry if isinstance(entry, list) else [entry]
             self._responses[url] = (
@@ -151,15 +155,35 @@ class RecordedTransport:
                 f"no recorded response {number + 1} for {request.url}"
                 f" (the recording has {len(entries)})"
             )
-        path, status, content_type = entries[number if in_order else 0]
+        entry = entries[number if in_order else 0]
+        if isinstance(entry, BaseException):
+            raise entry
+        path, status, content_type = entry
         body = path.read_bytes()
         headers = (("Content-Type", content_type),) if content_type else ()
         return HttpResponse(status=status, headers=headers, body=body, body_hash=sha256_hex(body))
 
 
-def _response_entry(directory: Path, entry: str | dict[str, Any]) -> tuple[Path, int, str | None]:
+type _Entry = tuple[Path, int, str | None] | Exception
+
+
+def _failure(kind: str) -> Exception:
+    """The transport error a recorded failure stands for: the same httpx class, or a builtin
+    connection error, never anything that would not be raised by a transport."""
+    found = getattr(httpx2, kind, None) or getattr(builtins, kind, None)
+    message = f"recorded failure: {kind}"
+    if isinstance(found, type) and issubclass(found, httpx2.TransportError):
+        return found(message)
+    if isinstance(found, type) and issubclass(found, OSError):
+        return found(message)
+    return ConnectionError(message)
+
+
+def _response_entry(directory: Path, entry: str | dict[str, Any]) -> _Entry:
     if isinstance(entry, str):
         entry = {"file": entry}
+    if "error" in entry:
+        return _failure(entry["error"])
     return (
         (directory / entry["file"]).resolve(),
         int(entry.get("status", 200)),
@@ -196,7 +220,12 @@ class RecordingTransport:
 
     def send(self, request: HttpRequest) -> HttpResponse:
         key = recording_key(request, self._contact_email, self._secrets)
-        response = self._inner.send(request)
+        try:
+            response = self._inner.send(request)
+        except Exception as error:
+            # Only the kind: a message may quote the URL, and with it the contact address.
+            self._append(key, {"error": type(error).__name__})
+            raise
         body = self._clean(response.body)
         if body != response.body:
             response = response.model_copy(update={"body": body, "body_hash": sha256_hex(body)})
@@ -218,11 +247,14 @@ class RecordingTransport:
             None,
         )
         name = response.body_hash + _EXTENSIONS.get(content_type or "", "")
-        entry = {"file": name, "status": response.status, "content_type": content_type}
+        path = self._directory / name
         with self._lock, self._locked():
-            path = self._directory / name
             if not path.exists():
                 _write_atomic(path, response.body)
+        self._append(key, {"file": name, "status": response.status, "content_type": content_type})
+
+    def _append(self, key: str, entry: dict[str, Any]) -> None:
+        with self._lock, self._locked():
             manifest_path = self._directory / "manifest.json"
             manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
             manifest.setdefault(key, []).append(entry)

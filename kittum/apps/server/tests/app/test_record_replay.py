@@ -33,13 +33,21 @@ from kittum.app import (
     job_handlers,
     open_screening,
     publish_protocol,
+    recording_secrets,
     request_enrichment,
 )
 from kittum.app.demo import DATA, PROTOCOL, SCOPE, SENTINELS
 from kittum.core import SystemClock
-from kittum.gateway import RecordedTransport
+from kittum.gateway import HttpRequest, RecordedTransport, RecordingRefused, RecordingTransport
+from kittum.gateway.testing import FakeTransport
 from kittum.ledger import PostgresLedger
-from kittum.models import CompletionRequest, LlmRecordings, Message, ModelRegistry
+from kittum.models import (
+    CompletionRequest,
+    LlmRecordingRefused,
+    LlmRecordings,
+    Message,
+    ModelRegistry,
+)
 from kittum.runs import PostgresJobQueue, PostgresReceipts, Worker
 from kittum.search import SearchPlan, import_file
 from kittum.settings import LlmEndpoint, Settings
@@ -52,7 +60,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from kittum.db import Database
-    from kittum.gateway import HttpRequest, HttpResponse
+    from kittum.gateway import HttpResponse
 
 PERSONAL = "max.mustermann@uni-example.de"
 OPENALEX_KEY = "oa-key-5f1c2d9e"
@@ -315,3 +323,70 @@ def test_a_replay_judges_with_the_recipe_the_live_run_judged_with(tmp_path: Path
     (path / "meta.json").unlink()
     with pytest.raises(ConfigurationError, match="does not say which recipe judged"):
         build_judge(replay, registry, replays)
+
+
+def test_recording_takes_only_secrets_it_can_tell_from_ordinary_content(tmp_path: Path) -> None:
+    """The dev database password `kittum` is also PubMed's `tool=kittum`: recording with it would
+    refuse every PubMed request, so it refuses to start instead, as for any short or common secret
+    or one inside what Kittum sends. With a long password (one that holds an `@`, percent-encoded
+    in the DSN), PubMed is recorded, and the password itself is refused wherever it turns up."""
+    store = FilesystemStore(tmp_path / "artifacts")
+    base = Settings(
+        database_url="postgresql://kittum:kittum@127.0.0.1:55432/kittum",
+        artifact_dir=tmp_path / "artifacts",
+        gateway_record=tmp_path / "sources",
+    )
+    for settings, name, problem in (
+        (base, "the database password", "at least 12 characters"),
+        (
+            replace(base, database_url="postgresql://kittum:administrator@db/kittum"),
+            "the database password",
+            "not a common word",
+        ),
+        (
+            replace(base, database_url="unused", openalex_api_key="example.invalid"),
+            "KITTUM_OPENALEX_API_KEY",
+            "part of what Kittum sends",
+        ),
+    ):
+        with pytest.raises(ConfigurationError, match=f"recording needs {name}.*{problem}") as e:
+            build_gateway(settings, None, store, SystemClock())  # type: ignore[arg-type]
+        assert "administrator" not in str(e.value) and "example.invalid" not in str(e.value)
+    with pytest.raises(ConfigurationError, match="recording needs the database password"):
+        build_backends(
+            replace(base, gateway_record=None, llm_record=tmp_path / "models"),
+            ModelRegistry.load(),
+            store,
+        )
+
+    password = "rec@rd-Only-7f3k"
+    recipe_id = "qwen3.8-27b-bf16"
+    settings = replace(
+        base,
+        database_url=f"postgresql://recorder:{quote(password, safe='')}@127.0.0.1:55432/kittum",
+        llm_record=tmp_path / "models",
+        llm_endpoints=(LlmEndpoint(recipe_id=recipe_id, base_url="http://gpu:8000/v1"),),
+    )
+    build_gateway(settings, None, store, SystemClock())  # type: ignore[arg-type]
+    sources = RecordingTransport(
+        FakeTransport(), tmp_path / "sources", secrets=recording_secrets(settings)
+    )
+    efetch = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+    pubmed = HttpRequest(url=efetch, params=(("id", "32450107"), ("tool", "kittum")))
+    assert sources.send(pubmed).status == 404  # recorded, whatever PubMed said
+    with pytest.raises(RecordingRefused, match="parameter 'term'"):
+        sources.send(HttpRequest(url=efetch, params=(("term", password),)))
+
+    answer = {"model": "served", "choices": [{"message": {"content": "{}"}}]}
+    client = httpx2.Client(
+        transport=httpx2.MockTransport(lambda _r: httpx2.Response(200, json=answer))
+    )
+    backend = build_backends(settings, ModelRegistry.load(), store, client=client)[recipe_id]
+    leaked = Message(role="user", content=f"The password is {password}.")
+    with pytest.raises(LlmRecordingRefused, match="its request holds"):
+        backend.complete(CompletionRequest(model_id=recipe_id, messages=(leaked,)))
+    # The recordings, that is; the deployment's own artifact store keeps what it sent, as always.
+    recorded = [p for d in ("sources", "models") for p in (tmp_path / d).rglob("*") if p.is_file()]
+    written = b"".join(p.read_bytes() for p in recorded)
+    assert b"tool=kittum" in written
+    assert password.encode() not in written and quote(password, safe="").encode() not in written

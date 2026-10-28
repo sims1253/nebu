@@ -11,6 +11,7 @@ import os
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+import httpx2
 import pytest
 
 from kittum.core import FixedClock, sha256_hex
@@ -37,19 +38,22 @@ if TYPE_CHECKING:
 ALICE = "alice@example.org"
 SECRET = "cs-9f8e7d6c5b4a"
 UNPAYWALL = f"https://api.unpaywall.org/v2/10.1186%2Fs12916-026-04943-4?email={ALICE}"
+UNREACHABLE = f"https://api.unpaywall.org/v2/10.1186%2Fs12916-026-05037-x?email={ALICE}"
 
 
 class Sources:
     """Answers each URL from its own script, in order, and remembers what was sent."""
 
-    def __init__(self, scripts: dict[str, list[HttpResponse]]) -> None:
+    def __init__(self, scripts: dict[str, list[HttpResponse | Exception]]) -> None:
         self.scripts = scripts
         self.sent: list[HttpRequest] = []
 
     def send(self, request: HttpRequest) -> HttpResponse:
         self.sent.append(request)
-        base = request.url.split("?")[0]
-        return self.scripts[base].pop(0)
+        answer = self.scripts[request.url.split("?")[0]].pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
 
 
 def _written(directory: Path) -> bytes:
@@ -144,8 +148,9 @@ def test_a_replay_answers_in_the_recorded_order_with_the_bytes_the_live_run_saw(
     database: Database, tmp_path: Path
 ) -> None:
     """Unpaywall answers 503 twice, so the first lookup gives up; asked again, it answers, with
-    a body that names the contact address. The replay gives up and then answers in the same way,
-    with the same bytes and the same hash as the live run."""
+    a body that names the contact address. For another DOI the connection fails before it answers.
+    The replay gives up, fails, and answers in the same way, with the same bytes and the same hash
+    as the live run."""
     directory = tmp_path / "sources"
     echo = json.dumps({"doi": "10.1186/s12916-026-04943-4", "email": ALICE}).encode()
     live = Sources(
@@ -154,7 +159,11 @@ def test_a_replay_answers_in_the_recorded_order_with_the_bytes_the_live_run_saw(
                 response(503),
                 response(503),
                 response(200, echo, (("Content-Type", "application/json"),)),
-            ]
+            ],
+            UNREACHABLE.split("?")[0]: [
+                httpx2.ConnectError(f"connection refused for {UNREACHABLE}"),
+                response(200, b"{}", (("Content-Type", "application/json"),)),
+            ],
         }
     )
     clock = FixedClock(datetime(2026, 10, 28, 9, tzinfo=UTC))
@@ -175,21 +184,26 @@ def test_a_replay_answers_in_the_recorded_order_with_the_bytes_the_live_run_saw(
             sleep=lambda _seconds: None,
         )
 
-    def session(transport: RecordingTransport | RecordedTransport, url: str) -> HttpResponse:
+    def session(transport: RecordingTransport | RecordedTransport, contact: str) -> HttpResponse:
         sources = gateway(transport)
+        url, unreachable = UNPAYWALL.replace(ALICE, contact), UNREACHABLE.replace(ALICE, contact)
         with pytest.raises(SourceUnavailable):
             sources.fetch("unpaywall", HttpRequest(url=url))
+        with pytest.raises(httpx2.ConnectError):
+            sources.fetch("unpaywall", HttpRequest(url=unreachable))
+        assert sources.fetch("unpaywall", HttpRequest(url=unreachable)).body == b"{}"
         return sources.fetch("unpaywall", HttpRequest(url=url))
 
-    answered = session(RecordingTransport(live, directory, contact_email=ALICE), UNPAYWALL)
-    assert answered.status == 200 and len(live.sent) == 3
+    answered = session(RecordingTransport(live, directory, contact_email=ALICE), ALICE)
+    assert answered.status == 200 and len(live.sent) == 5
+    # A failure is recorded by its kind alone: its message quoted the address.
+    assert b"alice" not in _written(directory).lower()
     # The live run gets the bytes the recording holds: the address is the placeholder.
     assert json.loads(answered.body)["email"] == CONTACT_PLACEHOLDER
     assert answered.body_hash == sha256_hex(answered.body)
 
     replay = RecordedTransport(directory, contact_email="bob@example.org")
-    bobs = UNPAYWALL.replace(ALICE, "bob@example.org")
-    replayed = session(replay, bobs)
+    replayed = session(replay, "bob@example.org")
     assert (replayed.status, replayed.body, replayed.body_hash) == (
         200,
         answered.body,
@@ -197,4 +211,4 @@ def test_a_replay_answers_in_the_recorded_order_with_the_bytes_the_live_run_saw(
     )
     # The live run asked three times; a fourth has nothing left to answer it.
     with pytest.raises(NotRecorded, match="no recorded response 4"):
-        replay.send(HttpRequest(url=bobs))
+        replay.send(HttpRequest(url=UNPAYWALL.replace(ALICE, "bob@example.org")))

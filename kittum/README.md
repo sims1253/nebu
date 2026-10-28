@@ -142,8 +142,8 @@ workbench is not recorded: replay the same steps.
 | `KITTUM_LLM_REPLAY`     | A recording from `KITTUM_LLM_RECORD`. Replaces every model server: each request is answered from it, and one with no recorded answer left fails naming its request hash. The judge is the one the live run used. Refused with `KITTUM_LLM_RECORD`.     |
 
 A replay answers in the order the live run was answered: a source that failed twice and then
-answered fails twice and then answers, and a model asked the same thing twice gives its two
-answers in turn.
+answered fails twice and then answers, a connection that failed fails again, and a model asked
+the same thing twice gives its two answers in turn.
 
 Recordings hold no credentials and no personal data. Request headers (where API keys travel) are
 never written, and credential query parameters such as NCBI's `api_key` are dropped. The contact
@@ -165,11 +165,26 @@ Recording uses the deployment's live rate limits but a response cache of its own
 every request of the run reaches its source and is written, even one the deployment had cached.
 The demo judge (`KITTUM_JUDGE_BACKEND=demo`) is a replay already; record with a real judge.
 
+Recording checks every configured key and password before it starts: each must be at least 12
+characters, not a common password, and not part of what Kittum itself sends (PubMed's
+`tool=kittum`, the User-Agent, the placeholder). Otherwise ordinary requests and bodies would hold
+the "secret" and be refused or redacted, so Kittum refuses to start, naming the setting. The dev
+database password `kittum` is such a password: record with a role of its own that has a long one.
+In the compose Postgres:
+
+```sh
+export KITTUM_RECORDER_PASSWORD=$(openssl rand -hex 16)
+docker compose -f infra/compose.yaml exec postgres psql -U kittum -d kittum \
+  -c "create role kittum_recorder login password '$KITTUM_RECORDER_PASSWORD' in role kittum" \
+  -c "alter role kittum_recorder set role kittum"   # what it creates belongs to kittum
+export KITTUM_DATABASE_URL=postgresql://kittum_recorder:$KITTUM_RECORDER_PASSWORD@127.0.0.1:55432/kittum
+```
+
 For example, the demo with a hosted judge, recorded once into `.kittum/demo-run/` and replayed in
 a fresh database:
 
 ```sh
-# Record: live sources and the live model, as in "Run Kittum" above.
+# Record: live sources and the live model, as in "Run Kittum" above, as kittum_recorder.
 export KITTUM_GATEWAY_RECORD=.kittum/demo-run/sources
 export KITTUM_LLM_RECORD=.kittum/demo-run/models
 uv run kittum demo seed --live

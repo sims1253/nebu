@@ -15,7 +15,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 from uuid import UUID
 
 from kittum.app.enrichment import ENRICHMENT_JOB, enrichment_handler
@@ -25,15 +25,18 @@ from kittum.db import Database
 from kittum.extraction import JOB_KIND as EXTRACTION_JOB
 from kittum.extraction import run_handler
 from kittum.gateway import (
+    CONTACT_PLACEHOLDER,
     HttpxTransport,
     RecordedTransport,
     RecordingTransport,
     SourceGateway,
     default_policies,
+    user_agent,
 )
 from kittum.judge import PROMPT_VERSION, JudgeConfig, judge_many
 from kittum.ledger import PostgresLedger
 from kittum.models import (
+    REPLAY_PREFIX,
     LlmRecordings,
     ModelRegistry,
     RecordingBackend,
@@ -120,16 +123,59 @@ def judge_config(recipe_id: str, *, label: str | None = None) -> JudgeConfig:
     )
 
 
+RECORDING_SECRET_LENGTH = 12
+"""The shortest key or password a recording run accepts: a shorter one could stand in ordinary
+text, which recording would then refuse or redact."""
+
+# Passwords common enough to stand in ordinary text despite their length.
+_COMMON_SECRETS = frozenset({"administrator", "changeme1234", "password1234", "postgrespostgres"})
+
+
+def _named_secrets(settings: Settings) -> list[tuple[str, str]]:
+    """Every configured key and password, with the setting it comes from."""
+    password = urlsplit(settings.database_url).password
+    named = [
+        ("KITTUM_NCBI_API_KEY", settings.ncbi_api_key),
+        ("KITTUM_OPENALEX_API_KEY", settings.openalex_api_key),
+        # A DSN percent-encodes its password; the password itself is what may leak.
+        ("the database password in KITTUM_DATABASE_URL", unquote(password) if password else None),
+    ]
+    named += [
+        (e.api_key_env, os.environ.get(e.api_key_env))
+        for e in settings.llm_endpoints
+        if e.api_key_env
+    ]
+    return [(name, value) for name, value in named if value]
+
+
 def recording_secrets(settings: Settings) -> tuple[str, ...]:
     """What no recording may hold: every configured key and password. The contact address is
     handled apart (it may stand in its contact parameter, as a placeholder)."""
-    values = [
-        settings.ncbi_api_key,
-        settings.openalex_api_key,
-        urlsplit(settings.database_url).password,
+    return tuple(dict.fromkeys(value for _, value in _named_secrets(settings)))
+
+
+def check_recording_secrets(settings: Settings) -> None:
+    """Refuse to record with a key or password that ordinary content could contain.
+
+    Recording refuses a request and cleans a body that holds a secret. A short password, a common
+    one, or one inside what Kittum itself sends (PubMed's `tool=kittum`, the User-Agent, the
+    contact placeholder) would refuse or redact requests and bodies that hold no secret at all."""
+    own = [
+        s.lower()
+        for s in ("kittum", user_agent(), CONTACT_PLACEHOLDER, "[redacted]", REPLAY_PREFIX)
     ]
-    values += [os.environ.get(e.api_key_env) for e in settings.llm_endpoints if e.api_key_env]
-    return tuple(dict.fromkeys(v for v in values if v))
+    for name, value in _named_secrets(settings):
+        folded = value.lower()
+        if len(value) < RECORDING_SECRET_LENGTH:
+            problem = f"of at least {RECORDING_SECRET_LENGTH} characters"
+        elif folded in _COMMON_SECRETS or any(folded in v for v in own):
+            problem = "that is not a common word or part of what Kittum sends"
+        else:
+            continue
+        raise ConfigurationError(
+            f"recording needs {name} to be a value {problem}, so that recording can tell it from"
+            ' ordinary content; record with a longer one (README, "Record a live run, replay it")'
+        )
 
 
 def build_backends(
@@ -163,6 +209,7 @@ def build_backends(
         backends_from_endpoints(settings.llm_endpoints, registry, artifacts, client=client)
     )
     if settings.llm_record:
+        check_recording_secrets(settings)
         recordings = LlmRecordings(settings.llm_record)
         backends = {
             recipe_id: RecordingBackend(
@@ -231,6 +278,8 @@ def build_gateway(
         raise ConfigurationError(
             "KITTUM_GATEWAY_RECORD records the real sources, so it cannot run with KITTUM_OFFLINE=1"
         )
+    if settings.gateway_record:
+        check_recording_secrets(settings)
     if settings.gateway_recordings:
         transport = RecordedTransport(
             settings.gateway_recordings, contact_email=settings.contact_email
@@ -390,6 +439,7 @@ def job_handlers(ctx: AppContext) -> dict[str, Handler]:
 
 __all__ = [
     "JOB_HANDLERS",
+    "RECORDING_SECRET_LENGTH",
     "AppContext",
     "ConfigurationError",
     "HandlerFactory",
@@ -397,6 +447,7 @@ __all__ = [
     "build_backends",
     "build_gateway",
     "build_judge",
+    "check_recording_secrets",
     "ensure_actor",
     "job_handlers",
     "judge_config",

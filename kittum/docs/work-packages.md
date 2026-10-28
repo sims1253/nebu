@@ -867,7 +867,11 @@ Enrichment and open-access retrieval (branch `kittum/enrichment-ui`):
   offline to the same rows and ledger payloads, and picks the live run's judge;
   `tests/models/test_replay.py` replays a judge run in order, in a file and in a directory, and
   refuses completions holding a key or the address; `tests/gateway/test_recording.py` covers the
-  refusals, the placeholder, and a failing-then-answering source replayed in order.
+  refusals, the placeholder, and a failing-then-answering source replayed in order, a transport
+  failure included (recorded as `{"error": <kind>}` and raised again as that kind). Recording
+  refuses to start (`check_recording_secrets`) with a key or password under
+  `RECORDING_SECRET_LENGTH` characters, a common one, or one inside what Kittum sends (the dev
+  password `kittum` is PubMed's `tool`); the database password is compared decoded.
 - Tests: `tests/app/test_enrichment.py` drives both jobs through the worker on recorded responses
   with PubTator answering 503, then again with it back (the cache answers the rest), and an attach
   that fails once and resumes; `tests/app/test_enrichment_jobs.py` has a worker lose its lease
