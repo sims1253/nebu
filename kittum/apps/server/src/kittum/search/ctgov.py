@@ -123,7 +123,7 @@ class CtgovSource:
 
         while True:
             url = self._build_url(plan.strategy, next_token)
-            resp = self._gateway.fetch("ctgov", HttpRequest(url=url))
+            resp = self._gateway.fetch("clinicaltrials", HttpRequest(url=url))
             if not 200 <= resp.status < 300:
                 raise SourceError(f"ClinicalTrials.gov returned HTTP {resp.status} for {url}")
             body_hash = self._artifacts.put(resp.body)

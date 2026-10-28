@@ -140,6 +140,32 @@ Criteria are executable. Each criterion compiles to a question that a human answ
 and that the AI judge answers as `met`, `not_met`, or `unclear` with a quote. Exclusion reasons are
 criterion IDs, so every exclusion list in every report comes from data instead of free text.
 
+A source in the plan may carry its search strategy in the source's own syntax. Compiling checks
+what can be checked without running it: balanced parentheses, brackets, and quotes. A field tag
+PubMed does not list is a warning beside the strategy, as PubMed itself only warns. A hit count
+from PubMed or ClinicalTrials.gov shows what the strategy finds today, with what PubMed said about
+its words (a phrase it found nowhere, a word it ignored); it is informational and records no
+search.
+
+A model can help write the protocol (`kittum.assist`). It drafts one from the lead's description,
+or suggests changes to one part, a question, a criterion, or a strategy, each with a reason. It
+answers in a JSON Schema derived from the protocol's own models in strict form, and each answer
+goes through the same compiler as a hand-written file; an answer with problems goes back to the
+model with them, at most twice. Nothing the model writes is published by it. Every draft,
+suggestion, accepted selection of changes, edit, and restore is an append-only revision, and the
+lead steps between them and publishes one. What a model wrote is attributed by value: a field is
+the model's while its value is one a model wrote in any draft, suggestion, or accepted selection
+of the project, however the document was saved since. Free text (a title, a criterion's text, a
+population, a strategy, a reference's note) counts for that kind of field wherever its object
+moved or whatever it is now called, which errs towards naming the model. Choices, numbers, and
+booleans count at the same place, or in an object that is recognisably the model's: one of the
+same kind whose own words say what the model's object said, such as a renamed topic. IDs never
+count. A person who changes the value takes the field over. A publication of a project
+with assistant revisions that nothing can attribute is refused. Every publication, from the workbench, an assistant revision, or
+the command line, records these fields (which field, which revision, which model) in its ledger
+event, and every request to the assistant is a ledger event with each attempt's raw request and
+response, failed ones included, so the AI disclosure lists both.
+
 A profile extends this schema. It can, for example, wrap scopes in a hierarchy of indications and
 subpopulations with an assigned comparator, and fix the freshness limit.
 
@@ -616,7 +642,7 @@ the terms of their own templates.
 
 | Screen | Shows | Default action and keys |
 | --- | --- | --- |
-| Protocol editor | PICO blocks per scope, the criteria table, version diff, protocol hash, and a test bench that runs the judge on calibration records to show which criteria it misreads | `n` new criterion, `Ctrl+Enter` run the test bench. **Publish** freezes and signs a version. |
+| Protocol editor | PICO blocks per scope, the criteria table, version diff, protocol hash, and a test bench that runs the judge on calibration records to show which criteria it misreads. With the assistant: the revisions, each part with **Improve** and each PubMed or ClinicalTrials.gov strategy with **Count**, a suggestion as marked-up changes with their reasons and counts before and after | `n` new criterion, `Ctrl+Enter` run the test bench. `[` and `]` step through revisions, `1` to `9` toggle a suggested change, `a` accept, `r` restore. **Publish** freezes and signs a version. |
 | Search review | One tab per database with the line-numbered strategy, limits, date, and hit count; the translation diff against the PubMed master; the PRESS checklist; which reference-set records the strategy finds and misses | `a` approve, `r` request changes |
 | Title and abstract queue | One record at a time: title, year, journal, publication type, registry ID, the abstract with structured labels and Methods first, and a criteria strip | `i` include, `e` then `1` to `9` exclude on a criterion, `u` unclear, `Backspace` undo, `Space` next. The next five records prefetch. Target median 15 to 25 seconds. |
 | Studies | Proposed record-to-study clusters with the linking evidence (shared NCT number, DOI family, title similarity) | `Enter` confirm, `s` split, `m` merge |

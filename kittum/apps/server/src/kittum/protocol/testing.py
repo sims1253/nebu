@@ -1,6 +1,7 @@
 """An in-memory `ProtocolStore` for tests in any module. It follows the Postgres store's rules.
 
-It ignores the transaction; pass `kittum.db.testing.null_tx()`. It cannot check that the approver
+It ignores the transaction; pass `kittum.db.testing.null_tx()`. It asks no registered attribution,
+which reads the database, so its publications name no AI parts. It cannot check that the approver
 is a human actor, because it has no actor table, so it trusts the ID.
 """
 
@@ -48,7 +49,13 @@ class InMemoryProtocolStore:
         return stored
 
     def publish(
-        self, tx: Tx, project_id: Id, version_id: Id, approved_by: Id, *, reason: str | None = None
+        self,
+        tx: Tx,
+        project_id: Id,
+        version_id: Id,
+        approved_by: Id,
+        *,
+        reason: str | None = None,
     ) -> StoredProtocol:
         stored = self.get_version(tx, project_id, version_id)
         previous = self.latest_published(tx, project_id)

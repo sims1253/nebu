@@ -5,8 +5,10 @@ Compilation runs in passes, and each reports every problem it finds, not just th
 1. YAML or JSON parsing, rejecting duplicate keys.
 2. Schema validation of every core field.
 3. Core cross-checks that a schema cannot express: unique IDs, scopes that exist, text in the
-   default language, criteria a reviewer can decide at title and abstract, and the screening mode
-   rules.
+   default language, criteria a reviewer can decide at title and abstract, the screening mode
+   rules, and the syntax of each source's search strategy as far as it can be checked without
+   running it (balanced brackets and quotes). A PubMed field tag PubMed does not list is a
+   warning (`protocol_warnings`), not a problem: PubMed searches it anyway.
 4. The profile, if the protocol names one: its extension schemas, its vocabularies, then its rules.
 
 Each problem carries the path into the source (`search_topics[1].criteria[0].applies_to[2]`), so an
@@ -17,7 +19,7 @@ import re
 from collections import Counter
 from collections.abc import Iterator, Mapping
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 import yaml.constructor
@@ -25,7 +27,7 @@ import yaml.resolver
 from pydantic import BaseModel, ValidationError
 
 from kittum.core import KittumError, Record, Sha256, content_hash
-from kittum.protocol.model import ReviewProtocol, ScreeningMode, SearchTopic
+from kittum.protocol.model import ReviewProtocol, ScreeningMode, SearchTopic, Source
 from kittum.protocol.profile import ExtensionPoint, Profile, registered_profiles
 
 HASH_DOMAIN = "kittum.protocol.v1"
@@ -454,6 +456,12 @@ def _check_sources(topic: SearchTopic, here: tuple[str | int, ...]) -> list[Prot
         [(path_of(*at, "sources", si, "id"), s.id) for si, s in enumerate(plan.sources)],
         "source ID",
     )
+    for si, source in enumerate(plan.sources):
+        if source.strategy is not None:
+            path = path_of(*at, "sources", si, "strategy")
+            issues += [
+                ProtocolIssue(path=path, message=m) for m in strategy_problems(source.strategy)
+            ]
     present = {s.id for s in plan.sources}
     for di, deviation in enumerate(plan.deviations):
         if deviation.source_id in present:
@@ -465,6 +473,220 @@ def _check_sources(topic: SearchTopic, here: tuple[str | int, ...]) -> list[Prot
                 )
             )
     return issues
+
+
+type StrategyDialect = Literal["pubmed", "ctgov"]
+
+
+def strategy_dialect(source: Source) -> StrategyDialect | None:
+    """The live interface whose syntax a source's strategy is written in, when Kittum knows it:
+    PubMed (MEDLINE searched on PubMed) or ClinicalTrials.gov's Essie. Other platforms (Ovid,
+    Cochrane Library) have their own syntax, which Kittum does not check or run."""
+    platform = (source.platform or "").casefold()
+    if platform == "pubmed" or source.id.casefold() == "pubmed":
+        return "pubmed"
+    names = {source.id.casefold(), platform, source.name.casefold()}
+    if names & {"clinicaltrials_gov", "ctgov", "clinicaltrials.gov"}:
+        return "ctgov"
+    return None
+
+
+# PubMed's search field tags, short and long ("Search Field Descriptions and Tags",
+# https://pubmed.ncbi.nlm.nih.gov/help/#search-tags), each confirmed against ESearch, which reports
+# a tag it does not know as FieldNotFound. Proximity searches add `:~N` to a title, abstract, or
+# affiliation field.
+PUBMED_FIELD_TAGS = frozenset(
+    {
+        "ad",
+        "affl",
+        "all",
+        "aid",
+        "au",
+        "auid",
+        "book",
+        "cn",
+        "cois",
+        "crdt",
+        "dcom",
+        "dp",
+        "ed",
+        "edat",
+        "epdat",
+        "ppdat",
+        "pdat",
+        "fau",
+        "1au",
+        "lastau",
+        "fir",
+        "filter",
+        "sb",
+        "gr",
+        "ir",
+        "isbn",
+        "ip",
+        "ta",
+        "jour",
+        "jid",
+        "la",
+        "lang",
+        "lid",
+        "lr",
+        "majr",
+        "mh",
+        "mesh",
+        "mhda",
+        "nm",
+        "ot",
+        "pa",
+        "pg",
+        "pl",
+        "pmid",
+        "uid",
+        "ps",
+        "pt",
+        "ptyp",
+        "pubn",
+        "rn",
+        "si",
+        "sh",
+        "so",
+        "ti",
+        "tiab",
+        "tt",
+        "tw",
+        "vi",
+        "mh:noexp",
+        "majr:noexp",
+        "sh:noexp",
+        "mesh:noexp",
+        "pt:noexp",
+        "ptyp:noexp",
+        "subheading",
+        "subheading:noexp",
+        "is",
+        "subs",
+        "affiliation",
+        "all fields",
+        "author",
+        "author - corporate",
+        "author - first",
+        "author - full",
+        "author - identifier",
+        "author - last",
+        "conflict of interest statements",
+        "corporate author",
+        "date - completion",
+        "date - create",
+        "date - entry",
+        "date - mesh",
+        "date - modification",
+        "date - publication",
+        "ec/rn number",
+        "editor",
+        "first author name",
+        "full author name",
+        "full investigator name",
+        "grants and funding",
+        "grant number",
+        "investigator",
+        "investigator - full",
+        "issue",
+        "journal",
+        "language",
+        "last author name",
+        "location id",
+        "mesh major topic",
+        "mesh subheading",
+        "mesh terms",
+        "mesh terms:noexp",
+        "mesh major topic:noexp",
+        "mesh subheading:noexp",
+        "publication type:noexp",
+        "other term",
+        "pagination",
+        "personal name as subject",
+        "pharmacological action",
+        "place of publication",
+        "publication type",
+        "publisher",
+        "secondary source id",
+        "subset",
+        "supplementary concept",
+        "substance name",
+        "text word",
+        "title",
+        "title/abstract",
+        "transliterated title",
+        "volume",
+        "publication date",
+        "entry date",
+        "create date",
+        "completion date",
+        "modification date",
+        "mesh date",
+        "electronic publication date",
+        "print publication date",
+    }
+)
+_TAG = re.compile(r"\[([^\]]*)\]")
+_PROXIMITY = re.compile(r"^(tiab|ti|ad|title/abstract|title|affiliation):~\d+$")
+
+
+def _unquoted(strategy: str) -> list[str]:
+    """The parts of a strategy outside its quoted phrases."""
+    return [part for i, part in enumerate(strategy.split('"')) if not i % 2]
+
+
+def strategy_problems(strategy: str) -> list[str]:
+    """What is wrong with a strategy's syntax, as far as a check without running it can tell:
+    quotes, parentheses, and square brackets must balance. Whether the query finds what it should
+    is for a hit count and the reference set to show."""
+    problems: list[str] = []
+    if strategy.count('"') % 2:
+        problems.append("a double quote is not closed")
+    depth = 0
+    for part in _unquoted(strategy):
+        for char in part:
+            depth += {"(": 1, ")": -1}.get(char, 0)
+            if depth < 0:
+                problems.append("a closing parenthesis has no opening one")
+                depth = 0
+    if depth > 0:
+        problems.append(
+            f"{depth} opening parenthes{'is is' if depth == 1 else 'es are'} not closed"
+        )
+    text = " ".join(_unquoted(strategy))
+    if text.count("[") != text.count("]"):
+        problems.append("square brackets do not balance")
+    return problems
+
+
+def strategy_warnings(strategy: str, dialect: StrategyDialect | None) -> list[str]:
+    """What may be wrong with a strategy that compiles: a PubMed field tag PubMed does not list.
+    PubMed searches such a term anyway, with a warning, so the protocol does too."""
+    if dialect != "pubmed":
+        return []
+    unknown = []
+    for tag in _TAG.findall(" ".join(_unquoted(strategy))):
+        name = " ".join(tag.casefold().split())
+        if name not in PUBMED_FIELD_TAGS and not _PROXIMITY.match(name):
+            unknown.append(f"[{tag}] is not a PubMed field tag; PubMed would search it as text")
+    return unknown
+
+
+def protocol_warnings(protocol: ReviewProtocol) -> tuple[ProtocolIssue, ...]:
+    """What may be wrong in a protocol that compiles, each with its path: for now, field tags in
+    a PubMed strategy that PubMed does not list."""
+    return tuple(
+        ProtocolIssue(
+            path=path_of("search_topics", ti, "source_plan", "sources", si, "strategy"),
+            message=message,
+        )
+        for ti, topic in enumerate(protocol.search_topics)
+        for si, source in enumerate(topic.source_plan.sources)
+        if source.strategy is not None
+        for message in strategy_warnings(source.strategy, strategy_dialect(source))
+    )
 
 
 def _check_reference_set(topic: SearchTopic, here: tuple[str | int, ...]) -> list[ProtocolIssue]:

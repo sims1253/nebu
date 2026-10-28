@@ -2,7 +2,12 @@
 
 Publishing freezes the version (a trigger rejects later changes) and appends a
 `protocol.published` event in the caller's transaction. A version that changes a topic's screening
-mode relative to the last published version needs a reason, which the event records.
+mode relative to the last published version needs a reason, which the event records. So does every
+field of the version a model wrote (`ai_parts`): which field, from which revision, by which model.
+Publishing asks every registered attribution (`register_attribution`; `kittum.assist` registers
+its own when imported) whatever saved the version: the workbench, an assistant revision, or the
+CLI. With none registered, a project with assistant revisions is refused, never published as if
+no model had written any of it.
 """
 
 from datetime import datetime
@@ -16,10 +21,46 @@ from kittum.protocol.compiler import ProtocolVersion, compile
 from kittum.protocol.diffing import diff
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping, Sequence
+
     from kittum.db import Tx
     from kittum.ledger import AuditEvent, Ledger
 
 PUBLISHED_EVENT = "protocol.published"
+
+type Attribution = Callable[[Tx, Id, ProtocolVersion], Sequence[Mapping[str, Any]]]
+"""The fields of a version that a model wrote, as `protocol.published` records them."""
+
+_ATTRIBUTIONS: dict[str, Attribution] = {}
+
+
+def register_attribution(name: str, attribution: Attribution) -> None:
+    """Have every publication record what `attribution` finds. Registering a name again replaces
+    its function."""
+    _ATTRIBUTIONS[name] = attribution
+
+
+def attributed(tx: Tx, project_id: Id, version: ProtocolVersion) -> list[dict[str, Any]]:
+    """What every registered attribution finds. Fails closed: a project whose protocol was
+    written with the assistant is never published as if no model had written any of it."""
+    if not _ATTRIBUTIONS and _assisted(tx, project_id):
+        raise ProtocolStateError(
+            "a model helped write this project's protocol, and nothing is registered to name"
+            " what it wrote; publish through kittum.app, or import kittum.assist first"
+        )
+    return [dict(p) for f in _ATTRIBUTIONS.values() for p in f(tx, project_id, version)]
+
+
+def _assisted(tx: Tx, project_id: Id) -> bool:
+    """Whether the protocol assistant has revisions in the project (its table, read only here)."""
+    row = tx.execute("select to_regclass('assist_revision') is not null as present").fetchone()
+    if row is None or not row["present"]:
+        return False
+    found = tx.execute(
+        "select exists (select 1 from assist_revision where project_id = %s) as found",
+        (project_id,),
+    ).fetchone()
+    return bool(found and found["found"])
 
 
 class ProtocolStateError(KittumError):
@@ -45,7 +86,13 @@ class ProtocolStore(Protocol):
     def save_draft(self, tx: Tx, project_id: Id, version: ProtocolVersion) -> StoredProtocol: ...
 
     def publish(
-        self, tx: Tx, project_id: Id, version_id: Id, approved_by: Id, *, reason: str | None = None
+        self,
+        tx: Tx,
+        project_id: Id,
+        version_id: Id,
+        approved_by: Id,
+        *,
+        reason: str | None = None,
     ) -> StoredProtocol: ...
 
     def get_version(self, tx: Tx, project_id: Id, version_id: Id) -> StoredProtocol: ...
@@ -56,7 +103,10 @@ class ProtocolStore(Protocol):
 
 
 def published_payload(
-    stored: StoredProtocol, previous: StoredProtocol | None, reason: str | None
+    stored: StoredProtocol,
+    previous: StoredProtocol | None,
+    reason: str | None,
+    ai_parts: Sequence[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     """The `protocol.published` payload. Shared with the in-memory store."""
     changes = diff(previous.version, stored.version) if previous else None
@@ -73,6 +123,7 @@ def published_payload(
         "added_criteria": list(changes.added_criteria) if changes else [],
         "removed_criteria": list(changes.removed_criteria) if changes else [],
         "changed_criteria": list(changes.changed_criteria) if changes else [],
+        "ai_parts": [dict(p) for p in ai_parts],
     }
 
 
@@ -89,14 +140,18 @@ def check_publishable(
 
 
 def published_event(
-    stored: StoredProtocol, previous: StoredProtocol | None, approved_by: Id, reason: str | None
+    stored: StoredProtocol,
+    previous: StoredProtocol | None,
+    approved_by: Id,
+    reason: str | None,
+    ai_parts: Sequence[Mapping[str, Any]] = (),
 ) -> EventDraft:
     return EventDraft(
         project_id=stored.project_id,
         type=PUBLISHED_EVENT,
         schema_version=1,
         actor_id=approved_by,
-        payload=published_payload(stored, previous, reason),
+        payload=published_payload(stored, previous, reason, ai_parts),
     )
 
 
@@ -172,7 +227,8 @@ def publish(
     ledger: Ledger,
     reason: str | None = None,
 ) -> StoredProtocol:
-    """Freeze a draft with a human approval and append `protocol.published`.
+    """Freeze a draft with a human approval and append `protocol.published`, naming the fields a
+    model wrote (every registered attribution) for the AI disclosure.
 
     Publications serialize per project, so the version compared against is the one in force when
     this one commits: two concurrent publications cannot both skip the mode-change reason.
@@ -195,7 +251,8 @@ def publish(
         raise ProtocolStateError("publishing a protocol needs the approval of a human actor")
     previous = latest_published(tx, project_id)
     check_publishable(stored, previous, reason)
-    event = ledger.append(tx, published_event(stored, previous, approved_by, reason))
+    ai_parts = attributed(tx, project_id, stored.version)
+    event = ledger.append(tx, published_event(stored, previous, approved_by, reason, ai_parts))
     published = mark_published(stored, event, approved_by, reason)
     tx.execute(
         "update protocol_version set status = 'published', published_at = %s, approved_by = %s,"
@@ -244,7 +301,13 @@ class PostgresProtocolStore:
         return save_draft(tx, project_id, version)
 
     def publish(
-        self, tx: Tx, project_id: Id, version_id: Id, approved_by: Id, *, reason: str | None = None
+        self,
+        tx: Tx,
+        project_id: Id,
+        version_id: Id,
+        approved_by: Id,
+        *,
+        reason: str | None = None,
     ) -> StoredProtocol:
         return publish(tx, project_id, version_id, approved_by, ledger=self._ledger, reason=reason)
 

@@ -9,6 +9,7 @@ import type {
   DiffPreview,
   ExampleProtocol,
   ProtocolIssue,
+  ProtocolRevision,
   ProtocolSource,
 } from "../../data/schema.ts";
 import { run } from "../../data/workbench.ts";
@@ -29,6 +30,8 @@ type Check =
       readonly text: string;
       readonly source: ProtocolSource;
       readonly preview: DiffPreview;
+      /** What may be wrong though it compiles, such as a field tag PubMed does not list. */
+      readonly warnings: ReadonlyArray<ProtocolIssue>;
     };
 
 const show = (value: unknown): string =>
@@ -41,16 +44,24 @@ const show = (value: unknown): string =>
 export function ProtocolEditor({
   onPublished,
   onCancel,
+  initialText = null,
+  base = null,
+  onRevisionSaved,
 }: {
   onPublished: (message: string) => void;
   onCancel: (() => void) | null;
+  /** The text to start from, such as an assistant revision's. */
+  initialText?: string | null;
+  /** The assistant revision the text comes from; the edit can be saved as the next revision. */
+  base?: ProtocolRevision | null;
+  onRevisionSaved?: (revision: ProtocolRevision) => void;
 }) {
   const { workbench } = useRouteContext({ from: "/p/$projectId" });
   const router = useRouter();
   const { project, me, protocol } = useProject();
   const [examples, setExamples] = useState<ReadonlyArray<ExampleProtocol>>([]);
   const [example, setExample] = useState("");
-  const [text, setText] = useState("");
+  const [text, setText] = useState(initialText ?? "");
   const [check, setCheck] = useState<Check>({ state: "unchecked" });
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -68,7 +79,7 @@ export function ProtocolEditor({
       () => live && setExamples([]),
     );
     // A new version starts from the published one.
-    if (protocol) {
+    if (protocol && initialText === null) {
       run(workbench.protocolSource(project.id)).then(
         (source) => live && setText((t) => t || source),
         () => undefined,
@@ -77,7 +88,7 @@ export function ProtocolEditor({
     return () => {
       live = false;
     };
-  }, [workbench, project.id, protocol]);
+  }, [workbench, project.id, protocol, initialText]);
 
   const load = (source: string) => {
     setText(source);
@@ -108,7 +119,13 @@ export function ProtocolEditor({
           source: parsed.source,
         }),
       );
-      setCheck({ state: "valid", text: current, source: parsed.source, preview });
+      setCheck({
+        state: "valid",
+        text: current,
+        source: parsed.source,
+        preview,
+        warnings: report.warnings ?? [],
+      });
     } catch (e) {
       setCheck({ state: "unchecked" });
       setError(failure(e, "The protocol could not be checked."));
@@ -119,6 +136,27 @@ export function ProtocolEditor({
   const unchanged =
     fresh && check.preview.diff !== null && check.preview.diff.changes?.length === 0;
   const modeChanged = fresh && (check.preview.diff?.mode_changes.length ?? 0) > 0;
+
+  const saveRevision = async () => {
+    if (check.state !== "valid" || !fresh || !base) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const saved = await run(
+        workbench.saveRevision({
+          projectId: project.id,
+          as: me.actor_id,
+          source: check.source,
+          baseId: base.id,
+        }),
+      );
+      onRevisionSaved?.(saved);
+    } catch (e) {
+      setError(failure(e, "The revision was not saved."));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const publish = async () => {
     if (check.state !== "valid" || !fresh) return;
@@ -248,10 +286,15 @@ export function ProtocolEditor({
             >
               <TextInput value={reason} onChange={(e) => setReason(e.currentTarget.value)} />
             </Field>
-            <div>
+            <div className="flex flex-wrap gap-3">
               <Button primary type="submit" disabled={busy}>
                 {busy ? "Publishing" : "Publish this version"}
               </Button>
+              {base ? (
+                <Button onClick={() => void saveRevision()} disabled={busy}>
+                  Save as a revision after {base.seq}
+                </Button>
+              ) : null}
             </div>
           </form>
         ) : null}
@@ -302,7 +345,23 @@ function Result({ check, stale }: { check: Check; stale: boolean }) {
           </ol>
         </>
       ) : (
-        <Changes preview={check.preview} />
+        <>
+          <Changes preview={check.preview} />
+          {check.warnings.length ? (
+            <ol className="mt-4 grid gap-2.5" aria-label="Warnings">
+              {check.warnings.map((warning, i) => (
+                <li
+                  key={i}
+                  className="border-l-2 border-unclear pl-3 text-sm"
+                  data-testid="protocol-warning"
+                >
+                  <span className="block text-xs font-semibold text-ink-2">{warning.path}</span>
+                  {warning.message}
+                </li>
+              ))}
+            </ol>
+          ) : null}
+        </>
       )}
     </div>
   );

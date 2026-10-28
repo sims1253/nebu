@@ -90,4 +90,18 @@ class RecipeBackend(LlmBackend, Protocol):
 
 
 class BackendError(KittumError):
-    """The model server answered, but not with a usable completion."""
+    """The model server could not be reached, or answered without a usable completion.
+
+    `raw_request_hash` and `raw_response_hash` name the bytes already in the artifact store, so a
+    failed call stays on record."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        raw_request_hash: str | None = None,
+        raw_response_hash: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.raw_request_hash = raw_request_hash
+        self.raw_response_hash = raw_response_hash

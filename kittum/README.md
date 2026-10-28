@@ -120,6 +120,13 @@ export KITTUM_JUDGE_MODEL=example-provider-model
 uv run kittum demo seed --live
 ```
 
+The protocol editor's **With the assistant** tab lets a model draft the protocol from a few
+sentences and suggest changes to one part at a time, which the lead accepts change by change.
+`KITTUM_ASSIST_MODEL` names its recipe (by default the judge's), served by one of
+`KITTUM_LLM_ENDPOINTS`; **Count** asks PubMed and ClinicalTrials.gov through the gateway.
+`KITTUM_ASSIST_BACKEND=demo` replays the answers recorded in `apps/server/src/kittum/app/demo_data/assist`
+instead; `uv run python -m tests.assist.record_fixtures <recipe>` records them again.
+
 For development, `pnpm dev:web` serves the workbench with hot reload on port 5180 against
 `kittum serve`, and `VITE_KITTUM_WORKBENCH=mock pnpm dev:web` shows recorded example data without
 a server. `pnpm --dir apps/web e2e` runs the end-to-end journeys against a migrated database in
@@ -138,8 +145,8 @@ workbench is not recorded: replay the same steps.
 | Variable                | What it does                                                                                                                                                                                                                                         |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `KITTUM_GATEWAY_RECORD` | A directory. The gateway writes every source response into it (status, `Content-Type`, body), each attempt in order, with a `manifest.json`, the format `KITTUM_GATEWAY_RECORDINGS` reads. Live only: refused with `KITTUM_OFFLINE=1`.                 |
-| `KITTUM_LLM_RECORD`     | A directory, or a file ending in `.json`. Every model completion is written under its request hash, in order, with the model identity the server reported, the serving, the endpoint, and the exact request and response bytes, and which recipe judged. |
-| `KITTUM_LLM_REPLAY`     | A recording from `KITTUM_LLM_RECORD`. Replaces every model server: each request is answered from it, and one with no recorded answer left fails naming its request hash. The judge is the one the live run used. Refused with `KITTUM_LLM_RECORD`.     |
+| `KITTUM_LLM_RECORD`     | A directory, or a file ending in `.json`. Every model completion is written under its request hash, in order, with the model identity the server reported, the serving, the endpoint, and the exact request and response bytes, and which recipe judged and which the protocol assistant used. |
+| `KITTUM_LLM_REPLAY`     | A recording from `KITTUM_LLM_RECORD`. Replaces every model server: each request is answered from it, and one with no recorded answer left fails naming its request hash. The judge and the protocol assistant use the recipes the live run used, unless `KITTUM_JUDGE_MODEL` or `KITTUM_ASSIST_MODEL` names another. Refused with `KITTUM_LLM_RECORD`.     |
 
 A replay answers in the order the live run was answered: a source that failed twice and then
 answered fails twice and then answers, a connection that failed fails again, and a model asked
@@ -163,7 +170,9 @@ https://api.example-provider.test/v1`.
 
 Recording uses the deployment's live rate limits but a response cache of its own process, so
 every request of the run reaches its source and is written, even one the deployment had cached.
-The demo judge (`KITTUM_JUDGE_BACKEND=demo`) is a replay already; record with a real judge.
+The demo judge (`KITTUM_JUDGE_BACKEND=demo`) is a replay already; record with a real judge. So is
+the demo assistant (`KITTUM_ASSIST_BACKEND=demo`), which is refused beside `KITTUM_LLM_REPLAY`
+rather than silently replaced by it or shadowing it: replay the assistant from one recording.
 
 Recording checks every configured key and password before it starts: each must be at least 12
 characters, not a common password, and not part of what Kittum itself sends (PubMed's

@@ -52,6 +52,7 @@ if TYPE_CHECKING:
 
     import httpx2
 
+    from kittum.app.assist import Assistant
     from kittum.core import Id
     from kittum.db import Tx
     from kittum.gateway import Gateway, Transport
@@ -322,25 +323,31 @@ class AppContext:
     backends: Mapping[str, LlmBackend] = field(default_factory=dict)
     """Every configured model server, by recipe ID (`Settings.llm_endpoints`)."""
     judge: Judge | None = None
+    assistant: Assistant | None = None
+    """The protocol assistant's model and count gateway (`kittum.app.assist`)."""
 
     @classmethod
     def from_settings(cls, settings: Settings) -> AppContext:
         clock = SystemClock()
         db = Database(settings.database_url)
         artifacts = FilesystemStore(settings.artifact_dir)
+        from kittum.app.assist import build_assistant
+
         registry = ModelRegistry.load(local=settings.recipes_file)
         backends = build_backends(settings, registry, artifacts)
+        gateway = build_gateway(settings, db, artifacts, clock)
         return cls(
             settings=settings,
             db=db,
             artifacts=artifacts,
             clock=clock,
-            gateway=build_gateway(settings, db, artifacts, clock),
+            gateway=gateway,
             ledger=PostgresLedger(clock),
             queue=PostgresJobQueue(clock),
             receipts=PostgresReceipts(),
             backends=backends,
             judge=build_judge(settings, registry, backends),
+            assistant=build_assistant(settings, backends, artifacts),
         )
 
     def require_ledger(self) -> Ledger:

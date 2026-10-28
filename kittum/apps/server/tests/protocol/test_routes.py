@@ -28,12 +28,56 @@ def _hash(name: str) -> str:
     return compile(example_text(name)).content_hash
 
 
+def test_a_pubmed_strategy_may_use_every_field_tag_pubmed_lists() -> None:
+    """Tags from PubMed's "Search Field Descriptions and Tags", short and long, proximity
+    included: a strategy with them compiles. A tag PubMed does not list is a warning beside the
+    strategy, as PubMed itself only warns; unbalanced syntax is a problem."""
+    client = TestClient(create_app())
+    source = example_source("nicotine-replacement")
+    medline = source["search_topics"][0]["source_plan"]["sources"][1]
+    assert medline["id"] == "medline"
+    medline["strategy"] = (
+        '(nicotine[mh] OR "nicotine patch"[tiab] OR NRT[Title/Abstract] OR "patch quit"[tiab:~3]'
+        ' OR "Nicotinic Agonists"[pa] OR "Smoking Cessation"[majr] OR therapy[sh:noexp])'
+        " AND (2024[epdat] OR 2023[ppdat] OR 2024/01/01[edat] OR 2024[Date - Entry]"
+        " OR 2024[mhda] OR 2024[crdt] OR 2024[lr] OR 2020:2024[dp])"
+        " AND (10.1000/xyz[aid] OR funding[cois] OR smith john[fir] OR e123[lid]"
+        ' OR 0372354[jid] OR hughes j[ps] OR "randomized controlled trial"[Publication Type])'
+        " AND english[la] AND medline[sb] AND humans[filter]"
+        # PubMed's own Clinical Queries use these unexpanded and subheading forms.
+        ' AND (review[pt:noexp] OR "clinical trial"[Publication Type:noexp]'
+        " OR diagnosis[Subheading:noexp] OR therapy[subheading] OR therapy[MeSH Subheading:noexp]"
+        ' OR "Smoking Cessation"[MeSH Major Topic:noexp] OR review[ptyp:noexp])'
+    )
+    report = client.post("/api/protocol/validate", json=source).json()
+    assert (report["ok"], report["issues"], report["warnings"]) == (True, [], [])
+
+    medline["strategy"] += " AND addiction[jt]"
+    report = client.post("/api/protocol/validate", json=source).json()
+    assert report["ok"] is True
+    assert report["warnings"] == [
+        {
+            "path": "search_topics[0].source_plan.sources[1].strategy",
+            "message": "[jt] is not a PubMed field tag; PubMed would search it as text",
+        }
+    ]
+    medline["strategy"] = "(" + medline["strategy"]
+    report = client.post("/api/protocol/validate", json=source).json()
+    assert report["ok"] is False
+    assert report["issues"][0]["message"] == "1 opening parenthesis is not closed"
+
+
 def test_validate_reports_the_hash_or_the_issues() -> None:
     client = TestClient(create_app())
     for name in (AMNOG, "nicotine-replacement"):
         ok = client.post("/api/protocol/validate", json=example_source(name))
         assert ok.status_code == 200
-        assert ok.json() == {"ok": True, "content_hash": _hash(name), "issues": []}
+        assert ok.json() == {
+            "ok": True,
+            "content_hash": _hash(name),
+            "issues": [],
+            "warnings": [],
+        }
 
     broken = example_source(AMNOG)
     broken["search_topics"][0]["freshness"]["max_age_months"] = 6

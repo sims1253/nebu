@@ -151,6 +151,56 @@ Left:
 - Approver identity comes from the request body until the API has authentication (WP-15).
 - A profile for EU JCA dossiers as a report target, if JCA needs more than linked questions.
 
+## Protocol assistant
+
+A model helps the methods lead write the protocol: `kittum.assist`, `app/assist.py`,
+`api/routes/assist.py`, and the editor's **With the assistant** tab.
+
+Done:
+
+- Sources carry an optional `strategy`, left out of the document when absent so older protocols
+  keep their content hash. Compile checks quotes, parentheses, and brackets (`strategy_problems`);
+  a PubMed field tag outside PubMed's documented list, each confirmed against ESearch, is a
+  warning (`strategy_warnings`, `protocol_warnings`, `ValidationReport.warnings`);
+  `strategy_dialect` names PubMed or ClinicalTrials.gov.
+- `draft` and `improve` (a question, a criterion, or a strategy as find-and-replace changes) ask
+  the model in a strict JSON Schema derived from the protocol's models (`strict_schema`,
+  `from_strict`), compile every answer, and send problems back at most twice (`REPAIRS`).
+- `record` stores a compiled answer as a `draft` or `suggestion` revision and writes a
+  `protocol.assist` ledger event with every attempt, also for an answer that never compiled.
+  `accept` (some changes), `restore`, and `save_edit` add revisions; `assist_revision` is
+  append-only.
+- AI marks by value: a field is the model's while its value is one a model wrote in the
+  project's assistant history (draft, suggestion, or accepted selection), whichever way the
+  document was saved. Free text (a string field of the schema without enumeration, constant, or
+  pattern) matches by kind of field, its path without object IDs, so renamed and moved objects
+  keep their marks; choices (enums, a source's name and platform), numbers, and booleans match at
+  the exact path, or in an object corresponding to one a model wrote (same kind of object, some
+  free text of its own equal), so a renamed topic keeps its mode and numbers; IDs are never
+  marked. Entries of lists without IDs (reference sets, deviations) are fields by position. `kittum.protocol.publish` asks every registered `Attribution`; importing
+  `kittum.assist` registers the assistant's, so publications from the workbench, an assistant
+  revision, and the CLI all record `ai_parts`. With none registered, publishing a project that has
+  assistant revisions raises `ProtocolStateError`. The `ai_disclosure` report lists them with every assistant request.
+- Improving a question or criterion keeps every nested profile extension (by ID); a language given
+  twice in an answer goes back to the model; a model server that is down or fails is a recorded
+  attempt with the bytes that exist.
+- `kittum.search.count_hits`: ESearch count, with every phrase PubMed found nowhere (quoted or
+  not), ignored, or could not field, or ClinicalTrials.gov `totalCount`, through the gateway
+  (source `clinicaltrials`, the gateway policy's name, which the CT.gov search now uses too).
+- Settings: `KITTUM_ASSIST_MODEL`, `KITTUM_ASSIST_BACKEND` (`demo` replays recorded answers).
+  `KITTUM_LLM_RECORD` notes the assistant's recipe as the `assist` role of its recordings; a
+  `KITTUM_LLM_REPLAY` without `KITTUM_ASSIST_MODEL` uses it, and refuses recordings of several
+  recipes that do not name it. `KITTUM_ASSIST_BACKEND=demo` is refused beside `KITTUM_LLM_REPLAY`.
+- Tests: `tests/assist/test_assist.py` on GLM-5.3-Flash's recorded answers and PubMed's recorded
+  counts; `e2e/assist.spec.ts` in the browser.
+
+Left:
+
+- Model calls run in the request; a slow model holds the request for up to a minute. A job would
+  free it.
+- Strategies for platforms other than PubMed and ClinicalTrials.gov are not syntax-checked or
+  counted.
+
 ## WP-04 Gateway
 
 Module `kittum.gateway`. Needs: `core`.

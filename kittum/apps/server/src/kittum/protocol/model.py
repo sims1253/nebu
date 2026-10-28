@@ -182,6 +182,10 @@ class Source(Record):
     name: Text
     platform: Text | None = None
     study_filter: Text | None = None
+    strategy: Text | None = Field(default=None, exclude_if=lambda v: v is None)
+    """The query as the source's own syntax writes it: PubMed field tags and MeSH, or
+    ClinicalTrials.gov's Essie terms. Left out of the document when absent, so a protocol written
+    before sources had strategies keeps its content hash."""
 
 
 class Deviation(Record):

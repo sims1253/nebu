@@ -61,16 +61,23 @@ const describe = (error: unknown): { status: number | null; message: string } =>
       detail = e.reason.description;
     }
   }
+  const issues = (detail as { issues?: ReadonlyArray<{ path: string; message: string }> } | null)
+    ?.issues;
   const message =
     typeof detail === "string"
       ? detail
-      : Array.isArray(detail)
-        ? detail.map((d: { msg?: string }) => d.msg ?? "").join(" ")
-        : detail
-          ? JSON.stringify(detail)
-          : e.reason?._tag === "TransportError"
-            ? "The server is not reachable."
-            : (e.message ?? "The server could not answer.");
+      : detail && typeof (detail as { message?: unknown }).message === "string"
+        ? [
+            (detail as { message: string }).message,
+            ...(issues ?? []).map((i) => (i.path ? `${i.path}: ${i.message}` : i.message)),
+          ].join("; ")
+        : Array.isArray(detail)
+          ? detail.map((d: { msg?: string }) => d.msg ?? "").join(" ")
+          : detail
+            ? JSON.stringify(detail)
+            : e.reason?._tag === "TransportError"
+              ? "The server is not reachable."
+              : (e.message ?? "The server could not answer.");
   return { status, message };
 };
 
@@ -242,6 +249,52 @@ export const makeApiWorkbench = (): Workbench => ({
           payload: { approved_by: as, reason },
         });
       }),
+    ),
+
+  assistRevisions: ({ projectId, as }) =>
+    call((api) => api.listAssistRevisions(projectId, { params: reviewer(as) })),
+
+  draftProtocol: ({ projectId, as, description }) =>
+    call((api) => api.draftProtocol(projectId, { params: reviewer(as), payload: { description } })),
+
+  improvePart: ({ projectId, as, revisionId, part }) =>
+    call((api) =>
+      api.improveProtocolPart(projectId, revisionId, { params: reviewer(as), payload: { part } }),
+    ),
+
+  acceptChanges: ({ projectId, as, suggestionId, changeIds }) =>
+    call((api) =>
+      api.acceptSuggestedChanges(projectId, suggestionId, {
+        params: reviewer(as),
+        payload: { change_ids: [...changeIds] },
+      }),
+    ),
+
+  restoreRevision: ({ projectId, as, revisionId }) =>
+    call((api) => api.restoreAssistRevision(projectId, revisionId, { params: reviewer(as) })),
+
+  saveRevision: ({ projectId, as, source, baseId }) =>
+    call((api) =>
+      api.saveAssistRevision(projectId, {
+        params: reviewer(as),
+        payload: { source, base_id: baseId },
+      }),
+    ),
+
+  compareRevisions: ({ projectId, as, from, to }) =>
+    call((api) => api.compareAssistRevisions(projectId, from, to, { params: reviewer(as) })),
+
+  publishRevision: ({ projectId, as, revisionId, reason }) =>
+    call((api) =>
+      api.publishAssistRevision(projectId, revisionId, {
+        params: reviewer(as),
+        payload: { reason },
+      }),
+    ),
+
+  countHits: ({ projectId, as, dialect, strategy }) =>
+    call((api) =>
+      api.countStrategyHits(projectId, { params: reviewer(as), payload: { dialect, strategy } }),
     ),
 
   runSearch: ({ projectId, as, plan }) =>

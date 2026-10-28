@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE eSearchResult PUBLIC "-//NLM//DTD esearch 20060628//EN" "https://eutils.ncbi.nlm.nih.gov/eutils/dtd/20060628/esearch.dtd">
+<eSearchResult><Count>35484</Count><RetMax>0</RetMax><RetStart>0</RetStart><IdList/><TranslationSet/><QueryTranslation>by "nicotine replacment zzqx"[tiab] OR nicotinne[tiab] OR smoking cessation[tiab]</QueryTranslation><ErrorList><PhraseNotFound>nicotinne</PhraseNotFound></ErrorList><WarningList><PhraseIgnored>by</PhraseIgnored><QuotedPhraseNotFound>"nicotine replacment zzqx"[tiab]</QuotedPhraseNotFound></WarningList></eSearchResult>

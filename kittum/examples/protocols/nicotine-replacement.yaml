@@ -87,8 +87,11 @@ search_topics:
         - id: medline
           kind: bibliographic
           name: MEDLINE
-          platform: Ovid
+          platform: PubMed
           study_filter: Cochrane highly sensitive search strategy for RCTs
+          strategy: >-
+            ("nicotine replacement"[tiab] OR "nicotine patch"[tiab] OR "nicotine gum"[tiab])
+            AND "smoking cessation"[tiab] AND randomized controlled trial[pt]
         - id: embase
           kind: bibliographic
           name: Embase
@@ -100,6 +103,7 @@ search_topics:
         - id: clinicaltrials_gov
           kind: registry
           name: ClinicalTrials.gov
+          strategy: '"nicotine replacement" AND "smoking cessation"'
         - id: ictrp
           kind: registry
           name: WHO ICTRP Search Portal

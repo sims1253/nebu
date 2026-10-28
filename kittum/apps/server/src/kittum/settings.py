@@ -78,6 +78,13 @@ class Settings:
     # `endpoint` calls the model server; `demo` replays the demo project's recorded answers, for
     # the end-to-end test and a demo without a model server.
     judge_backend: Literal["endpoint", "demo"] = "endpoint"
+    # The protocol assistant's model: a recipe ID served by one of `llm_endpoints`. Defaults to the
+    # judge's model, else the first endpoint's recipe.
+    assist_model: str | None = None
+    # `endpoint` calls the model server; `demo` replays the answers recorded in
+    # kittum/app/demo_data/assist, for the end-to-end test and a demo without a model server.
+    # Refused with `llm_replay`, which replays the assistant's answers from a recording of one's own.
+    assist_backend: Literal["endpoint", "demo"] = "endpoint"
     # The built workbench (`pnpm build` writes apps/web/dist). `kittum serve` serves it when set.
     web_dist: Path | None = None
     # A directory of recorded source responses (`kittum.gateway.RecordedTransport`), allowed only
@@ -116,7 +123,13 @@ class Settings:
                 Path(env["KITTUM_CHECKPOINT_KEY"]) if env.get("KITTUM_CHECKPOINT_KEY") else None
             ),
             judge_model=env.get("KITTUM_JUDGE_MODEL") or None,
-            judge_backend=_judge_backend(env.get("KITTUM_JUDGE_BACKEND", "endpoint")),
+            judge_backend=_backend(
+                "KITTUM_JUDGE_BACKEND", env.get("KITTUM_JUDGE_BACKEND", "endpoint")
+            ),
+            assist_model=env.get("KITTUM_ASSIST_MODEL") or None,
+            assist_backend=_backend(
+                "KITTUM_ASSIST_BACKEND", env.get("KITTUM_ASSIST_BACKEND", "endpoint")
+            ),
             web_dist=Path(env["KITTUM_WEB_DIST"]) if env.get("KITTUM_WEB_DIST") else None,
             gateway_recordings=(
                 Path(env["KITTUM_GATEWAY_RECORDINGS"])
@@ -142,7 +155,7 @@ def _flag(name: str, raw: str) -> bool:
     raise ValueError(f"{name} must be 1 or 0, not {raw!r}")
 
 
-def _judge_backend(raw: str) -> Literal["endpoint", "demo"]:
+def _backend(name: str, raw: str) -> Literal["endpoint", "demo"]:
     if raw not in ("endpoint", "demo"):
-        raise ValueError(f"KITTUM_JUDGE_BACKEND must be endpoint or demo, not {raw!r}")
+        raise ValueError(f"{name} must be endpoint or demo, not {raw!r}")
     return raw
