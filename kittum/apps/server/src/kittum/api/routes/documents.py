@@ -8,10 +8,11 @@ code points into the layer text; the browser converts its UTF-16 positions.
 from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response
+from pydantic import Field
 from starlette.concurrency import run_in_threadpool
 
 from kittum.api import Context  # noqa: TC001  FastAPI resolves it at runtime
-from kittum.core import Id, NotFoundError, Record, find_quote
+from kittum.core import Id, NotFoundError, Record
 from kittum.documents import (
     MAX_SCALE,
     MIN_SCALE,
@@ -28,6 +29,7 @@ from kittum.documents import (
     list_layers,
     make_anchor,
     page_words,
+    quote_spans,
     render_page,
     save_anchor,
 )
@@ -92,7 +94,8 @@ class PageWords(Record):
 
 class AnchorRequest(Record):
     quote: str
-    occurrence: int | None = None  # 0-based; required when the quote occurs more than once
+    # 0-based, among whole-token occurrences; required when the quote occurs more than once.
+    occurrence: Annotated[int, Field(ge=0)] | None = None
 
 
 def _not_found(e: NotFoundError) -> HTTPException:
@@ -209,9 +212,12 @@ def create_anchor(layer_id: Id, body: AnchorRequest, ctx: Context) -> Anchor:
             layer = get_layer(tx, layer_id, artifacts=ctx.artifacts)
         except NotFoundError as e:
             raise _not_found(e) from e
-        spans = find_quote(body.quote, layer.text)
+        # Whole tokens only, as `resolve` requires: an anchor must stay re-anchorable.
+        spans = quote_spans(layer.text, body.quote)
         if not spans:
-            raise HTTPException(status_code=404, detail="quote not found in the layer")
+            raise HTTPException(
+                status_code=404, detail="quote not found in the layer as whole words"
+            )
         if body.occurrence is None and len(spans) > 1:
             raise HTTPException(status_code=409, detail=f"quote occurs {len(spans)} times")
         index = body.occurrence or 0

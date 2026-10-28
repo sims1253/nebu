@@ -91,6 +91,12 @@ def test_api_refuses_what_it_cannot_serve(pg):
         assert client.get(f"/api/layers/{layer_id}/pages/14/words").status_code == 404
         missing = {"quote": "a sentence this trial never printed"}
         assert client.post(f"/api/layers/{layer_id}/anchors", json=missing).status_code == 404
+        anchors = f"/api/layers/{layer_id}/anchors"
+        # Part of a word ("andomi" in "randomised") cannot be re-anchored, so it is refused.
+        assert client.post(anchors, json={"quote": "andomi", "occurrence": 0}).status_code == 404
+        # A negative occurrence must not pick the last match.
+        repeated = {"quote": "1.0 (1.0, 2.0)", "occurrence": -1}
+        assert client.post(anchors, json=repeated).status_code == 422
         unknown = "01a18000-0000-7000-8000-000000000000"
         assert client.get(f"/api/documents/{unknown}").status_code == 404
         assert client.get(f"/api/anchors/{unknown}").status_code == 404

@@ -26,6 +26,7 @@ from kittum.documents.anchors import (
     compare_layers,
     make_anchor,
     page_words,
+    quote_spans,
     resolve,
 )
 from kittum.documents.docling_engine import DoclingParser, DoclingUnavailable, docling_available
@@ -120,6 +121,7 @@ __all__ = [
     "make_anchor",
     "ocr_available",
     "page_words",
+    "quote_spans",
     "recipe_hash",
     "remap",
     "render_page",

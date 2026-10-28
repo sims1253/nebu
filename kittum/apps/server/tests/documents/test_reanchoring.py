@@ -232,6 +232,21 @@ def test_whitespace_between_blocks_never_starves_the_context(pg):
     assert resolve(save_anchor(pg, make_anchor(old, span)), new).status == "exact"
 
 
+def test_a_quote_across_a_hyphenated_break_reanchors_onto_the_solid_word(pg):
+    old, new = _text_layers(
+        pg,
+        "Most trials found no evi-\ndence of harm in adults.",
+        "Most trials found no evidence of harm in adults.",
+    )
+    (span,) = find_quote("evidence of harm", old.text)
+    anchor = save_anchor(pg, make_anchor(old, span))
+    assert "-" in anchor.quote.exact  # the anchor keeps the printed, hyphenated form
+    resolution = resolve(anchor, new)
+    assert resolution.status in {"exact", "candidate"}
+    assert resolution.anchor is not None
+    assert new.text[resolution.anchor.start : resolution.anchor.end] == "evidence of harm"
+
+
 def test_a_changed_word_beside_the_quote_is_never_exact(pg):
     old, new = _text_layers(pg, "There were 12 nonfatal events.", "There were 12 fatal events.")
     (span,) = find_quote("12", old.text)

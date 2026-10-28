@@ -208,6 +208,26 @@ def _whole_tokens(text: str, span: Span) -> bool:
     return not (at(e - 1).isdigit() and at(e) in ".," and at(e + 1).isdigit())
 
 
+_LINE_END_HYPHEN = re.compile(r"(?<=[^\W\d_])-[ \t]*\n\s*(?=[^\W\d_])")
+
+
+def quote_spans(text: str, quote: str) -> tuple[Span, ...]:
+    """Where `quote` occurs in `text` as whole tokens ("fatal" is not in "nonfatal").
+
+    A quote copied across a hyphenated line break ("evi-\\ndence") is also looked up with the
+    word joined ("evidence") and with the hyphen kept ("non-small"), so it still matches text
+    that another engine spells solid.
+    """
+    variants = [quote]
+    if _LINE_END_HYPHEN.search(quote):
+        variants += [_LINE_END_HYPHEN.sub("", quote), _LINE_END_HYPHEN.sub("-", quote)]
+    for variant in variants:
+        spans = tuple(s for s in find_quote(variant, text) if _whole_tokens(text, s))
+        if spans:
+            return spans
+    return ()
+
+
 def _numbers(text: str) -> list[str]:
     return re.findall(r"\d+", text)
 
@@ -282,7 +302,7 @@ def resolve(anchor: Anchor, layer: Layer) -> Resolution:
         if layer.text[anchor.start : anchor.end] == anchor.quote.exact:
             return result("exact", anchor, "same_layer")
         return result("unresolved", None, "same_layer")
-    spans = [s for s in find_quote(anchor.quote.exact, layer.text) if _whole_tokens(layer.text, s)]
+    spans = quote_spans(layer.text, anchor.quote.exact)
     found = [make_anchor(layer, s) for s in spans]
 
     def placed(match: Anchor) -> str:
