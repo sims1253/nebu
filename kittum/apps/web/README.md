@@ -1,8 +1,10 @@
 # Reviewer workbench
 
-The screens from DESIGN.md "Reviewer workbench", built against a typed mock until the API serves
-them. `pnpm dev` runs it on the mock; `pnpm test` runs the keyboard flows in headless Chromium;
-`pnpm screenshots` (with `pnpm dev` running) writes `screenshots/`.
+The screens from DESIGN.md "Reviewer workbench", on the Kittum API. `pnpm dev` runs it against
+`kittum serve` (proxied on `/api`); `VITE_KITTUM_WORKBENCH=mock pnpm dev` runs it on recorded
+example data without a server. `pnpm test` runs the keyboard flows on the mock in headless
+Chromium; `pnpm e2e` runs the whole review on the real stack (see `e2e/stack.ts`); `pnpm
+screenshots` (with `VITE_KITTUM_WORKBENCH=mock pnpm dev` running) writes `screenshots/`.
 
 ## Design
 
@@ -37,11 +39,17 @@ key handler, and the theme.
 
 ## Data
 
-Screens use one interface, `Workbench` in `src/data/workbench.ts`. `src/data/schema.ts` mirrors
-the Python records of `kittum.protocol`, `screening`, `judge`, `documents`, and `extraction` in
-Effect Schema. `src/data/mock/` implements the interface on fixtures and decodes every response
-through the schemas, so a queue item can never carry AI output. `src/main.tsx` is the one place to
-swap in an implementation on `@kittum/contracts`.
+Screens use one interface, `Workbench` in `src/data/workbench.ts`. `src/data/api.ts` implements
+it on the client `@kittum/contracts` generates from the server's OpenAPI document, so server
+records arrive typed as the Pydantic models define them; `src/data/schema.ts` holds only what the
+screens compose from several responses and the extraction records, which the server does not serve
+yet. `src/data/mock/` implements the same interface on fixtures for the unit tests and decodes its
+answers through the generated schemas, so a queue item can never carry AI output. `src/main.tsx`
+picks the implementation.
+
+Who is at the workbench comes from `src/screens/project.tsx`: the person chosen on the project's
+picker (remembered per browser tab, or `?as=<actor ID>`), passed to every call that depends on who
+asks. There is no sign-in yet, and the picker says so.
 
 Fixtures, recorded once by the scripts in `scripts/`:
 
@@ -50,21 +58,13 @@ Fixtures, recorded once by the scripts in `scripts/`:
 - `abc06/`: the ABC-06 trial (Lancet Oncol 2021, CC BY 4.0) rendered with PyMuPDF to page PNGs,
   word boxes, mentions per criterion, and the anchors of the extraction values.
 
-## What the API must provide
+## What the API still lacks
 
-Beyond today's backend records:
+The rest of the earlier list is served now (WP-15).
 
 | Need | Where | Why |
 | --- | --- | --- |
-| A batch of the next assignments after a given one | `ScreeningService` (WP-09) | The queue keeps five records ahead; `next()` returns one. |
-| Record facts on `QueueItem`: journal, year, publication types, registry IDs, PMID, DOI, title highlights, structured-abstract sections as code-point ranges | WP-07, WP-09 | Shown above the abstract; Methods come first. |
-| `status` on `Reveal` (`met`, `not_met`, `unclear`) | WP-09 | The banner says what the AI read, not only which criterion. |
-| `DecideResult.phase` is `final` when no reveal follows, and a `revision` | WP-09 | The queue moves on at once when the AI agrees; undo re-decides with `expected_revision`. |
-| Timing with each decision: shown, first key, decided, reveal shown | WP-09 | DESIGN.md "Metrics". |
-| Review profile labels on the protocol (`profile.labels`) | WP-03 | The core is domain-neutral; a profile renames "population", "report", and so on. |
-| A layer summary (page sizes, text) and per-page words and PNGs | WP-10 | The viewer loads words per page, not the whole layer. |
-| Mentions per full-text criterion as anchors, in document order | WP-03, WP-10 | `[` and `]` walk them. |
-| Per-criterion verdicts with evidence anchors on a full-text decision | WP-09 | `Decision` carries only the reason and a flat anchor list. |
-| Anchors created from a reviewer's selection | WP-10 | Enter adopts a selection; offsets are code points. |
 | Extraction fields as both paths' proposals per semantic key, with accept recording the path and source-view time | WP-11 | The review groups by key and gates Enter on the source. |
-| Who the reviewer is and which scope they screen | WP-15 | `ProjectSummary.scope_id` stands in for assignment. |
+| Report targets and their rendering | WP-14 | The Reports screen. |
+| The evidence quotes of a full-text column in adjudication | WP-09, WP-15 | Adjudication shows how many spans each reviewer cited, not which. |
+| Authentication | WP-15 | `X-Kittum-Reviewer` is a stand-in. |

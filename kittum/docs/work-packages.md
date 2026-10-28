@@ -26,8 +26,8 @@ The two-week spike in [DESIGN.md](../DESIGN.md#two-week-spike) picks from these 
 | 12 | `appraisal` | Types done; open |
 | 13 | `stats` | Done: intervals, stopping, capture-recapture, conformal threshold, agreement |
 | 14 | `report` | Done: PRISMA flow, RIS, search report, AI disclosure, bundle exporters and `seal_bundle`, `gba_amnog` targets, routes; open items listed |
-| 15 | `api` | Health route done; open |
-| 16 | Workbench | Design system, title and abstract queue, full-text and extraction layouts on a typed mock; API wiring open |
+| 15 | `api`, `app` | Done: composition root, project lifecycle (service, routes, CLI), `serve` with the workbench, `worker`, `demo seed`; authentication open |
+| 16 | Workbench | Done: wired to the API with a reviewer picker; screening, full text, adjudication, progress, protocol, search, studies, report rendering and sealing; end-to-end journey in CI. Extraction review on the server waits on WP-11's screen wiring |
 | 17 | Evaluation harness | Open |
 
 ## WP-01 Ledger
@@ -678,10 +678,85 @@ Left open:
 
 ## WP-15 API
 
-Module `kittum.api`. Needs: the modules it exposes.
+Modules `kittum.api` and `kittum.app`. Needs: the modules it exposes.
 
 - Routes for the workbench screens, thin over module services. Regenerate contracts after each
   change.
+
+**Done** (branch `kittum/wp-15-integration`, on WP-09):
+
+- `kittum.app` is the composition root, an entry point like `api` and `cli` (`"app": {"*"}` in
+  the architecture test). `AppContext` moved there; `kittum.api` re-exports it.
+  `AppContext.from_settings` builds the Postgres ledger, the filesystem artifact store, the
+  `SourceGateway` (default policies, `HttpxTransport` with the contact email), and the screening
+  `Judge` from `Settings.llm_endpoints` and the recipe registry. A hosted judge recipe is refused
+  at start (screening records are `local_only`); the backends refuse each call as before.
+- Settings: `KITTUM_JUDGE_MODEL`, `KITTUM_JUDGE_BACKEND` (`endpoint`, or `demo` to replay the
+  demo's recorded answers), `KITTUM_WEB_DIST`; all listed in `kittum/.env.example`.
+- `kittum serve` serves the API and, with `KITTUM_WEB_DIST` or `--web-dist`, the built workbench
+  (files under `/assets` immutable, `index.html` for every other non-API path).
+  `kittum worker` runs a `Worker` with every registered job kind: `register_job_handler(kind,
+  factory)` is the seam extraction (WP-11) plugs into; the judge registers itself. A judge worker
+  refuses, before any model call, the jobs of a stage that names another judge config.
+- The project lifecycle (`kittum.app.lifecycle`), each step a function on the caller's
+  transaction with a ledger event, a route, and a `kittum project` command: create a project and
+  its lead, add people with roles (lead, reviewer, auditor, adjudicator; migration
+  `20261029040000_app_projects.sql`, table `project_member`), publish a protocol, run or import
+  searches (the search routes), ingest the corpus (once; update searches need the corpus diff),
+  attach full texts (table `full_text`, event `project.full_text_attached`), open a stage, and
+  progress. A stage takes its screeners, auditor, and adjudicators from the people; title and
+  abstract screens every report of the newest identity revision; full text every record included
+  at title and abstract that has a full text, with sentinels from the project's sentinel full
+  texts (`attach_sentinel_full_text`). Opening a stage enqueues the judge.
+- `kittum demo seed [--live] [--no-wait] [--json]`: the nicotine replacement example (no
+  profile), a PubMed search replayed from a recording (`scripts/record_demo_search.py`, 20
+  records), an example CENTRAL export with one duplicate of a PubMed record (confirmed by the lead
+  in the seed), a citation search with the two CC BY trials and a registry entry that shares the
+  Lesotho trial's NCT number (a pending study link for the Studies screen), both PDFs as full
+  texts, the Vitamin C PDF as a full-text sentinel, five people, and an open title and abstract
+  stage. Recorded answers (`demo_data/judge_answers.json`) are what `qwen3.5:4b` on Ollama
+  answered (`scripts/record_demo_answers.py`).
+- Server additions for the workbench, each in its module's route file:
+  - `projects.py`: `GET/POST /api/projects`, `GET /api/projects/{id}`, `POST .../members`,
+    `POST .../full-texts/{item_ref}` (PDF body), `GET .../progress` (identification counts and
+    each stage as the viewer may see it; outcomes for the lead only).
+  - `ledger.py`: `GET .../ledger/verify` (the report and event counts by type; events themselves
+    are not served, since their payloads hold every reviewer's decisions).
+  - `screening.py`: `GET/POST .../screening/stages`, `GET .../assignments/{id}/full-text` (the
+    document, layer, and protocol-term mentions per criterion, from `kittum.app.fulltext`). Rule
+    violations (422) now use FastAPI's validation-error shape, so the generated client decodes
+    them.
+  - `corpus.py`: `POST .../corpus/ingest`, `GET .../corpus/revisions/latest`.
+  - `protocol.py`: `GET .../protocol` (the published version with the profile's labels for core
+    concepts, the core's words otherwise).
+  - `documents.py`: `POST /api/layers/{id}/anchors` takes `start` to anchor a mention or a
+    selection at its offset.
+- Module additions the wiring needed: `corpus.latest_revision` and `corpus.reports` (the read
+  WP-09 asked for; `CorpusReport` carries the source records); `Screening.stages`, `.stage`, and
+  `.assignment_source` (the item reference stays server-side, since a sentinel's names it);
+  `documents.derive` restores a layer whose JSON the artifact store lacks by parsing again, and
+  refuses if the output hash differs (a database paired with another store used to fail on read).
+- Tests: `tests/app/test_lifecycle.py` drives a project from nothing to an open stage over HTTP,
+  with the judge-mismatch refusal; the end-to-end journey (WP-16) covers the rest on the real
+  stack.
+
+Open:
+
+- Authentication. `X-Kittum-Reviewer` (screening, progress) and the `actor_id` fields in request
+  bodies are stand-ins: anyone who can reach the API can act as anyone. The workbench says so.
+- Identity revisions after a stage opens (a confirmed link, a merge) do not reach the open stage,
+  which keeps the reports it opened with. Update searches need the corpus diff (WP-07).
+- One judge per deployment: a worker runs one judge config, and opening a stage uses it. A
+  stage with another config needs a worker started with it; a mismatched worker fails the jobs
+  for good (they need requeueing by hand).
+- The full-text waterfall's automatic sources (WP-10) should attach through `attach_full_text`;
+  only uploads and the demo do now. Full-text sentinels need a PDF each.
+- Extraction (WP-11, PR #39) adds `queue` and `receipts` to `AppContext` in `api/__init__.py`;
+  move them to `kittum/app/context.py` when merging. Its jobs register with
+  `register_job_handler`; its screen's `Workbench.extraction` and `accept` return "not served
+  yet" in `apps/web/src/data/api.ts`. Reports (WP-14) get a route file and a screen in the same
+  way; the Reports nav entry is a placeholder.
+- `kittum serve` runs one uvicorn process; production needs a process manager and TLS in front.
 
 ## WP-16 Workbench
 
@@ -691,36 +766,60 @@ Module `kittum.api`. Needs: the modules it exposes.
   keyboard flow. Base UI for components, Legend List for queues, server-rendered PDF pages with
   word-box text layers for full text.
 
-Done (branch `kittum/wp-16-workbench-design`):
+Done (branch `kittum/wp-16-workbench-design`, then `kittum/wp-15-integration`):
 
 - Design system: tokens for light and dark, IBM Plex Sans with its condensed width, keycaps, the
   status vocabulary, and the evidence marker that pairs a selected item with its source.
   `apps/web/README.md` describes it.
-- Project switcher and stage navigation (`g` then a letter). Protocol, Search, Studies, Risk of
-  bias, Progress, and Reports are placeholders that say what they will show and what they wait on.
-  Profile labels (population, report, and so on) come from the protocol, never from the code.
-- Title and abstract queue, complete: human first, reveal only on disagreement after a
-  provisional decision, `i`, `e` then `1`-`9`, `u`, Backspace, Space, five records prefetched,
-  protocol-term and entity highlights, criteria strip, and per-item timing sent with each
-  decision.
-- Full-text screening: page images with an invisible word-box text layer, criteria with
-  mentions in document order, `[` and `]`, Enter to adopt a mention or a selection, `y` `n` `?`,
-  and `i` `e` `x` once every criterion has a verdict.
-- Extraction review: fields by endpoint, arm, and timepoint; value, unit, status, path agreement,
-  and validators; the source region on the page; Enter accepts only after the source was on
-  screen; `1` or `2` picks a path; `e` edits from a selection.
-- A typed mock (`apps/web/src/data/`) behind one `Workbench` interface, on recorded PubMed
-  records and the open-access ABC-06 trial rendered with PyMuPDF.
-- Browser tests in Vitest browser mode on Chromium, and screenshots in `apps/web/screenshots/`.
+- `Workbench` (`src/data/workbench.ts`) has two implementations: `src/data/api.ts` on the
+  generated client in `@kittum/contracts` (development and production) and the mock on recorded
+  fixtures (unit tests; `VITE_KITTUM_WORKBENCH=mock` for a server-less look). Calls that depend on
+  who asks take the reviewer's actor ID, sent as `X-Kittum-Reviewer`. Server records come typed
+  from the contracts; `src/data/schema.ts` keeps only what the screens compose.
+- Who is at the workbench: a picker of the project's people, remembered per tab (two reviewers
+  side by side in two tabs), `?as=` on any URL, and a header chip to switch. It says plainly that
+  there is no sign-in. Each person starts where their work is.
+- Title and abstract queue on the server: five prefetched, decide, reveal on disagreement after
+  the reviewer's own decision, keep or revise, Backspace reopens and a new decision undoes the old
+  one on the server, an item awaiting a final decision comes back with its reveal, and a queue
+  that waits for the AI judge says so instead of "finished". The auditor screens here too.
+- Full text on the server: page PNGs and word boxes from the documents routes, protocol-term
+  mentions per criterion, `Enter` saves a mention or a selection as an anchor, the decision
+  carries a reading and evidence per criterion, the AI's reading after a provisional decision
+  (keep with `Space`), and the next full text.
+- Adjudication: the record with the pseudonymized columns side by side, `1`/`2` adopt, `i` `e`
+  `u` own decision, the AI column after the commit, `Space` next.
+- Progress: the PRISMA-style flow (identification by source, duplicates, per stage screened,
+  excluded, in conflict, waiting, included; full texts; studies), and for the lead agreement
+  (kappa, PABAK; human pairs and human-AI), reveals, extra screens, sentinels, the audit gauge
+  with the elusion bound, and the ledger check; `n` opens full-text screening for a scope.
+  Reviewers see their own counts only.
+- Protocol (read only, with profile labels), Search (executions, counts, line-numbered
+  strategies, the platform's translation), Studies (proposals first; `Enter` confirm, `x` mark,
+  `m` merge, `s` split; lead only).
+- End to end: `apps/web/e2e/review.spec.ts` (Playwright, `pnpm --dir apps/web e2e`, CI job
+  `kittum-e2e`) seeds the demo and starts `kittum serve` and `kittum worker` with the recorded
+  judge, then runs one journey: reviewer A screens by keyboard with an undo and a reveal (nothing
+  of the AI on screen before A decides); reviewer B screens and every screening response B
+  received is checked for A's ID and for AI rationales outside B's own reveals; the auditor gets
+  the AI-only disagreements; the adjudicator decides with no AI output on the page and then sees
+  it; the lead checks the flow, the excluded and included counts, conflicts, extra screens, and
+  kappa, and opens full text; both reviewers and the auditor screen the real Lesotho PDF and the
+  full-text sentinel with adopted evidence; the lead confirms the study link; studies drop from 29
+  to 28, the full-text extra screen is upheld, and the ledger verifies in the UI and with
+  `kittum ledger verify`.
+- Browser unit tests in Vitest browser mode on the mock, and screenshots in `apps/web/screenshots/`.
 
 Left:
 
-- Implement `Workbench` on the generated client once WP-15 serves these routes, and delete the
-  mock. The README lists what the API must add to the backend records.
-- Adjudication and AI-exclusion audit screens; the placeholder screens.
-- The full-text judge reveal, per-criterion verdict storage, and grounding exceptions.
+- Extraction review on the server (WP-11) and the Reports, Risk of bias, and AI-exclusion audit
+  screens; the full-text judge's per-criterion reading in adjudication; grounding exceptions.
+- Adjudication shows a full-text column's evidence as counts, not the quotes on the page.
+- Opening stages other than full text, adding people, and publishing a protocol happen in the CLI
+  or the API; the workbench has no forms for them yet.
 - A session break suggestion after a missed sentinel or a speed-up with an include-rate change.
 - Third-party licence notices for the web bundle (`licenses:sync`).
+- `scripts/screenshots.ts` still shoots the mock; point it at a seeded server.
 
 ## WP-17 Evaluation harness
 
