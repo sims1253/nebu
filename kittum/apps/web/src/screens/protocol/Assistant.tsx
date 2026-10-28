@@ -260,9 +260,10 @@ export function Assistant({
         working,
         selected: current?.id ?? null,
         shown: working ?? (current ? { doc: docOf(current), base: current } : null),
-        ready: revisions !== null && !saving && !drafting,
+        // An open draft box or a failed draft holds the lead's description; a switch would drop it.
+        ready: revisions !== null && !saving && !drafting && !describing && failed === null,
       }),
-    [onCurrent, working, current, revisions, saving, drafting],
+    [onCurrent, working, current, revisions, saving, drafting, describing, failed],
   );
 
   const step = (by: number) => {

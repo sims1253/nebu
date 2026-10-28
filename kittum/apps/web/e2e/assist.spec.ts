@@ -63,6 +63,8 @@ test("a lead drafts with the model, sees what it wrote, steps back, restores, an
     await expect(page.getByRole("heading", { name: "Describe the review" })).toBeVisible();
     const box = page.getByLabel("Description of the review");
     await box.fill(description);
+    // A switch to YAML would drop the description, so the tab waits for the draft.
+    await expect(page.getByRole("tab", { name: "YAML" })).toBeDisabled();
     await shoot(page, "01-describe");
     await box.press("Control+Enter");
     await expect(rail).toHaveCount(1);
