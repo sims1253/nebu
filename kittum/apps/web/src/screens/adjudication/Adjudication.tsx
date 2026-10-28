@@ -1,7 +1,9 @@
 // Adjudication (DESIGN.md, "Reviewer workbench"): the record with the reviewers' final decisions
 // side by side, pseudonymized as A, B, ... The adjudicator adopts a column or decides themselves;
-// only then does the AI's reading open, so it cannot anchor them. The queue holds human
-// disagreements only, so being in it says nothing about the AI.
+// only then does the AI's reading open, so it cannot anchor them. Each criterion of it shows its
+// verdict, rationale, and quote; `,` and `.` step through them, and the record marks the verified
+// quote of the one in view. The queue holds human disagreements only, so being in it says nothing
+// about the AI.
 import { useRouteContext } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
@@ -10,7 +12,9 @@ import type {
   AdjudicationItem,
   AdjudicationResult,
   Criterion,
+  CriterionVerdict,
   Outcome,
+  QuoteSpan,
   ReviewerColumn,
   StageInfo,
 } from "../../data/schema.ts";
@@ -20,7 +24,8 @@ import { Key, KeyHint } from "../../ui/Key.tsx";
 import { useKeys } from "../../ui/keys.ts";
 import { OUTCOMES, Status, VERDICTS } from "../../ui/Status.tsx";
 import { useProject } from "../project.tsx";
-import { Marked, orderSections } from "../screening/RecordText.tsx";
+import { AiReading } from "../screening/AiReading.tsx";
+import { Marked, orderSections, placeQuote } from "../screening/RecordText.tsx";
 
 interface Conflict {
   readonly stage: StageInfo;
@@ -52,7 +57,8 @@ export function AdjudicationQueue() {
     ).then(
       (lists) => live && setConflicts(lists.flat()),
       (e: unknown) =>
-        live && setError(e instanceof WorkbenchError ? e.message : "The conflicts could not load."),
+        live &&
+        setError(e instanceof WorkbenchError ? e.message : "Kittum could not load the conflicts."),
     );
     return () => {
       live = false;
@@ -63,18 +69,18 @@ export function AdjudicationQueue() {
     return (
       <Message title="Nothing to adjudicate">
         You adjudicate no screening stage of this review. The methods lead names the adjudicators
-        when a stage opens.
+        when opening a stage.
       </Message>
     );
   }
-  if (error) return <Message title="The conflicts could not load">{error}</Message>;
+  if (error) return <Message title="Kittum could not load the conflicts">{error}</Message>;
   if (conflicts === null) return <Message title="Loading the conflicts" />;
   const [first] = conflicts;
   if (!first) {
     return (
       <Message title="No open conflicts">
-        When two people screen a record differently, it comes here, with their decisions side by
-        side and without the AI&rsquo;s reading.
+        A record comes here when two people screen it differently. You see their decisions side by
+        side, and the AI&rsquo;s reading only after you decide.
       </Message>
     );
   }
@@ -108,48 +114,88 @@ function ConflictView({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [result, setResult] = useState<AdjudicationResult | null>(null);
+  // The AI criterion in view once its column is open; its quote is marked in the record.
+  const [aiIndex, setAiIndex] = useState(0);
   const [shownAt] = useState(() => new Date().toISOString());
 
   const commit = useCallback(
     async (choice: { adopted: string } | { outcome: Outcome; reason: string | null }) => {
       if (busy || result) return;
+      const own = "outcome" in choice;
+      // At full text an own exclusion cites evidence for its criterion. The adjudicator has no
+      // page here, so it cites what the reviewers adopted for that criterion.
+      const cited =
+        own && choice.reason
+          ? item.columns.flatMap((c) =>
+              c.criteria
+                .filter((r) => r.criterion_id === choice.reason && r.status === "not_met")
+                .flatMap((r) => r.evidence_anchor_ids ?? []),
+            )
+          : [];
+      const anchors = [...new Set(cited)];
+      if (own && stage.stage === "full_text" && choice.outcome === "exclude" && !anchors.length) {
+        setNotice(
+          `No reviewer cited evidence that ${criterionLabel(choice.reason ?? "", criteria, labels)} is not met. Adopt a column, or include.`,
+        );
+        return;
+      }
       const now = new Date().toISOString();
       setBusy(true);
       setNotice(null);
       try {
-        const own = "outcome" in choice;
-        setResult(
-          await run(
-            workbench.adjudicate({
-              projectId: project.id,
-              as: me.actor_id,
-              conflictId: item.conflict_id,
-              expectedEtag: item.etag,
-              adopted: own ? null : choice.adopted,
-              decision: own
-                ? {
-                    outcome: choice.outcome,
-                    reason_criterion_id: choice.reason,
-                    evidence_anchor_ids: [],
-                    comment: null,
-                  }
-                : null,
-              timing: {
-                shown_at: shownAt,
-                first_key_at: now,
-                decided_at: now,
-                reveal_shown_at: null,
-              },
-            }),
-          ),
+        const decided = await run(
+          workbench.adjudicate({
+            projectId: project.id,
+            as: me.actor_id,
+            conflictId: item.conflict_id,
+            expectedEtag: item.etag,
+            adopted: own ? null : choice.adopted,
+            decision: own
+              ? {
+                  outcome: choice.outcome,
+                  reason_criterion_id: choice.reason,
+                  evidence_anchor_ids: anchors,
+                  comment: null,
+                  criteria:
+                    stage.stage === "full_text" && choice.reason
+                      ? [
+                          {
+                            criterion_id: choice.reason,
+                            status: "not_met",
+                            evidence_anchor_ids: anchors,
+                          },
+                        ]
+                      : [],
+                }
+              : null,
+            timing: {
+              shown_at: shownAt,
+              first_key_at: now,
+              decided_at: now,
+              reveal_shown_at: null,
+            },
+          }),
         );
+        setAiIndex(firstToShow(decided.ai.criteria, decided.ai.quote_spans));
+        setResult(decided);
       } catch (e) {
-        setNotice(e instanceof WorkbenchError ? e.message : "The decision was not recorded.");
+        setNotice(e instanceof WorkbenchError ? e.message : "Kittum did not record the decision.");
       } finally {
         setBusy(false);
       }
     },
-    [busy, result, workbench, project.id, me.actor_id, item, shownAt],
+    [
+      busy,
+      result,
+      workbench,
+      project.id,
+      me.actor_id,
+      item,
+      shownAt,
+      stage.stage,
+      criteria,
+      labels,
+    ],
   );
 
   useKeys((event) => {
@@ -158,6 +204,11 @@ function ConflictView({
     if (result) {
       if (key === " ") {
         onNext();
+        return true;
+      }
+      if (key === "," || key === ".") {
+        const count = result.ai.criteria.length;
+        if (count > 0) setAiIndex((i) => (i + (key === "." ? 1 : count - 1)) % count);
         return true;
       }
       return false;
@@ -180,7 +231,7 @@ function ConflictView({
         return true;
       case "u":
         if (stage.stage === "full_text") {
-          setNotice("At full text, decide include or exclude, or adopt a column.");
+          setNotice("At full text, include, exclude on a criterion, or adopt a column.");
           return true;
         }
         void commit({ outcome: "unclear", reason: null });
@@ -204,7 +255,14 @@ function ConflictView({
         </span>
       </div>
       <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_minmax(420px,40%)]">
-        <RecordPane item={item} />
+        <RecordPane
+          item={item}
+          quote={
+            result
+              ? (result.ai.quote_spans[result.ai.criteria[aiIndex]?.criterion_id ?? ""] ?? null)
+              : null
+          }
+        />
         <aside
           className="flex min-h-0 flex-col overflow-y-auto border-l border-rule-strong bg-sheet"
           aria-label="Decisions"
@@ -224,7 +282,9 @@ function ConflictView({
               />
             ))}
           </div>
-          {result ? <AiColumn result={result} criteria={criteria} labels={labels} /> : null}
+          {result ? (
+            <AiColumn result={result} criteria={criteria} labels={labels} active={aiIndex} />
+          ) : null}
         </aside>
       </div>
       <footer className="border-t border-rule-strong bg-sheet-2">
@@ -237,7 +297,8 @@ function ConflictView({
                 : ""}
             </Status>
             <span className="text-ink-2">The decision is final.</span>
-            <span className="ml-auto">
+            <span className="ml-auto flex items-center gap-4">
+              <KeyHint keys={[",", "."]}>The AI&rsquo;s criteria</KeyHint>
               <KeyHint keys={[" "]}>Next conflict</KeyHint>
             </span>
           </div>
@@ -252,14 +313,16 @@ function ConflictView({
             <KeyHint keys={["i"]}>{OUTCOMES.include.label}</KeyHint>
             <span className="text-exclude">
               <KeyHint keys={["e"]} on={armed}>
-                {armed ? `Exclude: now 1 to ${criteria.length}` : "Exclude on a criterion"}
+                {armed
+                  ? `Now press 1 to ${criteria.length} for the criterion`
+                  : "Exclude on a criterion"}
               </KeyHint>
             </span>
             {stage.stage === "title_abstract" ? (
               <KeyHint keys={["u"]}>{OUTCOMES.unclear.label}</KeyHint>
             ) : null}
             <span className="ml-auto truncate text-ink-2" aria-live="polite">
-              {notice ?? (busy ? "Recording." : "The AI's reading opens after you decide.")}
+              {notice ?? (busy ? "Recording." : "The AI's reading appears after you decide.")}
             </span>
           </div>
         )}
@@ -281,10 +344,17 @@ const criterionLabel = (
   return criterion ? `${index + 1} ${labels[criterion.slot] ?? criterion.slot}` : id;
 };
 
-function RecordPane({ item }: { item: AdjudicationItem }) {
+function RecordPane({ item, quote }: { item: AdjudicationItem; quote: QuoteSpan | null }) {
   const at = useMemo(() => codePointIndex(item.text), [item.text]);
   const sections = orderSections(item.record.sections);
   const facts = [item.record.journal, item.record.year].filter(Boolean).join(", ");
+  const placed = placeQuote(item.title, item.text, quote);
+  // A full text is long: show its start, and as far as the marked quote.
+  const shown = Math.max(4000, (placed.text?.[1] ?? 0) + 400);
+  useEffect(() => {
+    if (!quote) return;
+    document.querySelector("[data-reveal-quote]")?.scrollIntoView({ block: "center" });
+  }, [quote]);
   return (
     <article className="overflow-y-auto bg-sheet px-10 pt-7 pb-10" aria-label="Record">
       <p className="text-xs text-ink-2">{facts}</p>
@@ -292,7 +362,7 @@ function RecordPane({ item }: { item: AdjudicationItem }) {
         className="mt-2 max-w-[68ch] text-xl font-semibold tracking-[-0.01em] text-balance"
         data-testid="record-title"
       >
-        {item.title}
+        <Marked text={item.title} highlights={[]} quote={placed.title} describe={() => ""} />
       </h1>
       {sections.length > 0 ? (
         <div className="mt-5 grid max-w-[72ch] gap-y-3">
@@ -304,16 +374,25 @@ function RecordPane({ item }: { item: AdjudicationItem }) {
                 from={at(section.start)}
                 to={at(section.end)}
                 highlights={[]}
-                quote={null}
+                quote={placed.text}
                 describe={() => ""}
               />
             </p>
           ))}
         </div>
-      ) : (
+      ) : item.text ? (
         <p className="mt-5 max-w-[72ch] text-md whitespace-pre-line">
-          {item.text.length > 4000 ? `${item.text.slice(0, 4000)}…` : item.text || "No abstract."}
+          <Marked
+            text={item.text}
+            to={Math.min(item.text.length, shown)}
+            highlights={[]}
+            quote={placed.text}
+            describe={() => ""}
+          />
+          {item.text.length > shown ? "…" : ""}
         </p>
+      ) : (
+        <p className="mt-5 text-md text-ink-3">This record has no abstract.</p>
       )}
     </article>
   );
@@ -374,39 +453,73 @@ function Column({
   );
 }
 
+/** The criterion to show first: a verified reason to exclude, then any placed quote. */
+const firstToShow = (
+  criteria: ReadonlyArray<CriterionVerdict>,
+  spans: Readonly<Record<string, QuoteSpan>>,
+) => {
+  const placed = (c: CriterionVerdict) => c.criterion_id in spans;
+  const index = criteria.findIndex((c) => c.status === "not_met" && placed(c));
+  return index >= 0 ? index : Math.max(0, criteria.findIndex(placed));
+};
+
 function AiColumn({
   result,
   criteria,
   labels,
+  active,
 }: {
   result: AdjudicationResult;
   criteria: ReadonlyArray<Criterion>;
   labels: Record<string, string>;
+  active: number;
 }) {
   return (
     <section className="reveal-enter px-4 pt-3 pb-4" aria-label="AI judge" data-testid="ai-column">
       <h2 className="text-sm font-semibold">The AI judge&rsquo;s reading</h2>
       <p className="mt-0.5 text-xs text-ink-3">
         {result.ai.excludes
-          ? "It proposed an exclusion with a verified quote."
-          : "It proposed no verified exclusion."}
+          ? "It found a reason to exclude, with a quote Kittum verified."
+          : "It found no reason to exclude that Kittum could verify."}
       </p>
-      <ul className="mt-2 grid gap-2">
-        {result.ai.criteria.map((c) => (
-          <li key={c.criterion_id} className="text-xs">
-            <Status term={VERDICTS[c.status]}>
-              {criterionLabel(c.criterion_id, criteria, labels)}
-            </Status>
-            {c.downgraded_from ? (
-              <span className="ml-2 text-ink-3">
-                said {VERDICTS[c.downgraded_from].label.toLowerCase()}; the quote check did not hold
-              </span>
-            ) : null}
-            {c.quote ? <p className="mt-0.5 text-ink-2">&ldquo;{c.quote}&rdquo;</p> : null}
-            <p className="mt-0.5 text-ink-3">{c.rationale}</p>
-          </li>
-        ))}
-      </ul>
+      <ol className="mt-2 grid gap-1">
+        {result.ai.criteria.map((c, i) => {
+          const index = criteria.findIndex((x) => x.id === c.criterion_id);
+          const criterion = criteria[index];
+          const span = result.ai.quote_spans[c.criterion_id];
+          return (
+            <li
+              key={c.criterion_id}
+              aria-current={i === active || undefined}
+              className={`rounded-[2px] px-2 py-1.5 ${i === active ? "evidence-item" : ""}`}
+            >
+              <AiReading
+                criterion={{
+                  number: criterion ? index + 1 : null,
+                  label: criterion ? (labels[criterion.slot] ?? criterion.slot) : c.criterion_id,
+                  text: criterion?.text_en ?? null,
+                }}
+                status={c.status}
+                downgradedFrom={c.downgraded_from}
+                rationale={c.rationale}
+                quote={c.quote ?? null}
+                verified={c.quote_verified}
+                markedAt={
+                  !span
+                    ? null
+                    : i !== active
+                      ? "Press , or . to mark it in the record."
+                      : span.part === "title"
+                        ? "Marked in the title."
+                        : "Marked in the record."
+                }
+                marked={i === active}
+                compact
+              />
+            </li>
+          );
+        })}
+      </ol>
     </section>
   );
 }

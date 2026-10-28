@@ -252,7 +252,7 @@ export function useQueue(
   const undo = useCallback(() => {
     if (busy) return;
     if (current?.reveal && !current.settled) {
-      setNotice("The AI's reading is already shown. Keep your decision with Space, or revise it.");
+      setNotice("The AI's reading is already shown. Keep your decision with Space, or change it.");
       return;
     }
     const previous = history.at(-1);

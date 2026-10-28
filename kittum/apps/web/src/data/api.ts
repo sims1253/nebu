@@ -129,6 +129,16 @@ const decisionBody = (d: Decision) => ({
 
 const timingBody = (t: DecisionTiming) => t;
 
+/** A server anchor as the viewer reads it. */
+const anchorView = (a: KittumApi.Anchor) => ({
+  id: a.id,
+  layer_id: a.layer_id,
+  quote: { exact: a.quote.exact, prefix: a.quote.prefix ?? "", suffix: a.quote.suffix ?? "" },
+  start: a.start,
+  end: a.end,
+  boxes: a.boxes,
+});
+
 // The protocol, as the screens read it.
 
 type Localized = { readonly [language: string]: string };
@@ -424,22 +434,7 @@ export const makeApiWorkbench = (): Workbench => ({
             pages: view.pages.map((p) => ({ page: p.number, width: p.width, height: p.height })),
           },
           mentions: source.mentions.map(
-            (m) =>
-              [
-                m.criterion_id,
-                m.mentions.map((a) => ({
-                  id: a.id,
-                  layer_id: a.layer_id,
-                  quote: {
-                    exact: a.quote.exact,
-                    prefix: a.quote.prefix ?? "",
-                    suffix: a.quote.suffix ?? "",
-                  },
-                  start: a.start,
-                  end: a.end,
-                  boxes: a.boxes,
-                })),
-              ] as const,
+            (m) => [m.criterion_id, m.mentions.map(anchorView)] as const,
           ),
         };
       }),
@@ -462,14 +457,25 @@ export const makeApiWorkbench = (): Workbench => ({
 
   adopt: ({ layerId, quote, start }) =>
     call((api) => api.createAnchor(layerId, { payload: { quote, start } })).pipe(
-      Effect.map((a) => ({
-        id: a.id,
-        layer_id: a.layer_id,
-        quote: { exact: a.quote.exact, prefix: a.quote.prefix ?? "", suffix: a.quote.suffix ?? "" },
-        start: a.start,
-        end: a.end,
-        boxes: a.boxes,
-      })),
+      Effect.map(anchorView),
+    ),
+
+  aiQuote: ({ projectId, as, assignmentId }) =>
+    call((api) =>
+      api.getScreeningAssignmentFullText(projectId, assignmentId, { params: reviewer(as) }),
+    ).pipe(Effect.map((source) => (source.ai_quote ? anchorView(source.ai_quote) : null))),
+
+  wrongDocument: ({ projectId, as, assignmentId, expectedEtag, documentId, note }) =>
+    call((api) =>
+      api.markScreeningWrongDocument(projectId, assignmentId, {
+        params: reviewer(as),
+        payload: {
+          command_id: commandId(),
+          expected_etag: expectedEtag,
+          document_id: documentId,
+          note,
+        },
+      }),
     ),
 
   adjudications: ({ projectId, as, scopeId, stage }) =>

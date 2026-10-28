@@ -268,18 +268,23 @@ const KEYS: ReadonlyArray<{
     screen: "Full text",
     keys: [
       [["↑", "↓"], "Choose the active criterion"],
-      [["[", "]"], "Previous or next mention"],
+      [[",", "."], "Previous or next mention"],
       [["Enter"], "Adopt the mention or selection as evidence"],
-      [["y", "n", "?"], "Met, not met, unclear"],
-      [["i", "e", "x"], "Include, exclude, insufficient information"],
+      [["y", "n", "?"], "Met, not met, unclear, if you want a verdict"],
+      [["i"], "Include, which says every criterion is met"],
+      [["e", "1–9"], "Exclude on the criterion the report fails"],
+      [["x", "1–9"], "Insufficient information on a criterion"],
+      [["w"], "The PDF is the wrong document"],
+      [["q"], "Show the AI's quote on the page, once it is shown"],
     ],
   },
   {
     screen: "Adjudication",
     keys: [
       [["1", "2"], "Adopt reviewer A's or B's decision"],
-      [["i", "e", "u"], "Your own decision; e then 1 to 9 for the criterion"],
-      [[" "], "Next conflict, once the AI column is shown"],
+      [["i", "e", "u"], "Your own decision. After e, press 1 to 9 for the criterion"],
+      [[",", "."], "Previous or next criterion of the AI's reading, after you decide"],
+      [[" "], "Next conflict, after you decide"],
     ],
   },
   {

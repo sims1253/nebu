@@ -58,9 +58,18 @@ export const expectNothingLeaked = (responses: ReadonlyArray<{ url: string; body
     // Decisions and verdicts travel only in screening and progress answers; elsewhere the
     // protocol's own words (its "outcome" label, say) are not anyone's decision.
     const decisions = /\/(screening|progress)/.test(url);
+    // The person's own reveal is the AI's reading, so it carries the verdict's fields (whether
+    // the quote was verified, what the model said before the check). Only there.
+    const ownReveals = new Set<string>();
     for (const [path, object] of objects(json)) {
       const keys = decisions
-        ? [...AI_FIELDS, ...DECISION_FIELDS, ...AUDIT_FIELDS, ...SENTINEL_FIELDS, ...LEAD_FIELDS]
+        ? [
+            ...(ownReveals.has(path) ? [] : AI_FIELDS),
+            ...DECISION_FIELDS,
+            ...AUDIT_FIELDS,
+            ...SENTINEL_FIELDS,
+            ...LEAD_FIELDS,
+          ]
         : [...SENTINEL_FIELDS, ...LEAD_FIELDS];
       for (const key of keys) {
         expect(key in object, `${url} ${path} has ${key}`).toBe(false);
@@ -70,6 +79,7 @@ export const expectNothingLeaked = (responses: ReadonlyArray<{ url: string; body
       if (typeof object["reveal"] === "object" && object["reveal"] !== null) {
         const own = url.endsWith("/decide") || object["phase"] === "final";
         expect(own, `${url} ${path} reveals the AI outside the person's own decision`).toBe(true);
+        ownReveals.add(`${path}.reveal`);
       }
     }
     expect(body, `${url} names a sentinel`).not.toMatch(/"sentinel:/);

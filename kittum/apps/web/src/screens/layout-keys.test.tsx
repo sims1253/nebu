@@ -13,13 +13,13 @@ describe("layout keys", () => {
     const app = mount("/p/ivosidenib-cca/screening/full-text");
     unmount = app.unmount;
     await expect.element(page.getByText("Page 1 of 12")).toBeVisible();
-    // Make every decision key live: evidence adopted and every criterion verdicted.
-    await press("]");
+    // Make every decision key live: evidence adopted and every criterion marked met.
+    await press(".");
     await press("Enter");
     for (let i = 0; i < 6; i++) await press("y");
     await expect
       .element(page.getByTestId("fulltext-notice"))
-      .toMatchTextContent("Every criterion has a verdict");
+      .toMatchTextContent("6 of 6 criteria have your verdict");
 
     await press("g");
     await press("x"); // extraction, not "insufficient information"

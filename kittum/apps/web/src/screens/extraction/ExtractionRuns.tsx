@@ -16,7 +16,7 @@ const STATUS: Record<string, string> = {
   queued: "Waiting for a worker",
   running: "Running",
   succeeded: "Ready to review",
-  failed: "Failed; it will be retried",
+  failed: "Failed. Kittum retries it",
   dead: "Failed for good",
 };
 
@@ -50,7 +50,7 @@ export function ExtractionRunsScreen() {
           setRuns(found);
           setAssertions(values);
         },
-        (e: unknown) => setError(failure(e, "The runs could not load.")),
+        (e: unknown) => setError(failure(e, "Kittum could not load the runs.")),
       ),
     [workbench, project.id, me.actor_id],
   );
@@ -69,7 +69,7 @@ export function ExtractionRunsScreen() {
   const open = (listing: RunListing | undefined) => {
     if (!listing) return;
     if (listing.run.status !== "succeeded") {
-      setNotice("This run has no fields yet. It opens once a worker has finished it.");
+      setNotice("This run has no fields yet. You can open it once a worker has finished it.");
       return;
     }
     void navigate({
@@ -138,8 +138,8 @@ export function ExtractionRunsScreen() {
         ) : runs.length === 0 ? (
           <p className="mt-4 max-w-[64ch] text-md text-ink-2">
             {canRequest
-              ? `No runs yet. Request one on a ${labels.report.toLowerCase()} included at full text, with an extraction schema: the arms, comparisons, endpoints, and quantities to take from it.`
-              : `No runs yet. The methods lead requests them on included ${plural(labels.report).toLowerCase()}; they show here once they are ready to review.`}
+              ? `No runs yet. Request one on a ${labels.report.toLowerCase()} included at full text. The extraction schema names the arms, comparisons, endpoints, and quantities to take from it.`
+              : `No runs yet. The methods lead requests them on included ${plural(labels.report).toLowerCase()}. A run shows here once it is ready to review.`}
           </p>
         ) : (
           <ol className="mt-6 border-t border-rule-strong" aria-label="Extraction runs">
@@ -275,7 +275,7 @@ function RequestRun({
         setReports(ready);
         setItemRef((ref) => ref || (ready[0]?.item_ref ?? ""));
       },
-      (e: unknown) => live && setError(failure(e, "The reports could not load.")),
+      (e: unknown) => live && setError(failure(e, "Kittum could not load the reports.")),
     );
     run(workbench.extractionModels(project.id)).then(
       (found) => live && setModels(found),
@@ -299,7 +299,7 @@ function RequestRun({
         ),
       );
     } catch (e) {
-      setSchemaError(failure(e, "The schema could not be read."));
+      setSchemaError(failure(e, "Kittum could not read the schema."));
     }
   };
 
@@ -332,10 +332,10 @@ function RequestRun({
       );
       setSchema(null);
       onDone(
-        `Requested a run on “${report.title}”. A worker takes it from the queue; it opens for review when it is ready.`,
+        `Requested a run on “${report.title}”. A worker runs it, and you can review it once it is ready.`,
       );
     } catch (e) {
-      setError(failure(e, "The run was not requested."));
+      setError(failure(e, "Kittum did not request the run."));
     } finally {
       setBusy(false);
     }
@@ -347,7 +347,7 @@ function RequestRun({
       onOpenChange={onOpenChange}
       wide
       title="Request an extraction run"
-      description="Both paths read the report's full text: Janus finds the tables and labelled values, the LLM path quotes what it reads, and every value is checked against its source. Reviewers then accept each one."
+      description="Both paths read the report's full text. Janus finds the tables and labelled values. The LLM path quotes what it reads. Kittum checks every value against its source, and reviewers accept each one."
       submit="Request the run"
       busy={busy}
       error={error}
@@ -357,7 +357,7 @@ function RequestRun({
         label={labels.report}
         hint={
           reports && reports.length === 0
-            ? "No report is included at full text yet. Extraction starts once one is."
+            ? "No report is included at full text yet. You can request a run once one is."
             : "Reports included at full text, with their PDF."
         }
       >
@@ -369,7 +369,7 @@ function RequestRun({
           ))}
         </Select>
       </Field>
-      <Field label="Study label" hint="How the review names it: its registry ID by default.">
+      <Field label="Study label" hint="How the review names the study. Its registry ID by default.">
         <TextInput
           value={label}
           placeholder={report?.registry_ids[0] ?? report?.doi ?? ""}

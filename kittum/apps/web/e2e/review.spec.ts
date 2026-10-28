@@ -13,6 +13,12 @@ import type { Browser, Page } from "@playwright/test";
 import { expectNothingLeaked, recordResponses } from "./blind.ts";
 import { SERVER, STACK_FILE } from "./stack.ts";
 
+/** With KITTUM_SHOTS set to a directory, the journey saves screenshots of the AI's reading. */
+const shot = async (page: Page, name: string) => {
+  const dir = process.env["KITTUM_SHOTS"];
+  if (dir) await page.screenshot({ path: join(dir, name) });
+};
+
 interface Stack {
   project_id: string;
   people: Record<string, string>;
@@ -189,8 +195,8 @@ const screenQueue = async (
 
 /**
  * Screens every full text in the queue (the record and the full-text sentinel, in the reviewer's
- * seeded order): evidence for the population, a verdict per criterion, exclude, and keep the
- * decision if the AI's reading is shown. Returns the titles and whether the AI was revealed.
+ * seeded order): evidence for the population, exclude on it, and keep the decision if the AI's
+ * reading is shown. Returns the titles and whether the AI was revealed.
  */
 const screenFullTexts = async (page: Page) => {
   const heading = page.getByRole("complementary", { name: "Criteria" }).getByRole("heading");
@@ -204,19 +210,20 @@ const screenFullTexts = async (page: Page) => {
     if (await finished.isVisible()) return seen;
     const title = (await heading.textContent()) ?? "";
     await expect(reveal).toHaveCount(0);
-    await page.keyboard.press("]"); // the first protocol-term mention of the population
+    await page.keyboard.press("."); // the first protocol-term mention of the population
     await expect(page.getByTestId("mention").first()).toHaveAttribute("aria-current", "true");
     await page.keyboard.press("Enter"); // adopt it: the server saves it as an anchor
     await expect(notice).toContainText("Adopted as evidence");
-    for (const key of ["n", "?", "?", "y", "?"]) await page.keyboard.press(key);
+    // One reason: exclude on criterion 1, the population, with that evidence.
     await page.keyboard.press("e");
-    await expect(reveal.or(notice.getByText("Excluded on Population"))).toBeVisible();
+    await page.keyboard.press("1");
+    await expect(reveal.or(notice.getByText("Excluded on 1 Population"))).toBeVisible();
     const revealed = await reveal.isVisible();
     if (revealed) {
-      await expect(reveal).toContainText("read this differently");
+      await expect(reveal).toContainText("The AI judge disagrees");
       await page.keyboard.press("Space"); // keep my decision
     }
-    await expect(notice).toContainText("Excluded on Population");
+    await expect(notice).toContainText("Excluded on 1 Population");
     seen.push({ title, revealed });
     await expect(heading.or(finished)).not.toHaveText(title);
   }
@@ -251,6 +258,7 @@ test("a review from search to full text, blind, audited, adjudicated, and verifi
         await expect(banner).toContainText("2 Intervention");
         await expect(banner).toContainText("Met");
         await expect(page.locator("body")).toContainText(rationaleOf(REVEALED, "INT"));
+        await shot(page, "01-title-abstract-reveal.png");
       },
     });
     expect(seen).toHaveLength(stack().records + 1); // and one sentinel
@@ -310,6 +318,8 @@ test("a review from search to full text, blind, audited, adjudicated, and verifi
     await page.keyboard.press(excluder);
     await expect(page.getByTestId("adjudicated")).toContainText("Excluded on 2 Intervention");
     await expect(page.getByTestId("ai-column")).toBeVisible();
+    await page.waitForTimeout(300); // the column's entrance
+    await shot(page, "11-adjudication-title-abstract.png");
     await page.keyboard.press("Space");
     await expect(page.getByRole("heading", { name: "No open conflicts" })).toBeVisible();
     await page.context().close();
