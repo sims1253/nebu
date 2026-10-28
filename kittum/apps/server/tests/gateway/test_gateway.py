@@ -67,6 +67,7 @@ def _gateway(
     sleep: RecordingSleep,
     store: MemoryStore | None = None,
     buckets: str = "postgres",
+    max_attempts: int = 5,
 ) -> SourceGateway:
     return SourceGateway(
         database=database,
@@ -75,13 +76,14 @@ def _gateway(
         policies={policy.source: policy for policy in policies},
         clock=clock,
         buckets=buckets,
+        max_attempts=max_attempts,
         sleep=sleep,
     )
 
 
 def _reset(database: Database) -> None:
     with database.transaction() as tx:
-        tx.execute("truncate gateway_attempt, gateway_cache, gateway_budget")
+        tx.execute("truncate gateway_attempt, gateway_cache, gateway_budget, gateway_cooldown")
         tables = tx.execute(
             "select tablename from pg_tables"
             " where schemaname = 'public' and tablename like 'ratelimit___gateway%'"
@@ -393,3 +395,100 @@ def test_a_new_execution_bypasses_the_cache_and_refreshes_it(database: Database)
     assert replay.from_cache
     assert replay.body == after
     assert len(transport.sent) == 2
+
+
+def test_concurrency_cap_is_shared_between_gateway_instances(database: Database) -> None:
+    transport = CountingTransport()
+
+    def gateway() -> SourceGateway:
+        clock = FixedClock(START)
+        return _gateway(
+            database,
+            transport,
+            policies=[_policy("crossref", concurrency=1)],
+            clock=clock,
+            sleep=RecordingSleep(clock),
+            buckets="memory",
+        )
+
+    gateways = [gateway(), gateway()]
+    barrier = threading.Barrier(2)
+    failures: list[BaseException] = []
+
+    def fetch(instance: SourceGateway, number: int) -> None:
+        try:
+            barrier.wait()
+            instance.fetch("crossref", _request(f"https://api.crossref.org/works/{number}"))
+        except BaseException as error:  # pragma: no cover - only on a broken gateway
+            failures.append(error)
+
+    threads = [
+        threading.Thread(target=fetch, args=(instance, number))
+        for number, instance in enumerate(gateways)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert not failures
+    assert transport.max_active == 1
+
+
+def test_a_cooldown_is_shared_between_gateway_instances(database: Database) -> None:
+    clock = FixedClock(START)
+    blocked_sleep = RecordingSleep(clock)
+    blocked = _gateway(
+        database,
+        FakeTransport(sequence=[response(429, b"slow down", (("Retry-After", "30"),))]),
+        policies=[_policy("openalex")],
+        clock=clock,
+        sleep=blocked_sleep,
+        buckets="memory",
+        max_attempts=1,
+    )
+
+    with pytest.raises(SourceUnavailable):
+        blocked.fetch("openalex", _request("https://api.openalex.org/a"))
+    assert blocked_sleep.durations == []
+
+    waiting_sleep = RecordingSleep(clock)
+    waiting_transport = FakeTransport(responses={"https://api.openalex.org/b": b"b"})
+    waiting = _gateway(
+        database,
+        waiting_transport,
+        policies=[_policy("openalex")],
+        clock=clock,
+        sleep=waiting_sleep,
+        buckets="memory",
+    )
+
+    assert waiting.fetch("openalex", _request("https://api.openalex.org/b")).body == b"b"
+    assert sum(waiting_sleep.durations) == pytest.approx(30.0)
+    assert len(waiting_transport.sent) == 1
+
+
+def test_retry_after_keeps_the_full_deadline(database: Database) -> None:
+    clock = FixedClock(START)
+    sleep = RecordingSleep(clock)
+    transport = FakeTransport(
+        sequence=[
+            response(429, b"slow down", (("Retry-After", "7200"),)),
+            response(200, b"ok"),
+        ]
+    )
+    gateway = _gateway(
+        database,
+        transport,
+        policies=[_policy("openalex")],
+        clock=clock,
+        sleep=sleep,
+        buckets="memory",
+    )
+
+    with stamina.set_testing(True, attempts=10, cap=True):
+        result = gateway.fetch("openalex", _request("https://api.openalex.org/1"))
+
+    assert result.status == 200
+    assert sum(sleep.durations) == pytest.approx(7_200.0)
+    assert max(sleep.durations) <= 60.0

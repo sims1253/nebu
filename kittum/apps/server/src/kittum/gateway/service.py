@@ -5,8 +5,9 @@ import random
 import re
 import threading
 import time
+import zlib
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from typing import TYPE_CHECKING, Any, cast
 
@@ -23,7 +24,13 @@ from kittum.gateway.errors import (
     UnknownSource,
 )
 from kittum.gateway.policies import default_policies
-from kittum.gateway.types import HttpRequest, HttpResponse, SourcePolicy, Transport
+from kittum.gateway.types import (
+    HttpRequest,
+    HttpResponse,
+    SourcePolicy,
+    Transport,
+    effective_request,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator, Mapping
@@ -39,6 +46,8 @@ RETRYABLE_STATUSES = frozenset({429, 502, 503, 504})
 _BACKOFF_BASE = 0.5
 _BACKOFF_CAP = 8.0
 _MAX_REQUEST_WAIT_MS = 60_000
+_CONCURRENCY_POLL_SECONDS = 0.05
+_MAX_COOLDOWN_SLEEP_SECONDS = 60.0
 _DEFAULT_POLICIES = default_policies()
 
 
@@ -81,6 +90,7 @@ class _SharedPool:
 
 def request_hash(request: HttpRequest) -> str:
     """The cache and attempt key: SHA-256 over the request's canonical JSON."""
+    request = effective_request(request)
     body = None if request.body is None else base64.b64encode(request.body).decode("ascii")
     payload = {
         "method": request.method.upper(),
@@ -109,6 +119,11 @@ def _rates(policy: SourcePolicy) -> list[Rate]:
 
 def _table_name(source: str) -> str:
     return "gateway_" + re.sub(r"[^a-z0-9]+", "_", source.lower()).strip("_")
+
+
+def _advisory_key(source: str) -> int:
+    """A stable int32 for `pg_try_advisory_xact_lock`, equal in every process."""
+    return zlib.crc32(source.encode()) & 0x7FFFFFFF
 
 
 def _seconds(value: str | None, now: datetime) -> float | None:
@@ -176,10 +191,7 @@ class SourceGateway:
 
         self._pool = _SharedPool(database)
         self._buckets: dict[str, AbstractBucket] = {}
-        self._semaphores: dict[str, threading.BoundedSemaphore] = {}
         self._buckets_lock = threading.Lock()
-        self._cooldowns: dict[str, float] = {}
-        self._cooldowns_lock = threading.Lock()
         self._retrying = stamina.RetryingCaller(attempts=max_attempts, timeout=None)
 
     # -- public surface -------------------------------------------------------------------
@@ -228,11 +240,10 @@ class SourceGateway:
         attempts[0] += 1
         number = attempts[0]
         self._wait_for_cooldown(source)
+        self._acquire(source, policy)
+        self._consume_budget(policy)
 
         with self._concurrency(policy):
-            self._acquire(source, policy)
-            self._consume_budget(policy)
-
             started = self._clock.now()
             try:
                 response = self._transport.send(request)
@@ -292,24 +303,37 @@ class SourceGateway:
 
     @contextmanager
     def _concurrency(self, policy: SourcePolicy) -> Generator[None]:
-        with self._buckets_lock:
-            semaphore = self._semaphores.get(policy.source)
-            if semaphore is None:
-                semaphore = threading.BoundedSemaphore(max(1, policy.concurrency))
-                self._semaphores[policy.source] = semaphore
-        semaphore.acquire()
-        try:
-            yield
-        finally:
-            semaphore.release()
+        """Hold one of the source's Postgres advisory slots for the duration of the send.
+
+        The lock lives in the transaction, so every process shares the cap and a worker that dies
+        mid-request releases its slot.
+        """
+        key = _advisory_key(policy.source)
+        slots = max(1, policy.concurrency)
+        while True:
+            for slot in range(slots):
+                with self._database.transaction() as tx:
+                    row = tx.execute(
+                        "select pg_try_advisory_xact_lock(%s, %s) as locked", (key, slot)
+                    ).fetchone()
+                    if row is not None and row["locked"]:
+                        yield
+                        return
+            self._sleep(_CONCURRENCY_POLL_SECONDS)
 
     def _wait_for_cooldown(self, source: str) -> None:
-        with self._cooldowns_lock:
-            until = self._cooldowns.get(source)
-        if until is not None:
-            remaining = until - self._clock.now().timestamp()
-            if remaining > 0:
-                self._sleep(remaining)
+        """Pause until the persisted deadline passes, re-checking after every bounded sleep."""
+        while True:
+            with self._database.transaction() as tx:
+                row = tx.execute(
+                    "select until from gateway_cooldown where source = %s", (source,)
+                ).fetchone()
+            if row is None:
+                return
+            remaining = (cast("datetime", row["until"]) - self._clock.now()).total_seconds()
+            if remaining <= 0:
+                return
+            self._sleep(min(remaining, _MAX_COOLDOWN_SLEEP_SECONDS))
 
     def _observe(self, source: str, response: HttpResponse) -> None:
         """Slow down before the source's own headers say we must."""
@@ -337,9 +361,14 @@ class SourceGateway:
                 self._cool(source, seconds)
 
     def _cool(self, source: str, seconds: float) -> None:
-        until = self._clock.now().timestamp() + min(seconds, 3_600.0)
-        with self._cooldowns_lock:
-            self._cooldowns[source] = max(until, self._cooldowns.get(source, 0.0))
+        until = self._clock.now() + timedelta(seconds=seconds)
+        with self._database.transaction() as tx:
+            tx.execute(
+                "insert into gateway_cooldown (source, until) values (%s, %s) "
+                "on conflict (source) do update set"
+                " until = greatest(gateway_cooldown.until, excluded.until)",
+                (source, until),
+            )
 
     @staticmethod
     def _header(response: HttpResponse, name: str) -> str | None:

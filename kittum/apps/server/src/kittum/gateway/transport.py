@@ -5,7 +5,7 @@ import importlib.metadata
 import httpx2
 
 from kittum.core import sha256_hex
-from kittum.gateway.types import HttpRequest, HttpResponse
+from kittum.gateway.types import HttpRequest, HttpResponse, effective_request
 
 
 def _version() -> str:
@@ -39,6 +39,7 @@ class HttpxTransport:
         )
 
     def send(self, request: HttpRequest) -> HttpResponse:
+        request = effective_request(request)
         headers = dict(request.headers)
         headers.setdefault("User-Agent", self.user_agent)
         response = self._client.request(

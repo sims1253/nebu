@@ -1,7 +1,7 @@
 import httpx2
 
 from kittum.core import sha256_hex
-from kittum.gateway import HttpRequest, HttpxTransport, default_policies
+from kittum.gateway import HttpRequest, HttpxTransport, default_policies, request_hash
 
 PUBLISHED_PER_SECOND = {
     "pubmed": 3,
@@ -56,3 +56,22 @@ def test_transport_sends_the_version_and_contact_as_user_agent() -> None:
     assert response.body_hash == sha256_hex(b"hello")
     assert seen["user-agent"].startswith("Kittum/")
     assert "librarian@example.org" in seen["user-agent"]
+
+
+def test_transport_and_cache_key_keep_the_query_in_the_url() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        seen["url"] = str(request.url)
+        return httpx2.Response(200, content=b"ok")
+
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
+    transport = HttpxTransport(client=client)
+    request = HttpRequest(url="https://example.org/search?term=cancer", params=(("page", "2"),))
+
+    transport.send(request)
+
+    assert seen["url"] == "https://example.org/search?term=cancer&page=2"
+    assert request_hash(request) == request_hash(
+        HttpRequest(url="https://example.org/search", params=(("term", "cancer"), ("page", "2")))
+    )

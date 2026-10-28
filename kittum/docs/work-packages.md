@@ -79,26 +79,28 @@ Module `kittum.gateway`. Needs: `core`.
   an NCBI key raises PubMed's rate.
 - Done: `SourceGateway` with a pyrate-limiter bucket per source. The Postgres bucket shares the
   limit across processes; `buckets="memory"` is for tests. One table per source, named
-  `ratelimit___gateway_<source>`. A per-source concurrency cap sits around each attempt.
+  `ratelimit___gateway_<source>`. A per-source concurrency cap is enforced with Postgres advisory
+  slots held for each send, so it spans workers too.
 - Done: daily budgets in `gateway_budget`, consumed per attempt, so a new gateway instance
   continues where the previous one stopped. Exhaustion raises `SourceBudgetExhausted`; the
   caller decides whether to wait for the next day or fail the job.
 - Done: `Retry-After` (seconds or HTTP date) and `X-RateLimit-Remaining`/`X-RateLimit-Reset`
-  pause a source before the next attempt. Retries with stamina on 429, 502, 503, and 504, five
-  attempts, exponential backoff with full jitter.
+  pause a source before the next attempt, with the full deadline in `gateway_cooldown`, so every
+  worker waits. Retries with stamina on 429, 502, 503, and 504, five attempts, exponential
+  backoff with full jitter.
 - Done: content-addressed cache: the body goes to `ArtifactStore`, `gateway_cache` maps the
-  canonical request hash to status, headers, and body hash. `use_cache=False` bypasses read and
-  write. Every transport attempt lands in `gateway_attempt`.
+  canonical request hash to status, headers, and body hash. `use_cache=False` skips the read but
+  stores the fresh response for later replays. Every transport attempt lands in `gateway_attempt`.
 - Done: `FakeTransport` scripts a sequence of responses (`kittum.gateway.testing`).
 - Left: entry points do not build a gateway yet. `AppContext` needs a `gateway` field (an
   interface change outside this module) before search and enrichment can call it.
 - Left: PubMed's and OpenAlex's API keys are not attached to requests here; adapters pass them
-  as request parameters. Retry-After on 503 is honoured, but no circuit breaker/source health
-  memory spans gateway instances.
+  as request parameters. Retry-After on 503 is honoured, but there is no circuit breaker or
+  source-health memory beyond the cooldown deadlines.
 - Acceptance met: tests against real Postgres with `FakeTransport` show a 429 then 200 with both
   attempts recorded, five failures with a clear error, a cache hit with no transport call,
-  independent buckets for two sources, a budget that survives a new gateway, and the
-  concurrency cap.
+  independent buckets for two sources, a budget that survives a new gateway, the concurrency cap,
+  and cooldowns shared across gateway instances.
 
 ## WP-05 Search
 
