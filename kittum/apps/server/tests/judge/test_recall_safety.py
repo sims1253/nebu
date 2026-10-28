@@ -491,6 +491,13 @@ SMOKERS = Criterion(
     decidable_at=("title_abstract",),
     applies_to=(SCOPE,),
 )
+
+
+def _plain(text: str) -> ScreeningItem:
+    """A record whose title names no design, so only `text` can."""
+    return item("occ-round-5", "Smoking cessation in primary care", text)
+
+
 RANDOMIZED = Criterion(
     id="C_CHEMO",
     slot="study_type",
@@ -541,7 +548,7 @@ RANDOMIZED = Criterion(
 def test_evidence_against_the_criterions_own_requirement_excludes(
     criterion: Criterion, sentence: str, quote: str
 ) -> None:
-    verdict = _judge_chemo(_record("occ-round-5", sentence), criterion, quote)
+    verdict = _judge_chemo(_plain(sentence), criterion, quote)
     (result,) = verdict.criteria
     assert (result.status, result.failed_check, result.quote_verified) == ("not_met", None, True)
     assert verdict.excludes
@@ -550,6 +557,59 @@ def test_evidence_against_the_criterions_own_requirement_excludes(
 @pytest.mark.parametrize(
     ("criterion", "sentence", "quote", "check"),
     [
+        # Sol round 1. The negation is limited to an age or a frequency: smoking history, not
+        # current non-smoking.
+        (
+            SMOKERS,
+            "We enrolled adults who did not smoke tobacco before age 18.",
+            "adults who did not smoke tobacco before age 18",
+            "negation",
+        ),
+        (
+            SMOKERS,
+            "We enrolled adults who did not smoke tobacco before age 18.",
+            "did not smoke tobacco",
+            "negation",
+        ),
+        (
+            SMOKERS,
+            "We enrolled adults who did not regularly smoke tobacco.",
+            "adults who did not regularly smoke tobacco",
+            "negation",
+        ),
+        # The sentence goes on past a shorter quote and adds smokers.
+        (
+            SMOKERS,
+            "We enrolled adults who did not smoke tobacco and smokers of cigars.",
+            "adults who did not smoke tobacco",
+            "negation",
+        ),
+        # A survey is a measurement here, and the record is a trial.
+        (
+            RANDOMIZED,
+            "This was a randomized controlled trial. Participants completed a survey at baseline.",
+            "a survey",
+            "polarity",
+        ),
+        (
+            RANDOMIZED,
+            "Participants completed a survey at baseline.",
+            "a survey",
+            "polarity",
+        ),
+        # The record names the required design by abbreviation, or in another sentence.
+        (
+            RANDOMIZED,
+            "This was a secondary cohort analysis of an RCT.",
+            "a secondary cohort analysis",
+            "polarity",
+        ),
+        (
+            RANDOMIZED,
+            "This was a prospective cohort study. Smokers were randomly assigned to two arms.",
+            "a prospective cohort study",
+            "polarity",
+        ),
         # The negation is about another condition.
         (
             SMOKERS,
@@ -626,6 +686,14 @@ def test_evidence_against_the_criterions_own_requirement_excludes(
         ),
     ],
     ids=[
+        "S1-negation-limited-to-an-age",
+        "S1-shorter-quote",
+        "S1-frequency",
+        "S2-coordinated-cohort-after-the-quote",
+        "S3-survey-as-measurement-in-an-rct",
+        "S3-bare-survey",
+        "S4-rct-abbreviation",
+        "S4-randomly-assigned-elsewhere",
         "other-condition-negated",
         "negated-age-bound",
         "other-cohort-in-the-sentence",
@@ -642,7 +710,7 @@ def test_evidence_against_the_criterions_own_requirement_excludes(
 def test_evidence_that_does_not_contradict_the_criterions_requirement_is_unclear(
     criterion: Criterion, sentence: str, quote: str, check: str
 ) -> None:
-    verdict = _judge_chemo(_record("occ-round-5", sentence), criterion, quote)
+    verdict = _judge_chemo(_plain(sentence), criterion, quote)
     (result,) = verdict.criteria
     assert result.quote_verified
     assert (result.status, result.downgraded_from, result.failed_check) == (

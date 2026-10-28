@@ -284,9 +284,10 @@ Modules `kittum.judge` and `kittum.models`. Needs: `protocol`, `core`.
   negation cue and it scoped to the key term, and the right polarity for an include or exclude
   criterion. The negation and design checks read the criterion (#44): a negation of one
   requirement of an affirmative condition ("adults ... who did not smoke tobacco" against
-  "Adults who smoke tobacco") and, on a study design criterion, an unnegated other design named
-  by a keyword ("a prospective cohort study" against "Randomized controlled trial", in a sentence
-  that names nothing of the wording) support `not_met`. `Verdict.excludes` is a proposal for
+  "Adults who smoke tobacco", with nothing after it in the sentence and no "before age 18" or
+  "daily") and, on a study design criterion, an unnegated other design named by a keyword as the
+  record's own ("a prospective cohort study" against "Randomized controlled trial", in a record
+  that names nothing of the required design, "RCT" included) support `not_met`. `Verdict.excludes` is a proposal for
   humans and adjudication, never a final exclusion. `judge_many` stores verdicts (migration
   `20261028120000_judge_verdicts.sql`), artifacts, and `judge.verdict_recorded` events, and
   skips records already judged under the same cache key.
@@ -294,8 +295,9 @@ Modules `kittum.judge` and `kittum.models`. Needs: `protocol`, `core`.
   `fleiss_kappa` for run-to-run agreement.
 - A small gold set (`tests/judge/fixtures/demo_gold.json`): the demo's 30 title and abstract
   items, the screeners' decisions from the end-to-end plan, and recorded answers from
-  GLM-5.3-Flash and qwen3.5:4b. The filter verifies 3 of GLM's 5 correct `not_met` readings (was
-  0) and 2 of qwen's 5 (was 1), and none that the screeners contradict.
+  GLM-5.3-Flash and qwen3.5:4b. The filter verifies 2 of GLM's 5 correct `not_met` readings (was
+  0) and 2 of qwen's 5 (was 1), and none that the screeners contradict. GLM's "This ComBaCaL
+  cohort study" stays `unclear`: the record also mentions "nested trials".
 
 **Left.**
 
@@ -315,7 +317,7 @@ Modules `kittum.judge` and `kittum.models`. Needs: `protocol`, `core`.
   not read that way: "received varenicline" against "One arm receives NRT" stays `unclear`,
   because the other arm may have had NRT (the gold set's genetic study is such a case). A
   wording with a generic noun ("Randomized controlled study") verifies no other design, since
-  "a cohort study" names its word "study". Measure the work saved this costs on gold data before
+  "a cohort study" names its word "study"; nor does a record that mentions trials in passing. Measure the work saved this costs on gold data before
   loosening any rule.
 - Accepted limitations of the filter, not to be chased with more patterns: foreign content words
   that carry negation ("Melanoma assente"); a negation in an intervening clause about another

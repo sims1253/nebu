@@ -41,13 +41,16 @@ COMBACAL = _title("Community-Based Chronic Disease Care in Rural Lesotho")
 # Verified exclusions: (criterion, title). Before the negation and design checks read the
 # criterion, the filter verified none of GLM's and only qwen's POP quote "did not smoke tobacco".
 VERIFIED = {
-    GLM: {("POP", TRANSDERMAL), ("DESIGN", COHORT), ("DESIGN", COMBACAL)},
+    GLM: {("POP", TRANSDERMAL), ("DESIGN", COHORT)},
     QWEN: {("POP", TRANSDERMAL), ("DESIGN", COHORT)},
 }
 # Correct not_met readings the filter still turns unclear, and why. A quote that names another
 # intervention ("received varenicline") does not show that no arm got NRT, so it stays unclear.
 STILL_UNCLEAR = {
     GLM: {
+        # "This ComBaCaL cohort study": the record also says that "nested trials" will follow,
+        # and a record that names the required design anywhere is not read.
+        ("DESIGN", COMBACAL, "polarity"),
         ("INT", _title("Electronic Nicotine-Delivery Systems"), "language_unverifiable"),
         ("INT", _title("Varenicline versus placebo for smoking cessation"), "polarity"),
     },
@@ -109,8 +112,8 @@ def test_verified_exclusions_on_real_answers_are_the_screeners_own(model: str) -
 
     assert verified == VERIFIED[model]
     assert unclear == STILL_UNCLEAR[model]
-    # Recall of correct not_met readings: 3 of 5 for GLM (was 0), 2 of 5 for qwen (was 1).
-    assert (len(verified), len(verified) + len(unclear)) == {GLM: (3, 5), QWEN: (2, 5)}[model]
+    # Recall of correct not_met readings: 2 of 5 for GLM (was 0), 2 of 5 for qwen (was 1).
+    assert (len(verified), len(verified) + len(unclear)) == {GLM: (2, 5), QWEN: (2, 5)}[model]
     # Readings the screeners contradict, or on a criterion they did not name, all stay unclear.
     assert set(other) == OTHER[model]
 
@@ -127,14 +130,17 @@ EDITS = [
         "who did not smoke tobacco and 58 adults who smoke tobacco.",
         "negation",
     ),
+    # The negation is about smoking history, not about smoking now.
+    (
+        TRANSDERMAL,
+        "who did not smoke tobacco.",
+        "who did not smoke tobacco before age 18.",
+        "negation",
+    ),
     # The cohort is part of a randomised trial: the sentence names the required design too.
     (COHORT, "cohort study", "cohort study in a randomised trial", "polarity"),
-    (
-        COMBACAL,
-        "study is to assess",
-        "study is a randomized controlled trial to assess",
-        "polarity",
-    ),
+    # Another sentence of the record says it is randomised.
+    (COHORT, "We followed", "Within a randomised trial, we followed", "polarity"),
     # A negation outside the quote reverses it.
     (COHORT, ": a prospective", ": not a prospective", "negation"),
 ]
