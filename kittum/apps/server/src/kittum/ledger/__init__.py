@@ -33,7 +33,7 @@ from kittum.ledger.keys import SigningKey, VerifyKey
 from kittum.ledger.model import (
     AuditEvent,
     ChainAudit,
-    Check,
+    ChainCheck,
     Checkpoint,
     CheckpointStatus,
     EventDraft,
@@ -55,7 +55,7 @@ __all__ = [
     "BundleReport",
     "BundleWriter",
     "ChainAudit",
-    "Check",
+    "ChainCheck",
     "Checkpoint",
     "CheckpointStatus",
     "EventDraft",

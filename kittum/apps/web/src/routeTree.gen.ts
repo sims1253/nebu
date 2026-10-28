@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as PProjectIdRouteRouteImport } from './routes/p/$projectId/route'
 import { Route as PProjectIdIndexRouteImport } from './routes/p/$projectId/index'
 import { Route as PProjectIdAdjudicationRouteImport } from './routes/p/$projectId/adjudication'
+import { Route as PProjectIdAuditRouteImport } from './routes/p/$projectId/audit'
 import { Route as PProjectIdProgressRouteImport } from './routes/p/$projectId/progress'
 import { Route as PProjectIdProtocolRouteImport } from './routes/p/$projectId/protocol'
 import { Route as PProjectIdReportsRouteImport } from './routes/p/$projectId/reports'
@@ -44,6 +45,11 @@ const PProjectIdIndexRoute = PProjectIdIndexRouteImport.update({
 const PProjectIdAdjudicationRoute = PProjectIdAdjudicationRouteImport.update({
   id: '/adjudication',
   path: '/adjudication',
+  getParentRoute: () => PProjectIdRouteRoute,
+} as any)
+const PProjectIdAuditRoute = PProjectIdAuditRouteImport.update({
+  id: '/audit',
+  path: '/audit',
   getParentRoute: () => PProjectIdRouteRoute,
 } as any)
 const PProjectIdProgressRoute = PProjectIdProgressRouteImport.update({
@@ -115,6 +121,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/p/$projectId': typeof PProjectIdRouteRouteWithChildren
   '/p/$projectId/adjudication': typeof PProjectIdAdjudicationRoute
+  '/p/$projectId/audit': typeof PProjectIdAuditRoute
   '/p/$projectId/progress': typeof PProjectIdProgressRoute
   '/p/$projectId/protocol': typeof PProjectIdProtocolRoute
   '/p/$projectId/reports': typeof PProjectIdReportsRoute
@@ -132,6 +139,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/p/$projectId/adjudication': typeof PProjectIdAdjudicationRoute
+  '/p/$projectId/audit': typeof PProjectIdAuditRoute
   '/p/$projectId/progress': typeof PProjectIdProgressRoute
   '/p/$projectId/protocol': typeof PProjectIdProtocolRoute
   '/p/$projectId/reports': typeof PProjectIdReportsRoute
@@ -151,6 +159,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/p/$projectId': typeof PProjectIdRouteRouteWithChildren
   '/p/$projectId/adjudication': typeof PProjectIdAdjudicationRoute
+  '/p/$projectId/audit': typeof PProjectIdAuditRoute
   '/p/$projectId/progress': typeof PProjectIdProgressRoute
   '/p/$projectId/protocol': typeof PProjectIdProtocolRoute
   '/p/$projectId/reports': typeof PProjectIdReportsRoute
@@ -171,6 +180,7 @@ export interface FileRouteTypes {
     | '/'
     | '/p/$projectId'
     | '/p/$projectId/adjudication'
+    | '/p/$projectId/audit'
     | '/p/$projectId/progress'
     | '/p/$projectId/protocol'
     | '/p/$projectId/reports'
@@ -188,6 +198,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/p/$projectId/adjudication'
+    | '/p/$projectId/audit'
     | '/p/$projectId/progress'
     | '/p/$projectId/protocol'
     | '/p/$projectId/reports'
@@ -206,6 +217,7 @@ export interface FileRouteTypes {
     | '/'
     | '/p/$projectId'
     | '/p/$projectId/adjudication'
+    | '/p/$projectId/audit'
     | '/p/$projectId/progress'
     | '/p/$projectId/protocol'
     | '/p/$projectId/reports'
@@ -254,6 +266,13 @@ declare module '@tanstack/react-router' {
       path: '/adjudication'
       fullPath: '/p/$projectId/adjudication'
       preLoaderRoute: typeof PProjectIdAdjudicationRouteImport
+      parentRoute: typeof PProjectIdRouteRoute
+    }
+    '/p/$projectId/audit': {
+      id: '/p/$projectId/audit'
+      path: '/audit'
+      fullPath: '/p/$projectId/audit'
+      preLoaderRoute: typeof PProjectIdAuditRouteImport
       parentRoute: typeof PProjectIdRouteRoute
     }
     '/p/$projectId/progress': {
@@ -345,6 +364,7 @@ declare module '@tanstack/react-router' {
 
 interface PProjectIdRouteRouteChildren {
   PProjectIdAdjudicationRoute: typeof PProjectIdAdjudicationRoute
+  PProjectIdAuditRoute: typeof PProjectIdAuditRoute
   PProjectIdProgressRoute: typeof PProjectIdProgressRoute
   PProjectIdProtocolRoute: typeof PProjectIdProtocolRoute
   PProjectIdReportsRoute: typeof PProjectIdReportsRoute
@@ -362,6 +382,7 @@ interface PProjectIdRouteRouteChildren {
 
 const PProjectIdRouteRouteChildren: PProjectIdRouteRouteChildren = {
   PProjectIdAdjudicationRoute: PProjectIdAdjudicationRoute,
+  PProjectIdAuditRoute: PProjectIdAuditRoute,
   PProjectIdProgressRoute: PProjectIdProgressRoute,
   PProjectIdProtocolRoute: PProjectIdProtocolRoute,
   PProjectIdReportsRoute: PProjectIdReportsRoute,

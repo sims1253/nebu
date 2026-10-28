@@ -78,7 +78,7 @@ class VerifyReport(Record):
     checkpoint_seq: int | None = None
 
 
-type Check = Literal["seq", "payload_hash", "prev_hash", "event_hash", "checkpoint"]
+type ChainCheck = Literal["seq", "payload_hash", "prev_hash", "event_hash", "checkpoint"]
 """Which recomputation an event or checkpoint failed in a `ChainAudit`."""
 
 
@@ -91,7 +91,7 @@ class Finding(Record):
     seq: int
     event_id: Id | None = None
     type: str | None = None
-    check: Check
+    check: ChainCheck
     problem: Problem
     stored: str | None = None
     expected: str | None = None

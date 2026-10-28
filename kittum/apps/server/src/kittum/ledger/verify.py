@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
     from kittum.core import Id
     from kittum.ledger.keys import VerifyKey
-    from kittum.ledger.model import AuditEvent, Check, Checkpoint, Problem
+    from kittum.ledger.model import AuditEvent, ChainCheck, Checkpoint, Problem
 
 
 def verify_chain(
@@ -121,7 +121,7 @@ def audit_chain(
 
     def found(
         e: AuditEvent,
-        check: Check,
+        check: ChainCheck,
         problem: Problem,
         reason: str,
         *,

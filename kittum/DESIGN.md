@@ -626,6 +626,7 @@ the terms of their own templates.
 | AI-exclusion audit | Strata, sample sizes, misses found, estimated missed relevant records with a 95% upper bound, pass or fail against the protocol's threshold | A found miss creates a queue of the 20 nearest AI-excluded records for human rescreening. |
 | Risk of bias | Signalling questions on the left with assembled quotes, the PDF on the right; the rendering on each instrument the review needs (RoB 2, ROBINS-I V2, or a profile's form) | `1` to `5` for yes, probably yes, probably no, no, no information. `o` override with a reason. |
 | Progress | The live PRISMA flow per scope with the update-search delta, throughput, kappa and PABAK for human pairs and human-AI pairs, conflict rate, the audit gauge, and the disclosure summary | Read only |
+| Audit | For the methods lead: the chain on one strip; a PRISMA count opened to its records and a record to every ledger event that touched it, with hashes and artifacts; a full integrity check naming each failing event and check; the flow and the AI disclosure as of any event | `1` trace, `2` integrity, `3` as of an event, `v` verify again, `c` sign a checkpoint, `p` keep the reports at the event |
 
 Kittum renders PDF pages as images, as Janus does, and lays an invisible text layer from the
 reader's word boxes over them. Selecting text then yields code-point offsets and regions without

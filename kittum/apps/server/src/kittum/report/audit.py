@@ -81,7 +81,7 @@ class TracedEvent(Record):
     payload: dict[str, Any]
 
 
-class Occurrence(Record):
+class TracedOccurrence(Record):
     """One search result that the identity revision counts as this record."""
 
     occurrence_id: Id
@@ -117,7 +117,7 @@ class RecordTrace(Record):
     study_id: Id | None
     title: str
     identity_revision_id: Id | None
-    occurrences: tuple[Occurrence, ...]
+    occurrences: tuple[TracedOccurrence, ...]
     events: tuple[TracedEvent, ...]
     reveals: tuple[RevealTiming, ...]
     head_seq: int
@@ -198,6 +198,15 @@ class _Names:
             for r in tx.execute(
                 "select a.id, a.role from screening_assignment a"
                 " join screening_stage s on s.id = a.stage_id where s.project_id = %s",
+                (project_id,),
+            ).fetchall()
+        }
+        self.flags: dict[tuple[str, str], tuple[bool, bool]] = {
+            (str(r["stage_id"]), r["item_ref"]): (r["audit"], r["rescreen"])
+            for r in tx.execute(
+                "select i.stage_id, i.item_ref, i.audit, i.rescreen from screening_item i"
+                " join screening_stage s on s.id = i.stage_id"
+                " where s.project_id = %s and (i.audit or i.rescreen)",
                 (project_id,),
             ).fetchall()
         }
@@ -327,7 +336,16 @@ def _describe(
             if timing.get("reveal_shown_at"):
                 summary += ", after seeing the AI's reading"
         if role == "auditor":
-            summary += " (auditor's extra screen)"
+            audit, rescreen = names.flags.get(
+                (str(stage_id), str(p.get("item_ref"))), (False, False)
+            )
+            summary += (
+                " (the auditor's blind extra screen)"
+                if rescreen
+                else " (the auditor's audit sample)"
+                if audit
+                else " (the auditor)"
+            )
         facts += [
             ("Phase", phase),
             ("Role", role),
@@ -568,7 +586,7 @@ def trace(
         e.payload.get("execution_id"): e.seq for e in events if e.type == "search.executed"
     }
     occurrences = tuple(
-        Occurrence(
+        TracedOccurrence(
             occurrence_id=r["occurrence_id"],
             title=r["title"],
             source=r["source"],

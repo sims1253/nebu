@@ -429,7 +429,7 @@ def test_the_lead_traces_a_record_from_its_searches_to_an_accepted_value(
     (rita,) = [
         e for e in events if e["stage"] == "full_text" and people.get(e["actor_id"]) == "Rita"
     ]
-    assert rita["summary"].endswith("(auditor's extra screen)")
+    assert rita["summary"].endswith("(the auditor's audit sample)")
     (adjudicated,) = [e for e in events if e["kind"] == "adjudication"]
     assert people[adjudicated["actor_id"]] == "Elena"
     assert adjudicated["payload"]["outcome"] == "include"

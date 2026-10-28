@@ -382,6 +382,41 @@
         "title": "AiColumn",
         "type": "object"
       },
+      "AiInvolvement": {
+        "additionalProperties": false,
+        "description": "Human exclusions the AI took part in. The AI alone never excludes.",
+        "properties": {
+          "excluded_after_ai_rescreen": {
+            "title": "Excluded After Ai Rescreen",
+            "type": "integer"
+          },
+          "excluded_after_ai_reveal": {
+            "title": "Excluded After Ai Reveal",
+            "type": "integer"
+          },
+          "excluded_with_ai_involvement": {
+            "title": "Excluded With Ai Involvement",
+            "type": "integer"
+          },
+          "excluded_with_ai_proposal": {
+            "title": "Excluded With Ai Proposal",
+            "type": "integer"
+          },
+          "marked_ineligible_by_automation": {
+            "default": 0,
+            "title": "Marked Ineligible By Automation",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "excluded_with_ai_proposal",
+          "excluded_after_ai_reveal",
+          "excluded_after_ai_rescreen",
+          "excluded_with_ai_involvement"
+        ],
+        "title": "AiInvolvement",
+        "type": "object"
+      },
       "Anchor": {
         "additionalProperties": false,
         "properties": {
@@ -575,6 +610,107 @@
           "media_type"
         ],
         "title": "ArtifactFile",
+        "type": "object"
+      },
+      "ArtifactRef": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "sha256": {
+            "$ref": "#/components/schemas/Sha256"
+          },
+          "stored": {
+            "title": "Stored",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sha256",
+          "label",
+          "stored"
+        ],
+        "title": "ArtifactRef",
+        "type": "object"
+      },
+      "AsOf": {
+        "additionalProperties": false,
+        "properties": {
+          "cutoff_recorded_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cutoff Recorded At"
+          },
+          "cutoff_seq": {
+            "title": "Cutoff Seq",
+            "type": "integer"
+          },
+          "cutoff_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cutoff Type"
+          },
+          "disclosure": {
+            "additionalProperties": true,
+            "title": "Disclosure",
+            "type": "object"
+          },
+          "disclosure_hash": {
+            "$ref": "#/components/schemas/Sha256"
+          },
+          "flows": {
+            "items": {
+              "$ref": "#/components/schemas/PrismaFlow"
+            },
+            "title": "Flows",
+            "type": "array"
+          },
+          "head_seq": {
+            "title": "Head Seq",
+            "type": "integer"
+          },
+          "items": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ItemLabel"
+            },
+            "title": "Items",
+            "type": "object"
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/StageDisclosure"
+            },
+            "title": "Stages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "cutoff_seq",
+          "head_seq",
+          "cutoff_type",
+          "cutoff_recorded_at",
+          "flows",
+          "stages",
+          "disclosure",
+          "disclosure_hash",
+          "items"
+        ],
+        "title": "AsOf",
         "type": "object"
       },
       "Assertion": {
@@ -889,6 +1025,193 @@
           "mean_standard_deviation.standard_deviation"
         ],
         "type": "string"
+      },
+      "ChainAudit": {
+        "additionalProperties": false,
+        "description": "Every check on every event and checkpoint, not only the first failure (`verify_chain`).\n\nA tampered row shows up as the exact check it fails: a changed payload under its old hash\nfails `payload_hash`; a re-hashed payload fails `event_hash`; a fully re-hashed event fails\nthe next event's `prev_hash`; a re-hashed tail fails the signed `checkpoint` that covers it;\na deleted event leaves a `seq` gap.",
+        "properties": {
+          "checkpoints": {
+            "items": {
+              "$ref": "#/components/schemas/CheckpointStatus"
+            },
+            "title": "Checkpoints",
+            "type": "array"
+          },
+          "events": {
+            "title": "Events",
+            "type": "integer"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/Finding"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "head_seq": {
+            "title": "Head Seq",
+            "type": "integer"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "project_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "trusted_key_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Sha256"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "verified_through_seq": {
+            "title": "Verified Through Seq",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "project_id",
+          "events",
+          "head_seq",
+          "ok",
+          "verified_through_seq",
+          "findings",
+          "checkpoints",
+          "trusted_key_id"
+        ],
+        "title": "ChainAudit",
+        "type": "object"
+      },
+      "ChainCheck": {
+        "enum": [
+          "seq",
+          "payload_hash",
+          "prev_hash",
+          "event_hash",
+          "checkpoint"
+        ],
+        "type": "string"
+      },
+      "Check": {
+        "additionalProperties": false,
+        "properties": {
+          "actual": {
+            "title": "Actual",
+            "type": "integer"
+          },
+          "expected": {
+            "title": "Expected",
+            "type": "integer"
+          },
+          "holds": {
+            "title": "Holds",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "expected",
+          "actual",
+          "holds"
+        ],
+        "title": "Check",
+        "type": "object"
+      },
+      "Checkpoint": {
+        "additionalProperties": false,
+        "description": "A signed statement that the chain of `project_id` had `head_hash` at `seq`.\n\nCopies live outside the database, so a checkpoint still convicts a chain that an administrator\nrewrote or cut, as long as the signing key was not theirs.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "head_hash": {
+            "$ref": "#/components/schemas/Sha256"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "key_id": {
+            "$ref": "#/components/schemas/Sha256"
+          },
+          "project_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "signature": {
+            "$ref": "#/components/schemas/SignatureHex"
+          },
+          "tsa_token_hash": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Sha256"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "seq",
+          "head_hash",
+          "key_id",
+          "signature",
+          "created_at"
+        ],
+        "title": "Checkpoint",
+        "type": "object"
+      },
+      "CheckpointStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "checkpoint": {
+            "$ref": "#/components/schemas/Checkpoint"
+          },
+          "head_matches": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Head Matches"
+          },
+          "signature": {
+            "enum": [
+              "valid",
+              "invalid",
+              "unknown_key",
+              "unchecked"
+            ],
+            "title": "Signature",
+            "type": "string"
+          }
+        },
+        "required": [
+          "checkpoint",
+          "signature",
+          "head_matches"
+        ],
+        "title": "CheckpointStatus",
+        "type": "object"
       },
       "Comparator": {
         "additionalProperties": false,
@@ -1706,6 +2029,40 @@
         "title": "Endpoint",
         "type": "object"
       },
+      "EventPage": {
+        "additionalProperties": false,
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/TracedEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "head_seq": {
+            "title": "Head Seq",
+            "type": "integer"
+          },
+          "next_after_seq": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next After Seq"
+          }
+        },
+        "required": [
+          "events",
+          "head_seq",
+          "next_after_seq"
+        ],
+        "title": "EventPage",
+        "type": "object"
+      },
       "ExampleProtocol": {
         "additionalProperties": false,
         "properties": {
@@ -1930,6 +2287,25 @@
         "title": "ExtractionSchema",
         "type": "object"
       },
+      "Fact": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "value"
+        ],
+        "title": "Fact",
+        "type": "object"
+      },
       "FailedCheck": {
         "enum": [
           "quote_not_found",
@@ -2021,6 +2397,77 @@
           "description"
         ],
         "title": "FieldSpec",
+        "type": "object"
+      },
+      "Finding": {
+        "additionalProperties": false,
+        "description": "One check that failed, with what the row stores and what recomputing it gives.\n\n`seq` is the event the check ran on; a checkpoint's finding names the seq it covers.",
+        "properties": {
+          "check": {
+            "$ref": "#/components/schemas/ChainCheck"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expected": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected"
+          },
+          "problem": {
+            "$ref": "#/components/schemas/Problem"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "stored": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stored"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          }
+        },
+        "required": [
+          "seq",
+          "check",
+          "problem",
+          "reason"
+        ],
+        "title": "Finding",
         "type": "object"
       },
       "FreshnessPolicy": {
@@ -2320,6 +2767,32 @@
         "title": "Interval",
         "type": "object"
       },
+      "ItemLabel": {
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "trace_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Ref"
+          }
+        },
+        "required": [
+          "title",
+          "trace_ref"
+        ],
+        "title": "ItemLabel",
+        "type": "object"
+      },
       "KnownInclude": {
         "additionalProperties": false,
         "properties": {
@@ -2573,6 +3046,45 @@
           "actor_id"
         ],
         "title": "MergeRequest",
+        "type": "object"
+      },
+      "Milestone": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "protocol",
+              "search",
+              "corpus",
+              "stage_opened",
+              "stage_closed",
+              "seal",
+              "report"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "seq",
+          "kind",
+          "label",
+          "recorded_at"
+        ],
+        "title": "Milestone",
         "type": "object"
       },
       "ModeChange": {
@@ -3044,6 +3556,179 @@
           "studies_identified"
         ],
         "title": "PrismaCounts",
+        "type": "object"
+      },
+      "PrismaFlow": {
+        "additionalProperties": false,
+        "properties": {
+          "ai_full_text": {
+            "$ref": "#/components/schemas/AiInvolvement"
+          },
+          "ai_title_abstract": {
+            "$ref": "#/components/schemas/AiInvolvement"
+          },
+          "checks": {
+            "items": {
+              "$ref": "#/components/schemas/Check"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "cutoff_seq": {
+            "title": "Cutoff Seq",
+            "type": "integer"
+          },
+          "duplicates_removed": {
+            "title": "Duplicates Removed",
+            "type": "integer"
+          },
+          "exclusion_reasons": {
+            "items": {
+              "$ref": "#/components/schemas/ReasonCount"
+            },
+            "title": "Exclusion Reasons",
+            "type": "array"
+          },
+          "identified_by_source": {
+            "items": {
+              "$ref": "#/components/schemas/SourceCount"
+            },
+            "title": "Identified By Source",
+            "type": "array"
+          },
+          "identified_from_databases": {
+            "title": "Identified From Databases",
+            "type": "integer"
+          },
+          "identified_from_other_sources": {
+            "title": "Identified From Other Sources",
+            "type": "integer"
+          },
+          "identified_from_registers": {
+            "title": "Identified From Registers",
+            "type": "integer"
+          },
+          "identity_revision_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "members": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Members",
+            "type": "object"
+          },
+          "records_awaiting_screening": {
+            "title": "Records Awaiting Screening",
+            "type": "integer"
+          },
+          "records_excluded": {
+            "title": "Records Excluded",
+            "type": "integer"
+          },
+          "records_identified": {
+            "title": "Records Identified",
+            "type": "integer"
+          },
+          "records_outside_identity": {
+            "title": "Records Outside Identity",
+            "type": "integer"
+          },
+          "records_screened": {
+            "title": "Records Screened",
+            "type": "integer"
+          },
+          "records_unresolved": {
+            "title": "Records Unresolved",
+            "type": "integer"
+          },
+          "reports_assessed": {
+            "title": "Reports Assessed",
+            "type": "integer"
+          },
+          "reports_awaiting_assessment": {
+            "title": "Reports Awaiting Assessment",
+            "type": "integer"
+          },
+          "reports_awaiting_classification": {
+            "title": "Reports Awaiting Classification",
+            "type": "integer"
+          },
+          "reports_excluded": {
+            "title": "Reports Excluded",
+            "type": "integer"
+          },
+          "reports_included": {
+            "title": "Reports Included",
+            "type": "integer"
+          },
+          "reports_not_retrieved": {
+            "title": "Reports Not Retrieved",
+            "type": "integer"
+          },
+          "reports_sought": {
+            "title": "Reports Sought",
+            "type": "integer"
+          },
+          "reports_unresolved": {
+            "title": "Reports Unresolved",
+            "type": "integer"
+          },
+          "scope_id": {
+            "title": "Scope Id",
+            "type": "string"
+          },
+          "studies_included": {
+            "title": "Studies Included",
+            "type": "integer"
+          },
+          "topic_id": {
+            "title": "Topic Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic_id",
+          "scope_id",
+          "identity_revision_id",
+          "cutoff_seq",
+          "identified_by_source",
+          "records_identified",
+          "identified_from_databases",
+          "identified_from_registers",
+          "identified_from_other_sources",
+          "duplicates_removed",
+          "records_outside_identity",
+          "records_screened",
+          "records_awaiting_screening",
+          "records_excluded",
+          "records_unresolved",
+          "ai_title_abstract",
+          "reports_sought",
+          "reports_not_retrieved",
+          "reports_assessed",
+          "reports_awaiting_assessment",
+          "reports_excluded",
+          "exclusion_reasons",
+          "reports_awaiting_classification",
+          "reports_unresolved",
+          "ai_full_text",
+          "reports_included",
+          "studies_included",
+          "members",
+          "checks"
+        ],
+        "title": "PrismaFlow",
         "type": "object"
       },
       "Problem": {
@@ -3751,6 +4436,25 @@
         "title": "QueueRecord",
         "type": "object"
       },
+      "ReasonCount": {
+        "additionalProperties": false,
+        "properties": {
+          "criterion_id": {
+            "title": "Criterion Id",
+            "type": "string"
+          },
+          "reports": {
+            "title": "Reports",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "criterion_id",
+          "reports"
+        ],
+        "title": "ReasonCount",
+        "type": "object"
+      },
       "RecordFacts": {
         "additionalProperties": false,
         "description": "Bibliographic facts shown above the abstract.",
@@ -3817,6 +4521,80 @@
           }
         },
         "title": "RecordFacts",
+        "type": "object"
+      },
+      "RecordTrace": {
+        "additionalProperties": false,
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/TracedEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "head_seq": {
+            "title": "Head Seq",
+            "type": "integer"
+          },
+          "identity_revision_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "occurrences": {
+            "items": {
+              "$ref": "#/components/schemas/TracedOccurrence"
+            },
+            "title": "Occurrences",
+            "type": "array"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "report_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "reveals": {
+            "items": {
+              "$ref": "#/components/schemas/RevealTiming"
+            },
+            "title": "Reveals",
+            "type": "array"
+          },
+          "study_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "report_id",
+          "study_id",
+          "title",
+          "identity_revision_id",
+          "occurrences",
+          "events",
+          "reveals",
+          "head_seq"
+        ],
+        "title": "RecordTrace",
         "type": "object"
       },
       "ReferenceSet": {
@@ -4156,6 +4934,91 @@
           "always"
         ],
         "type": "string"
+      },
+      "RevealTiming": {
+        "additionalProperties": false,
+        "description": "When a reviewer saw the AI's reading, against their own blind decision.",
+        "properties": {
+          "decided_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "decision_recorded_at": {
+            "format": "date-time",
+            "title": "Decision Recorded At",
+            "type": "string"
+          },
+          "decision_seq": {
+            "title": "Decision Seq",
+            "type": "integer"
+          },
+          "final_seq": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Final Seq"
+          },
+          "kept": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kept"
+          },
+          "reviewer": {
+            "title": "Reviewer",
+            "type": "string"
+          },
+          "reviewer_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "shown_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shown At"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stage",
+          "reviewer_id",
+          "reviewer",
+          "decision_seq",
+          "decided_at",
+          "decision_recorded_at",
+          "shown_at",
+          "final_seq",
+          "kept"
+        ],
+        "title": "RevealTiming",
+        "type": "object"
       },
       "ReviewField": {
         "additionalProperties": false,
@@ -5083,6 +5946,23 @@
         "pattern": "^[0-9a-f]{64}$",
         "type": "string"
       },
+      "SignCheckpointRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_id": {
+            "$ref": "#/components/schemas/Id"
+          }
+        },
+        "required": [
+          "actor_id"
+        ],
+        "title": "SignCheckpointRequest",
+        "type": "object"
+      },
+      "SignatureHex": {
+        "pattern": "^[0-9a-f]{128}$",
+        "type": "string"
+      },
       "Source": {
         "additionalProperties": false,
         "properties": {
@@ -5122,6 +6002,35 @@
           "name"
         ],
         "title": "Source",
+        "type": "object"
+      },
+      "SourceCount": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "records": {
+            "title": "Records",
+            "type": "integer"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "name",
+          "kind",
+          "records"
+        ],
+        "title": "SourceCount",
         "type": "object"
       },
       "SourceKind": {
@@ -5347,6 +6256,70 @@
           "full_text"
         ],
         "type": "string"
+      },
+      "StageDisclosure": {
+        "additionalProperties": false,
+        "properties": {
+          "ai_proposed_exclusions": {
+            "title": "Ai Proposed Exclusions",
+            "type": "integer"
+          },
+          "conflicts_resolved": {
+            "title": "Conflicts Resolved",
+            "type": "integer"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "records": {
+            "title": "Records",
+            "type": "integer"
+          },
+          "records_read_by_ai": {
+            "title": "Records Read By Ai",
+            "type": "integer"
+          },
+          "rescreens_sent": {
+            "title": "Rescreens Sent",
+            "type": "integer"
+          },
+          "reveal": {
+            "title": "Reveal",
+            "type": "string"
+          },
+          "reveals_shown": {
+            "title": "Reveals Shown",
+            "type": "integer"
+          },
+          "revised_after_reveal": {
+            "title": "Revised After Reveal",
+            "type": "integer"
+          },
+          "scope_id": {
+            "title": "Scope Id",
+            "type": "string"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stage",
+          "scope_id",
+          "mode",
+          "reveal",
+          "records",
+          "records_read_by_ai",
+          "ai_proposed_exclusions",
+          "reveals_shown",
+          "revised_after_reveal",
+          "conflicts_resolved",
+          "rescreens_sent"
+        ],
+        "title": "StageDisclosure",
+        "type": "object"
       },
       "StageInfo": {
         "additionalProperties": false,
@@ -5788,6 +6761,176 @@
           "label"
         ],
         "title": "Timepoint",
+        "type": "object"
+      },
+      "TraceKind": {
+        "enum": [
+          "search",
+          "identity",
+          "stage",
+          "ai",
+          "decision",
+          "conflict",
+          "adjudication",
+          "full_text",
+          "extraction",
+          "report",
+          "ledger",
+          "project"
+        ],
+        "type": "string"
+      },
+      "TracedEvent": {
+        "additionalProperties": false,
+        "description": "A ledger event with who recorded it, what it means, and its place in the chain.",
+        "properties": {
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "actor_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "actor_kind": {
+            "title": "Actor Kind",
+            "type": "string"
+          },
+          "artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactRef"
+            },
+            "title": "Artifacts",
+            "type": "array"
+          },
+          "event_hash": {
+            "$ref": "#/components/schemas/Sha256"
+          },
+          "event_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/Fact"
+            },
+            "title": "Facts",
+            "type": "array"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TraceKind"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "payload_hash": {
+            "$ref": "#/components/schemas/Sha256"
+          },
+          "prev_hash": {
+            "$ref": "#/components/schemas/Sha256"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seq",
+          "event_id",
+          "type",
+          "schema_version",
+          "actor_id",
+          "actor",
+          "actor_kind",
+          "recorded_at",
+          "payload_hash",
+          "prev_hash",
+          "event_hash",
+          "kind",
+          "stage",
+          "summary",
+          "facts",
+          "artifacts",
+          "payload"
+        ],
+        "title": "TracedEvent",
+        "type": "object"
+      },
+      "TracedOccurrence": {
+        "additionalProperties": false,
+        "description": "One search result that the identity revision counts as this record.",
+        "properties": {
+          "execution_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "occurrence_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "provider_record_id": {
+            "title": "Provider Record Id",
+            "type": "string"
+          },
+          "raw_hash": {
+            "$ref": "#/components/schemas/Sha256"
+          },
+          "search_seq": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Seq"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "occurrence_id",
+          "title",
+          "source",
+          "provider_record_id",
+          "execution_id",
+          "search_seq",
+          "raw_hash"
+        ],
+        "title": "TracedOccurrence",
         "type": "object"
       },
       "UndoRequest": {
@@ -6547,6 +7690,567 @@
         "summary": "Get Project",
         "tags": [
           "projects"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/audit/artifacts/{sha256}": {
+      "get": {
+        "description": "An artifact a ledger event of the project names: a raw search response, a full text, a\nmodel's raw output, a rendered prompt. Nothing else by hash.",
+        "operationId": "downloadAuditArtifact",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sha256",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "Sha256",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download",
+        "tags": [
+          "audit"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/audit/as-of": {
+      "get": {
+        "description": "The PRISMA flows and the AI disclosure as the ledger stood at `cutoff_seq` (the head when\nempty). Computed, not stored: the Reports screen renders and keeps a report.",
+        "operationId": "reviewAsOf",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cutoff_seq",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cutoff Seq"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AsOf"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review As Of",
+        "tags": [
+          "audit"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/audit/checkpoints": {
+      "get": {
+        "description": "Every stored checkpoint, oldest first, with its signature checked against the server's key\nand its head hash against the stored event.",
+        "operationId": "listCheckpoints",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CheckpointStatus"
+                  },
+                  "title": "Response Listcheckpoints",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Checkpoints",
+        "tags": [
+          "audit"
+        ]
+      },
+      "post": {
+        "description": "Sign the chain head with the server's checkpoint key. Refused if the chain does not verify.",
+        "operationId": "signCheckpoint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignCheckpointRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckpointStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sign Checkpoint",
+        "tags": [
+          "audit"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/audit/events": {
+      "get": {
+        "description": "Ledger events after `after_seq`, with their payloads. A `type` ending in \".\" matches its\nfamily (\"screening.\"); `ref` keeps one record's events.",
+        "operationId": "listAuditEvents",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_seq",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "After Seq",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "through_seq",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Through Seq"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Type"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actor_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Id"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Actor Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ref",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ref"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Events",
+        "tags": [
+          "audit"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/audit/milestones": {
+      "get": {
+        "description": "Named ledger positions to pick a cutoff by: protocol versions, searches, the corpus, and\nevery stage opened and closed.",
+        "operationId": "listMilestones",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Milestone"
+                  },
+                  "title": "Response Listmilestones",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Milestones",
+        "tags": [
+          "audit"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/audit/records/{ref}/trace": {
+      "get": {
+        "description": "Every ledger event that concerns one record, from the searches that found it on.\n\n`ref` is any reference a PRISMA count lists: a report, a search result, or a study.",
+        "operationId": "traceRecord",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "ref",
+            "required": true,
+            "schema": {
+              "title": "Ref",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordTrace"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trace Record",
+        "tags": [
+          "audit"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/audit/verify": {
+      "get": {
+        "description": "Recompute every payload hash, event hash, and link, and check every checkpoint against the\nserver's checkpoint key. Names each failing event and check, not only the first.",
+        "operationId": "auditLedger",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChainAudit"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify",
+        "tags": [
+          "audit"
         ]
       }
     },
