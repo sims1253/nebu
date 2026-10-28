@@ -226,7 +226,8 @@ def test_two_distinct_publications_same_nct_stay_separate_reports_linked_to_one_
     )
 
     exec1 = make_execution("pubmed", [primary, followup])
-    corpus_rev = ingest(pg, proj_id, [exec1])
+    ledger = InMemoryLedger()
+    corpus_rev = ingest(pg, proj_id, [exec1], actor_id=actor_id, ledger=ledger)
 
     assert len(corpus_rev.proposals) == 1
     proposal = corpus_rev.proposals[0]
@@ -240,6 +241,7 @@ def test_two_distinct_publications_same_nct_stay_separate_reports_linked_to_one_
         corpus_rev.identity_revision_id,
         proposal.id,
         actor_id,
+        ledger=ledger,
     )
     assert isinstance(new_rev, IdentityRevision)
     assert new_rev.parent_id == corpus_rev.identity_revision_id
@@ -361,7 +363,9 @@ def test_full_corpus_flow_and_prisma_counts_against_postgres(pg: Tx) -> None:
     exec_ctgov = make_execution("ctgov", [t2_ctgov])
 
     # Ingest
-    corpus_rev = ingest(pg, proj_id, [exec_pubmed, exec_central, exec_ctgov], ledger=ledger)
+    corpus_rev = ingest(
+        pg, proj_id, [exec_pubmed, exec_central, exec_ctgov], actor_id=actor_id, ledger=ledger
+    )
     assert len(corpus_rev.occurrences) == 8
     assert corpus_rev.identity_revision_id is not None
 
@@ -487,43 +491,9 @@ def test_full_corpus_flow_and_prisma_counts_against_postgres(pg: Tx) -> None:
     all_events = ledger.events(pg, proj_id)
     event_types = [e.type for e in all_events]
     assert event_types == [
+        "corpus.ingested",
         "corpus.confirmed",
         "corpus.confirmed",
         "corpus.merged",
         "corpus.split",
     ]
-
-
-@pytest.mark.postgres
-def test_postgres_ledger_persistence_and_verification(pg: Tx) -> None:
-    """Test PostgresLedger writing directly to the foundation audit_event table."""
-    proj_id, actor_id = create_test_project_and_actor(pg)
-
-    rec1 = make_record(doi="10.1056/NEJMoa1111111", title="Trial A (PubMed)")
-    rec2 = make_record(doi="10.1056/NEJMoa1111111", title="Trial A (CENTRAL)")
-    exec1 = make_execution("pubmed", [rec1, rec2])
-
-    corpus_rev = ingest(pg, proj_id, [exec1])
-    proposal = corpus_rev.proposals[0]
-
-    # Confirm using PostgresLedger directly
-    assert corpus_rev.identity_revision_id is not None
-    rev1 = confirm(
-        pg,
-        proj_id,
-        corpus_rev.identity_revision_id,
-        proposal.id,
-        actor_id,
-    )
-
-    # Verify audit_event row in Postgres
-    with pg.cursor() as cur:
-        cur.execute(
-            "select seq, event_id, type, prev_hash, event_hash from audit_event where project_id = %s order by seq asc",
-            (proj_id,),
-        )
-        events = cur.fetchall()
-        assert len(events) == 1
-        assert events[0]["type"] == "corpus.confirmed"
-        assert events[0]["seq"] == 1
-        assert events[0]["event_id"] == rev1.event_id

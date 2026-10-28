@@ -98,7 +98,8 @@ def test_corpus_api_endpoints_e2e(api_client: TestClient) -> None:
             "insert into actor (id, identity_ref, kind) values (%s, %s, %s)",
             (actor_id, f"actor-{actor_id}@kittum.org", "human"),
         )
-        corpus_rev = ingest(tx, proj_id, [execution])
+        ledger = api_client.app.state.context.ledger
+        corpus_rev = ingest(tx, proj_id, [execution], actor_id=actor_id, ledger=ledger)
 
     # 1. GET /api/projects/{project_id}/corpus/proposals
     resp = api_client.get(f"/api/projects/{proj_id}/corpus/proposals")

@@ -34,6 +34,7 @@ class FakeCorpus:
         project_id: Id,
         executions: tuple[SearchExecution, ...] | list[SearchExecution],
         *,
+        actor_id: Id | None = None,
         ledger: Ledger | None = None,
     ) -> CorpusRevision:
         all_records = []

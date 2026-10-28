@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, Query
 
-from kittum.api import Context  # noqa: TC001
+from kittum.api import AppContext, Context  # noqa: TC001
 from kittum.core import Id, Record
 from kittum.corpus import (
     IdentityRevision,
@@ -16,6 +16,7 @@ from kittum.corpus import (
     merge,
     split,
 )
+from kittum.ledger import Ledger  # noqa: TC001
 
 router = APIRouter(prefix="/api/projects/{project_id}/corpus", tags=["corpus"])
 
@@ -71,7 +72,7 @@ def confirm_route(
                 body.revision_id,
                 body.proposal_id,
                 body.actor_id,
-                ledger=ctx.ledger,
+                ledger=_ledger(ctx),
             )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -93,7 +94,7 @@ def merge_route(
                 body.relation,
                 body.actor_id,
                 reason=body.reason,
-                ledger=ctx.ledger,
+                ledger=_ledger(ctx),
             )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -114,7 +115,7 @@ def split_route(
                 body.occurrence_ids,
                 body.actor_id,
                 reason=body.reason,
-                ledger=ctx.ledger,
+                ledger=_ledger(ctx),
             )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -128,3 +129,9 @@ def get_counts_route(
 ) -> PrismaCounts:
     with ctx.db.transaction() as tx:
         return get_counts(tx, revision_id)
+
+
+def _ledger(ctx: AppContext) -> Ledger:
+    if ctx.ledger is None:
+        raise HTTPException(status_code=503, detail="no ledger is configured")
+    return ctx.ledger

@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 
 from kittum.core import Id, new_id
 from kittum.corpus.dedupe import generate_link_proposals
-from kittum.corpus.ledger import PostgresLedger
 from kittum.corpus.models import (
     CorpusRevision,
     IdentityLink,
@@ -34,10 +33,13 @@ def ingest(
     project_id: Id,
     executions: tuple[SearchExecution, ...] | list[SearchExecution],
     *,
-    ledger: Ledger | None = None,
+    actor_id: Id,
+    ledger: Ledger,
 ) -> CorpusRevision:
-    """Ingest search executions, generate link proposals, and create initial revisions."""
-    _ = ledger
+    """Ingest search executions, generate link proposals, and create the first identity revision.
+
+    Writes a `corpus.ingested` ledger event in the caller's transaction.
+    """
     all_records = []
     occurrences: list[Occurrence] = []
     for execution in executions:
@@ -56,66 +58,77 @@ def ingest(
     corpus_rev_id = new_id()
     identity_rev_id = new_id()
 
-    # Try database persistence if tx is real
-    try:
-        with tx.cursor() as cur:
-            cur.execute(
-                "insert into corpus_revision (id, project_id) values (%s, %s)",
-                (corpus_rev_id, project_id),
-            )
-            for prop in proposals:
-                cur.execute(
-                    """
-                    insert into proposal (
-                        id, project_id, corpus_revision_id, relation, occurrence_ids, evidence, status
-                    ) values (%s, %s, %s, %s, %s, %s, %s)
-                    """,
-                    (
-                        prop.id,
-                        project_id,
-                        corpus_rev_id,
-                        prop.relation,
-                        list(prop.occurrence_ids),
-                        list(prop.evidence),
-                        prop.status,
-                    ),
-                )
+    event = ledger.append(
+        tx,
+        EventDraft(
+            project_id=project_id,
+            type="corpus.ingested",
+            schema_version=1,
+            actor_id=actor_id,
+            payload={
+                "corpus_revision_id": str(corpus_rev_id),
+                "identity_revision_id": str(identity_rev_id),
+                "search_ids": [str(e.id) for e in executions],
+                "occurrences": len(occurrences),
+                "proposals": len(proposals),
+            },
+        ),
+    )
+    with tx.cursor() as cur:
+        cur.execute(
+            "insert into corpus_revision (id, project_id) values (%s, %s)",
+            (corpus_rev_id, project_id),
+        )
+        for prop in proposals:
             cur.execute(
                 """
-                insert into identity_revision (id, project_id, parent_id, event_seq, event_id)
-                values (%s, %s, null, 0, null)
+                insert into proposal (
+                    id, project_id, corpus_revision_id, relation, occurrence_ids, evidence, status
+                ) values (%s, %s, %s, %s, %s, %s, %s)
                 """,
-                (identity_rev_id, project_id),
+                (
+                    prop.id,
+                    project_id,
+                    corpus_rev_id,
+                    prop.relation,
+                    list(prop.occurrence_ids),
+                    list(prop.evidence),
+                    prop.status,
+                ),
             )
-            for occ in occurrences:
-                report_id = new_id()
-                study_id = new_id()
-                cur.execute(
-                    "insert into report (id, project_id) values (%s, %s)",
-                    (report_id, project_id),
-                )
-                cur.execute(
-                    "insert into study (id, project_id) values (%s, %s)",
-                    (study_id, project_id),
-                )
-                cur.execute(
-                    """
-                    insert into identity_link (
-                        id, revision_id, occurrence_id, report_id, study_id, relation, source
-                    ) values (%s, %s, %s, %s, %s, 'standalone', %s)
-                    """,
-                    (
-                        new_id(),
-                        identity_rev_id,
-                        occ.id,
-                        report_id,
-                        study_id,
-                        occ.source,
-                    ),
-                )
-    except AssertionError:
-        # NullTx in tests
-        pass
+        cur.execute(
+            """
+            insert into identity_revision (id, project_id, parent_id, event_seq, event_id)
+            values (%s, %s, null, %s, %s)
+            """,
+            (identity_rev_id, project_id, event.seq, event.event_id),
+        )
+        for occ in occurrences:
+            report_id = new_id()
+            study_id = new_id()
+            cur.execute(
+                "insert into report (id, project_id) values (%s, %s)",
+                (report_id, project_id),
+            )
+            cur.execute(
+                "insert into study (id, project_id) values (%s, %s)",
+                (study_id, project_id),
+            )
+            cur.execute(
+                """
+                insert into identity_link (
+                    id, revision_id, occurrence_id, report_id, study_id, relation, source
+                ) values (%s, %s, %s, %s, %s, 'standalone', %s)
+                """,
+                (
+                    new_id(),
+                    identity_rev_id,
+                    occ.id,
+                    report_id,
+                    study_id,
+                    occ.source,
+                ),
+            )
 
     return CorpusRevision(
         id=corpus_rev_id,
@@ -133,10 +146,10 @@ def confirm(
     proposal_id: Id,
     confirmed_by: Id,
     *,
-    ledger: Ledger | None = None,
+    ledger: Ledger,
 ) -> IdentityRevision:
     """Human confirmation of a link proposal, creating a new identity revision and ledger event."""
-    effective_ledger = ledger or PostgresLedger()
+    effective_ledger = ledger
 
     with tx.cursor() as cur:
         cur.execute(
@@ -260,10 +273,10 @@ def merge(
     actor_id: Id,
     *,
     reason: str = "",
-    ledger: Ledger | None = None,
+    ledger: Ledger,
 ) -> IdentityRevision:
     """Human manual merge of occurrences, creating a new identity revision and ledger event."""
-    effective_ledger = ledger or PostgresLedger()
+    effective_ledger = ledger
 
     with tx.cursor() as cur:
         cur.execute(
@@ -370,10 +383,10 @@ def split(
     actor_id: Id,
     *,
     reason: str = "",
-    ledger: Ledger | None = None,
+    ledger: Ledger,
 ) -> IdentityRevision:
     """Human split of occurrences, undoing a previous merge without losing history."""
-    effective_ledger = ledger or PostgresLedger()
+    effective_ledger = ledger
 
     with tx.cursor() as cur:
         cur.execute(
@@ -552,7 +565,7 @@ def link(
     tx: Tx | None = None,
     project_id: Id | None = None,
     parent_revision_id: Id | None = None,
-    ledger: Ledger | None = None,
+    ledger: Ledger,
 ) -> IdentityRevision:
     """Convenience alias for confirming a proposal."""
     if tx is None or project_id is None or parent_revision_id is None:
