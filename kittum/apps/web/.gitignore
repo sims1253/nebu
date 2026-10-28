@@ -1,3 +1,3 @@
 scripts/.cache/
 screenshots/*.tmp.png
-apps/web/.vitest/
+.vitest/
