@@ -202,6 +202,23 @@ describe("title and abstract queue", () => {
     expect(abc06.map((d) => d.decision.outcome)).toEqual(["include", "unclear"]);
   });
 
+  test("shows an abstract without section labels whole, with its protocol terms", async () => {
+    const app = mount(QUEUE, { reveal: "never" });
+    unmount = app.unmount;
+    await expectTitle("ClarIDHy");
+    for (let i = 0; i < 20; i++) await press("i");
+    // PMID 35510484's abstract has no labels: one unlabelled section, as the server sends it.
+    await expectTitle("Multicenter phase II trial of trastuzumab deruxtecan");
+    const record = page.getByRole("article", { name: "Record" });
+    await expect
+      .element(
+        record.getByText("Trastuzumab deruxtecan (DS-8201) is an antibody-drug", { exact: false }),
+      )
+      .toBeVisible();
+    expect(document.body.textContent).not.toContain("This record has no abstract");
+    expect(document.querySelectorAll("article .term").length).toBeGreaterThan(0);
+  });
+
   test("a held decision key decides one record, not the ones behind it", async () => {
     const app = mount(QUEUE);
     unmount = app.unmount;

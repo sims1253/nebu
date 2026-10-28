@@ -170,12 +170,22 @@ test("a lead enriches the corpus from the open sources and fetches open-access f
       SENTINELS,
       ...by,
     );
+    const looked: string[] = [];
     for (const id of [sam, jun]) {
       const page = await (await browser.newContext()).newPage();
       await page.goto(`/p/${projectId}/screening/title-abstract?as=${id}`);
-      await includeAll(page);
+      // The registry entry's summary has no section labels; the reviewer still reads all of it.
+      await includeAll(page, async (title) => {
+        if (!title.startsWith(REGISTRY)) return;
+        const record = page.getByRole("article", { name: "Record" });
+        await expect(record).toContainText("This ComBaCaL cohort study is to assess the impact");
+        await expect(record).toContainText("Trial registration: NCT05596773.");
+        await expect(record.getByText("This record has no abstract")).toHaveCount(0);
+        looked.push(id);
+      });
       await page.context().close();
     }
+    expect(looked).toEqual([sam, jun]);
   });
 
   const retrievalRow = (title: string) =>

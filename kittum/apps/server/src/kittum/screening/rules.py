@@ -293,9 +293,17 @@ _LABEL = re.compile(r"(?:^|(?<=\s))([A-Z][A-Z &/-]{2,}[A-Z]):\s+")
 
 
 def sections(text: str) -> tuple[tuple[str, int, int], ...]:
-    """Structured-abstract sections as (label, start, end), from inline labels ("METHODS: ")."""
+    """Abstract sections as (label, start, end), from inline labels ("METHODS: ").
+
+    Text without labels (a registry summary, an unstructured abstract), or before the first
+    label, is one section with the empty label. Only an empty text has no sections.
+    """
     matches = list(_LABEL.finditer(text))
     out: list[tuple[str, int, int]] = []
+    head = text[: matches[0].start() if matches else len(text)]
+    if head.strip():
+        start = len(head) - len(head.lstrip())
+        out.append(("", start, len(head.rstrip())))
     for i, m in enumerate(matches):
         end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
         body = text[m.end() : end].rstrip()

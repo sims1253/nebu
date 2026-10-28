@@ -2,8 +2,11 @@
 import { expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
-/** Screens a person's whole title and abstract queue: includes everything, keeps it on a reveal. */
-export const includeAll = async (page: Page) => {
+/**
+ * Screens a person's whole title and abstract queue: includes everything, keeps it on a reveal.
+ * `look` sees each record before it is decided.
+ */
+export const includeAll = async (page: Page, look?: (title: string) => Promise<void>) => {
   const title = page.getByTestId("record-title");
   const finished = page.getByRole("heading", { name: "Queue finished" });
   const banner = page.getByTestId("ai-reveal");
@@ -17,6 +20,7 @@ export const includeAll = async (page: Page) => {
     await expect(title.or(finished)).toBeVisible({ timeout: 60_000 });
     if (await finished.isVisible()) return;
     const text = await titleNow();
+    if (look && text) await look(text);
     await page.keyboard.press("i");
     await expect
       .poll(
