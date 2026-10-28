@@ -8,7 +8,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
-from kittum.core import FixedClock, new_id
+from psycopg.types.json import Jsonb
+
+from kittum.core import FixedClock, canonical_json, new_id
 from kittum.db.testing import null_tx
 from kittum.ledger import AuditEvent, EventDraft, PostgresLedger, SqliteLedger
 from kittum.ledger.testing import InMemoryLedger, seed_project
@@ -53,6 +55,8 @@ class Harness:
     new_project: Callable[[], tuple[Id, Id]]
     delete: Callable[[Id, int], None]
     insert: Callable[[AuditEvent], None]
+    overwrite: Callable[[AuditEvent], None]
+    """Replace the stored event at the same seq in place, leaving checkpoints alone."""
 
     def append(self, project_id: Id, actor_id: Id, n: int, kind: str = "test.event") -> None:
         for i in range(n):
@@ -84,7 +88,11 @@ def memory_harness() -> Iterator[Harness]:
         chain.append(event)
         chain.sort(key=lambda e: e.seq)
 
-    yield Harness("memory", ledger, null_tx(), clock, _ids, delete, insert)
+    def overwrite(event: AuditEvent) -> None:
+        chain = ledger._events[event.project_id]
+        chain[:] = [event if e.seq == event.seq else e for e in chain]
+
+    yield Harness("memory", ledger, null_tx(), clock, _ids, delete, insert, overwrite)
 
 
 def sqlite_harness(tmp_path: Path) -> Iterator[Harness]:
@@ -107,8 +115,29 @@ def sqlite_harness(tmp_path: Path) -> Iterator[Harness]:
     def insert(event: AuditEvent) -> None:
         ledger.restore([event], [])
 
+    def overwrite(event: AuditEvent) -> None:
+        unlocked()
+        conn.execute(
+            "update audit_event set event_id = ?, type = ?, schema_version = ?, actor_id = ?,"
+            " recorded_at = ?, payload = ?, payload_hash = ?, prev_hash = ?, event_hash = ?"
+            " where project_id = ? and seq = ?",
+            (
+                str(event.event_id),
+                event.type,
+                event.schema_version,
+                str(event.actor_id),
+                event.recorded_at.isoformat(),
+                canonical_json(event.payload).decode(),
+                event.payload_hash,
+                event.prev_hash,
+                event.event_hash,
+                str(event.project_id),
+                event.seq,
+            ),
+        )
+
     try:
-        yield Harness("sqlite", ledger, null_tx(), clock, _ids, delete, insert)
+        yield Harness("sqlite", ledger, null_tx(), clock, _ids, delete, insert, overwrite)
     finally:
         ledger.close()
 
@@ -127,4 +156,28 @@ def postgres_harness(pg: Tx) -> Iterator[Harness]:
     def insert(event: AuditEvent) -> None:
         ledger._insert_event(pg, event)
 
-    yield Harness("postgres", ledger, pg, clock, lambda: seed_project(pg), delete, insert)
+    def overwrite(event: AuditEvent) -> None:
+        pg.execute("alter table audit_event disable trigger user")
+        pg.execute(
+            "update audit_event set event_id = %s, type = %s, schema_version = %s,"
+            " actor_id = %s, recorded_at = %s, payload = %s, payload_hash = %s, prev_hash = %s,"
+            " event_hash = %s where project_id = %s and seq = %s",
+            (
+                event.event_id,
+                event.type,
+                event.schema_version,
+                event.actor_id,
+                event.recorded_at,
+                Jsonb(event.payload),
+                event.payload_hash,
+                event.prev_hash,
+                event.event_hash,
+                event.project_id,
+                event.seq,
+            ),
+        )
+        pg.execute("alter table audit_event enable trigger user")
+
+    yield Harness(
+        "postgres", ledger, pg, clock, lambda: seed_project(pg), delete, insert, overwrite
+    )

@@ -115,7 +115,8 @@ class ChainStore(ABC):
     ) -> Checkpoint:
         """Verify the chain through `seq` (default: the head), sign its hash, and store that.
 
-        Refuses to sign a chain that does not verify, so a checkpoint never launders tampering.
+        Refuses to sign a chain that does not verify, or that contradicts an earlier checkpoint
+        from the same key, so a checkpoint never launders tampering, even a fully re-hashed one.
         """
         with self._atomic(tx):
             head = self._lock_head(tx, project_id)
@@ -124,15 +125,24 @@ class ChainStore(ABC):
             seq = head.seq if seq is None else seq
             if not 1 <= seq <= head.seq:
                 raise ValueError(f"seq {seq} is outside the chain (1 to {head.seq})")
-            events = self.events(tx, project_id, through_seq=seq)
+            own = [c for c in self.checkpoints(tx, project_id) if c.key_id == signer.key_id]
+            through = max([seq, *(c.seq for c in own)])
+            events = self.events(tx, project_id, through_seq=through)
             report = verify_chain(project_id, events)
-            if not report.ok or report.checked_through_seq != seq:
+            if not report.ok or report.checked_through_seq < seq:
                 raise LedgerIntegrityError(report)
+            hashes = {e.seq: e.event_hash for e in events}
+            for earlier in own:
+                holds = hashes.get(earlier.seq) == earlier.head_hash
+                if not holds or not signer.verify_key.verifies_checkpoint(earlier):
+                    raise LedgerIntegrityError(
+                        verify_chain(project_id, events, checkpoint=earlier, key=signer.verify_key)
+                    )
             checkpoint = signer.sign_checkpoint(
                 id=new_id(),
                 project_id=project_id,
                 seq=seq,
-                head_hash=events[-1].event_hash,
+                head_hash=events[seq - 1].event_hash,
                 created_at=self._clock.now().astimezone(UTC),
             )
             self._insert_checkpoint(tx, checkpoint)

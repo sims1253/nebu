@@ -147,6 +147,29 @@ def test_a_rewritten_chain_passes_the_chain_but_not_the_checkpoint(store: Harnes
     assert (report.ok, report.problem, report.first_bad_seq) == (False, "rewritten", 5)
 
 
+def test_checkpoint_refuses_to_sign_a_rewrite_its_earlier_checkpoint_contradicts(
+    store: Harness,
+) -> None:
+    project, actor = store.new_project()
+    store.append(project, actor, 5)
+    earlier = store.ledger.checkpoint(store.tx, project, KEY, seq=4)
+    events = store.ledger.events(store.tx, project)
+
+    # The rewrite keeps the earlier checkpoint row and is consistent on its own.
+    for forged in _forge_from(events, 2, {"decision": "exclude"})[1:]:
+        store.overwrite(forged)
+    store.append(project, actor, 1)
+    assert store.ledger.verify(store.tx, project).ok
+
+    for seq in (None, 3):
+        with pytest.raises(LedgerIntegrityError) as caught:
+            store.ledger.checkpoint(store.tx, project, KEY, seq=seq)
+        assert (caught.value.report.problem, caught.value.report.first_bad_seq) == ("rewritten", 4)
+    assert store.ledger.checkpoints(store.tx, project) == [earlier]
+    # Another key has nothing to contradict, so it may sign; its checkpoint proves nothing to KEY.
+    assert store.ledger.checkpoint(store.tx, project, SigningKey.generate()).seq == 6
+
+
 def test_a_checkpoint_from_another_key_proves_nothing(store: Harness) -> None:
     project, actor = store.new_project()
     store.append(project, actor, 3)
