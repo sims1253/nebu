@@ -277,11 +277,11 @@ test("a lead sets up a review from nothing in the browser, as the CLI would", as
     await expect(page.getByText("The corpus is not built yet.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Build the corpus" })).toBeEnabled();
     await page.keyboard.press("b");
-    await expect(page.getByText(/^30 reports in 30 studies/)).toBeVisible();
-    // The PubMed and CENTRAL records of one trial share a DOI: proposed, left for the lead.
-    await expect(page.getByTestId("proposal").first()).toContainText(
-      "The same record, found twice",
+    await expect(page.getByTestId("corpus-count")).toHaveText(
+      "The searches returned 30 records. None is a duplicate yet. That leaves 30 reports in 30 studies.",
     );
+    // The PubMed and CENTRAL records of one trial share a DOI: proposed, left for the lead.
+    await expect(page.getByTestId("proposal").first()).toContainText("Duplicate records");
     // Building it queued its enrichment; the worker fills it from the recorded open sources.
     await expect(page.getByTestId("enrichment-status")).toContainText(
       "Enriched 30 records after the corpus was built",

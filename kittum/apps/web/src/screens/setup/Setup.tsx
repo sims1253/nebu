@@ -105,7 +105,7 @@ export function SetupScreen() {
       summary:
         searches > 0
           ? `${searches} ${searches === 1 ? "search" : "searches"}`
-          : "Import each database's export, or run PubMed and ClinicalTrials.gov live",
+          : "Import each database's export, or run PubMed, Europe PMC, or ClinicalTrials.gov live",
       screen: { to: "/p/$projectId/search", label: "Go to the searches" },
     },
     {
@@ -353,7 +353,7 @@ function Panel({
       return (
         <>
           <Guide>
-            Add one search per database and query, as PRISMA-S asks. Run PubMed and
+            Add one search per database and query, as PRISMA-S asks. Run PubMed, Europe PMC, and
             ClinicalTrials.gov live. For every other database, import its export file with the query
             as you ran it.
           </Guide>

@@ -312,6 +312,8 @@ export interface Workbench {
   readonly link: (
     request: Caller & { readonly revisionId: string } & (
         | { readonly action: "confirm"; readonly proposalId: string }
+        /** Every open duplicate that shares a DOI, PMID, or PMCID. */
+        | { readonly action: "confirm_exact" }
         | {
             readonly action: "merge";
             readonly occurrenceIds: ReadonlyArray<string>;

@@ -255,6 +255,16 @@ const KEYS: ReadonlyArray<{
     ],
   },
   {
+    screen: "Studies (the methods lead)",
+    keys: [
+      [["Enter"], "Confirm the selected proposed link"],
+      [["a"], "Confirm every duplicate with the same DOI, PMID, or PMCID"],
+      [["x", "m"], "Mark records, then merge them into one study"],
+      [["s"], "Split the record out of its study or report"],
+      [["o", "r"], "Open the record's enrichment, enrich again"],
+    ],
+  },
+  {
     screen: "Title and abstract",
     keys: [
       [["i"], "Include"],
