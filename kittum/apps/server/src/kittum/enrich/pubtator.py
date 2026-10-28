@@ -16,7 +16,7 @@ from kittum.gateway import HttpRequest
 if TYPE_CHECKING:
     from kittum.gateway import Gateway
 
-SOURCE = "pubtator3"
+SOURCE = "pubtator"  # the gateway policy's name
 BASE = "https://www.ncbi.nlm.nih.gov/research/pubtator3-api/publications/export/biocjson"
 
 _LABELS = {

@@ -3,7 +3,8 @@
 `AppContext.from_settings` wires every module for one process; `kittum serve`, `kittum worker`,
 and the CLI's project commands share it. `lifecycle` holds the steps of a project, from creating
 it and its people to opening a screening stage, as functions the routes and commands call.
-`demo.seed` builds a complete demo project from recordings.
+`demo.seed` builds a complete demo project from recordings. `enrichment` and `open_access` run the
+corpus's enrichment and the open-access end of the full-text waterfall as jobs.
 
 Owner: WP-15. An entry point like `api` and `cli`: it may use every module's public surface.
 """
@@ -22,6 +23,19 @@ from kittum.app.context import (
     register_job_handler,
 )
 from kittum.app.demo import DemoProject, run_judge_jobs, seed_demo
+from kittum.app.enrichment import (
+    ENRICHMENT_JOB,
+    EnrichmentRun,
+    RecordEnrichmentView,
+    RecordFlag,
+    SourceFailureView,
+    SourceProgress,
+    enrichment_run,
+    latest_enrichment_run,
+    record_enrichment,
+    record_flags,
+    request_enrichment,
+)
 from kittum.app.fulltext import AssignmentFullText, CriterionMentions, mentions
 from kittum.app.lifecycle import (
     FULL_TEXT_ATTACHED,
@@ -39,6 +53,7 @@ from kittum.app.lifecycle import (
     RetrievalItem,
     StageProgress,
     add_member,
+    attach_acquired_full_text,
     attach_full_text,
     attach_sentinel_full_text,
     check_extractable,
@@ -65,17 +80,32 @@ from kittum.app.lifecycle import (
     retrieval,
     visible_reports,
 )
+from kittum.app.open_access import (
+    OPEN_ACCESS_JOB,
+    AttemptView,
+    OpenAccessRun,
+    ReportRetrieval,
+    latest_open_access_run,
+    open_access_run,
+    report_attempts,
+    request_open_access,
+    sought_for_retrieval,
+)
 
 __all__ = [
+    "ENRICHMENT_JOB",
     "FULL_TEXT_ATTACHED",
     "JOB_HANDLERS",
     "MEMBER_ADDED",
+    "OPEN_ACCESS_JOB",
     "PROJECT_CREATED",
     "AppContext",
     "AssignmentFullText",
+    "AttemptView",
     "ConfigurationError",
     "CriterionMentions",
     "DemoProject",
+    "EnrichmentRun",
     "ExampleProtocol",
     "FullText",
     "HandlerFactory",
@@ -84,12 +114,19 @@ __all__ = [
     "Member",
     "MemberRole",
     "NotLead",
+    "OpenAccessRun",
     "Progress",
     "ProjectSummary",
     "ProtocolRef",
+    "RecordEnrichmentView",
+    "RecordFlag",
+    "ReportRetrieval",
     "RetrievalItem",
+    "SourceFailureView",
+    "SourceProgress",
     "StageProgress",
     "add_member",
+    "attach_acquired_full_text",
     "attach_full_text",
     "attach_sentinel_full_text",
     "build_gateway",
@@ -97,6 +134,7 @@ __all__ = [
     "check_extractable",
     "corpus_records",
     "create_project",
+    "enrichment_run",
     "ensure_actor",
     "example_protocols",
     "full_text",
@@ -106,10 +144,13 @@ __all__ = [
     "is_lead",
     "job_handlers",
     "judge_config",
+    "latest_enrichment_run",
+    "latest_open_access_run",
     "list_projects",
     "load_sentinels",
     "members",
     "mentions",
+    "open_access_run",
     "open_screening",
     "parse_sentinels",
     "parse_source",
@@ -117,11 +158,17 @@ __all__ = [
     "project_summary",
     "protocol_source",
     "publish_protocol",
+    "record_enrichment",
+    "record_flags",
     "register_job_handler",
+    "report_attempts",
+    "request_enrichment",
+    "request_open_access",
     "require_lead",
     "require_project_lead",
     "retrieval",
     "run_judge_jobs",
     "seed_demo",
+    "sought_for_retrieval",
     "visible_reports",
 ]

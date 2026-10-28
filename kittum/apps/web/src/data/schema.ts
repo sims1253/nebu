@@ -73,6 +73,16 @@ export type Sentinel = KittumApi.Sentinel;
 export type RetrievalItem = KittumApi.RetrievalItem;
 export type FullText = KittumApi.FullText;
 
+// Enrichment from the open sources and the open-access end of the full-text waterfall.
+export type EnrichmentRun = KittumApi.EnrichmentRun;
+export type SourceProgress = KittumApi.SourceProgress;
+export type RecordFlag = KittumApi.RecordFlag;
+export type RecordEnrichment = KittumApi.RecordEnrichmentView;
+export type EntityTag = KittumApi.EntityTag;
+export type OpenAccessRun = KittumApi.OpenAccessRun;
+export type ReportRetrieval = KittumApi.ReportRetrieval;
+export type AttemptView = KittumApi.AttemptView;
+
 /** A decision as the screens build it: every field the server reads, none left to defaults. */
 export interface Decision {
   readonly outcome: Outcome;

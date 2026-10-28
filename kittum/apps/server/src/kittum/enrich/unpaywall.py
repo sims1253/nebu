@@ -7,6 +7,7 @@ configured. One request per DOI. See docs/sources.md.
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote, urlencode
 
+from kittum.core import canonical_doi
 from kittum.enrich._http import SourceUnavailable, fetch_json
 from kittum.enrich.types import OaLocation, OaVersion
 
@@ -18,7 +19,7 @@ BASE = "https://api.unpaywall.org/v2"
 
 
 def _url(doi: str, email: str) -> str:
-    return f"{BASE}/{quote(doi.lower(), safe='')}?{urlencode({'email': email})}"
+    return f"{BASE}/{quote(canonical_doi(doi) or doi, safe='')}?{urlencode({'email': email})}"
 
 
 def _version(value: Any) -> OaVersion | None:
@@ -57,4 +58,8 @@ def best_oa_location(gateway: Gateway, doi: str, *, email: str | None) -> OaLoca
         return None
     if not isinstance(body, dict):
         raise SourceUnavailable(SOURCE, "unexpected response shape")
+    asked = canonical_doi(doi) or doi
+    answered = canonical_doi(str(body.get("doi") or doi)) or asked
+    if answered != asked:
+        raise SourceUnavailable(SOURCE, f"answered for DOI {answered}, not {asked}")
     return _location(body.get("best_oa_location"))

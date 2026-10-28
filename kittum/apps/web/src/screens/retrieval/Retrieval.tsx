@@ -1,18 +1,35 @@
-// Full-text retrieval (DESIGN.md, "Full text"): the human end of the waterfall. The methods lead
-// sees every report with its outcome at title and abstract, uploads the PDF of each one sought
-// for retrieval, and adds the full-text sentinels that full-text queues get unmarked. The list
-// is the lead's alone: it names every record, and a reviewer who saw it could tell sentinels.
+// Full-text retrieval (DESIGN.md, "Full text"). The methods lead sees every report with its
+// outcome at title and abstract, has a worker walk the open-access waterfall for the reports
+// sought (every attempt listed under its report: source, host, outcome, licence), uploads the
+// PDF of each one it could not fetch, and adds the full-text sentinels that full-text queues get
+// unmarked. The list is the lead's alone: it names every record, and a reviewer who saw it could
+// tell sentinels.
 import { LegendList } from "@legendapp/list/react";
 import type { LegendListRef } from "@legendapp/list/react";
 import { useRouteContext } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { RetrievalItem } from "../../data/schema.ts";
+import type {
+  AttemptView,
+  OpenAccessRun,
+  ReportRetrieval,
+  RetrievalItem,
+} from "../../data/schema.ts";
 import { run } from "../../data/workbench.ts";
-import { failure, Field, FileInput, FormDialog, Select, TextInput } from "../../ui/Form.tsx";
+import {
+  Button,
+  failure,
+  Field,
+  FileInput,
+  FormDialog,
+  Select,
+  TextInput,
+} from "../../ui/Form.tsx";
 import { KeyHint } from "../../ui/Key.tsx";
 import { useKeys } from "../../ui/keys.ts";
+import { usePoll } from "../../ui/poll.ts";
 import { LEAD_ONLY, plural, useProject } from "../project.tsx";
+import { runActive, sourceName } from "../studies/Enrichment.tsx";
 
 const OUTCOME: Record<string, { label: string; className: string }> = {
   include: { label: "Included", className: "text-include" },
@@ -34,18 +51,49 @@ export function RetrievalScreen() {
   const [uploading, setUploading] = useState(false);
   const [addingSentinel, setAddingSentinel] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [openAccess, setOpenAccess] = useState<OpenAccessRun | null>(null);
+  const [fetching, setFetching] = useState(false);
   const list = useRef<LegendListRef>(null);
 
   const load = useCallback(
     () =>
-      run(workbench.fullTexts({ projectId: project.id, as: me.actor_id })).then(setItems, (e) =>
-        setError(failure(e, "The reports could not load.")),
+      Promise.all([
+        run(workbench.fullTexts({ projectId: project.id, as: me.actor_id })),
+        run(workbench.openAccess({ projectId: project.id, as: me.actor_id })),
+      ]).then(
+        ([found, latest]) => {
+          setItems(found);
+          setOpenAccess(latest);
+        },
+        (e) => setError(failure(e, "The reports could not load.")),
       ),
     [workbench, project.id, me.actor_id],
   );
   useEffect(() => {
     if (seesLeadData && project.protocol) void load();
   }, [load, seesLeadData, project.protocol]);
+  usePoll(seesLeadData && runActive(openAccess), () => void load());
+
+  const byReport = useMemo(
+    () => new Map((openAccess?.reports ?? []).map((r) => [r.report_id, r])),
+    [openAccess],
+  );
+
+  const fetchOpenAccess = async () => {
+    setFetching(true);
+    setNotice(null);
+    setError(null);
+    try {
+      setOpenAccess(
+        await run(workbench.startOpenAccess({ projectId: project.id, as: me.actor_id })),
+      );
+      setAll(false);
+    } catch (e) {
+      setError(failure(e, "The open-access retrieval was not started."));
+    } finally {
+      setFetching(false);
+    }
+  };
 
   const screened = (items ?? []).some((i) => Object.keys(i.outcomes).length > 0);
   const shown = useMemo(
@@ -54,6 +102,7 @@ export function RetrievalScreen() {
   );
   const current = shown[Math.min(selected, shown.length - 1)];
   const retrieved = shown.filter((i) => i.full_text).length;
+  const canFetch = screened && !fetching && !runActive(openAccess);
 
   useEffect(() => {
     if (shown.length)
@@ -81,6 +130,16 @@ export function RetrievalScreen() {
         return true;
       case "s":
         setAddingSentinel(true);
+        return true;
+      case "o":
+        if (!screened) return false;
+        if (runActive(openAccess)) {
+          setNotice(
+            "The open-access retrieval is still running; each report shows its attempts as it goes.",
+          );
+          return true;
+        }
+        void fetchOpenAccess();
         return true;
       case "f":
         if (!screened) return false;
@@ -131,6 +190,24 @@ export function RetrievalScreen() {
               ? `${all ? "Every report of the corpus." : "The reports included at title and abstract in at least one scope."} Upload each one's PDF with its licence; full-text screening opens on those that have one.`
               : "No stage is screened yet, so every report of the corpus is listed. A full text attached now waits for its record to pass title and abstract."}
         </p>
+        {screened ? (
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
+            <Button primary keys="o" disabled={!canFetch} onClick={() => void fetchOpenAccess()}>
+              {runActive(openAccess)
+                ? "Fetching open-access full texts"
+                : "Fetch open-access full texts"}
+            </Button>
+            <span
+              className="text-sm text-ink-2"
+              data-testid="open-access-status"
+              aria-live="polite"
+            >
+              {openAccess
+                ? openAccessLine(openAccess)
+                : "Tries Europe PMC, Unpaywall, OpenAlex, and the publisher's openly licensed PDF for each report sought without a full text."}
+            </span>
+          </div>
+        ) : null}
         {error || notice ? (
           <p
             role={error ? "alert" : "status"}
@@ -164,6 +241,7 @@ export function RetrievalScreen() {
             renderItem={({ item, index }) => (
               <Row
                 item={item}
+                retrieval={byReport.get(item.report_id)}
                 selected={item.item_ref === current?.item_ref}
                 onSelect={() => setSelected(index)}
               />
@@ -203,12 +281,77 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
+const OUTCOME_LINE: Record<string, string> = {
+  acquired: "Fetched from open access.",
+  not_acquired: "No location gave a PDF. Upload it with u.",
+  no_location: "No open-access location is known. Upload it with u.",
+  had_full_text: "Uploaded by hand while the run waited.",
+};
+
+const ATTEMPT: Record<string, (a: AttemptView) => string> = {
+  acquired: () => "Fetched",
+  http_error: (a) => `Refused, HTTP ${a.status ?? "?"}`,
+  not_pdf: () => "A web page, not a PDF",
+  unreadable_pdf: () => "A PDF that does not open",
+  unavailable: () => "No answer",
+};
+
+function openAccessLine(r: OpenAccessRun) {
+  const tried = r.reports.filter((x) => x.outcome).length;
+  const n = r.reports.length;
+  const reports = `${n} ${n === 1 ? "report" : "reports"}`;
+  if (r.status === "queued") return `Waiting for a worker to try ${reports}.`;
+  if (r.status === "running") return `Fetching: ${tried} of ${reports} tried.`;
+  if (r.status === "failed")
+    return `Stopped after ${tried} of ${reports}: ${r.error ?? "the job failed"}.`;
+  const got = r.reports.filter((x) => x.outcome === "acquired").length;
+  return `Fetched ${got} of ${reports} from open access. The rest need an upload.`;
+}
+
+function Attempts({ retrieval }: { retrieval: ReportRetrieval }) {
+  return (
+    <div
+      className="col-span-3 mt-1.5"
+      data-testid="open-access"
+      data-outcome={retrieval.outcome ?? "pending"}
+    >
+      <p className={`text-xs ${retrieval.outcome === "acquired" ? "text-include" : "text-ink-2"}`}>
+        {retrieval.outcome ? OUTCOME_LINE[retrieval.outcome] : "Waiting its turn."}
+      </p>
+      {retrieval.attempts.length > 0 ? (
+        <table aria-label="Open-access attempts" className="mt-1 w-full max-w-[52rem] text-xs">
+          <tbody>
+            {retrieval.attempts.map((a, i) => (
+              <tr key={`${i}-${a.url}`} data-testid="attempt" className="text-ink-2">
+                <td className="w-6 py-0.5 text-ink-3 tabular-nums">{i + 1}</td>
+                <td className="w-24 py-0.5">{sourceName(a.source)}</td>
+                <td className="py-0.5">
+                  <span title={a.url}>{a.host}</span>
+                </td>
+                <td
+                  className={`w-48 py-0.5 ${a.outcome === "acquired" ? "font-medium text-include" : "text-exclude"}`}
+                  title={a.error ?? undefined}
+                >
+                  {(ATTEMPT[a.outcome] ?? (() => a.outcome))(a)}
+                </td>
+                <td className="w-28 py-0.5 text-right">{a.licence ?? "No licence stated"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : null}
+    </div>
+  );
+}
+
 function Row({
   item,
+  retrieval,
   selected,
   onSelect,
 }: {
   item: RetrievalItem;
+  retrieval: ReportRetrieval | undefined;
   selected: boolean;
   onSelect: () => void;
 }) {
@@ -256,12 +399,16 @@ function Row({
             PDF, {item.full_text.page_count ?? "?"} pages
             <span className="block text-ink-3">
               {item.full_text.licence ?? "Licence not recorded"}
+              {retrieval?.outcome === "acquired" && retrieval.source
+                ? `, from ${sourceName(retrieval.source)}`
+                : ""}
             </span>
           </span>
         ) : (
           <span className="text-ink-3">Not retrieved</span>
         )}
       </p>
+      {retrieval ? <Attempts retrieval={retrieval} /> : null}
     </article>
   );
 }

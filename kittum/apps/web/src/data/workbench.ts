@@ -24,6 +24,7 @@ import type {
   DecisionTiming,
   Assertion,
   DiffPreview,
+  EnrichmentRun,
   ExampleProtocol,
   ExtractionReview,
   ExtractionRun,
@@ -35,12 +36,15 @@ import type {
   LedgerSummary,
   LinkProposal,
   Member,
+  OpenAccessRun,
   PageLayer,
   ParsedSource,
   Phase,
   Progress,
   ProjectSummary,
   ProtocolSource,
+  RecordEnrichment,
+  RecordFlag,
   RenderedReport,
   ReportInfo,
   RetrievalItem,
@@ -212,7 +216,8 @@ export interface Workbench {
       readonly sentinels?: ReadonlyArray<Sentinel>;
     },
   ) => Call<StageInfo>;
-  readonly ledger: (projectId: string) => Call<LedgerSummary>;
+  /** Whether the hash chain holds; its event counts and where it breaks for the lead only. */
+  readonly ledger: (caller: Caller) => Call<LedgerSummary>;
 
   // The catalogue (every search's records, the corpus, the link proposals) is the methods
   // lead's alone: a reviewer who could list every record could tell the sentinels in their
@@ -236,6 +241,24 @@ export interface Workbench {
           }
       ),
   ) => Call<IdentityRevision>;
+
+  // Enrichment from the open sources and open-access retrieval, the methods lead's alone like
+  // the catalogue. Each run is a job a worker fills; the screens poll it until it is done.
+
+  /** The newest enrichment run with its progress per source, or null before the first. */
+  readonly enrichment: (caller: Caller) => Call<EnrichmentRun | null>;
+  /** Enriches the corpus again; a run still going comes back instead. */
+  readonly startEnrichment: (caller: Caller) => Call<EnrichmentRun>;
+  /** Per enriched record: retraction and other notices, answering sources, open access. */
+  readonly enrichmentFlags: (caller: Caller) => Call<ReadonlyArray<RecordFlag>>;
+  /** One record as enrichment completed it, or null before it is enriched. */
+  readonly recordEnrichment: (
+    request: Caller & { readonly occurrenceId: string },
+  ) => Call<RecordEnrichment | null>;
+  /** The newest open-access retrieval with each report's attempts, or null before the first. */
+  readonly openAccess: (caller: Caller) => Call<OpenAccessRun | null>;
+  /** Walks the open-access waterfall for every report sought without a full text. */
+  readonly startOpenAccess: (caller: Caller) => Call<OpenAccessRun>;
 
   /** Reports, the methods lead's alone: render a target from the ledger, fetch one of its
    * files, and seal the handover bundle. */

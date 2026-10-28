@@ -10,6 +10,8 @@ const DECISION_FIELDS = ["columns", "outcome", "reason_criterion_id", "evidence_
 // Keys that would tell a sentinel from any other record, anywhere; and, in screening answers, an
 // audit item (elsewhere `audit` is the protocol's audit plan, which everyone may read).
 const SENTINEL_FIELDS = ["expected_outcome", "sentinel_outcome", "sentinel_title"];
+// The ledger's event counts by type: how many reports were sought, acquired, or not, by type.
+const LEAD_FIELDS = ["by_type"];
 const AUDIT_FIELDS = ["audit", "rescreen"];
 
 /** Every object in a JSON value, with the path that leads to it. */
@@ -58,8 +60,8 @@ export const expectNothingLeaked = (responses: ReadonlyArray<{ url: string; body
     const decisions = /\/(screening|progress)/.test(url);
     for (const [path, object] of objects(json)) {
       const keys = decisions
-        ? [...AI_FIELDS, ...DECISION_FIELDS, ...AUDIT_FIELDS, ...SENTINEL_FIELDS]
-        : SENTINEL_FIELDS;
+        ? [...AI_FIELDS, ...DECISION_FIELDS, ...AUDIT_FIELDS, ...SENTINEL_FIELDS, ...LEAD_FIELDS]
+        : [...SENTINEL_FIELDS, ...LEAD_FIELDS];
       for (const key of keys) {
         expect(key in object, `${url} ${path} has ${key}`).toBe(false);
       }

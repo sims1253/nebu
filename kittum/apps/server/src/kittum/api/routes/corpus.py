@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from kittum.api import AppContext, Context  # noqa: TC001
 from kittum.api.routes.projects import Viewer  # noqa: TC001 - FastAPI resolves it at runtime
-from kittum.app import LifecycleError, NotLead, ingest_corpus, require_lead
+from kittum.app import LifecycleError, NotLead, ingest_corpus, request_enrichment, require_lead
 from kittum.core import Id, NotFoundError, Record
 from kittum.corpus import (
     CorpusReport,
@@ -69,11 +69,23 @@ class SplitRequest(Record):
 
 @router.post("/ingest", operation_id="ingestCorpus", status_code=201)
 def ingest_route(project_id: Id, body: IngestRequest, ctx: Context) -> CorpusRevision:
-    """Deduplicate every search of the project into the first identity revision."""
+    """Deduplicate every search of the project into the first identity revision, and queue its
+    enrichment from the open sources when a worker can run it."""
     with _errors(), ctx.db.transaction() as tx:
         # The revision comes back with every record: the lead's catalogue.
         require_lead(tx, project_id, body.actor_id)
-        return ingest_corpus(tx, project_id, actor_id=body.actor_id, ledger=_ledger(ctx))
+        revision = ingest_corpus(tx, project_id, actor_id=body.actor_id, ledger=_ledger(ctx))
+        if ctx.queue is not None and ctx.gateway is not None:
+            request_enrichment(
+                tx,
+                project_id,
+                actor_id=body.actor_id,
+                trigger="corpus_built",
+                ledger=_ledger(ctx),
+                queue=ctx.queue,
+                clock=ctx.clock,
+            )
+        return revision
 
 
 @router.get("/revisions/latest", operation_id="getLatestCorpusRevision")

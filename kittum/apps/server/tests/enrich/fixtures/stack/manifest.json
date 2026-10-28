@@ -1,0 +1,367 @@
+{
+  "http://www.thelancet.com/article/S0140673620311806/pdf": {
+    "content_type": "text/html",
+    "file": "67d860d1e06afb16.html",
+    "status": 403
+  },
+  "https://api.crossref.org/works/10.1000%2Fdep.2018.551?mailto=test%40kittum.dev": {
+    "content_type": "text/plain",
+    "file": "b73d38b7ca8f2a7d",
+    "status": 404
+  },
+  "https://api.crossref.org/works/10.1000%2Fgut.2016.207?mailto=test%40kittum.dev": {
+    "content_type": "text/plain",
+    "file": "ada2dbdfd6283efd",
+    "status": 404
+  },
+  "https://api.crossref.org/works/10.1000%2Fnrt.2017.014?mailto=test%40kittum.dev": {
+    "content_type": "text/plain",
+    "file": "f13919758e7110c5",
+    "status": 404
+  },
+  "https://api.crossref.org/works/10.1000%2Fnrt.2019.001?mailto=test%40kittum.dev": {
+    "content_type": "text/plain",
+    "file": "66ef38ca233e20b5",
+    "status": 404
+  },
+  "https://api.crossref.org/works/10.1000%2Fnrt.2021.033?mailto=test%40kittum.dev": {
+    "content_type": "text/plain",
+    "file": "88591ef33a604207",
+    "status": 404
+  },
+  "https://api.crossref.org/works/10.1000%2Fpop.2020.090?mailto=test%40kittum.dev": {
+    "content_type": "text/plain",
+    "file": "7790fd9a3b16d524",
+    "status": 404
+  },
+  "https://api.crossref.org/works/10.1001%2Fjama.2024.4183?mailto=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "b3d64b890bc4b919.json",
+    "status": 200
+  },
+  "https://api.crossref.org/works/10.1001%2Fjamanetworkopen.2024.18120?mailto=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "bb747238552cc00b.json",
+    "status": 200
+  },
+  "https://api.crossref.org/works/10.1001%2Fjamanetworkopen.2024.8727?mailto=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "35867572b7a579bc.json",
+    "status": 200
+  },
+  "https://api.crossref.org/works/10.1002%2Fcpt.3210?mailto=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "008d3a48817bbfae.json",
+    "status": 200
+  },
+  "https://api.crossref.org/works/10.1007%2Fs00590-023-03723-7?mailto=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "eb541f72831104dd.json",
+    "status": 200
+  },
+  "https://api.crossref.org/works/10.1007%2Fs10792-024-03137-2?mailto=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "26229378fe88c962.json",
+    "status": 200
+  },
+  "https://api.crossref.org/works/10.1016%2Fj.drugalcdep.2024.111351?mailto=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "608c65951678bb14.json",
+    "status": 200
+  },
+  "https://api.crossref.org/works/10.1016%2Fj.jtho.2023.11.012?mailto=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "1167f394a43c8b3d.json",
+    "status": 200
+  },
+  "https://api.crossref.org/works/10.1016%2Fs0140-6736%2820%2931180-6?mailto=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "9a6f354bc2cfa489.json",
+    "status": 200
+  },
+  "https://api.crossref.org/works/10.1037%2Fadb0000928?mailto=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "fdb2404440983c4f.json",
+    "status": 200
+  },
+  "https://api.crossref.org/works/10.1056%2Fnejmoa2308815?mailto=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "5d9aa927cf393fc2.json",
+    "status": 200
+  },
+  "https://api.crossref.org/works/10.1080%2F10826084.2024.2369155?mailto=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "2cca6e8490e2edf3.json",
+    "status": 200
+  },
+  "https://api.crossref.org/works/10.1080%2F13548506.2022.2129081?mailto=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "b83952061672c92d.json",
+    "status": 200
+  },
+  "https://api.crossref.org/works/10.1093%2Fntr%2Fntad126?mailto=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "da4d1cd07c66c9f1.json",
+    "status": 200
+  },
+  "https://api.crossref.org/works/10.1093%2Fntr%2Fntad183?mailto=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "4bba93af55c09b68.json",
+    "status": 200
+  },
+  "https://api.crossref.org/works/10.1093%2Fntr%2Fntad201?mailto=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "b7c89fe71e3c2a20.json",
+    "status": 200
+  },
+  "https://api.crossref.org/works/10.1097%2Fjcp.0000000000001864?mailto=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "47caffc36c2f3db0.json",
+    "status": 200
+  },
+  "https://api.crossref.org/works/10.1111%2Fadd.16428?mailto=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "3fd7ead76b33f10d.json",
+    "status": 200
+  },
+  "https://api.crossref.org/works/10.1111%2Fadd.16472?mailto=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "8647a97c216123a8.json",
+    "status": 200
+  },
+  "https://api.crossref.org/works/10.1159%2F000541682?mailto=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "602046a66f592784.json",
+    "status": 200
+  },
+  "https://api.crossref.org/works/10.1177%2F00048674231181039?mailto=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "5271183cac6f8b48.json",
+    "status": 200
+  },
+  "https://api.crossref.org/works/10.1186%2Fs12916-026-04943-4?mailto=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "616bf3ff6a017dfa.json",
+    "status": 200
+  },
+  "https://api.crossref.org/works/10.1186%2Fs12916-026-05037-x?mailto=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "6867a00e66356138.json",
+    "status": 200
+  },
+  "https://api.openalex.org/works?filter=doi:10.1159/000541682|10.1001/jamanetworkopen.2024.18120|10.1080/10826084.2024.2369155|10.1016/j.drugalcdep.2024.111351|10.1097/jcp.0000000000001864|10.1001/jama.2024.4183|10.1001/jamanetworkopen.2024.8727|10.1007/s10792-024-03137-2|10.1111/add.16472|10.1002/cpt.3210|10.1056/nejmoa2308815|10.1111/add.16428|10.1016/j.jtho.2023.11.012|10.1093/ntr/ntad201|10.1093/ntr/ntad183|10.1007/s00590-023-03723-7|10.1093/ntr/ntad126|10.1177/00048674231181039|10.1037/adb0000928|10.1080/13548506.2022.2129081|10.1000/nrt.2019.001|10.1000/nrt.2017.014|10.1000/nrt.2021.033|10.1000/gut.2016.207|10.1000/dep.2018.551|10.1000/pop.2020.090|10.1186/s12916-026-04943-4|10.1186/s12916-026-05037-x&per-page=100&select=id,doi,ids,display_name,abstract_inverted_index,is_retracted,open_access,best_oa_location,locations": {
+    "content_type": "application/json",
+    "file": "2b8db9dadf8cec1e.json",
+    "status": 200
+  },
+  "https://api.openalex.org/works?filter=doi:10.1186/s12916-026-04943-4|10.1186/s12916-026-05037-x&per-page=100&select=id,doi,ids,display_name,abstract_inverted_index,is_retracted,open_access,best_oa_location,locations": {
+    "content_type": "application/json",
+    "file": "b44647ec87801608.json",
+    "status": 200
+  },
+  "https://api.openalex.org/works?filter=doi:10.1186/s12916-026-04943-4|10.1186/s12916-026-05037-x|10.1016/s0140-6736%2820%2931180-6&per-page=100&select=id,doi,ids,display_name,abstract_inverted_index,is_retracted,open_access,best_oa_location,locations": {
+    "content_type": "application/json",
+    "file": "667deade12d5611a.json",
+    "status": 200
+  },
+  "https://api.openalex.org/works?filter=pmid:39462502|38935378|38898605|38838477|38752924|38696203|38683609|38662017|38482972|38369951|38354139|38282258|37977486|37819741|37742229|37725265|37474127|37353970|37141036|36203394&per-page=100&select=id,doi,ids,display_name,abstract_inverted_index,is_retracted,open_access,best_oa_location,locations": {
+    "content_type": "application/json",
+    "file": "7968e064625b0b46.json",
+    "status": 200
+  },
+  "https://api.unpaywall.org/v2/10.1000%2Fdep.2018.551?email=test%40kittum.dev": {
+    "content_type": "text/html",
+    "file": "edf2419fe8f46dc6.html",
+    "status": 404
+  },
+  "https://api.unpaywall.org/v2/10.1000%2Fgut.2016.207?email=test%40kittum.dev": {
+    "content_type": "text/html",
+    "file": "54f459bedce8e4f4.html",
+    "status": 404
+  },
+  "https://api.unpaywall.org/v2/10.1000%2Fnrt.2017.014?email=test%40kittum.dev": {
+    "content_type": "text/html",
+    "file": "5696ec65785b5af2.html",
+    "status": 404
+  },
+  "https://api.unpaywall.org/v2/10.1000%2Fnrt.2019.001?email=test%40kittum.dev": {
+    "content_type": "text/html",
+    "file": "03494f4b9f32c6b2.html",
+    "status": 404
+  },
+  "https://api.unpaywall.org/v2/10.1000%2Fnrt.2021.033?email=test%40kittum.dev": {
+    "content_type": "text/html",
+    "file": "28e1aad9a92abfb9.html",
+    "status": 404
+  },
+  "https://api.unpaywall.org/v2/10.1000%2Fpop.2020.090?email=test%40kittum.dev": {
+    "content_type": "text/html",
+    "file": "59f12db706dcabf4.html",
+    "status": 404
+  },
+  "https://api.unpaywall.org/v2/10.1001%2Fjama.2024.4183?email=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "1f33bd7a22d96ddc.json",
+    "status": 200
+  },
+  "https://api.unpaywall.org/v2/10.1001%2Fjamanetworkopen.2024.18120?email=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "fd9d4f09fe8244e8.json",
+    "status": 200
+  },
+  "https://api.unpaywall.org/v2/10.1001%2Fjamanetworkopen.2024.8727?email=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "97ea4bde9cda0098.json",
+    "status": 200
+  },
+  "https://api.unpaywall.org/v2/10.1002%2Fcpt.3210?email=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "1224a2e32d6fda09.json",
+    "status": 200
+  },
+  "https://api.unpaywall.org/v2/10.1007%2Fs00590-023-03723-7?email=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "1eb7aebf3e360409.json",
+    "status": 200
+  },
+  "https://api.unpaywall.org/v2/10.1007%2Fs10792-024-03137-2?email=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "c942f9dd5cb89e54.json",
+    "status": 200
+  },
+  "https://api.unpaywall.org/v2/10.1016%2Fj.drugalcdep.2024.111351?email=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "3b38d36e72ebf615.json",
+    "status": 200
+  },
+  "https://api.unpaywall.org/v2/10.1016%2Fj.jtho.2023.11.012?email=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "0b8b8482448ddf30.json",
+    "status": 200
+  },
+  "https://api.unpaywall.org/v2/10.1016%2Fs0140-6736%2820%2931180-6?email=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "e55003869bd604c8.json",
+    "status": 200
+  },
+  "https://api.unpaywall.org/v2/10.1037%2Fadb0000928?email=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "bbceb865965e4306.json",
+    "status": 200
+  },
+  "https://api.unpaywall.org/v2/10.1056%2Fnejmoa2308815?email=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "40791aca2d798d2b.json",
+    "status": 200
+  },
+  "https://api.unpaywall.org/v2/10.1080%2F10826084.2024.2369155?email=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "d8ee6c5cab9ee32a.json",
+    "status": 200
+  },
+  "https://api.unpaywall.org/v2/10.1080%2F13548506.2022.2129081?email=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "ed4b3d4edf5d4d16.json",
+    "status": 200
+  },
+  "https://api.unpaywall.org/v2/10.1093%2Fntr%2Fntad126?email=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "dcb17fade044b0cc.json",
+    "status": 200
+  },
+  "https://api.unpaywall.org/v2/10.1093%2Fntr%2Fntad183?email=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "3c81c8d44895aa09.json",
+    "status": 200
+  },
+  "https://api.unpaywall.org/v2/10.1093%2Fntr%2Fntad201?email=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "f68cc4b805f44f98.json",
+    "status": 200
+  },
+  "https://api.unpaywall.org/v2/10.1097%2Fjcp.0000000000001864?email=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "1abac9855037dfbe.json",
+    "status": 200
+  },
+  "https://api.unpaywall.org/v2/10.1111%2Fadd.16428?email=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "1d636b42559a85fd.json",
+    "status": 200
+  },
+  "https://api.unpaywall.org/v2/10.1111%2Fadd.16472?email=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "2faadd60dafc62fe.json",
+    "status": 200
+  },
+  "https://api.unpaywall.org/v2/10.1159%2F000541682?email=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "e1e1489a5868565b.json",
+    "status": 200
+  },
+  "https://api.unpaywall.org/v2/10.1177%2F00048674231181039?email=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "0747e1f6be1e3c20.json",
+    "status": 200
+  },
+  "https://api.unpaywall.org/v2/10.1186%2Fs12916-026-04943-4?email=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "cb05be962bd9b1b6.json",
+    "status": 200
+  },
+  "https://api.unpaywall.org/v2/10.1186%2Fs12916-026-05037-x?email=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "181c1a24fee81aeb.json",
+    "status": 200
+  },
+  "https://europepmc.org/articles/PMC13374172?pdf=render": {
+    "content_type": "text/html",
+    "file": "21860691b52a62e0.html",
+    "status": 403
+  },
+  "https://europepmc.org/articles/PMC13613656?pdf=render": {
+    "content_type": "text/html",
+    "file": "84156b8f6fa0f058.html",
+    "status": 403
+  },
+  "https://link.springer.com/content/pdf/10.1186/s12916-026-04943-4.pdf": {
+    "content_type": "application/pdf",
+    "file": "../../../documents/fixtures/gerber2026-lesotho-t2d-crct.pdf",
+    "status": 200
+  },
+  "https://link.springer.com/content/pdf/10.1186/s12916-026-05037-x.pdf": {
+    "content_type": "application/pdf",
+    "file": "../../../documents/fixtures/li2026-vitamin-c-kidney-biopsy-rct.pdf",
+    "status": 200
+  },
+  "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID%3A39462502+OR+EXT_ID%3A38935378+OR+EXT_ID%3A38898605+OR+EXT_ID%3A38838477+OR+EXT_ID%3A38752924+OR+EXT_ID%3A38696203+OR+EXT_ID%3A38683609+OR+EXT_ID%3A38662017+OR+EXT_ID%3A38482972+OR+EXT_ID%3A38369951+OR+EXT_ID%3A38354139+OR+EXT_ID%3A38282258+OR+EXT_ID%3A37977486+OR+EXT_ID%3A37819741+OR+EXT_ID%3A37742229+OR+EXT_ID%3A37725265+OR+EXT_ID%3A37474127+OR+EXT_ID%3A37353970+OR+EXT_ID%3A37141036+OR+EXT_ID%3A36203394+OR+EXT_ID%3A42174613+OR+EXT_ID%3A42399956+OR+DOI%3A%2210.1159%2F000541682%22+OR+DOI%3A%2210.1001%2Fjamanetworkopen.2024.18120%22+OR+DOI%3A%2210.1080%2F10826084.2024.2369155%22+OR+DOI%3A%2210.1016%2Fj.drugalcdep.2024.111351%22+OR+DOI%3A%2210.1097%2Fjcp.0000000000001864%22+OR+DOI%3A%2210.1001%2Fjama.2024.4183%22+OR+DOI%3A%2210.1001%2Fjamanetworkopen.2024.8727%22+OR+DOI%3A%2210.1007%2Fs10792-024-03137-2%22+OR+DOI%3A%2210.1111%2Fadd.16472%22+OR+DOI%3A%2210.1002%2Fcpt.3210%22+OR+DOI%3A%2210.1056%2Fnejmoa2308815%22+OR+DOI%3A%2210.1111%2Fadd.16428%22+OR+DOI%3A%2210.1016%2Fj.jtho.2023.11.012%22+OR+DOI%3A%2210.1093%2Fntr%2Fntad201%22+OR+DOI%3A%2210.1093%2Fntr%2Fntad183%22+OR+DOI%3A%2210.1007%2Fs00590-023-03723-7%22+OR+DOI%3A%2210.1093%2Fntr%2Fntad126%22+OR+DOI%3A%2210.1177%2F00048674231181039%22+OR+DOI%3A%2210.1037%2Fadb0000928%22+OR+DOI%3A%2210.1080%2F13548506.2022.2129081%22+OR+DOI%3A%2210.1000%2Fnrt.2019.001%22+OR+DOI%3A%2210.1000%2Fnrt.2017.014%22+OR+DOI%3A%2210.1000%2Fnrt.2021.033%22+OR+DOI%3A%2210.1000%2Fgut.2016.207%22+OR+DOI%3A%2210.1000%2Fdep.2018.551%22+OR+DOI%3A%2210.1000%2Fpop.2020.090%22+OR+DOI%3A%2210.1186%2Fs12916-026-04943-4%22+OR+DOI%3A%2210.1186%2Fs12916-026-05037-x%22&format=json&resultType=core&synonym=FALSE&pageSize=100": {
+    "content_type": "application/json",
+    "file": "274423805e893e2b.json",
+    "status": 200
+  },
+  "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID%3A42174613+OR+EXT_ID%3A42399956+OR+DOI%3A%2210.1186%2Fs12916-026-04943-4%22+OR+DOI%3A%2210.1186%2Fs12916-026-05037-x%22&format=json&resultType=core&synonym=FALSE&pageSize=100": {
+    "content_type": "application/json",
+    "file": "8f59ef7608aa6410.json",
+    "status": 200
+  },
+  "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID%3A42174613+OR+EXT_ID%3A42399956+OR+EXT_ID%3A32450107+OR+DOI%3A%2210.1186%2Fs12916-026-04943-4%22+OR+DOI%3A%2210.1186%2Fs12916-026-05037-x%22+OR+DOI%3A%2210.1016%2Fs0140-6736%2820%2931180-6%22&format=json&resultType=core&synonym=FALSE&pageSize=100": {
+    "content_type": "application/json",
+    "file": "07de7bac9d543461.json",
+    "status": 200
+  },
+  "https://www.ncbi.nlm.nih.gov/research/pubtator3-api/publications/export/biocjson?pmids=39462502%2C38935378%2C38898605%2C38838477%2C38752924%2C38696203%2C38683609%2C38662017%2C38482972%2C38369951%2C38354139%2C38282258%2C37977486%2C37819741%2C37742229%2C37725265%2C37474127%2C37353970%2C37141036%2C36203394%2C42174613%2C42399956": {
+    "content_type": "application/json",
+    "file": "551a32848cdc36ac.json",
+    "status": 200
+  },
+  "https://www.ncbi.nlm.nih.gov/research/pubtator3-api/publications/export/biocjson?pmids=42174613%2C42399956": {
+    "content_type": "application/json",
+    "file": "bbdbcecfd2448f52.json",
+    "status": 200
+  },
+  "https://www.ncbi.nlm.nih.gov/research/pubtator3-api/publications/export/biocjson?pmids=42174613%2C42399956%2C32450107": {
+    "content_type": "application/json",
+    "file": "8c3e01cac1ea7826.json",
+    "status": 200
+  }
+}

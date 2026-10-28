@@ -1,5 +1,7 @@
 // Starts the stack once for the journey: seeds the demo project, then runs `kittum serve` and a
-// `kittum worker` beside it, both with the recorded judge. Returns the teardown.
+// `kittum worker` beside it, both with the recorded judge and with the source gateway answering
+// from the responses recorded in the server's tests (KITTUM_GATEWAY_RECORDINGS), so enrichment and
+// open-access retrieval run as they would and nothing touches the network. Returns the teardown.
 import { execFileSync, spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
@@ -9,6 +11,7 @@ import { join } from "node:path";
 export const SERVER = join(import.meta.dirname, "..", "..", "server");
 export const STACK_FILE = join(import.meta.dirname, ".stack.json");
 const DIST = join(import.meta.dirname, "..", "dist");
+export const RECORDINGS = join(SERVER, "tests", "enrich", "fixtures", "stack");
 const PORT = Number(process.env["KITTUM_E2E_PORT"] ?? 8199);
 
 const waitFor = async (url: string, child: ChildProcess) => {
@@ -31,6 +34,12 @@ export const stackEnv = () => ({
   KITTUM_ARTIFACT_DIR: process.env["KITTUM_ARTIFACT_DIR"] ?? join(tmpdir(), "kittum-e2e-artifacts"),
   KITTUM_JUDGE_BACKEND: "demo",
   KITTUM_WEB_DIST: DIST,
+  KITTUM_GATEWAY_RECORDINGS: RECORDINGS,
+  // Recordings replace the sources only in offline mode, with a response cache of each process's
+  // own; the server refuses them otherwise.
+  KITTUM_OFFLINE: "1",
+  // The address the recordings were made with; it is part of each Crossref and Unpaywall URL.
+  KITTUM_CONTACT_EMAIL: "test@kittum.dev",
 });
 
 export default async function stack() {

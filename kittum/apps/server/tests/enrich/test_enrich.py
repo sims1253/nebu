@@ -1,6 +1,7 @@
 """Enrichment against recorded real responses. No test here touches the network."""
 
 import uuid
+from datetime import date
 from typing import TYPE_CHECKING
 from urllib.parse import parse_qs, unquote, urlsplit
 
@@ -37,6 +38,8 @@ if TYPE_CHECKING:
     from kittum.gateway import Gateway, HttpRequest
 
 pytestmark = pytest.mark.postgres
+
+TODAY = date(2026, 10, 28)
 
 _RETRACTED_PMID = "32450107"
 _RETRACTION_NOTICE = "10.1016/s0140-6736(20)31324-6"
@@ -248,7 +251,7 @@ def test_unpaywall_answers_when_metadata_sources_are_out_of_budget(pg: Tx) -> No
     bmj = next(record for record in result.records if record.doi == "10.1136/bmjopen-2026-124110")
     assert bmj.oa_locations
     assert all(location.source == "unpaywall" for location in bmj.oa_locations)
-    candidates = full_text_candidates(bmj)
+    candidates = full_text_candidates(bmj, on=TODAY)
     assert candidates[0].source == "unpaywall"
     assert candidates[0].format == "pdf"
     assert candidates[0].licence == "cc-by"
@@ -269,7 +272,7 @@ def test_full_text_candidates_follow_the_waterfall(pg: Tx) -> None:
     by_pmid = _by_pmid(result.records)
 
     bmj = by_pmid["42785935"]
-    candidates = full_text_candidates(bmj)
+    candidates = full_text_candidates(bmj, on=TODAY)
     assert [candidate.source for candidate in candidates][:2] == ["europepmc", "europepmc"]
     assert [candidate.format for candidate in candidates][:2] == ["xml", "pdf"]
     assert candidates[0].licence == "cc by"
@@ -278,7 +281,7 @@ def test_full_text_candidates_follow_the_waterfall(pg: Tx) -> None:
 
     # The retracted paper has no Europe PMC PDF, so OpenAlex's publisher PDF follows the XML.
     retracted = by_pmid[_RETRACTED_PMID]
-    retracted_candidates = full_text_candidates(retracted)
+    retracted_candidates = full_text_candidates(retracted, on=TODAY)
     assert retracted_candidates[0].source == "europepmc"
     assert retracted_candidates[0].format == "xml"
     assert retracted_candidates[-1].source == "openalex"
@@ -428,4 +431,6 @@ def test_non_open_access_europepmc_record_gets_no_full_text_candidate(pg: Tx) ->
 
     assert record.pmcid == "PMC13544592"  # Europe PMC indexes it, but not as open access
     assert not any(location.source == "europepmc" for location in record.oa_locations)
-    assert all(candidate.source != "europepmc" for candidate in full_text_candidates(record))
+    assert all(
+        candidate.source != "europepmc" for candidate in full_text_candidates(record, on=TODAY)
+    )

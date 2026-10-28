@@ -105,6 +105,10 @@ class InMemoryJobQueue:
         with self._lock:
             return self._put(self._leased(job), lease_until=self._clock.now() + lease)
 
+    def fence(self, tx: Tx, job: Job) -> None:
+        with self._lock:
+            self._leased(job)
+
     def complete(self, tx: Tx, job: Job, output_hash: str | None = None) -> Job:
         with self._lock:
             return self._put(

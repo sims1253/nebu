@@ -87,6 +87,7 @@ retention, and set and lift a legal hold.
 | pyrate-limiter | MIT | 10 | | Its Postgres bucket shares one rate limit across all workers | **Use** in the source gateway |
 | stamina | MIT | | | Retries with jitter and instrumentation, on tenacity | **Use** |
 | httpx | BSD-3-Clause | 0 (0.28.1, December 2024) | | One maintainer; issues reportedly closed in February 2026 | **Use with care**. aiohttp or niquests if it decays further. |
+| h2 (python-hyper), through `httpx2[http2]` | MIT | | | HTTP/2 for the gateway's transport. Publisher bot protection (link.springer.com, October 2026) answers HTTP/1.1 clients with a challenge page instead of the open-access PDF. Brings hpack and hyperframe, both MIT. | **Use** |
 | ruff | MIT | 49 | | | **Use** |
 | ty | MIT | Pre-1.0 | | Janus uses it | **Use**, as Janus does |
 

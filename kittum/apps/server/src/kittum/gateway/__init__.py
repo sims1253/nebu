@@ -2,7 +2,8 @@
 
 Per-source rate buckets persisted in Postgres, a safety margin under every published limit,
 `Retry-After` handling, retries with jitter, daily budgets, and a content-addressed response
-cache. A rerun of a frozen strategy makes no network calls.
+cache. A rerun of a frozen strategy makes no network calls. `RecordedTransport` answers from
+responses recorded once from the real sources, for a stack that must stay offline.
 
 Owner: WP-04.
 
@@ -24,6 +25,7 @@ from kittum.gateway.errors import (
     UnknownSource,
 )
 from kittum.gateway.policies import MARGIN, default_policies
+from kittum.gateway.recorded import NotRecorded, RecordedTransport
 from kittum.gateway.service import MAX_ATTEMPTS, SourceGateway, request_hash
 from kittum.gateway.transport import HttpxTransport, user_agent
 from kittum.gateway.types import Gateway, HttpRequest, HttpResponse, SourcePolicy, Transport
@@ -36,6 +38,8 @@ __all__ = [
     "HttpRequest",
     "HttpResponse",
     "HttpxTransport",
+    "NotRecorded",
+    "RecordedTransport",
     "SourceBudgetExhausted",
     "SourceGateway",
     "SourcePolicy",

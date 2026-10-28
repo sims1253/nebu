@@ -7,7 +7,7 @@ can carry many IDs, so the whole record set costs one request per batch.
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlencode
 
-from kittum.core import Record
+from kittum.core import Record, canonical_doi
 from kittum.enrich._http import SourceUnavailable, chunks, fetch_json
 from kittum.enrich._text import strip_markup
 from kittum.enrich.types import OaLocation
@@ -44,9 +44,7 @@ def _url(query: str) -> str:
 
 
 def _doi(value: Any) -> str | None:
-    if not isinstance(value, str) or not value:
-        return None
-    return value.removeprefix("https://doi.org/").lower()
+    return canonical_doi(value) if isinstance(value, str) else None
 
 
 def _locations(raw: dict[str, Any]) -> tuple[OaLocation, ...]:
@@ -129,7 +127,7 @@ def works(
     batch_size: int = 50,
 ) -> list[Work]:
     pmid_values = [str(pmid) for pmid in dict.fromkeys(pmids) if pmid]
-    doi_values = [doi.lower() for doi in dict.fromkeys(dois) if doi]
+    doi_values = [d for d in dict.fromkeys(canonical_doi(doi) for doi in dois) if d]
     terms = [f"EXT_ID:{pmid}" for pmid in pmid_values]
     terms += [f'DOI:"{doi}"' for doi in doi_values]
     found: list[Work] = []

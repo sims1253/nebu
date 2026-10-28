@@ -450,7 +450,8 @@ export const makeApiWorkbench = (): Workbench => ({
       }),
     ),
 
-  ledger: (projectId) => call((api) => api.verifyProjectLedger(projectId, undefined)),
+  ledger: ({ projectId, as }) =>
+    call((api) => api.verifyProjectLedger(projectId, { params: reviewer(as) })),
 
   searches: ({ projectId, as }) =>
     call((api) => api.listSearchExecutions(projectId, { params: reviewer(as) })),
@@ -479,6 +480,26 @@ export const makeApiWorkbench = (): Workbench => ({
           });
       }
     }),
+
+  enrichment: ({ projectId, as }) =>
+    orNull(call((api) => api.getLatestEnrichmentRun(projectId, { params: reviewer(as) }))),
+
+  startEnrichment: ({ projectId, as }) =>
+    call((api) => api.startEnrichment(projectId, { payload: { actor_id: as } })),
+
+  enrichmentFlags: ({ projectId, as }) =>
+    call((api) => api.listRecordEnrichmentFlags(projectId, { params: reviewer(as) })),
+
+  recordEnrichment: ({ projectId, as, occurrenceId }) =>
+    orNull(
+      call((api) => api.getRecordEnrichment(projectId, occurrenceId, { params: reviewer(as) })),
+    ),
+
+  openAccess: ({ projectId, as }) =>
+    orNull(call((api) => api.getLatestOpenAccessRetrieval(projectId, { params: reviewer(as) }))),
+
+  startOpenAccess: ({ projectId, as }) =>
+    call((api) => api.startOpenAccessRetrieval(projectId, { payload: { actor_id: as } })),
 
   renderReport: ({ projectId, as, target, cutoffSeq }) =>
     call((api) =>

@@ -4,6 +4,7 @@ Kept in a submodule so the source clients can use them without a circular import
 re-exports every one of them from `kittum.enrich`.
 """
 
+from datetime import date
 from typing import Literal
 
 from kittum.core import Id, Record
@@ -15,6 +16,8 @@ OaVersion = Literal["published", "accepted", "submitted"]
 class OaLocation(Record):
     url: str
     licence: str | None = None
+    licence_start: date | None = None
+    """When the licence takes effect, where the source states it (Crossref does)."""
     version: OaVersion | None = None
     source: str = ""
     format: SourceFormat | None = None
@@ -44,6 +47,11 @@ class FieldSource(Record):
     source: str
 
 
+class SourceFailure(Record):
+    source: str
+    reason: str
+
+
 class RecordEnrichment(Record):
     occurrence_id: Id
     provider_record_id: str
@@ -59,11 +67,11 @@ class RecordEnrichment(Record):
     clinical_trial_numbers: tuple[str, ...] = ()
     field_sources: tuple[FieldSource, ...] = ()
     sources_used: tuple[str, ...] = ()
-
-
-class SourceFailure(Record):
-    source: str
-    reason: str
+    sources_asked: tuple[str, ...] = ()
+    """The enrichment sources asked about this record."""
+    failures: tuple[SourceFailure, ...] = ()
+    """The sources that failed for this record, and why: an error, no budget, or an answer that
+    names another work."""
 
 
 class Enrichment(Record):
@@ -75,6 +83,7 @@ class FullTextCandidate(Record):
     url: str
     format: Literal["pdf", "xml"]
     licence: str | None = None
+    licence_start: date | None = None
     version: OaVersion | None = None
     source: str
 

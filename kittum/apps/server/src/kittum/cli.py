@@ -214,12 +214,50 @@ def _project_step(args: argparse.Namespace) -> int:
                 revision = app.ingest_corpus(
                     tx, UUID(args.project), actor_id=UUID(args.by), ledger=ledger
                 )
+                # As the workbench does: `kittum worker` enriches the new corpus.
+                assert ctx.queue is not None
+                enrichment = app.request_enrichment(
+                    tx,
+                    UUID(args.project),
+                    actor_id=UUID(args.by),
+                    trigger="corpus_built",
+                    ledger=ledger,
+                    queue=ctx.queue,
+                    clock=ctx.clock,
+                )
                 _print(
                     {
                         "identity_revision_id": revision.identity_revision_id,
                         "occurrences": len(revision.occurrences),
                         "proposals": len(revision.proposals),
+                        "enrichment_run_id": enrichment.id,
                     }
+                )
+            case "enrich":
+                assert ctx.queue is not None
+                _print(
+                    app.request_enrichment(
+                        tx,
+                        UUID(args.project),
+                        actor_id=UUID(args.by),
+                        trigger="requested",
+                        ledger=ledger,
+                        queue=ctx.queue,
+                        clock=ctx.clock,
+                    )
+                )
+            case "fetch-open-access":
+                assert ctx.queue is not None
+                _print(
+                    app.request_open_access(
+                        tx,
+                        UUID(args.project),
+                        ctx.screening(),
+                        actor_id=UUID(args.by),
+                        ledger=ledger,
+                        queue=ctx.queue,
+                        clock=ctx.clock,
+                    )
                 )
             case "attach-full-text":
                 _print(
@@ -324,6 +362,8 @@ def main(argv: list[str] | None = None) -> int:
     live.add_argument("--topic", required=True)
     live.add_argument("--strategy", required=True)
     step("ingest")
+    step("enrich")  # again; `ingest` queues the first enrichment
+    step("fetch-open-access")
     attach = step("attach-full-text", "item_ref", "pdf")
     attach.add_argument("--licence")
     stage = step("open-stage", "scope", "stage")

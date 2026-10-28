@@ -248,7 +248,17 @@ def test_a_project_from_nothing_to_an_open_stage(database: Database, tmp_path: P
     assert hers["stages"][0]["outcomes"] is None
     assert client.post(render, json={"actor_id": auditor}).status_code == 403
 
-    ledger = ok(client.get(f"/api/projects/{pid}/ledger/verify"))
-    assert ledger["verify"]["ok"]
+    ledger = ok(client.get(f"/api/projects/{pid}/ledger/verify", headers=as_lead))
+    assert ledger["ok"] and ledger["verify"]["ok"]
+    # Anyone else learns that the chain holds and how far, and not what is in it.
+    for headers in (reviewer, as_auditor, {}):
+        theirs = ok(client.get(f"/api/projects/{pid}/ledger/verify", headers=headers))
+        assert theirs == {
+            "ok": True,
+            "checked_through_seq": ledger["checked_through_seq"],
+            "verify": None,
+            "events": None,
+            "by_type": None,
+        }
     assert ledger["by_type"]["project.member_added"] == 6  # five people and a second role
     assert ledger["by_type"]["judge.verdict_recorded"] == 11

@@ -19,7 +19,17 @@ broken encodings, when `ocrmypdf` and `tesseract` are installed.
 Owner: WP-10.
 """
 
-from kittum.documents.acquisition import ACQUIRED, NOT_ACQUIRED, acquire, acquisitions
+from kittum.documents.acquisition import (
+    ACQUIRED,
+    ATTEMPTED,
+    NOT_ACQUIRED,
+    FetchedLocation,
+    acquire,
+    acquisitions,
+    fetch_location,
+    get_acquisition,
+    record_location,
+)
 from kittum.documents.anchors import (
     RESOLVE_VERSION,
     DifferentDocument,
@@ -73,6 +83,7 @@ from kittum.documents.triage import triage
 
 __all__ = [
     "ACQUIRED",
+    "ATTEMPTED",
     "MAX_SCALE",
     "MIN_SCALE",
     "NOT_ACQUIRED",
@@ -88,6 +99,7 @@ __all__ = [
     "DoclingParser",
     "DoclingUnavailable",
     "Document",
+    "FetchedLocation",
     "FullTextLocation",
     "Layer",
     "Line",
@@ -113,6 +125,8 @@ __all__ = [
     "compare_layers",
     "derive",
     "docling_available",
+    "fetch_location",
+    "get_acquisition",
     "get_anchor",
     "get_document",
     "get_layer",
@@ -123,6 +137,7 @@ __all__ = [
     "page_words",
     "quote_spans",
     "recipe_hash",
+    "record_location",
     "remap",
     "render_page",
     "resolve",

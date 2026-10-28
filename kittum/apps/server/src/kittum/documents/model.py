@@ -171,9 +171,11 @@ class FullTextLocation(Record):
 class AcquisitionAttempt(Record):
     source: str
     url: str
-    status: int | None
-    outcome: Literal["acquired", "http_error", "not_pdf", "unreadable_pdf"]
+    status: int | None  # None when the source gave no response
+    outcome: Literal["acquired", "http_error", "not_pdf", "unreadable_pdf", "unavailable"]
     body_hash: Sha256 | None = None
+    licence: str | None = None  # the location's, as its source states it
+    error: str | None = None  # why an unavailable source gave no response
 
 
 class Acquisition(Record):

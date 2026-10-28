@@ -15,6 +15,7 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
 import { expectNothingLeaked, recordResponses } from "./blind.ts";
+import { includeAll } from "./screen.ts";
 import { SERVER, stackEnv } from "./stack.ts";
 
 const EXAMPLES = join(SERVER, "..", "..", "examples");
@@ -57,33 +58,6 @@ const fieldIndex = async (page: Page, projectId: string, runId: string, as: stri
       (f) => f.key.endpoint === endpoint && f.key.arm === arm && f.key.quantity === quantity,
     );
   return { text: review.layer.text, at };
-};
-
-/** Screens a person's whole title and abstract queue: includes everything, keeps it on a reveal. */
-const includeAll = async (page: Page) => {
-  const title = page.getByTestId("record-title");
-  const finished = page.getByRole("heading", { name: "Queue finished" });
-  const banner = page.getByTestId("ai-reveal");
-  // The record on screen now, or null between records and while the AI is still reading: never
-  // wait for a title that may not come back (as in review.spec.ts).
-  const titleNow = async () =>
-    (await title.count()) > 0
-      ? await title.textContent({ timeout: 1_000 }).catch(() => null)
-      : null;
-  for (;;) {
-    await expect(title.or(finished)).toBeVisible({ timeout: 60_000 });
-    if (await finished.isVisible()) return;
-    const text = await titleNow();
-    await page.keyboard.press("i");
-    await expect
-      .poll(
-        async () =>
-          (await banner.isVisible()) || (await finished.isVisible()) || (await titleNow()) !== text,
-        { timeout: 60_000 },
-      )
-      .toBe(true);
-    if (await banner.isVisible()) await page.keyboard.press("Space"); // keep my decision
-  }
 };
 
 /** Screens a person's full texts: the trial included with every criterion met, the rest
@@ -308,6 +282,15 @@ test("a reviewer accepts and corrects values Janus read from a trial the screene
   const { text, at } = await fieldIndex(page, projectId, runId, sam);
   const notice = page.getByTestId("extraction-notice");
   const selected = page.locator("[data-testid=field-row][aria-selected=true]");
+  const count = page.getByTestId("accepted-count");
+  /** Presses `key` until `count` reads `after`, while it still reads `before`: a press the screen
+   * refuses because the source has not been on screen long enough yet does no harm, and a slow
+   * machine may need a second one. Never presses once the count has moved. */
+  const acceptOnce = (press: () => Promise<void>, before: string, after: string) =>
+    expect(async () => {
+      if ((await count.textContent()) === before) await press();
+      await expect(count).toHaveText(after, { timeout: 2_000 });
+    }).toPass({ timeout: 30_000 });
 
   await test.step("a reviewer accepts the Janus value once its source was on screen", async () => {
     await page.goto(`/p/${projectId}/extraction?as=${sam}`);
@@ -317,9 +300,8 @@ test("a reviewer accepts and corrects values Janus read from a trial the screene
     expect(at("participants", "intervention", "n_analysed")).toBe(0);
     await expect(selected.getByTestId("field-value")).toHaveText("52participants");
     await expect(page.getByTestId("source-highlight").first()).toBeVisible();
-    await page.waitForTimeout(700);
-    await page.keyboard.press("Enter");
-    await expect(page.getByTestId("accepted-count")).toHaveText("1 of 10 accepted");
+    await page.waitForTimeout(700); // the source on screen past the floor, on a quick machine
+    await acceptOnce(() => page.keyboard.press("Enter"), "0 of 10 accepted", "1 of 10 accepted");
   });
 
   await test.step("the reviewer corrects a value Janus missed with its span on the page", async () => {
@@ -355,8 +337,7 @@ test("a reviewer accepts and corrects values Janus read from a trial the screene
     await expect(value).toHaveValue("6.5"); // the number in the selection, to confirm
     await expect(notice).toContainText("Edited to “6.5”");
     await page.waitForTimeout(700);
-    await value.press("Enter");
-    await expect(page.getByTestId("accepted-count")).toHaveText("2 of 10 accepted");
+    await acceptOnce(() => value.press("Enter"), "1 of 10 accepted", "2 of 10 accepted");
     const row = page.getByTestId("field-row").nth(target);
     await expect(row.getByTestId("field-value")).toHaveText("6.5%");
     await expect(row).toContainText("Edited");

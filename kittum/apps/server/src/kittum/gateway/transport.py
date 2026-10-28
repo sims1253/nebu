@@ -1,4 +1,8 @@
-"""The real transport: httpx2, one connection pool, a polite User-Agent."""
+"""The real transport: httpx2 over HTTP/2, one connection pool, a polite User-Agent.
+
+HTTP/2 because some publishers' bot protection answers an HTTP/1.1 client with a challenge page
+instead of the PDF it asked for (link.springer.com did in October 2026).
+"""
 
 import importlib.metadata
 
@@ -35,7 +39,7 @@ class HttpxTransport:
     ) -> None:
         self.user_agent = user_agent(contact_email)
         self._client = client or httpx2.Client(
-            timeout=httpx2.Timeout(timeout), follow_redirects=True
+            timeout=httpx2.Timeout(timeout), follow_redirects=True, http2=True
         )
 
     def send(self, request: HttpRequest) -> HttpResponse:

@@ -1,10 +1,11 @@
 """The composition root: one `AppContext` per process, built from `Settings`.
 
 `AppContext.from_settings` wires the Postgres ledger, the job queue and command receipts, the
-artifact store, the source gateway (with the default policies and the httpx transport), the model
-backends from `Settings.llm_endpoints` (with the recipes in `Settings.recipes_file`), and the
-screening judge. `job_handlers` gives a `kittum.runs.Worker` the handler of every job kind a
-module registered: the screening judge and extraction runs.
+artifact store, the source gateway (with the default policies and the httpx transport, or the
+recorded responses in `Settings.gateway_recordings`), the model backends from
+`Settings.llm_endpoints` (with the recipes in `Settings.recipes_file`), and the screening judge.
+`job_handlers` gives a `kittum.runs.Worker` the handler of every job kind a module registered: the
+screening judge, extraction runs, enrichment runs, and open-access retrieval.
 """
 
 import functools
@@ -13,11 +14,13 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from kittum.app.enrichment import ENRICHMENT_JOB, enrichment_handler
+from kittum.app.open_access import OPEN_ACCESS_JOB, open_access_handler
 from kittum.core import Clock, KittumError, SystemClock
 from kittum.db import Database
 from kittum.extraction import JOB_KIND as EXTRACTION_JOB
 from kittum.extraction import run_handler
-from kittum.gateway import HttpxTransport, SourceGateway, default_policies
+from kittum.gateway import HttpxTransport, RecordedTransport, SourceGateway, default_policies
 from kittum.judge import PROMPT_VERSION, JudgeConfig, judge_many
 from kittum.ledger import PostgresLedger
 from kittum.models import ModelRegistry, backends_from_endpoints
@@ -30,7 +33,7 @@ if TYPE_CHECKING:
 
     from kittum.core import Id
     from kittum.db import Tx
-    from kittum.gateway import Gateway
+    from kittum.gateway import Gateway, Transport
     from kittum.ledger import Ledger
     from kittum.models import LlmBackend, ModelRecipe, OpenAICompatibleBackend
     from kittum.runs import Handler, Job, JobContext, JobOutput, JobQueue, ReceiptStore
@@ -121,9 +124,24 @@ def build_judge(
 def build_gateway(
     settings: Settings, db: Database, artifacts: ArtifactStore, clock: Clock
 ) -> SourceGateway:
+    """The source gateway: live over HTTP, or, in offline mode only, from recorded responses with
+    a cache and rate limits of its own process, so recordings never mix with what the sources
+    said. Recordings without offline mode, or offline mode without recordings, are refused."""
+    if bool(settings.gateway_recordings) != settings.offline:
+        raise ConfigurationError(
+            "KITTUM_GATEWAY_RECORDINGS and KITTUM_OFFLINE=1 go together: recordings replace the"
+            " real sources only in offline mode, and offline mode needs recordings"
+        )
+    transport: Transport = (
+        RecordedTransport(settings.gateway_recordings)
+        if settings.gateway_recordings
+        else HttpxTransport(contact_email=settings.contact_email)
+    )
     return SourceGateway(
         database=db,
-        transport=HttpxTransport(contact_email=settings.contact_email),
+        transport=transport,
+        buckets="memory" if settings.offline else "postgres",
+        cache="memory" if settings.offline else "postgres",
         artifacts=artifacts,
         policies=default_policies(
             contact_email=settings.contact_email, ncbi_api_key=settings.ncbi_api_key
@@ -236,6 +254,24 @@ def _extraction_jobs(ctx: AppContext) -> Handler | None:
 
 
 register_job_handler(EXTRACTION_JOB, _extraction_jobs)
+
+
+def _source_jobs(
+    build: Callable[[AppContext, Gateway, Ledger, JobQueue], Handler], kind: str
+) -> HandlerFactory:
+    """Jobs that reach external sources: only a context with a gateway and a queue runs them."""
+
+    def factory(ctx: AppContext) -> Handler | None:
+        if ctx.gateway is None or ctx.queue is None:
+            log.warning("no source gateway or job queue, so this worker runs no %s jobs", kind)
+            return None
+        return build(ctx, ctx.gateway, ctx.require_ledger(), ctx.queue)
+
+    return factory
+
+
+register_job_handler(ENRICHMENT_JOB, _source_jobs(enrichment_handler, ENRICHMENT_JOB))
+register_job_handler(OPEN_ACCESS_JOB, _source_jobs(open_access_handler, OPEN_ACCESS_JOB))
 
 
 def job_handlers(ctx: AppContext) -> dict[str, Handler]:
