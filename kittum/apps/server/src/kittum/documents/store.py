@@ -134,7 +134,7 @@ def derive(tx: Tx, document: Document, parser: Parser, *, artifacts: ArtifactSto
         "select * from layer where document_id = %s and recipe_hash = %s", (document.id, r_hash)
     ).fetchone()
     if row is not None:
-        if row["output_hash"] not in _LAYER_CACHE and not artifacts.exists(row["output_hash"]):
+        if not artifacts.exists(row["output_hash"]):
             _restore(row, parser, document, artifacts)
         return _layer(row, _raw_layer(artifacts, row["output_hash"]))
     raw = parser.parse(artifacts.get(document.artifact_hash))
@@ -167,10 +167,14 @@ def _restore(
 ) -> None:
     """Put a layer that the database records but this store lacks back, by parsing again.
 
-    The recipe pins the parser, so the output must hash to the recorded value; anything else
-    is a different layer and is refused rather than stored under the old one's name.
+    The layer this process parsed earlier serves if it is still cached. Otherwise the recipe
+    pins the parser, so parsing again must give the recorded output. Either way the bytes must
+    hash to the recorded value; anything else is a different layer and is refused rather than
+    stored under the old one's name.
     """
-    raw = parser.parse(artifacts.get(document.artifact_hash))
+    raw = _LAYER_CACHE.get(row["output_hash"]) or parser.parse(
+        artifacts.get(document.artifact_hash)
+    )
     body = canonical_json(raw)
     if sha256_hex(body) != row["output_hash"]:
         raise LayerArtifactMissing(
