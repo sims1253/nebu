@@ -24,6 +24,8 @@ import type {
   Phase,
   Progress,
   ProjectSummary,
+  RenderedReport,
+  SealedBundle,
   ProtocolVersion,
   QueueItem,
   ScopeStatus,
@@ -147,6 +149,12 @@ export interface Workbench {
           }
       ),
   ) => Call<IdentityRevision>;
+
+  /** Reports, the methods lead's alone: render a target from the ledger, fetch one of its
+   * files, and seal the handover bundle. */
+  readonly renderReport: (request: Caller & { readonly target: string }) => Call<RenderedReport>;
+  readonly reportFile: (request: Caller & { readonly sha256: string }) => Call<Uint8Array>;
+  readonly sealBundle: (caller: Caller) => Call<SealedBundle>;
 
   /** Extraction review; null until there is something to review. Not served yet (WP-11). */
   readonly extraction: (projectId: string) => Call<ExtractionReview | null>;

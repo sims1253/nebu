@@ -65,6 +65,5 @@ The rest of the earlier list is served now (WP-15).
 | Need | Where | Why |
 | --- | --- | --- |
 | Extraction fields as both paths' proposals per semantic key, with accept recording the path and source-view time | WP-11 | The review groups by key and gates Enter on the source. |
-| Report targets and their rendering | WP-14 | The Reports screen. |
 | The evidence quotes of a full-text column in adjudication | WP-09, WP-15 | Adjudication shows how many spans each reviewer cited, not which. |
 | Authentication | WP-15 | `X-Kittum-Reviewer` is a stand-in. |

@@ -60,14 +60,17 @@ A walk through the demo:
 3. **Elena Weiss** adjudicates the human conflicts (`1`, `2` adopt a reviewer's decision); the AI's
    reading opens after she decides.
 4. **Morgan Lee**, the methods lead, watches **Progress** (the PRISMA flow, kappa, the extra
-   screens, the audit gauge, the ledger check), opens full-text screening there with `n`, and
-   confirms study links on **Studies** (`Enter`).
+   screens, the audit gauge, the ledger check), opens full-text screening there with `n`,
+   confirms study links on **Studies** (`Enter`), and on **Reports** renders the PRISMA flow (`p`)
+   and seals the handover bundle (`s`; needs `KITTUM_CHECKPOINT_KEY`), which `uv run kittum verify
+   <path>` checks offline.
 5. The reviewers screen the full texts: `]` jumps to a protocol term on the page, `Enter` adopts
    it as evidence, `y` `n` `?` give each criterion a verdict, `i` `e` `x` decide.
 
 `uv run kittum ledger verify <project ID>` checks the project's hash chain. `uv run kittum
 project --help` lists the lifecycle steps for a review of your own: create it, add people,
-publish a protocol, import or run searches, ingest the corpus, attach full texts, open stages.
+publish a protocol, import or run searches, ingest the corpus, attach full texts, open stages
+(`--sentinels examples/sentinels/nicotine-replacement.yaml` for the example protocol).
 
 For development, `pnpm dev:web` serves the workbench with hot reload on port 5180 against
 `kittum serve`, and `VITE_KITTUM_WORKBENCH=mock pnpm dev:web` shows recorded example data without

@@ -2,7 +2,7 @@
 // `kittum worker` beside it, both with the recorded judge. Returns the teardown.
 import { execFileSync, spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -36,6 +36,25 @@ export default async function stack() {
     KITTUM_JUDGE_BACKEND: "demo",
     KITTUM_WEB_DIST: DIST,
   };
+  // The key that signs the bundle's checkpoint; a real deployment holds it apart from the database.
+  const key = join(mkdtempSync(join(tmpdir(), "kittum-e2e-key-")), "checkpoint.pem");
+  writeFileSync(
+    key,
+    execFileSync(
+      "uv",
+      [
+        "run",
+        "python",
+        "-c",
+        "import sys; from cryptography.hazmat.primitives import serialization as s;" +
+          " from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey as K;" +
+          " sys.stdout.buffer.write(K.generate().private_bytes(s.Encoding.PEM," +
+          " s.PrivateFormat.PKCS8, s.NoEncryption()))",
+      ],
+      { cwd: SERVER },
+    ),
+  );
+  (env as Record<string, string>)["KITTUM_CHECKPOINT_KEY"] = key;
   const name = `End-to-end ${new Date().toISOString()}`;
   const seeded = execFileSync("uv", ["run", "kittum", "demo", "seed", "--json", "--name", name], {
     cwd: SERVER,

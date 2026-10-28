@@ -441,6 +441,9 @@ export const makeMockWorkbench = (
     corpus: () => call("other", "corpus", null, () => null),
     proposals: () => call("other", "proposals", null, () => []),
     link: unavailable,
+    renderReport: unavailable,
+    reportFile: unavailable,
+    sealBundle: unavailable,
 
     extraction: (projectId) =>
       call("other", "extraction", projectId, () => {

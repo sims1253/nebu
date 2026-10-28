@@ -45,6 +45,8 @@ export type SourceRecord = KittumApi.SourceRecord;
 export type LinkProposal = KittumApi.LinkProposal;
 export type IdentityRevision = KittumApi.IdentityRevision;
 export type LedgerSummary = KittumApi.LedgerSummary;
+export type RenderedReport = KittumApi.RenderedArtifact;
+export type SealedBundle = KittumApi.SealedBundle;
 type CriterionDecision = KittumApi.CriterionDecision;
 
 /** A decision as the screens build it: every field the server reads, none left to defaults. */

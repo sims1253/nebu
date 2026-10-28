@@ -440,4 +440,35 @@ test("a review from search to full text, blind, audited, adjudicated, and verifi
     });
     expect(verified).toContain("OK project");
   });
+
+  await test.step("the lead renders the PRISMA flow and seals a bundle that verifies offline", async () => {
+    const { page } = await open(browser, "Morgan Lee", "reports");
+    await page.keyboard.press("p");
+    // The report counts from the ledger what Progress showed: the same review, the same numbers.
+    // One flow per scope of the topic; this review screened one of them.
+    await expect(page.getByTestId("prisma-flow")).toHaveCount(2);
+    const flow = page.locator('[data-testid="prisma-flow"][data-scope="nrt-vs-control"]');
+    for (const [count, value] of [
+      ["records_identified", 30],
+      ["duplicates_removed", 1],
+      ["records_screened", 29],
+      ["records_excluded", 29 - INCLUDED],
+      ["records_awaiting_screening", 0],
+      ["reports_excluded", 1],
+      ["reports_included", 0],
+    ] as const) {
+      await expect(flow.getByTestId(`prisma-${count}`), count).toHaveText(String(value));
+    }
+    await expect(flow.getByRole("img")).toBeVisible();
+
+    await page.keyboard.press("s");
+    const path = (await page.getByTestId("bundle-path").textContent()) ?? "";
+    expect(path).not.toBe("");
+    const bundle = execFileSync("uv", ["run", "kittum", "verify", path], {
+      cwd: SERVER,
+      encoding: "utf8",
+    });
+    expect(bundle).toContain(`OK ${path}`);
+    await page.context().close();
+  });
 });

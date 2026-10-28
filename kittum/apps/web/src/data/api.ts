@@ -380,7 +380,17 @@ export const makeApiWorkbench = (): Workbench => ({
       }
     }),
 
-  // Extraction (WP-11) lands later: its screen shows what it will do until the server serves it.
+  renderReport: ({ projectId, as, target }) =>
+    call((api) => api.renderReportTarget(projectId, target, { payload: { actor_id: as } })),
+
+  reportFile: ({ projectId, as, sha256 }) =>
+    call((api) => api.downloadReportArtifact(projectId, sha256, { params: reviewer(as) })),
+
+  sealBundle: ({ projectId, as }) =>
+    call((api) => api.sealReportBundle(projectId, { payload: { actor_id: as } })),
+
+  // The server serves extraction (WP-11), but this screen is not wired to it yet: it shows what
+  // it will do.
   extraction: () => Effect.succeed(null),
   accept: () =>
     Effect.fail(

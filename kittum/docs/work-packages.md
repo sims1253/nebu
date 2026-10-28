@@ -678,36 +678,46 @@ Left open:
 
 ## WP-15 API
 
-Modules `kittum.api` and `kittum.app`. Needs: the modules it exposes.
+Modules `kittum.api`, `kittum.app`, and `kittum.people`. Needs: the modules it exposes.
 
 - Routes for the workbench screens, thin over module services. Regenerate contracts after each
   change.
 
-**Done** (branch `kittum/wp-15-integration`, on WP-09):
+**Done** (branch `kittum/wp-15-integration`, on main with WP-09, WP-11, and WP-14):
 
 - `kittum.app` is the composition root, an entry point like `api` and `cli` (`"app": {"*"}` in
   the architecture test). `AppContext` moved there; `kittum.api` re-exports it.
-  `AppContext.from_settings` builds the Postgres ledger, the filesystem artifact store, the
-  `SourceGateway` (default policies, `HttpxTransport` with the contact email), and the screening
-  `Judge` from `Settings.llm_endpoints` and the recipe registry. A hosted judge recipe is refused
+  `AppContext.from_settings` builds the Postgres ledger, the job queue and command receipts
+  (extraction's commands use them), the filesystem artifact store, the `SourceGateway` (default
+  policies, `HttpxTransport` with the contact email), every model backend in
+  `Settings.llm_endpoints` by recipe, and the screening `Judge`. A hosted judge recipe is refused
   at start (screening records are `local_only`); the backends refuse each call as before.
 - Settings: `KITTUM_JUDGE_MODEL`, `KITTUM_JUDGE_BACKEND` (`endpoint`, or `demo` to replay the
   demo's recorded answers), `KITTUM_WEB_DIST`; all listed in `kittum/.env.example`.
 - `kittum serve` serves the API and, with `KITTUM_WEB_DIST` or `--web-dist`, the built workbench
   (files under `/assets` immutable, `index.html` for every other non-API path).
-  `kittum worker` runs a `Worker` with every registered job kind: `register_job_handler(kind,
-  factory)` is the seam extraction (WP-11) plugs into; the judge registers itself. A judge worker
+  `kittum worker` runs a `Worker` with every registered job kind (`register_job_handler(kind,
+  factory)`): the screening judge, and extraction's `run_handler` once a model server is
+  configured. A judge worker
   refuses, before any model call, the jobs of a stage that names another judge config.
+- `kittum.people` owns who works on a project and in which roles (lead, reviewer, auditor,
+  adjudicator; migration `20261029040000_app_projects.sql`, table `project_member`). `is_lead`
+  decides who sees the whole review: `Screening.status` gives a stage's whole view only to a
+  project lead (anyone else outside the stage gets 404), `report.require_lead` refuses anyone but
+  a lead, and the catalogue routes below answer 403 to anyone else. Screening and report may
+  import it (the `ALLOWED` table).
 - The project lifecycle (`kittum.app.lifecycle`), each step a function on the caller's
   transaction with a ledger event, a route, and a `kittum project` command: create a project and
-  its lead, add people with roles (lead, reviewer, auditor, adjudicator; migration
-  `20261029040000_app_projects.sql`, table `project_member`), publish a protocol, run or import
+  its lead, add people with roles, publish a protocol, run or import
   searches (the search routes), ingest the corpus (once; update searches need the corpus diff),
   attach full texts (table `full_text`, event `project.full_text_attached`), open a stage, and
   progress. A stage takes its screeners, auditor, and adjudicators from the people; title and
   abstract screens every report of the newest identity revision; full text every record included
   at title and abstract that has a full text, with sentinels from the project's sentinel full
-  texts (`attach_sentinel_full_text`). Opening a stage enqueues the judge.
+  texts (`attach_sentinel_full_text`). Opening a stage enqueues the judge. `kittum project
+  open-stage --sentinels FILE` takes title and abstract sentinels from a YAML or JSON list
+  (`examples/sentinels/nicotine-replacement.yaml`, which the demo uses too); a refused step
+  prints why and exits 1.
 - `kittum demo seed [--live] [--no-wait] [--json]`: the nicotine replacement example (no
   profile), a PubMed search replayed from a recording (`scripts/record_demo_search.py`, 20
   records), an example CENTRAL export with one duplicate of a PubMed record (confirmed by the lead
@@ -718,15 +728,18 @@ Modules `kittum.api` and `kittum.app`. Needs: the modules it exposes.
   answered (`scripts/record_demo_answers.py`).
 - Server additions for the workbench, each in its module's route file:
   - `projects.py`: `GET/POST /api/projects`, `GET /api/projects/{id}`, `POST .../members`,
-    `POST .../full-texts/{item_ref}` (PDF body), `GET .../progress` (identification counts and
-    each stage as the viewer may see it; outcomes for the lead only).
+    `POST .../full-texts/{item_ref}` (PDF body), `GET .../progress` (each stage the viewer has a
+    part in, as they may see it; identification counts and outcomes for the lead only).
   - `ledger.py`: `GET .../ledger/verify` (the report and event counts by type; events themselves
     are not served, since their payloads hold every reviewer's decisions).
   - `screening.py`: `GET/POST .../screening/stages`, `GET .../assignments/{id}/full-text` (the
     document, layer, and protocol-term mentions per criterion, from `kittum.app.fulltext`). Rule
     violations (422) now use FastAPI's validation-error shape, so the generated client decodes
     them.
-  - `corpus.py`: `POST .../corpus/ingest`, `GET .../corpus/revisions/latest`.
+  - `corpus.py`: `POST .../corpus/ingest`, `GET .../corpus/revisions/latest`. That, the link
+    proposals, and `search.py`'s executions take `X-Kittum-Reviewer` and answer 403 to anyone
+    but a project lead: a reviewer who could list every record could tell the sentinels in their
+    queue by their absence.
   - `protocol.py`: `GET .../protocol` (the published version with the profile's labels for core
     concepts, the core's words otherwise).
   - `documents.py`: `POST /api/layers/{id}/anchors` takes `start` to anchor a mention or a
@@ -734,11 +747,13 @@ Modules `kittum.api` and `kittum.app`. Needs: the modules it exposes.
 - Module additions the wiring needed: `corpus.latest_revision` and `corpus.reports` (the read
   WP-09 asked for; `CorpusReport` carries the source records); `Screening.stages`, `.stage`, and
   `.assignment_source` (the item reference stays server-side, since a sentinel's names it);
-  `documents.derive` restores a layer whose JSON the artifact store lacks by parsing again, and
-  refuses if the output hash differs (a database paired with another store used to fail on read).
+  `documents.derive` restores a layer whose JSON the artifact store lacks (from the parsed layer
+  this process still holds, or by parsing again), and refuses if the output hash differs (a
+  database paired with another store used to fail on read).
 - Tests: `tests/app/test_lifecycle.py` drives a project from nothing to an open stage over HTTP,
-  with the judge-mismatch refusal; the end-to-end journey (WP-16) covers the rest on the real
-  stack.
+  with the judge-mismatch refusal, and a third reviewer outside the stage who gets no catalogue,
+  no stage, and no reports; `tests/app/test_cli.py` sets a review up from the command line; the
+  end-to-end journey (WP-16) covers the rest on the real stack.
 
 Open:
 
@@ -751,11 +766,10 @@ Open:
   for good (they need requeueing by hand).
 - The full-text waterfall's automatic sources (WP-10) should attach through `attach_full_text`;
   only uploads and the demo do now. Full-text sentinels need a PDF each.
-- Extraction (WP-11, PR #39) adds `queue` and `receipts` to `AppContext` in `api/__init__.py`;
-  move them to `kittum/app/context.py` when merging. Its jobs register with
-  `register_job_handler`; its screen's `Workbench.extraction` and `accept` return "not served
-  yet" in `apps/web/src/data/api.ts`. Reports (WP-14) get a route file and a screen in the same
-  way; the Reports nav entry is a placeholder.
+- The extraction screen is not wired to WP-11's routes yet: `Workbench.extraction` and `accept`
+  in `apps/web/src/data/api.ts` return "not served yet".
+- Writes (confirm, merge, split, render, seal) name their actor in the request body; only
+  reports check that it is a lead.
 - `kittum serve` runs one uvicorn process; production needs a process manager and TLS in front.
 
 ## WP-16 Workbench
@@ -796,7 +810,9 @@ Done (branch `kittum/wp-16-workbench-design`, then `kittum/wp-15-integration`):
   Reviewers see their own counts only.
 - Protocol (read only, with profile labels), Search (executions, counts, line-numbered
   strategies, the platform's translation), Studies (proposals first; `Enter` confirm, `x` mark,
-  `m` merge, `s` split; lead only).
+  `m` merge, `s` split). Search and Studies are the lead's: anyone else sees why, not the records.
+- Reports (the lead's): `p` renders the PRISMA 2020 flow from the ledger and shows its counts and
+  diagram per scope, `s` seals the handover bundle and says how to verify it offline.
 - End to end: `apps/web/e2e/review.spec.ts` (Playwright, `pnpm --dir apps/web e2e`, CI job
   `kittum-e2e`) seeds the demo and starts `kittum serve` and `kittum worker` with the recorded
   judge, then runs one journey: reviewer A screens by keyboard with an undo and a reveal (nothing
@@ -807,13 +823,16 @@ Done (branch `kittum/wp-16-workbench-design`, then `kittum/wp-15-integration`):
   kappa, and opens full text; both reviewers and the auditor screen the real Lesotho PDF and the
   full-text sentinel with adopted evidence; the lead confirms the study link; studies drop from 29
   to 28, the full-text extra screen is upheld, and the ledger verifies in the UI and with
-  `kittum ledger verify`.
+  `kittum ledger verify`. Reviewer B and the auditor get 403 from the catalogue and no lead
+  figures, and no screening or progress answer they received has an AI verdict field, another
+  person's decision, or a reveal outside their own decision. The lead renders the PRISMA flow
+  (the same counts as Progress) and seals a bundle that `kittum verify` accepts.
 - Browser unit tests in Vitest browser mode on the mock, and screenshots in `apps/web/screenshots/`.
 
 Left:
 
-- Extraction review on the server (WP-11) and the Reports, Risk of bias, and AI-exclusion audit
-  screens; the full-text judge's per-criterion reading in adjudication; grounding exceptions.
+- Extraction review on the server (WP-11), the other report targets on the Reports screen, and
+  the Risk of bias and AI-exclusion audit screens; the full-text judge's per-criterion reading in adjudication; grounding exceptions.
 - Adjudication shows a full-text column's evidence as counts, not the quotes on the page.
 - Opening stages other than full text, adding people, and publishing a protocol happen in the CLI
   or the API; the workbench has no forms for them yet.
