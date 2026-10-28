@@ -75,6 +75,7 @@ search_topics:
     scopes: [nrt-vs-control, combination-vs-single]
     audit:
       sentinel_percent: "1"
+      random_audit_percent: "10"
     freshness:
       max_age_months: 12
     source_plan:

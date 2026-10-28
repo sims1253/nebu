@@ -250,15 +250,21 @@ INVALID = {
         "census",
     ),
     "M2 without a random exclusion audit": (
-        lambda s: _topic(s).update(
-            mode="M2", mode_rationale={"en": "Large search."}, validation_pack="pack-1"
+        lambda s: (
+            _topic(s)["audit"].pop("random_audit_percent", None),
+            _topic(s).update(
+                mode="M2", mode_rationale={"en": "Large search."}, validation_pack="pack-1"
+            ),
         ),
         "search_topics[0].audit.random_audit_percent",
         "mode M2 needs a random audit of exclusions above 0 percent",
     ),
     "M3 without a random exclusion audit": (
-        lambda s: _topic(s).update(
-            mode="M3", mode_rationale={"en": "Very large search."}, stopping=dict(STOPPING)
+        lambda s: (
+            _topic(s)["audit"].pop("random_audit_percent", None),
+            _topic(s).update(
+                mode="M3", mode_rationale={"en": "Very large search."}, stopping=dict(STOPPING)
+            ),
         ),
         "search_topics[0].audit.random_audit_percent",
         "mode M3 needs a random audit of exclusions above 0 percent",
@@ -323,6 +329,7 @@ def test_every_problem_is_reported_at_once() -> None:
     def edit(source: dict[str, Any]) -> None:
         _criterion(source, "INT").__setitem__("applies_to", ["x"])
         _topic(source)["mode"] = "M3"
+        _topic(source)["audit"].pop("random_audit_percent", None)
         source["questions"][0]["label"] = {"de": "NRT gegen Kontrolle"}
 
     issues = {i.path for i in _break(edit).issues}
