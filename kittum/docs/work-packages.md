@@ -363,24 +363,45 @@ Module `kittum.screening`. Needs: `protocol`, `corpus`, `judge`, `ledger`, `runs
 - Conflicts once every screener has decided: human disagreements (and full-text exclusions on
   different criteria) in every mode, two human exclusions in M1 while the model saw no failing
   criterion, every provisional or final AI disagreement in M2 (the census), and audit samples the
-  auditor includes. `adjudication_queue` shows each human's final decision under a pseudonym (A, B), never
-  to someone who screened the record; `adjudicate` adopts a column or takes an own decision and
-  returns the AI column only then.
+  auditor includes. `adjudication_queue` shows each human's final decision under a pseudonym
+  (A, B), never to someone who screened the record, in an order hashed from the conflict ID;
+  `adjudicate` adopts a column or takes an own decision and returns the AI column only then.
+  `outcomes` gives each record's current outcome (include, exclude, conflict, or not yet
+  screened) for the lead and later stages.
+- Decoys, so that queue membership does not reveal the AI. A conflict only the AI raised (M1: the
+  model includes, both humans exclude; M2: the AI disagrees with the lone human) shows only
+  agreeing human decisions. Each is matched by at least one decoy with the same visible outcome: a
+  fully screened record with no conflict (so humans and AI agreed), drawn in a seeded order, or,
+  if none is free yet, the next record completed with that outcome. A queue item with a given
+  visible outcome is then AI-driven with probability at most one half. The rate is this
+  one-to-one rule, not a protocol percentage. Decoys have the same fields, columns, revision, and
+  order logic as real conflicts; their adjudications are recorded but change no outcome and count
+  in no conflict total. The lead's view reports decoys, decoys adjudicated, and decoys decided as
+  the humans and the AI had. Residual: conflict IDs are UUIDv7, so a decoy drawn from the pool
+  shares its creation time with the conflict it accompanies (which of the two is the decoy stays
+  hidden).
 - Blinding below the service: reviewer reads go through the SQL functions
   `screening_reviewer_queue` and `screening_reviewer_progress`, which return only the reviewer's
-  own assignments, no AI output (except their own reveal while it awaits the final decision), no
-  sentinel or audit flags. Screeners see their own counts in `status`; anyone else sees the stage
-  with kappa and PABAK (human pairs and human-AI, on blind provisional decisions), reveals shown
-  and followed, the audit gauge (sentinel accuracy, `stats.elusion_estimate` over the records
-  excluded without adjudication, in two strata by `ai_excludes`), and the M3 stop test (`stats.stop_test` over the fully screened
-  prefix of the AI order, with the minimum screened share).
+  own assignments in one stage, no AI output (except their own reveal while it awaits the final
+  decision), no sentinel or audit flags. Two topics that screen the same scope keep separate
+  queues and counts; a scope in several topics needs `topic_id`. Screeners see their own counts in
+  `status`; anyone else sees the stage with kappa and PABAK (human pairs; human-AI against the
+  model's own reading as `human_ai` and against the verified reading as `human_ai_verified`; all
+  on blind provisional decisions), reveals shown and followed, the audit gauge (sentinel accuracy,
+  `stats.elusion_estimate` over the records excluded without adjudication, in two strata by
+  `ai_excludes`), the decoy gauge, and the M3 stop test (`stats.stop_test` over the fully screened
+  prefix of the AI order, with the minimum screened share). An open conflict in the tested prefix
+  counts as relevant in the p-value but withholds certification: the verdict is
+  `pending_conflicts`, with their number, until they are adjudicated.
 - Full text: per-criterion readings (met, not met, unclear) with evidence anchor IDs (opaque UUIDs
-  until WP-10); include, exclude, or insufficient information; an exclusion cites a not-met
-  criterion with evidence.
+  until WP-10); include, exclude, or insufficient information. Every outcome cites at least one
+  evidence anchor, and an exclusion cites a not-met criterion with evidence.
 - Routes in `api/routes/screening.py`: `GET .../screening/queue`, `POST .../assignments/{id}/decide`,
   `POST .../assignments/{id}/undo`, `GET .../adjudications`, `POST .../adjudications/{id}/decide`,
   `GET .../status`. The caller's actor ID comes from the `X-Kittum-Reviewer` header until WP-15
   adds authentication; it is a stand-in, not a security boundary.
+- `tests/screening/test_decoys.py`, `test_topics.py`, and
+  `test_m3_stop_waits_for_conflicts_in_the_tested_prefix` cover the first review's findings.
 - `tests/screening/test_escalation.py` covers the two readings: a downgraded `not_met` with both
   M1 humans excluding is not adjudicated (and stays in the audit frame); a model that saw every
   criterion met is adjudicated; the same in M2, with a downgraded `not_met` agreeing with either
@@ -415,8 +436,6 @@ Left open:
   keywords without a negation, fail the polarity check), so the verified reading mostly includes.
   Escalation uses the model's own reading, so this no longer floods M1 adjudication, but M3 order
   and the audit strata see few verified exclusions.
-- Human-AI kappa and PABAK compare the blind provisional decisions with the verified reading. A
-  second pair against the model's own reading may be worth reporting.
 
 ## WP-10 Documents
 
