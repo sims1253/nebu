@@ -8,12 +8,50 @@ import { VIEW_MS } from "./ExtractionReview.tsx";
 const RUN = `/p/ivosidenib-cca/extraction/${MOCK_RUN_ID}`;
 
 let unmount: (() => void) | undefined;
-afterEach(() => unmount?.());
+afterEach(() => {
+  release();
+  unmount?.();
+});
 
 const notice = () => page.getByTestId("extraction-notice");
 const selected = () =>
   document.querySelector("[data-testid=field-row][aria-selected=true]")?.textContent ?? "";
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+// Room for the page images and the scroll under a full `pnpm check` (see the multi-line test).
+const settle = { timeout: 15_000 };
+
+/**
+ * Holds back every IntersectionObserver report while `held` is set, as a browser may when the page
+ * comes back from a hidden tab; `release` delivers them in order. The reports are the browser's own.
+ */
+let held: Array<() => void> | null = null;
+const RealObserver = window.IntersectionObserver;
+window.IntersectionObserver = class extends RealObserver {
+  constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+    super((entries, observer) => {
+      if (held) held.push(() => callback(entries, observer));
+      else callback(entries, observer);
+    }, options);
+  }
+};
+const hold = () => {
+  held = [];
+};
+const release = () => {
+  const queued = held ?? [];
+  held = null;
+  for (const deliver of queued) deliver();
+};
+
+/** Hides or shows the page as switching tabs does, for the page's own visibility checks. */
+const setHidden = (hidden: boolean) => {
+  Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    get: () => (hidden ? "hidden" : "visible"),
+  });
+  document.dispatchEvent(new Event("visibilitychange"));
+};
 
 describe("extraction review", () => {
   test("accepts a value only after its source was on screen, and makes the reviewer pick between paths", async () => {
@@ -55,12 +93,12 @@ describe("extraction review", () => {
   test("accepts as a group only the agreeing standard fields that were on screen, for as long as they were", async () => {
     const app = mount(RUN);
     unmount = app.unmount;
-    await expect.element(page.getByText("1 of 21 accepted")).toBeVisible();
+    await expect.element(page.getByText("1 of 21 accepted"), settle).toBeVisible();
     // The two agreeing standard fields are last in the list, below the fold: a group accept
     // now would take values the reviewer never saw, however long the screen has been open.
     await pause(VIEW_MS + 300);
     await press("a");
-    await expect.element(notice()).toMatchTextContent("has been on screen long enough");
+    await expect.element(notice(), settle).toMatchTextContent("has been on screen long enough");
     expect(app.workbench.groupAccepts).toHaveLength(0);
 
     const list = document.querySelector<HTMLElement>("[data-testid=fields]")!;
@@ -69,16 +107,69 @@ describe("extraction review", () => {
       [...document.querySelectorAll<HTMLElement>("[data-testid=field-row]")].filter((r) =>
         r.textContent?.includes("Patients with any adverse event"),
       );
-    await expect.poll(() => rows().length).toBe(2);
+    await expect.poll(() => rows().length, settle).toBe(2);
     const shownAt = performance.now();
     await pause(VIEW_MS + 300);
     await press("a");
-    await expect.element(page.getByText("3 of 21 accepted")).toBeVisible();
+    await expect.element(page.getByText("3 of 21 accepted"), settle).toBeVisible();
     const [group] = app.workbench.groupAccepts;
     expect(group?.fieldIds).toEqual(rows().map((r) => r.dataset["fieldId"]));
     // The time they were on screen, not the time since the screen opened.
     expect(group?.listViewedMs).toBeGreaterThanOrEqual(VIEW_MS);
     expect(group?.listViewedMs).toBeLessThanOrEqual(performance.now() - shownAt + 50);
+  });
+
+  test("does not count the time the tab was hidden towards a group accept", async () => {
+    const app = mount(RUN);
+    unmount = app.unmount;
+    await expect.element(page.getByText("1 of 21 accepted"), settle).toBeVisible();
+    const list = document.querySelector<HTMLElement>("[data-testid=fields]")!;
+    list.scrollTop = list.scrollHeight;
+    await expect
+      .poll(() => document.querySelectorAll("[data-testid=field-row]").length, settle)
+      .toBeGreaterThan(0);
+    // A glance at the two rows, a second in another tab, and back: not a look at them.
+    await pause(150);
+    setHidden(true);
+    await pause(VIEW_MS + 600);
+    setHidden(false);
+    await pause(100);
+    await press("a");
+    await expect.element(notice(), settle).toMatchTextContent("has been on screen long enough");
+    expect(app.workbench.groupAccepts).toHaveLength(0);
+    // Their time runs again once the page is back.
+    await pause(VIEW_MS);
+    await press("a");
+    await expect.element(page.getByText("3 of 21 accepted"), settle).toBeVisible();
+    expect(app.workbench.groupAccepts[0]?.listViewedMs).toBeLessThan(VIEW_MS + 400);
+  });
+
+  test("does not resume a group's time on return until a fresh report says the rows are in view", async () => {
+    const app = mount(RUN);
+    unmount = app.unmount;
+    await expect.element(page.getByText("1 of 21 accepted"), settle).toBeVisible();
+    const list = document.querySelector<HTMLElement>("[data-testid=fields]")!;
+    list.scrollTop = list.scrollHeight;
+    await pause(150);
+    // Away, the list scrolls off the two rows; back, the observer is slow to say so.
+    setHidden(true);
+    hold();
+    list.scrollTop = 0;
+    await pause(300);
+    setHidden(false);
+    await pause(VIEW_MS + 200);
+    await press("a");
+    await expect.element(notice(), settle).toMatchTextContent("has been on screen long enough");
+    expect(app.workbench.groupAccepts).toHaveLength(0);
+    // Once the reports arrive, the rows count only when they are in view again.
+    release();
+    await pause(VIEW_MS + 200);
+    await press("a");
+    await expect.element(notice(), settle).toMatchTextContent("has been on screen long enough");
+    list.scrollTop = list.scrollHeight;
+    await pause(VIEW_MS + 200);
+    await press("a");
+    await expect.element(page.getByText("3 of 21 accepted"), settle).toBeVisible();
   });
 
   test("does not count time before the page image has drawn", async () => {
@@ -170,7 +261,6 @@ describe("extraction review", () => {
     unmount = app.unmount;
     // `expect.poll` and `expect.element` give up after 1 s by default; under a full
     // `pnpm check` the page images and the scroll can take longer than that, so the waits get room.
-    const settle = { timeout: 15_000 };
     await expect.element(page.getByText("1 of 21 accepted"), settle).toBeVisible();
     await press("Tab"); // "randomly assigned to ASC alone (n=81)" breaks over two lines
     await expect

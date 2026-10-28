@@ -239,25 +239,58 @@ export function ExtractionScreen({ review }: { review: ExtractionReview }) {
     const root = list.current;
     if (!root || !groupKey) return;
     const seen = rowsSeen.current;
+    // A row's time runs only while the page is visible and a fresh report says it is wholly in
+    // the list's view. On the page's return every row waits for a report computed after it: a
+    // report from before (the rows may have scrolled away meanwhile) starts nothing.
+    let shownSince = document.hidden ? Infinity : 0;
+    const start = (id: string, now: number) => {
+      const row = seen.get(id) ?? { ms: 0, since: null };
+      if (row.since === null) seen.set(id, { ...row, since: now });
+    };
+    const stop = (id: string, now: number) => {
+      const row = seen.get(id);
+      if (row && row.since !== null) seen.set(id, { ms: row.ms + now - row.since, since: null });
+    };
     const observer = new IntersectionObserver(
       (entries) => {
         const now = performance.now();
         for (const entry of entries) {
           const id = (entry.target as HTMLElement).dataset["fieldId"] ?? "";
-          const row = seen.get(id) ?? { ms: 0, since: null };
           const whole = entry.isIntersecting && entry.intersectionRatio >= 0.99;
-          if (whole && row.since === null) seen.set(id, { ...row, since: now });
-          else if (!whole && row.since !== null)
-            seen.set(id, { ms: row.ms + now - row.since, since: null });
+          if (!whole) stop(id, now);
+          else if (!document.hidden && entry.time >= shownSince) start(id, now);
         }
       },
       { root, threshold: [0, 0.99, 1] },
     );
+    const tracked = () =>
+      groupKey
+        .split(",")
+        .map((id) => rows.current.get(id))
+        .filter((el): el is HTMLElement => el !== undefined);
+    const onVisibility = () => {
+      const now = performance.now();
+      if (document.hidden) {
+        shownSince = Infinity;
+        for (const id of groupKey.split(",")) stop(id, now);
+        return;
+      }
+      // Observing afresh makes the observer report each row as it is now.
+      shownSince = now;
+      for (const el of tracked()) {
+        observer.unobserve(el);
+        observer.observe(el);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
     for (const id of groupKey.split(",")) {
       const el = rows.current.get(id);
       if (el) observer.observe(el);
     }
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [groupKey]);
   const rowViewedMs = (id: string) => {
     const row = rowsSeen.current.get(id);
