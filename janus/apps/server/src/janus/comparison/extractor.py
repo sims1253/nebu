@@ -48,6 +48,9 @@ class _Candidate:
     column_context: str | None
     row_context: str | None
     kind: str  # "table" or "text"
+    # The column-context words the table's inferred structure supplied (an inherited spanning
+    # header, continuation header rows), as opposed to the column's own row-0 cell.
+    inferred_column_context: str | None = None
 
 
 def _bbox(value: Any) -> dict[str, float] | None:
@@ -60,10 +63,21 @@ def _bbox(value: Any) -> dict[str, float] | None:
 _GROUP_N = re.compile(r"^[Nn]\s*=\s*\d[\d,]*$")
 # A year that labels a column under a spanning header ("2023 | 2024" under "Revenue").
 _YEAR = re.compile(r"^(?:19\d\d|20\d\d|2100)$")
-# Values that carry letters: an amount with a currency code, or a date with a month name.
-_CODED_AMOUNT = re.compile(r"^(?:[A-Z]{3}\s*[-+]?\d[\d.,\s]*|[-+]?\d[\d.,\s]*\s*[A-Z]{3})$")
+# Values that carry letters: an amount with an ISO 4217 code ("USD 10"), or a date with a month
+# name ("5 Jan 2024"). A currency symbol carries no letters, so "$10.00" is a value already.
+_CURRENCY_CODES = (
+    "USD|EUR|GBP|CHF|JPY|CNY|AUD|CAD|NZD|SEK|NOK|DKK|PLN|CZK|HUF|INR|BRL|ZAR|MXN|KRW|SGD|HKD"
+)
+_CODED_AMOUNT = re.compile(
+    rf"^(?:(?:{_CURRENCY_CODES})\s*[-+]?\d[\d.,\s]*|[-+]?\d[\d.,\s]*\s*(?:{_CURRENCY_CODES}))$"
+)
+_MONTH = (
+    r"(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?"
+    r"|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?"
+)
 _NAMED_DATE = re.compile(
-    r"^(?:\d{1,2}\.?\s+[A-Za-z]{3,9}\.?,?\s+\d{2,4}|[A-Za-z]{3,9}\.?\s+(?:\d{1,2},?\s+)?\d{4})$"
+    rf"^(?:\d{{1,2}}\.?\s+{_MONTH},?\s+\d{{2,4}}|{_MONTH}\s+(?:\d{{1,2}},?\s+)?\d{{4}})$",
+    re.IGNORECASE,
 )
 
 
@@ -131,13 +145,15 @@ def _header_rows(
 
 def _header_paths(
     cells: dict[tuple[int, int], TableCell], header: list[int], columns: list[int]
-) -> dict[int, list[str]]:
-    """Each column's header names from top to bottom ("Primary analysis set", "Control").
+) -> tuple[dict[int, list[str]], dict[int, list[str]]]:
+    """Each column's header names from top to bottom ("Primary analysis set", "Control"),
+    and the part of them the structure supplied rather than the column's own row-0 cell.
 
     Above the leaf row, an empty cell the detector reports without a box is a spanned
     position: it takes the name of the spanning cell to its left. Group sizes ("N = 355")
     are values, not names, and stay out of the path."""
     paths: dict[int, list[str]] = {column: [] for column in columns}
+    structural: dict[int, list[str]] = {column: [] for column in columns}
     for depth, row in enumerate(header):
         spanning = ""
         for column in columns:
@@ -149,9 +165,13 @@ def _header_paths(
                 spanning = "" if _GROUP_N.match(text) else text
             elif depth < len(header) - 1 and (cell is None or cell.bbox is None):
                 text = spanning
+                if text:
+                    structural[column].append(text)
             if text and not _GROUP_N.match(text):
                 paths[column].append(text)
-    return paths
+                if depth and (cell is not None and cell.text.strip()):
+                    structural[column].append(text)
+    return paths, structural
 
 
 def _table_candidates(evidence: DocumentEvidence, *, inferred: bool) -> list[_Candidate]:
@@ -171,8 +191,9 @@ def _table_candidates(evidence: DocumentEvidence, *, inferred: bool) -> list[_Ca
             columns = sorted({cell.column for cell in table.cells})
             if inferred:
                 header = _header_rows(cells, rows, columns) if table.header_row and rows else []
-                paths = _header_paths(cells, header, columns)
+                paths, structural = _header_paths(cells, header, columns)
                 headers = {column: " ".join(paths[column]) for column in columns}
+                supplied = {column: " ".join(structural[column]) for column in columns}
             else:
                 header = []
                 headers = {
@@ -180,6 +201,7 @@ def _table_candidates(evidence: DocumentEvidence, *, inferred: bool) -> list[_Ca
                     for column in columns
                     if table.header_row and (0, column) in cells
                 }
+                supplied = {}
 
             def candidate(
                 label: str,
@@ -190,6 +212,7 @@ def _table_candidates(evidence: DocumentEvidence, *, inferred: bool) -> list[_Ca
                 table: TableStructure = table,
                 page: PageContent = page,
                 headers: dict[int, str] = headers,
+                supplied: dict[int, str] = supplied,
             ) -> _Candidate:
                 return _Candidate(
                     label=label,
@@ -206,6 +229,7 @@ def _table_candidates(evidence: DocumentEvidence, *, inferred: bool) -> list[_Ca
                     column_context=headers.get(value_cell.column) or None,
                     row_context=row_context,
                     kind="table",
+                    inferred_column_context=supplied.get(value_cell.column) or None,
                 )
 
             # A header row below row 0 has no row label; its group sizes ("N = 355") take the
@@ -1100,6 +1124,53 @@ def match_component(value_rule: ValueRule, raw: str) -> tuple[str | None, str | 
     return None, f"Value did not match the declared {shape.value} source shape", False
 
 
+def _words(text: str) -> list[str]:
+    return re.findall(r"[^\W_]+", text.casefold())
+
+
+def _has_word(word: str, words: list[str]) -> bool:
+    """Whether `words` carry `word` the way the label scorer sees it: case and punctuation
+    aside, close spellings ("controls", "Control") alike; numbers only as printed."""
+    if any(c.isdigit() for c in word):
+        return word in words
+    return any(fuzz.ratio(word, other) >= 80 for other in words)
+
+
+def _missing_words(aliases: list[str], context: str | None) -> list[set[str]]:
+    """Per alias, the words of the alias the context does not carry."""
+    present = _words(context or "")
+    return [{w for w in _words(alias) if not _has_word(w, present)} for alias in aliases]
+
+
+def _missing_column_words(field: ExtractionField, candidate: _Candidate) -> bool:
+    """Whether every requested column alias has words the candidate's column header lacks."""
+    aliases = _column_labels(field)
+    return bool(aliases) and all(_missing_words(aliases, candidate.column_context))
+
+
+def _explains_missing_columns(
+    field: ExtractionField, original: _Candidate, inferred: _Candidate
+) -> bool:
+    """Whether the inferred pick may replace the original pick of the row-0 reading: it carries
+    every word of a requested column alias, and the words the original pick lacked come from
+    the structure the inference found (a spanning header above the column, a continuation
+    header row), not merely from a longer header."""
+    aliases = _column_labels(field)
+    lacking = _missing_words(aliases, original.column_context)
+    carried = _missing_words(aliases, inferred.column_context)
+    supplied = _words(inferred.inferred_column_context or "")
+    return any(
+        not carry and all(_has_word(word, supplied) for word in lack)
+        for lack, carry in zip(lacking, carried, strict=True)
+    )
+
+
+def _carries_sections(field: ExtractionField, candidate: _Candidate) -> bool:
+    """Whether the candidate's section carries every word of a requested section alias."""
+    sections = field.locate.section_labels
+    return not sections or not all(_missing_words(sections, candidate.row_context))
+
+
 _CANDIDATE_NOUN = {"table_label": "table label", "text_label": "text label"}
 _LOCATION_NOUN = {"table_label": "table cell", "text_label": "text line"}
 
@@ -1165,12 +1236,16 @@ class SchemaExtractor:
             if "table_label" not in pools:
                 pools["table_label"] = _table_candidates(evidence, inferred=False)
             extraction, best = self._extract_static(field, pools["table_label"])
-            if best is None or not _is_complete_column_match(field, best):
+            if best is None or _missing_column_words(field, best):
                 if "table_label:inferred" not in pools:
                     pools["table_label:inferred"] = _table_candidates(evidence, inferred=True)
                 inferred, inferred_best = self._extract_static(field, pools["table_label:inferred"])
-                if inferred_best is not None and (
-                    best is None or _is_complete_column_match(field, inferred_best)
+                # An inferred pick outside a requested section never replaces anything, not
+                # even a tie: the inference may not trade the section for a column.
+                if (
+                    inferred_best is not None
+                    and _carries_sections(field, inferred_best)
+                    and (best is None or _explains_missing_columns(field, best, inferred_best))
                 ):
                     extraction = inferred
             extractions.append(extraction)

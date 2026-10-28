@@ -46,14 +46,18 @@ the group name as section context. For example, `Group\nSub A\nSub B` becomes tw
 indentation to identify parent groups. A section mismatch can lower the score by 30 percent.
 
 That reading, with row 0 as the column context and only the reader's sections, stands whenever
-it selects one cell whose header carries the requested column words. Only when it selects
-nothing, ties, or selects a cell whose header lacks those words does Janus infer more of the
-table's structure for the field:
+it selects one cell whose header carries the requested column words, compared as the scorer
+compares them (case, punctuation, and close spellings such as plurals aside; numbers as
+printed). Only when it selects nothing, ties, or selects a cell whose header lacks those words
+does Janus infer more of the table's structure for the field. An inferred cell then replaces
+the original choice only if a spanning or continuation header above its column supplies the
+missing words, and never if it lies outside a requested section:
 
 - Rows below row 0 with an empty first cell, and only names or group sizes in their other cells,
-  continue the header. Digits beside words name things (`Dose 10 mg`, `Week 12`); a cell that
-  prints a number, an amount, a percentage, or a date makes the row a data row, unless every cell
-  is a year in the columns a spanning header covers (`2023 | 2024` under `Revenue`).
+  continue the header. Digits beside words name things (`Dose 10 mg`, `ARM 10`, `Week 2024`); a
+  cell that prints a number, an amount (with a currency symbol or an ISO 4217 code such as
+  `USD 10`), a percentage, or a date (digits, or a month name) makes the row a data row, unless
+  every cell is a year in the columns a spanning header covers (`2023 | 2024` under `Revenue`).
 - A column's context is then its whole header path: under `Primary analysis set` spanning
   `Control | Intervention | Total`, the first column's context is `Primary analysis set Control`.
 - A group size printed in a header row (`N = 355` under `Vitamin C group`) is a candidate whose
