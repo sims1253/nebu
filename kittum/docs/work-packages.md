@@ -896,6 +896,26 @@ Done (branch `kittum/wp-16-workbench-design`, then `kittum/wp-15-integration`):
   audit screen is open nothing of it, accepts Table 1's 52, and edits the 12-month HbA1c from a
   mouse selection on page 5; the assertion's anchor is that span. `tests/app/test_extraction_access.py`
   checks every extraction read and acceptance against Postgres.
+- The Audit screen (branch `kittum/audit-trail`, `g` then `l`), shown only to a lead who screens
+  nothing, over lead-only routes under `/api/projects/{id}/audit` (`report.audit`,
+  `ledger.audit_chain`). A strip across the top draws the whole chain: a tick per event, the
+  traced record's events, failing events, and signed checkpoints. `1` traces a number: every
+  PRISMA count opens to its records (`PrismaFlow.members`), and a record opens to a timeline of
+  every ledger event that touched it, from the searches that found it (with the raw response) to
+  its duplicates, each blind decision and when the AI's reading was shown after it, conflicts,
+  adjudication, the full text (licence, PDF), and extracted values with their anchors; each event
+  shows its seq, actor, time, and hashes, and links the artifacts it names. `2` checks the chain:
+  `audit_chain` runs every check on every event (payload hash, event hash, the link to the event
+  before, missing seqs) and every checkpoint (signature, head hash), and names each failing
+  event and check with the stored and recomputed values; `c` signs a checkpoint at the head. `3`
+  looks back: the PRISMA flows and the AI disclosure at any event, picked by seq, on the strip, or
+  by name ("Title and abstract closed"), beside the head; `p` renders and keeps those reports at
+  that event. `tests/app/test_audit.py` traces the Lesotho trial through every stage over HTTP and
+  edits a decision as the database superuser, step by step up to a re-hashed tail and a deleted
+  event, checking that each step is named and that a bundle sealed before still verifies while
+  none can be sealed after. `tests/report/test_audit.py` checks the flow when title and abstract
+  closed against the lead's status at that moment. `apps/web/e2e/audit.spec.ts` drives the
+  screen, tampers through `e2e/tamper.ts`, and checks a screener is refused everywhere.
 - Browser unit tests in Vitest browser mode on the mock, and screenshots in `apps/web/screenshots/`.
 
 Left:
@@ -909,6 +929,9 @@ Left:
 - A session break suggestion after a missed sentinel or a speed-up with an include-rate change.
 - Third-party licence notices for the web bundle (`licenses:sync`).
 - `scripts/screenshots.ts` still shoots the mock; point it at a seeded server.
+- Audit: checkpoints are read from the database; a copy kept outside it (WORM storage) is not
+  compared yet. The trace reads the whole chain per request, which is fine for one review's
+  thousands of events but wants an index on `payload->>'item_ref'` at Embase scale.
 
 ## WP-17 Evaluation harness
 

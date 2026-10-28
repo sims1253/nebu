@@ -10,6 +10,12 @@ import type {
   AdjudicationItem,
   AdjudicationResult,
   Anchor,
+  AsOf,
+  ChainAudit,
+  CheckpointStatus,
+  EventPage,
+  Milestone,
+  RecordTrace,
   Box,
   CorpusRevision,
   CorpusView,
@@ -233,9 +239,33 @@ export interface Workbench {
 
   /** Reports, the methods lead's alone: render a target from the ledger, fetch one of its
    * files, and seal the handover bundle. */
-  readonly renderReport: (request: Caller & { readonly target: string }) => Call<RenderedReport>;
+  readonly renderReport: (
+    request: Caller & {
+      readonly target: string;
+      /** The ledger event to render at; the head when absent. */
+      readonly cutoffSeq?: number;
+    },
+  ) => Call<RenderedReport>;
   readonly reportFile: (request: Caller & { readonly sha256: string }) => Call<Uint8Array>;
   readonly sealBundle: (caller: Caller) => Call<SealedBundle>;
+
+  // The audit trail, the methods lead's alone: the ledger holds every reviewer's decisions.
+
+  /** Every ledger event that concerns a record: a report, a search result, or a study. */
+  readonly trace: (request: Caller & { readonly ref: string }) => Call<RecordTrace>;
+  /** Ledger events after `afterSeq`, oldest first. */
+  readonly ledgerEvents: (
+    request: Caller & { readonly afterSeq: number; readonly limit: number },
+  ) => Call<EventPage>;
+  /** Every check on every event and checkpoint, naming each one that fails. */
+  readonly auditLedger: (caller: Caller) => Call<ChainAudit>;
+  /** Signs the chain head with the server's checkpoint key. */
+  readonly signCheckpoint: (caller: Caller) => Call<CheckpointStatus>;
+  readonly milestones: (caller: Caller) => Call<ReadonlyArray<Milestone>>;
+  /** The PRISMA flows and the AI disclosure at a cutoff (the head when null). */
+  readonly asOf: (request: Caller & { readonly cutoffSeq: number | null }) => Call<AsOf>;
+  /** An artifact a ledger event names: a raw response, a full text, a model's raw output. */
+  readonly auditArtifact: (request: Caller & { readonly sha256: string }) => Call<Uint8Array>;
 
   // Extraction. The lead requests runs on reports with a full text (`fullTexts` names them); a
   // worker fills each run; a reviewer accepts each value after viewing its source.

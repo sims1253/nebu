@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import type { Member, ProjectSummary } from "../../../data/schema.ts";
 import { run } from "../../../data/workbench.ts";
 import {
+  derive,
   ProjectContext,
   rememberedReviewer,
   rememberReviewer,
@@ -41,9 +42,17 @@ type Section =
   | "extraction"
   | "risk-of-bias"
   | "progress"
-  | "reports";
+  | "reports"
+  | "audit";
 
-const NAV: ReadonlyArray<{ section: Section; label: string; chord: string; group?: string }> = [
+const NAV: ReadonlyArray<{
+  section: Section;
+  label: string;
+  chord: string;
+  group?: string;
+  /** Shown only to a methods lead who screens nothing, as the server answers only them. */
+  lead?: boolean;
+}> = [
   { section: "setup", label: "Setup", chord: "u" },
   { section: "protocol", label: "Protocol", chord: "p" },
   { section: "search", label: "Search", chord: "s" },
@@ -61,6 +70,7 @@ const NAV: ReadonlyArray<{ section: Section; label: string; chord: string; group
   { section: "risk-of-bias", label: "Risk of bias", chord: "b" },
   { section: "progress", label: "Progress", chord: "o" },
   { section: "reports", label: "Reports", chord: "r" },
+  { section: "audit", label: "Audit", chord: "l", lead: true },
 ];
 
 const path = (section: Section) => `/p/$projectId/${section}` as const;
@@ -85,6 +95,8 @@ function ProjectLayout() {
 
 function Layout({ state, onSwitch }: { state: ProjectState; onSwitch: () => void }) {
   const navigate = useNavigate();
+  const { seesLeadData } = derive(state);
+  const nav = NAV.filter((n) => !n.lead || seesLeadData);
   const [chord, setChord] = useState(false);
   const [help, setHelp] = useState(false);
   const { theme, toggle } = useTheme();
@@ -93,7 +105,7 @@ function Layout({ state, onSwitch }: { state: ProjectState; onSwitch: () => void
     (event) => {
       if (chord) {
         setChord(false);
-        const target = NAV.find((n) => n.chord === event.key);
+        const target = nav.find((n) => n.chord === event.key);
         if (target)
           void navigate({ to: path(target.section), params: { projectId: state.project.id } });
         return true;
@@ -123,10 +135,10 @@ function Layout({ state, onSwitch }: { state: ProjectState; onSwitch: () => void
             aria-label="Review stages"
             className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto"
           >
-            {NAV.map((item, index) => (
+            {nav.map((item, index) => (
               <span key={item.section} className="flex items-center">
                 {/* A rule on each side of a group, the screening stages. */}
-                {index > 0 && NAV[index - 1]?.group !== item.group ? (
+                {index > 0 && nav[index - 1]?.group !== item.group ? (
                   <span aria-hidden="true" className="mx-1.5 h-4 w-px self-center bg-rule-strong" />
                 ) : null}
                 <Link
@@ -217,7 +229,7 @@ const KEYS: ReadonlyArray<{
   {
     screen: "Everywhere",
     keys: [
-      [["g", "t"], "Go to a stage: u, p, s, d, v, t, f, a, x, b, o, r"],
+      [["g", "t"], "Go to a stage: u, p, s, d, v, t, f, a, x, b, o, r, and l for Audit"],
       [["h"], "Show these keys"],
     ],
   },
@@ -265,6 +277,16 @@ const KEYS: ReadonlyArray<{
       [["1", "2"], "Adopt reviewer A's or B's decision"],
       [["i", "e", "u"], "Your own decision; e then 1 to 9 for the criterion"],
       [[" "], "Next conflict, once the AI column is shown"],
+    ],
+  },
+  {
+    screen: "Audit (the methods lead)",
+    keys: [
+      [["1", "2", "3"], "Trace a number, integrity, the review as of an event"],
+      [["[", "]"], "Previous and next PRISMA count; j and k move through its records"],
+      [["v"], "Verify the whole chain again"],
+      [["c"], "Sign a checkpoint at the head"],
+      [["p"], "Render and keep the reports at the chosen event"],
     ],
   },
   {

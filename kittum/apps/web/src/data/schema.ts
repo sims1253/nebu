@@ -46,6 +46,17 @@ export type IdentityRevision = KittumApi.IdentityRevision;
 export type LedgerSummary = KittumApi.LedgerSummary;
 export type RenderedReport = KittumApi.RenderedArtifact;
 export type SealedBundle = KittumApi.SealedBundle;
+
+// The audit trail: the ledger as the methods lead reads it.
+export type RecordTrace = KittumApi.RecordTrace;
+export type TracedEvent = KittumApi.TracedEvent;
+export type EventPage = KittumApi.EventPage;
+export type ChainAudit = KittumApi.ChainAudit;
+export type Finding = KittumApi.Finding;
+export type CheckpointStatus = KittumApi.CheckpointStatus;
+export type Milestone = KittumApi.Milestone;
+export type AsOf = KittumApi.AsOf;
+export type PrismaFlow = KittumApi.PrismaFlow;
 type CriterionDecision = KittumApi.CriterionDecision;
 
 // Setting a review up: the protocol as the lead writes it, searches, the corpus, full texts.

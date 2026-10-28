@@ -491,6 +491,13 @@ export const makeMockWorkbench = (
     renderReport: unavailable,
     reportFile: unavailable,
     sealBundle: unavailable,
+    trace: unavailable,
+    ledgerEvents: unavailable,
+    auditLedger: unavailable,
+    signCheckpoint: unavailable,
+    milestones: unavailable,
+    asOf: unavailable,
+    auditArtifact: unavailable,
 
     extractionRuns: ({ projectId }) =>
       call("other", "extractionRuns", projectId, () =>

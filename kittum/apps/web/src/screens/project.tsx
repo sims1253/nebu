@@ -75,9 +75,10 @@ export function useProject() {
   return derive(state);
 }
 
-// Derived once per project state, so screens can depend on what it returns.
+// Derived once per project state, so screens can depend on what it returns. The layout, which
+// provides the context, derives from the state directly.
 const derived = new WeakMap<ProjectState, ReturnType<typeof compute>>();
-const derive = (state: ProjectState) => {
+export const derive = (state: ProjectState) => {
   let found = derived.get(state);
   if (!found) derived.set(state, (found = compute(state)));
   return found;

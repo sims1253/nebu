@@ -480,14 +480,45 @@ export const makeApiWorkbench = (): Workbench => ({
       }
     }),
 
-  renderReport: ({ projectId, as, target }) =>
-    call((api) => api.renderReportTarget(projectId, target, { payload: { actor_id: as } })),
+  renderReport: ({ projectId, as, target, cutoffSeq }) =>
+    call((api) =>
+      api.renderReportTarget(projectId, target, {
+        payload: { actor_id: as, ...(cutoffSeq === undefined ? {} : { cutoff_seq: cutoffSeq }) },
+      }),
+    ),
 
   reportFile: ({ projectId, as, sha256 }) =>
     call((api) => api.downloadReportArtifact(projectId, sha256, { params: reviewer(as) })),
 
   sealBundle: ({ projectId, as }) =>
     call((api) => api.sealReportBundle(projectId, { payload: { actor_id: as } })),
+
+  trace: ({ projectId, as, ref }) =>
+    call((api) => api.traceRecord(projectId, ref, { params: reviewer(as) })),
+
+  ledgerEvents: ({ projectId, as, afterSeq, limit }) =>
+    call((api) =>
+      api.listAuditEvents(projectId, { params: { after_seq: afterSeq, limit, ...reviewer(as) } }),
+    ),
+
+  auditLedger: ({ projectId, as }) =>
+    call((api) => api.auditLedger(projectId, { params: reviewer(as) })),
+
+  signCheckpoint: ({ projectId, as }) =>
+    call((api) => api.signCheckpoint(projectId, { payload: { actor_id: as } })),
+
+  milestones: ({ projectId, as }) =>
+    call((api) => api.listMilestones(projectId, { params: reviewer(as) })),
+
+  asOf: ({ projectId, as, cutoffSeq }) =>
+    call((api) =>
+      api.reviewAsOf(projectId, {
+        params: { ...(cutoffSeq === null ? {} : { cutoff_seq: cutoffSeq }), ...reviewer(as) },
+      }),
+    ),
+
+  auditArtifact: ({ projectId, as, sha256 }) =>
+    call((api) => api.downloadAuditArtifact(projectId, sha256, { params: reviewer(as) })),
 
   extractionRuns: ({ projectId, as }) =>
     call((api) => api.listExtractionRuns(projectId, { params: reviewer(as) })),

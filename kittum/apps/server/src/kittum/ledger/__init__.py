@@ -8,6 +8,8 @@ the Postgres store, the SQLite handover bundle, and the offline `verify` tool ag
   until the caller commits.
 - `SqliteLedger` is the bundle's store and a test store; `InMemoryLedger` in
   `kittum.ledger.testing` is the fake. All three share one implementation of the chain rules.
+- `audit_chain` runs every check on every event and checkpoint and names each failure, for an
+  assessor; `verify_chain` stops at the first.
 - `checkpoint` signs the chain head with an Ed25519 `SigningKey`. A hash chain alone cannot show
   that its end was cut or that it was rewritten from some point on; `verify` against a checkpoint
   can.
@@ -30,8 +32,12 @@ from kittum.ledger.chain import GENESIS_HASH, event_hash, payload_hash
 from kittum.ledger.keys import SigningKey, VerifyKey
 from kittum.ledger.model import (
     AuditEvent,
+    ChainAudit,
+    ChainCheck,
     Checkpoint,
+    CheckpointStatus,
     EventDraft,
+    Finding,
     Ledger,
     LedgerIntegrityError,
     Problem,
@@ -39,7 +45,7 @@ from kittum.ledger.model import (
 )
 from kittum.ledger.postgres import PostgresLedger
 from kittum.ledger.sqlite import SqliteLedger
-from kittum.ledger.verify import verify_chain
+from kittum.ledger.verify import audit_chain, verify_chain
 
 __all__ = [
     "EXPORTERS",
@@ -48,10 +54,14 @@ __all__ = [
     "Bundle",
     "BundleReport",
     "BundleWriter",
+    "ChainAudit",
+    "ChainCheck",
     "Checkpoint",
+    "CheckpointStatus",
     "EventDraft",
     "Exporter",
     "ExporterRegistry",
+    "Finding",
     "Ledger",
     "LedgerIntegrityError",
     "PostgresLedger",
@@ -60,6 +70,7 @@ __all__ = [
     "SqliteLedger",
     "VerifyKey",
     "VerifyReport",
+    "audit_chain",
     "event_hash",
     "payload_hash",
     "register_exporter",
