@@ -6148,7 +6148,7 @@
     },
     "/api/projects/{project_id}/reports/artifacts/{sha256}": {
       "get": {
-        "description": "A rendered file, or an artifact's index, by hash.",
+        "description": "A rendered file, or an artifact's index, by hash. For the methods lead only.",
         "operationId": "downloadReportArtifact",
         "parameters": [
           {
@@ -6169,6 +6169,16 @@
               "pattern": "^[0-9a-f]{64}$",
               "title": "Sha256",
               "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
             }
           }
         ],

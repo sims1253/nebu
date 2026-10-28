@@ -414,6 +414,8 @@ export type PublishProtocolVersion200 = StoredProtocol
 export const PublishProtocolVersion200 = StoredProtocol
 export type PublishProtocolVersion422 = HTTPValidationError
 export const PublishProtocolVersion422 = HTTPValidationError
+export type DownloadReportArtifactParams = { readonly "X-Kittum-Reviewer": Id }
+export const DownloadReportArtifactParams = Schema.Struct({ "X-Kittum-Reviewer": Schema.suspend((): Schema.Codec<Id> => Id).annotate({ "description": "The caller's actor ID. A stand-in until the API has authentication." }) })
 export type DownloadReportArtifact422 = HTTPValidationError
 export const DownloadReportArtifact422 = HTTPValidationError
 export type SealReportBundleRequestJson = SealRequest
@@ -848,15 +850,17 @@ export const make = (
   ),
     "downloadReportArtifact": (projectId, sha256, options: Parameters<KittumApi["downloadReportArtifact"]>[2]) => __makePathRequest(HttpClientRequest.get, [projectId, sha256], () => "/api/projects/" + __encodePathParam(projectId) + "/reports/artifacts/" + __encodePathParam(sha256) + "").pipe(
     Effect.flatMap((request) => request.pipe(
-      withResponse(options?.config)(HttpClientResponse.matchStatus({
+      HttpClientRequest.setHeaders({ "X-Kittum-Reviewer": options.params["X-Kittum-Reviewer"] ?? undefined }),
+      withResponse(options.config)(HttpClientResponse.matchStatus({
       "2xx": decodeBinary,
       "422": decodeError("DownloadReportArtifact422", DownloadReportArtifact422),
       orElse: unexpectedStatus
     }))
     ))
   ),
-    "downloadReportArtifactStream": (projectId, sha256) => Stream.unwrap(__makePathRequest(HttpClientRequest.get, [projectId, sha256], () => "/api/projects/" + __encodePathParam(projectId) + "/reports/artifacts/" + __encodePathParam(sha256) + "").pipe(
+    "downloadReportArtifactStream": (projectId, sha256, options) => Stream.unwrap(__makePathRequest(HttpClientRequest.get, [projectId, sha256], () => "/api/projects/" + __encodePathParam(projectId) + "/reports/artifacts/" + __encodePathParam(sha256) + "").pipe(
     Effect.map((request) => request.pipe(
+      HttpClientRequest.setHeaders({ "X-Kittum-Reviewer": options.params["X-Kittum-Reviewer"] ?? undefined }),
       binaryRequest
     ))
   )),
@@ -1181,16 +1185,16 @@ readonly "publishProtocolVersion": {
     <Config extends OperationConfig | undefined = undefined>(projectId: string, versionId: string, options: { readonly payload: typeof PublishProtocolVersionRequestJson.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<PublishProtocolVersion200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"PublishProtocolVersion422", PublishProtocolVersion422>>;
   }
   /**
-* A rendered file, or an artifact's index, by hash.
+* A rendered file, or an artifact's index, by hash. For the methods lead only.
 */
 readonly "downloadReportArtifact": {
-    <Config extends OperationConfig | undefined = undefined>(projectId: string, sha256: string, options: { readonly config: Config }): Effect.Effect<WithOptionalResponse<Uint8Array, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"DownloadReportArtifact422", DownloadReportArtifact422>>;
-    <Config extends OperationConfig | undefined = undefined>(projectId: string, sha256: string, options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<Uint8Array, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"DownloadReportArtifact422", DownloadReportArtifact422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, sha256: string, options: { readonly params: typeof DownloadReportArtifactParams.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<Uint8Array, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"DownloadReportArtifact422", DownloadReportArtifact422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, sha256: string, options: { readonly params: typeof DownloadReportArtifactParams.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<Uint8Array, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"DownloadReportArtifact422", DownloadReportArtifact422>>;
   }
   /**
-* A rendered file, or an artifact's index, by hash.
+* A rendered file, or an artifact's index, by hash. For the methods lead only.
 */
-readonly "downloadReportArtifactStream": (projectId: string, sha256: string) => Stream.Stream<Uint8Array, HttpClientError.HttpClientError>
+readonly "downloadReportArtifactStream": (projectId: string, sha256: string, options: { readonly params: typeof DownloadReportArtifactParams.Encoded }) => Stream.Stream<Uint8Array, HttpClientError.HttpClientError>
   /**
 * Seal the handover bundle with every report, at the cutoff or the ledger head.
 */
