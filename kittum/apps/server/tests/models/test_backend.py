@@ -313,6 +313,22 @@ def test_a_hosted_api_gets_its_key_from_the_environment_and_the_recipe_unchanged
     assert "sk-wrong-2222" not in str(e.value)
     assert not any(b"sk-wrong-2222" in data for data in store.puts)
 
+    # A key with a stray newline is refused before sending, without its value in the error.
+    sent_before = len(server.seen)
+    monkeypatch.setenv("EXAMPLE_LLM_KEY", "sk-newline-3333\n")
+    with pytest.raises(BackendError, match="EXAMPLE_LLM_KEY is not a valid API key") as e:
+        backend.complete(_request("example-hosted"))
+    assert "sk-newline-3333" not in str(e.value) and len(server.seen) == sent_before
+
+    # The recorded endpoint drops credentials and the query, and keeps an IPv6 host bracketed.
+    (local,) = backends_from_endpoints(
+        (LlmEndpoint(recipe_id="example-hosted", base_url="http://user:pw@[::1]:8000/v1/?k=1"),),
+        ModelRegistry([hosted]),
+        store,
+        client=server.client(),
+    ).values()
+    assert local.endpoint == "http://[::1]:8000/v1"
+
 
 def test_a_backend_refuses_requests_for_another_recipe(registry: ModelRegistry) -> None:
     server = Server()

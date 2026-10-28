@@ -70,6 +70,8 @@ def public_url(url: str) -> str:
     """`url` without user info, query, or fragment, safe to record."""
     parts = urlsplit(url)
     host = parts.hostname or ""
+    if ":" in host:
+        host = f"[{host}]"  # an IPv6 address keeps its brackets
     netloc = f"{host}:{parts.port}" if parts.port else host
     return urlunsplit((parts.scheme, netloc, parts.path.rstrip("/"), "", ""))
 
@@ -160,6 +162,12 @@ class OpenAICompatibleBackend:
             if not key:
                 raise BackendError(
                     f"{self.recipe.id}: the API key variable {self._api_key_env} is not set"
+                )
+            if not key.isascii() or not key.isprintable() or any(c.isspace() for c in key):
+                # The HTTP library would refuse the header with the key in its error.
+                raise BackendError(
+                    f"{self.recipe.id}: the value of {self._api_key_env} is not a valid API key"
+                    " (it holds whitespace or control characters)"
                 )
             headers["authorization"] = f"Bearer {key}"
         return headers
