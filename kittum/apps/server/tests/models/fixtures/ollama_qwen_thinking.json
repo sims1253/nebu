@@ -1,0 +1,23 @@
+{
+  "id": "chatcmpl-731",
+  "object": "chat.completion",
+  "created": 1793179188,
+  "model": "qwen3.5:4b",
+  "system_fingerprint": "fp_ollama",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "```json\n{\"C_POP_ADULT_NSCLC\": {\"quote\": \"patients aged 12 to 17 years\", \"rationale\": \"The trial enrolled adolescents, not adults.\", \"status\": \"not_met\"}}\n```",
+        "reasoning": "The population criterion requires adults; the abstract reports patients aged 12 to 17 years."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1236,
+    "completion_tokens": 141,
+    "total_tokens": 1377
+  }
+}

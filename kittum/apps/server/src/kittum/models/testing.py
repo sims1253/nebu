@@ -1,20 +1,25 @@
 """A backend that replays stored answers, keyed by request hash."""
 
-from kittum.core import content_hash, sha256_hex
-from kittum.models import Completion, CompletionRequest
+from kittum.core import sha256_hex
+from kittum.models import Completion, CompletionRequest, request_key
 
 
 class RecordedBackend:
     def __init__(
-        self, answers: dict[str, str] | None = None, *, default: str | None = None
+        self,
+        answers: dict[str, str] | None = None,
+        *,
+        default: str | None = None,
+        model_identity: str | None = None,
     ) -> None:
         self._answers = answers or {}
         self._default = default
+        self._model_identity = model_identity
         self.requests: list[CompletionRequest] = []
 
     @staticmethod
     def key(request: CompletionRequest) -> str:
-        return content_hash(request, domain="kittum.completion_request.v1")
+        return request_key(request)
 
     def complete(self, request: CompletionRequest) -> Completion:
         self.requests.append(request)
@@ -24,7 +29,7 @@ class RecordedBackend:
             raise KeyError(f"no recorded answer for request {key}")
         return Completion(
             text=text,
-            model_identity=request.model_id,
+            model_identity=self._model_identity or request.model_id,
             request_hash=key,
             raw_response_hash=sha256_hex(text.encode()),
         )

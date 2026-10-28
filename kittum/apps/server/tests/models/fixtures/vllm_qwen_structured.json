@@ -1,0 +1,36 @@
+{
+  "id": "chatcmpl-9f3c2a7e5b0d4c1f8e6a2b9d7c5e3f10",
+  "object": "chat.completion",
+  "created": 1793178841,
+  "model": "Qwen/Qwen3.8-27B",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"C_POP_ADULT_NSCLC\": {\"quote\": \"patients aged 12 to 17 years\", \"rationale\": \"The trial enrolled adolescents, not adults.\", \"status\": \"not_met\"}}",
+        "refusal": null,
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "tool_calls": [],
+        "reasoning": null
+      },
+      "logprobs": null,
+      "finish_reason": "stop",
+      "stop_reason": null,
+      "token_ids": null
+    }
+  ],
+  "service_tier": null,
+  "system_fingerprint": null,
+  "usage": {
+    "prompt_tokens": 1184,
+    "total_tokens": 1231,
+    "completion_tokens": 47,
+    "prompt_tokens_details": null
+  },
+  "prompt_logprobs": null,
+  "prompt_token_ids": null,
+  "kv_transfer_params": null
+}
