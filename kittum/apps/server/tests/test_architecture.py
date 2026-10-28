@@ -17,6 +17,7 @@ ALLOWED: dict[str, set[str]] = {
     "ledger": {"core", "db", "storage"},
     "runs": {"core", "db", "ledger"},
     "protocol": {"core", "db", "ledger"},
+    "profiles": {"core", "protocol"},
     "gateway": {"core", "db", "storage"},
     "models": {"core", "gateway"},
     "stats": {"core"},

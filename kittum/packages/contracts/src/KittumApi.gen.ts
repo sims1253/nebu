@@ -10,9 +10,119 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse"
 // non-recursive definitions
 export type Health = { readonly "status": string, readonly "version": string }
 export const Health = Schema.Struct({ "status": Schema.String.annotate({ "title": "Status" }), "version": Schema.String.annotate({ "title": "Version" }) }).annotate({ "title": "Health", "identifier": "Health" })
+export type Id = string
+export const Id = Schema.String.annotate({ "format": "uuid", "identifier": "Id" })
+export type ValidationError = { readonly "ctx"?: { readonly [x: string]: Schema.Json }, readonly "input"?: Schema.Json, readonly "loc": ReadonlyArray<string | number>, readonly "msg": string, readonly "type": string } & { readonly [x: string]: Schema.Json }
+export const ValidationError = Schema.StructWithRest(Schema.Struct({ "ctx": Schema.optionalKey(Schema.Record(Schema.String, Schema.Json.annotate({ "expected": "JSON value" })).annotate({ "title": "Context" })), "input": Schema.optionalKey(Schema.Json.annotate({ "expected": "JSON value", "title": "Input" })), "loc": Schema.Array(Schema.Union([Schema.String, Schema.Int])).annotate({ "title": "Location" }), "msg": Schema.String.annotate({ "title": "Message" }), "type": Schema.String.annotate({ "title": "Error Type" }) }), [Schema.Record(Schema.String, Schema.Json.annotate({ "expected": "JSON value" }))]).annotate({ "title": "ValidationError", "identifier": "ValidationError" })
+export type Sha256 = string
+export const Sha256 = Schema.String.check(Schema.isPattern(new RegExp("^[0-9a-f]{64}$", "u")).annotate({ "expected": "a string matching the RegExp ^[0-9a-f]{64}$", "identifier": "Sha256" }))
+export type LanguageCode = string
+export const LanguageCode = Schema.String.check(Schema.isPattern(new RegExp("^[a-z]{2,3}(-[A-Z]{2})?$", "u")).annotate({ "expected": "a string matching the RegExp ^[a-z]{2,3}(-[A-Z]{2})?$", "identifier": "LanguageCode" }))
+export type Text = string
+export const Text = Schema.String.check(Schema.isMinLength(1).annotate({ "expected": "a value with a length of at least 1", "identifier": "Text" }))
+export type Identifier = string
+export const Identifier = Schema.String.check(Schema.isPattern(new RegExp("^[A-Za-z][A-Za-z0-9_.-]{0,63}$", "u")).annotate({ "expected": "a string matching the RegExp ^[A-Za-z][A-Za-z0-9_.-]{0,63}$", "identifier": "Identifier" }))
+export type Extensions = { readonly [x: string]: Schema.Json }
+export const Extensions = Schema.Record(Schema.String, Schema.Json.annotate({ "expected": "JSON value" })).annotate({ "identifier": "Extensions" })
+export type Percent = string
+export const Percent = Schema.String.check(Schema.isPattern(new RegExp("^[0-9]{1,3}(\\.[0-9]+)?$", "u")).annotate({ "expected": "a string matching the RegExp ^[0-9]{1,3}(\\.[0-9]+)?$", "identifier": "Percent" }))
+export type Stage = "title_abstract" | "full_text"
+export const Stage = Schema.Literals(["title_abstract", "full_text"]).annotate({ "identifier": "Stage" })
+export type Polarity = "include" | "exclude"
+export const Polarity = Schema.Literals(["include", "exclude"]).annotate({ "identifier": "Polarity" })
+export type PicoSlot = "population" | "intervention" | "comparator" | "outcome" | "study_type" | "other"
+export const PicoSlot = Schema.Literals(["population", "intervention", "comparator", "outcome", "study_type", "other"]).annotate({ "identifier": "PicoSlot" })
+export type FreshnessPolicy = { readonly "deadline"?: string | null, readonly "max_age_months": number }
+export const FreshnessPolicy = Schema.Struct({ "deadline": Schema.optionalKey(Schema.Union([Schema.String.annotate({ "format": "date" }), Schema.Null]).annotate({ "title": "Deadline" })), "max_age_months": Schema.Number.annotate({ "title": "Max Age Months" }).check(Schema.isInt().annotate({ "expected": "an integer" })).check(Schema.isGreaterThanOrEqualTo(1).annotate({ "expected": "a value greater than or equal to 1" })) }).annotate({ "title": "FreshnessPolicy", "identifier": "FreshnessPolicy" })
+export type ScreeningMode = "M1" | "M2" | "M3"
+export const ScreeningMode = Schema.Literals(["M1", "M2", "M3"]).annotate({ "title": "ScreeningMode", "identifier": "ScreeningMode" })
+export type IdentifierKind = "doi" | "pmid" | "nct" | "isrctn" | "eudract" | "euct"
+export const IdentifierKind = Schema.Literals(["doi", "pmid", "nct", "isrctn", "eudract", "euct"]).annotate({ "identifier": "IdentifierKind" })
+export type ScopeKind = "question" | "search_topic"
+export const ScopeKind = Schema.Literals(["question", "search_topic"]).annotate({ "identifier": "ScopeKind" })
+export type SourceKind = "bibliographic" | "registry" | "website" | "other"
+export const SourceKind = Schema.Literals(["bibliographic", "registry", "website", "other"]).annotate({ "identifier": "SourceKind" })
+export type ConfidencePercent = string
+export const ConfidencePercent = Schema.String.check(Schema.isPattern(new RegExp("^[0-9]{1,3}(\\.[0-9]+)?$", "u")).annotate({ "expected": "a string matching the RegExp ^[0-9]{1,3}(\\.[0-9]+)?$", "identifier": "ConfidencePercent" }))
+export type PositivePercent = string
+export const PositivePercent = Schema.String.check(Schema.isPattern(new RegExp("^[0-9]{1,3}(\\.[0-9]+)?$", "u")).annotate({ "expected": "a string matching the RegExp ^[0-9]{1,3}(\\.[0-9]+)?$", "identifier": "PositivePercent" }))
+export type ProtocolIssue = { readonly "message": string, readonly "path": string }
+export const ProtocolIssue = Schema.Struct({ "message": Schema.String.annotate({ "title": "Message" }), "path": Schema.String.annotate({ "title": "Path" }) }).annotate({ "title": "ProtocolIssue", "identifier": "ProtocolIssue" })
+export type ProtocolVersionSummary = { readonly "content_hash": string, readonly "created_at": string, readonly "id": Id, readonly "parent_id": Id | null, readonly "published_at": string | null, readonly "status": "draft" | "published", readonly "version_label": string }
+export const ProtocolVersionSummary = Schema.Struct({ "content_hash": Schema.String.annotate({ "title": "Content Hash" }), "created_at": Schema.String.annotate({ "title": "Created At", "format": "date-time" }), "id": Id, "parent_id": Schema.Union([Id, Schema.Null]), "published_at": Schema.Union([Schema.String.annotate({ "format": "date-time" }), Schema.Null]).annotate({ "title": "Published At" }), "status": Schema.Literals(["draft", "published"]).annotate({ "title": "Status" }), "version_label": Schema.String.annotate({ "title": "Version Label" }) }).annotate({ "title": "ProtocolVersionSummary", "identifier": "ProtocolVersionSummary" })
+export type PublishRequest = { readonly "approved_by": Id, readonly "reason"?: string | null }
+export const PublishRequest = Schema.Struct({ "approved_by": Id, "reason": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Reason" })) }).annotate({ "title": "PublishRequest", "identifier": "PublishRequest" })
+export type HTTPValidationError = { readonly "detail"?: ReadonlyArray<ValidationError> } & { readonly [x: string]: Schema.Json }
+export const HTTPValidationError = Schema.StructWithRest(Schema.Struct({ "detail": Schema.optionalKey(Schema.Array(ValidationError).annotate({ "title": "Detail" })) }), [Schema.Record(Schema.String, Schema.Json.annotate({ "expected": "JSON value" }))]).annotate({ "title": "HTTPValidationError", "identifier": "HTTPValidationError" })
+export type LocalizedText = { readonly [x: string]: Text }
+export const LocalizedText = Schema.Record(Schema.String, Text).check(Schema.isMinProperties(1).annotate({ "expected": "a value with at least 1 entry" })).check(Schema.isPropertyNames(Schema.String.check(Schema.isPattern(new RegExp("^[a-z]{2,3}(-[A-Z]{2})?$", "u")).annotate({ "expected": "a string matching the RegExp ^[a-z]{2,3}(-[A-Z]{2})?$" }))).annotate({ "expected": "an object with property names matching the schema", "identifier": "LocalizedText" }))
+export type PressReview = { readonly "reviewed_on"?: string | null, readonly "reviewer"?: Text | null, readonly "status": "planned" | "done" }
+export const PressReview = Schema.Struct({ "reviewed_on": Schema.optionalKey(Schema.Union([Schema.String.annotate({ "format": "date" }), Schema.Null]).annotate({ "title": "Reviewed On" })), "reviewer": Schema.optionalKey(Schema.Union([Text, Schema.Null])), "status": Schema.Literals(["planned", "done"]).annotate({ "title": "Status" }) }).annotate({ "title": "PressReview", "identifier": "PressReview" })
+export type AuditPlan = { readonly "census_of_disagreements"?: boolean, readonly "random_audit_percent"?: Percent, readonly "sentinel_percent"?: Percent }
+export const AuditPlan = Schema.Struct({ "census_of_disagreements": Schema.optionalKey(Schema.Boolean.annotate({ "title": "Census Of Disagreements", "default": true })), "random_audit_percent": Schema.optionalKey(Schema.suspend((): Schema.Codec<Percent> => Percent).annotate({ "default": "0" })), "sentinel_percent": Schema.optionalKey(Schema.suspend((): Schema.Codec<Percent> => Percent).annotate({ "default": "0" })) }).annotate({ "title": "AuditPlan", "identifier": "AuditPlan" })
+export type KnownInclude = { readonly "kind": IdentifierKind, readonly "note"?: Text | null, readonly "value": Text }
+export const KnownInclude = Schema.Struct({ "kind": IdentifierKind, "note": Schema.optionalKey(Schema.Union([Text, Schema.Null])), "value": Text }).annotate({ "title": "KnownInclude", "identifier": "KnownInclude" })
+export type Scope = { readonly "id": string, readonly "kind"?: ScopeKind, readonly "label": string }
+export const Scope = Schema.Struct({ "id": Schema.String.annotate({ "title": "Id" }), "kind": Schema.optionalKey(Schema.suspend((): Schema.Codec<ScopeKind> => ScopeKind).annotate({ "default": "question" })), "label": Schema.String.annotate({ "title": "Label" }) }).annotate({ "title": "Scope", "description": "One review question or search topic that decisions are keyed by.", "identifier": "Scope" })
+export type Source = { readonly "id": Identifier, readonly "kind": SourceKind, readonly "name": Text, readonly "platform"?: Text | null, readonly "study_filter"?: Text | null }
+export const Source = Schema.Struct({ "id": Identifier, "kind": SourceKind, "name": Text, "platform": Schema.optionalKey(Schema.Union([Text, Schema.Null])), "study_filter": Schema.optionalKey(Schema.Union([Text, Schema.Null])) }).annotate({ "title": "Source", "identifier": "Source" })
+export type StoppingPlan = { readonly "confidence_percent": ConfidencePercent, readonly "method": "buscar", readonly "minimum_screened_percent": Percent, readonly "target_recall_percent": PositivePercent }
+export const StoppingPlan = Schema.Struct({ "confidence_percent": ConfidencePercent, "method": Schema.Literal("buscar").annotate({ "title": "Method" }), "minimum_screened_percent": Percent, "target_recall_percent": PositivePercent }).annotate({ "title": "StoppingPlan", "description": "When an M3 topic may stop screening in AI order.", "identifier": "StoppingPlan" })
+export type ValidationReport = { readonly "content_hash"?: string | null, readonly "issues"?: ReadonlyArray<ProtocolIssue>, readonly "ok": boolean }
+export const ValidationReport = Schema.Struct({ "content_hash": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Content Hash" })), "issues": Schema.optionalKey(Schema.Array(ProtocolIssue).annotate({ "title": "Issues", "default": [] })), "ok": Schema.Boolean.annotate({ "title": "Ok" }) }).annotate({ "title": "ValidationReport", "identifier": "ValidationReport" })
+export type EffectModifier = { readonly "categories"?: ReadonlyArray<Text>, readonly "id": Identifier, readonly "label": LocalizedText }
+export const EffectModifier = Schema.Struct({ "categories": Schema.optionalKey(Schema.Array(Text).annotate({ "title": "Categories", "default": [] })), "id": Identifier, "label": LocalizedText }).annotate({ "title": "EffectModifier", "identifier": "EffectModifier" })
+export type Outcome = { readonly "category": Identifier, readonly "definition"?: LocalizedText | null, readonly "extensions"?: Extensions, readonly "id": Identifier, readonly "name": LocalizedText, readonly "rationale"?: LocalizedText | null }
+export const Outcome = Schema.Struct({ "category": Identifier, "definition": Schema.optionalKey(Schema.Union([LocalizedText, Schema.Null])), "extensions": Schema.optionalKey(Extensions), "id": Identifier, "name": LocalizedText, "rationale": Schema.optionalKey(Schema.Union([LocalizedText, Schema.Null])) }).annotate({ "title": "Outcome", "identifier": "Outcome" })
+export type Comparator = { readonly "extensions"?: Extensions, readonly "id": Identifier, readonly "text": LocalizedText }
+export const Comparator = Schema.Struct({ "extensions": Schema.optionalKey(Extensions), "id": Identifier, "text": LocalizedText }).annotate({ "title": "Comparator", "identifier": "Comparator" })
+export type Criterion = { readonly "applies_to": ReadonlyArray<string>, readonly "decidable_at": ReadonlyArray<Stage>, readonly "extensions"?: Extensions, readonly "id": Identifier, readonly "keywords"?: ReadonlyArray<Text>, readonly "negative_examples"?: ReadonlyArray<string>, readonly "polarity"?: Polarity, readonly "positive_examples"?: ReadonlyArray<string>, readonly "slot": PicoSlot, readonly "text": LocalizedText }
+export const Criterion = Schema.Struct({ "applies_to": Schema.Array(Schema.String).annotate({ "title": "Applies To" }).check(Schema.isMinLength(1).annotate({ "expected": "a value with a length of at least 1" })), "decidable_at": Schema.Array(Stage).annotate({ "title": "Decidable At" }).check(Schema.isMinLength(1).annotate({ "expected": "a value with a length of at least 1" })), "extensions": Schema.optionalKey(Extensions), "id": Identifier, "keywords": Schema.optionalKey(Schema.Array(Text).annotate({ "title": "Keywords", "default": [] })), "negative_examples": Schema.optionalKey(Schema.Array(Schema.String).annotate({ "title": "Negative Examples", "default": [] })), "polarity": Schema.optionalKey(Schema.suspend((): Schema.Codec<Polarity> => Polarity).annotate({ "default": "include" })), "positive_examples": Schema.optionalKey(Schema.Array(Schema.String).annotate({ "title": "Positive Examples", "default": [] })), "slot": PicoSlot, "text": LocalizedText }).annotate({ "title": "Criterion", "description": "An executable eligibility criterion.\n\n`text` states the condition. For an `include` criterion a record must meet it; for an\n`exclude` criterion a record that shows it is excluded. Either way the judge answers whether\nthe record *passes*: `not_met` with a verified quote is what excludes.", "identifier": "Criterion" })
+export type Deviation = { readonly "justification": LocalizedText, readonly "source_id": Identifier }
+export const Deviation = Schema.Struct({ "justification": LocalizedText, "source_id": Identifier }).annotate({ "title": "Deviation", "description": "A justified departure from a required source plan, e.g. a source that cannot be searched.", "identifier": "Deviation" })
+export type ReferenceSet = { readonly "development"?: ReadonlyArray<KnownInclude>, readonly "press"?: PressReview | null, readonly "validation"?: ReadonlyArray<KnownInclude> }
+export const ReferenceSet = Schema.Struct({ "development": Schema.optionalKey(Schema.Array(KnownInclude).annotate({ "title": "Development", "default": [] })), "press": Schema.optionalKey(Schema.Union([PressReview, Schema.Null])), "validation": Schema.optionalKey(Schema.Array(KnownInclude).annotate({ "title": "Validation", "default": [] })) }).annotate({ "title": "ReferenceSet", "description": "Known relevant records: the strategy is built on one set and validated on the other.", "identifier": "ReferenceSet" })
+export type ReviewQuestion = { readonly "comparators"?: ReadonlyArray<Comparator>, readonly "comparators_are_alternatives"?: boolean, readonly "extensions"?: Extensions, readonly "id": Identifier, readonly "intervention": LocalizedText, readonly "label": LocalizedText, readonly "outcomes"?: ReadonlyArray<Identifier>, readonly "population": LocalizedText }
+export const ReviewQuestion = Schema.Struct({ "comparators": Schema.optionalKey(Schema.Array(Comparator).annotate({ "title": "Comparators", "default": [] })), "comparators_are_alternatives": Schema.optionalKey(Schema.Boolean.annotate({ "title": "Comparators Are Alternatives", "default": false })), "extensions": Schema.optionalKey(Extensions), "id": Identifier, "intervention": LocalizedText, "label": LocalizedText, "outcomes": Schema.optionalKey(Schema.Array(Identifier).annotate({ "title": "Outcomes", "default": [] })), "population": LocalizedText }).annotate({ "title": "ReviewQuestion", "description": "One question or population of the review. Decisions are keyed by it as a scope.", "identifier": "ReviewQuestion" })
+export type SourcePlan = { readonly "deviations"?: ReadonlyArray<Deviation>, readonly "limits"?: Text | null, readonly "sources": ReadonlyArray<Source> }
+export const SourcePlan = Schema.Struct({ "deviations": Schema.optionalKey(Schema.Array(Deviation).annotate({ "title": "Deviations", "default": [] })), "limits": Schema.optionalKey(Schema.Union([Text, Schema.Null])), "sources": Schema.Array(Source).annotate({ "title": "Sources" }).check(Schema.isMinLength(1).annotate({ "expected": "a value with a length of at least 1" })) }).annotate({ "title": "SourcePlan", "identifier": "SourcePlan" })
+export type SearchTopic = { readonly "audit"?: AuditPlan, readonly "criteria": ReadonlyArray<Criterion>, readonly "extensions"?: Extensions, readonly "freshness": FreshnessPolicy, readonly "id": Identifier, readonly "kind": Identifier, readonly "label": LocalizedText, readonly "mode": ScreeningMode, readonly "mode_rationale"?: LocalizedText | null, readonly "reference_set"?: ReferenceSet, readonly "scopes": ReadonlyArray<Scope>, readonly "source_plan": SourcePlan, readonly "stopping"?: StoppingPlan | null, readonly "validation_pack"?: Text | null }
+export const SearchTopic = Schema.Struct({ "audit": Schema.optionalKey(Schema.suspend((): Schema.Codec<AuditPlan> => AuditPlan).annotate({ "default": { "census_of_disagreements": true, "random_audit_percent": "0", "sentinel_percent": "0" } })), "criteria": Schema.Array(Criterion).annotate({ "title": "Criteria" }).check(Schema.isMinLength(1).annotate({ "expected": "a value with a length of at least 1" })), "extensions": Schema.optionalKey(Extensions), "freshness": FreshnessPolicy, "id": Identifier, "kind": Identifier, "label": LocalizedText, "mode": ScreeningMode, "mode_rationale": Schema.optionalKey(Schema.Union([LocalizedText, Schema.Null])), "reference_set": Schema.optionalKey(Schema.suspend((): Schema.Codec<ReferenceSet> => ReferenceSet).annotate({ "default": { "development": [], "validation": [] } })), "scopes": Schema.Array(Scope).annotate({ "title": "Scopes" }).check(Schema.isMinLength(1).annotate({ "expected": "a value with a length of at least 1" })), "source_plan": SourcePlan, "stopping": Schema.optionalKey(Schema.Union([StoppingPlan, Schema.Null])), "validation_pack": Schema.optionalKey(Schema.Union([Text, Schema.Null])) }).annotate({ "title": "SearchTopic", "identifier": "SearchTopic" })
+export type ReviewProtocol = { readonly "default_language": LanguageCode, readonly "effect_modifiers"?: ReadonlyArray<EffectModifier>, readonly "extensions"?: Extensions, readonly "outcomes": ReadonlyArray<Outcome>, readonly "profile"?: Identifier | null, readonly "questions": ReadonlyArray<ReviewQuestion>, readonly "schema_version"?: 1, readonly "search_topics": ReadonlyArray<SearchTopic>, readonly "title": LocalizedText, readonly "version_label": Text }
+export const ReviewProtocol = Schema.Struct({ "default_language": LanguageCode, "effect_modifiers": Schema.optionalKey(Schema.Array(EffectModifier).annotate({ "title": "Effect Modifiers", "default": [] })), "extensions": Schema.optionalKey(Extensions), "outcomes": Schema.Array(Outcome).annotate({ "title": "Outcomes" }).check(Schema.isMinLength(1).annotate({ "expected": "a value with a length of at least 1" })), "profile": Schema.optionalKey(Schema.Union([Identifier, Schema.Null])), "questions": Schema.Array(ReviewQuestion).annotate({ "title": "Questions" }).check(Schema.isMinLength(1).annotate({ "expected": "a value with a length of at least 1" })), "schema_version": Schema.optionalKey(Schema.Literal(1).annotate({ "title": "Schema Version", "default": 1 })), "search_topics": Schema.Array(SearchTopic).annotate({ "title": "Search Topics" }).check(Schema.isMinLength(1).annotate({ "expected": "a value with a length of at least 1" })), "title": LocalizedText, "version_label": Text }).annotate({ "title": "ReviewProtocol", "identifier": "ReviewProtocol" })
+export type ProtocolVersion = { readonly "content_hash": Sha256, readonly "protocol": ReviewProtocol }
+export const ProtocolVersion = Schema.Struct({ "content_hash": Sha256, "protocol": ReviewProtocol }).annotate({ "title": "ProtocolVersion", "identifier": "ProtocolVersion" })
+export type StoredProtocol = { readonly "approved_by"?: Id | null, readonly "approved_event_id"?: Id | null, readonly "created_at": string, readonly "id": Id, readonly "parent_id": Id | null, readonly "project_id": Id, readonly "publish_reason"?: string | null, readonly "published_at"?: string | null, readonly "status": "draft" | "published", readonly "version": ProtocolVersion }
+export const StoredProtocol = Schema.Struct({ "approved_by": Schema.optionalKey(Schema.Union([Id, Schema.Null])), "approved_event_id": Schema.optionalKey(Schema.Union([Id, Schema.Null])), "created_at": Schema.String.annotate({ "title": "Created At", "format": "date-time" }), "id": Id, "parent_id": Schema.Union([Id, Schema.Null]), "project_id": Id, "publish_reason": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Publish Reason" })), "published_at": Schema.optionalKey(Schema.Union([Schema.String.annotate({ "format": "date-time" }), Schema.Null]).annotate({ "title": "Published At" })), "status": Schema.Literals(["draft", "published"]).annotate({ "title": "Status" }), "version": ProtocolVersion }).annotate({ "title": "StoredProtocol", "identifier": "StoredProtocol" })
 // schemas
 export type GetHealth200 = Health
 export const GetHealth200 = Health
+export type ListProtocolVersions200 = ReadonlyArray<ProtocolVersionSummary>
+export const ListProtocolVersions200 = Schema.Array(ProtocolVersionSummary).annotate({ "title": "Response Listprotocolversions" })
+export type ListProtocolVersions422 = HTTPValidationError
+export const ListProtocolVersions422 = HTTPValidationError
+export type SaveProtocolDraftRequestJson = { readonly [x: string]: Schema.Json }
+export const SaveProtocolDraftRequestJson = Schema.Record(Schema.String, Schema.Json.annotate({ "expected": "JSON value" })).annotate({ "title": "Source" })
+export type SaveProtocolDraft201 = StoredProtocol
+export const SaveProtocolDraft201 = StoredProtocol
+export type SaveProtocolDraft422 = HTTPValidationError
+export const SaveProtocolDraft422 = HTTPValidationError
+export type GetProtocolVersion200 = StoredProtocol
+export const GetProtocolVersion200 = StoredProtocol
+export type GetProtocolVersion422 = HTTPValidationError
+export const GetProtocolVersion422 = HTTPValidationError
+export type PublishProtocolVersionRequestJson = PublishRequest
+export const PublishProtocolVersionRequestJson = PublishRequest
+export type PublishProtocolVersion200 = StoredProtocol
+export const PublishProtocolVersion200 = StoredProtocol
+export type PublishProtocolVersion422 = HTTPValidationError
+export const PublishProtocolVersion422 = HTTPValidationError
+export type ValidateProtocolRequestJson = { readonly [x: string]: Schema.Json }
+export const ValidateProtocolRequestJson = Schema.Record(Schema.String, Schema.Json.annotate({ "expected": "JSON value" })).annotate({ "title": "Source" })
+export type ValidateProtocol200 = ValidationReport
+export const ValidateProtocol200 = ValidationReport
+export type ValidateProtocol422 = HTTPValidationError
+export const ValidateProtocol422 = HTTPValidationError
 
 export interface OperationConfig {
   /**
@@ -74,15 +184,97 @@ export const make = (
           )
       : (request) => Effect.flatMap(httpClient.execute(request), withOptionalResponse)
   }
+  const __encodePathParam = encodeURIComponent
+  const __makePathRequest = (
+    method: (url: string) => HttpClientRequest.HttpClientRequest,
+    parameters: ReadonlyArray<string>,
+    getPath: () => string,
+  ) => Effect.suspend(() => {
+    const fail = (description: string, cause?: unknown) => Effect.fail(
+      new HttpClientError.HttpClientError({
+        reason: new HttpClientError.InvalidUrlError({
+          request: method(""),
+          cause,
+          description,
+        }),
+      }),
+    )
+    if (parameters.some((value) => value === "" || /^(?:\.|%2e){1,2}$/i.test(value))) {
+      return fail("Path parameters must be non-empty and cannot be dot segments")
+    }
+    let path: string
+    try {
+      path = getPath()
+    } catch (cause) {
+      return fail("Failed to encode path parameter", cause)
+    }
+    if (path.split("/").some((segment) => /^(?:\.|%2e){1,2}$/i.test(segment))) {
+      return fail("Request paths cannot contain dot segments")
+    }
+    return Effect.succeed(method(path))
+  })
   const decodeSuccess =
     <Schema extends Schema.Constraint>(schema: Schema) =>
     (response: HttpClientResponse.HttpClientResponse) =>
       HttpClientResponse.schemaBodyJson(schema)(response)
+  const decodeError =
+    <const Tag extends string, Schema extends Schema.Constraint>(tag: Tag, schema: Schema) =>
+    (response: HttpClientResponse.HttpClientResponse) =>
+      Effect.flatMap(
+        HttpClientResponse.schemaBodyJson(schema)(response),
+        (cause) => Effect.fail(KittumApiError(tag, cause, response)),
+      )
   return {
     httpClient,
     "getHealth": (options: Parameters<KittumApi["getHealth"]>[0]) => HttpClientRequest.get("/api/health").pipe(
       withResponse(options?.config)(HttpClientResponse.matchStatus({
       "2xx": decodeSuccess(GetHealth200),
+      orElse: unexpectedStatus
+    }))
+    ),
+    "listProtocolVersions": (projectId, options: Parameters<KittumApi["listProtocolVersions"]>[1]) => __makePathRequest(HttpClientRequest.get, [projectId], () => "/api/projects/" + __encodePathParam(projectId) + "/protocol-versions").pipe(
+    Effect.flatMap((request) => request.pipe(
+      withResponse(options?.config)(HttpClientResponse.matchStatus({
+      "2xx": decodeSuccess(ListProtocolVersions200),
+      "422": decodeError("ListProtocolVersions422", ListProtocolVersions422),
+      orElse: unexpectedStatus
+    }))
+    ))
+  ),
+    "saveProtocolDraft": (projectId, options: Parameters<KittumApi["saveProtocolDraft"]>[1]) => __makePathRequest(HttpClientRequest.post, [projectId], () => "/api/projects/" + __encodePathParam(projectId) + "/protocol-versions").pipe(
+    Effect.flatMap((request) => request.pipe(
+      HttpClientRequest.bodyJsonUnsafe(options.payload),
+      withResponse(options.config)(HttpClientResponse.matchStatus({
+      "2xx": decodeSuccess(SaveProtocolDraft201),
+      "422": decodeError("SaveProtocolDraft422", SaveProtocolDraft422),
+      orElse: unexpectedStatus
+    }))
+    ))
+  ),
+    "getProtocolVersion": (projectId, versionId, options: Parameters<KittumApi["getProtocolVersion"]>[2]) => __makePathRequest(HttpClientRequest.get, [projectId, versionId], () => "/api/projects/" + __encodePathParam(projectId) + "/protocol-versions/" + __encodePathParam(versionId) + "").pipe(
+    Effect.flatMap((request) => request.pipe(
+      withResponse(options?.config)(HttpClientResponse.matchStatus({
+      "2xx": decodeSuccess(GetProtocolVersion200),
+      "422": decodeError("GetProtocolVersion422", GetProtocolVersion422),
+      orElse: unexpectedStatus
+    }))
+    ))
+  ),
+    "publishProtocolVersion": (projectId, versionId, options: Parameters<KittumApi["publishProtocolVersion"]>[2]) => __makePathRequest(HttpClientRequest.post, [projectId, versionId], () => "/api/projects/" + __encodePathParam(projectId) + "/protocol-versions/" + __encodePathParam(versionId) + "/publish").pipe(
+    Effect.flatMap((request) => request.pipe(
+      HttpClientRequest.bodyJsonUnsafe(options.payload),
+      withResponse(options.config)(HttpClientResponse.matchStatus({
+      "2xx": decodeSuccess(PublishProtocolVersion200),
+      "422": decodeError("PublishProtocolVersion422", PublishProtocolVersion422),
+      orElse: unexpectedStatus
+    }))
+    ))
+  ),
+    "validateProtocol": (options: Parameters<KittumApi["validateProtocol"]>[0]) => HttpClientRequest.post("/api/protocol/validate").pipe(
+      HttpClientRequest.bodyJsonUnsafe(options.payload),
+      withResponse(options.config)(HttpClientResponse.matchStatus({
+      "2xx": decodeSuccess(ValidateProtocol200),
+      "422": decodeError("ValidateProtocol422", ValidateProtocol422),
       orElse: unexpectedStatus
     }))
     )
@@ -97,6 +289,41 @@ export interface KittumApi {
 readonly "getHealth": {
     <Config extends OperationConfig | undefined = undefined>(options: { readonly config: Config }): Effect.Effect<WithOptionalResponse<GetHealth200, Config>, HttpClientError.HttpClientError | SchemaError>;
     <Config extends OperationConfig | undefined = undefined>(options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<GetHealth200, Config | undefined>, HttpClientError.HttpClientError | SchemaError>;
+  }
+  /**
+* List Protocol Versions
+*/
+readonly "listProtocolVersions": {
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly config: Config }): Effect.Effect<WithOptionalResponse<ListProtocolVersions200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ListProtocolVersions422", ListProtocolVersions422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<ListProtocolVersions200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ListProtocolVersions422", ListProtocolVersions422>>;
+  }
+  /**
+* Save Protocol Draft
+*/
+readonly "saveProtocolDraft": {
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly payload: typeof SaveProtocolDraftRequestJson.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<SaveProtocolDraft201, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"SaveProtocolDraft422", SaveProtocolDraft422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly payload: typeof SaveProtocolDraftRequestJson.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<SaveProtocolDraft201, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"SaveProtocolDraft422", SaveProtocolDraft422>>;
+  }
+  /**
+* Get Protocol Version
+*/
+readonly "getProtocolVersion": {
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, versionId: string, options: { readonly config: Config }): Effect.Effect<WithOptionalResponse<GetProtocolVersion200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetProtocolVersion422", GetProtocolVersion422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, versionId: string, options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<GetProtocolVersion200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetProtocolVersion422", GetProtocolVersion422>>;
+  }
+  /**
+* Publish Protocol Version
+*/
+readonly "publishProtocolVersion": {
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, versionId: string, options: { readonly payload: typeof PublishProtocolVersionRequestJson.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<PublishProtocolVersion200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"PublishProtocolVersion422", PublishProtocolVersion422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, versionId: string, options: { readonly payload: typeof PublishProtocolVersionRequestJson.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<PublishProtocolVersion200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"PublishProtocolVersion422", PublishProtocolVersion422>>;
+  }
+  /**
+* Validate Protocol
+*/
+readonly "validateProtocol": {
+    <Config extends OperationConfig | undefined = undefined>(options: { readonly payload: typeof ValidateProtocolRequestJson.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<ValidateProtocol200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ValidateProtocol422", ValidateProtocol422>>;
+    <Config extends OperationConfig | undefined = undefined>(options: { readonly payload: typeof ValidateProtocolRequestJson.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<ValidateProtocol200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ValidateProtocol422", ValidateProtocol422>>;
   }
 }
 

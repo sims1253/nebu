@@ -14,11 +14,14 @@ from fastapi import Depends, FastAPI, Request
 
 from kittum.core import Clock, Record, SystemClock
 from kittum.db import Database
+from kittum.ledger import PostgresLedger
 from kittum.settings import Settings
 from kittum.storage import ArtifactStore, FilesystemStore
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
+
+    from kittum.ledger import Ledger
 
 
 @dataclass
@@ -29,6 +32,7 @@ class AppContext:
     db: Database
     artifacts: ArtifactStore
     clock: Clock = field(default_factory=SystemClock)
+    ledger: Ledger | None = None
 
     @classmethod
     def from_settings(cls, settings: Settings) -> AppContext:
@@ -36,6 +40,7 @@ class AppContext:
             settings=settings,
             db=Database(settings.database_url),
             artifacts=FilesystemStore(settings.artifact_dir),
+            ledger=PostgresLedger(),
         )
 
 
@@ -53,6 +58,9 @@ class Health(Record):
 
 def create_app(context: AppContext | None = None) -> FastAPI:
     """Build the app. Without a context, one is built from the environment at startup."""
+    from kittum.profiles import load_profiles
+
+    load_profiles()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:

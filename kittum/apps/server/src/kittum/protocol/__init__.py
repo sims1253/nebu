@@ -3,94 +3,127 @@
 The protocol is versioned JSON with a content hash, and it is the source of truth for every later
 decision. Exclusion reasons are criterion IDs.
 
-Owner: WP-03. Shipped now: a first cut of the types. Still to build: the full schema from
-DESIGN.md (Teilpopulation, zVT, endpoints, source plan, reference set, audit and stopping plans),
-`compile` with validation, `diff`, and criterion rendering for humans and models.
+    version = compile(yaml_text)               # validated, cross-checked, hashed
+    stored = save_draft(tx, project_id, version)
+    publish(tx, project_id, stored.id, approver_id, ledger=ledger)   # frozen, ledger event
+
+Criteria render as the question a reviewer answers (`render_question`) and as the prompt
+fragment the AI judge answers with a verbatim quote (`render_prompt`). `diff` compares versions.
+`kittum.protocol.testing.InMemoryProtocolStore` stands in for the Postgres store.
+
+The core schema is domain-neutral. A protocol may name a `profile` that adds vocabularies,
+labels, typed `extensions`, and validation rules (`register_profile`); this package never imports
+one.
+
+Owner: WP-03.
 """
 
-from enum import StrEnum
-from typing import TYPE_CHECKING, Any, Literal
-
-from kittum.core import Record, Sha256
-
-if TYPE_CHECKING:
-    from collections.abc import Mapping
-
-
-class ScreeningMode(StrEnum):
-    M1 = "M1"  # two humans, AI as third screener
-    M2 = "M2"  # one human, AI as second screener
-    M3 = "M3"  # prioritized dual screening with a certified stop
-
-
-type PicoSlot = Literal[
-    "population", "intervention", "comparator", "outcome", "study_type", "other"
-]
-type Stage = Literal["title_abstract", "full_text"]
-
-
-class Criterion(Record):
-    id: str
-    slot: PicoSlot
-    text_de: str
-    text_en: str
-    decidable_at: tuple[Stage, ...]
-    applies_to: tuple[str, ...]  # scope IDs
-    positive_examples: tuple[str, ...] = ()
-    negative_examples: tuple[str, ...] = ()
-
-
-class Scope(Record):
-    """One Teilpopulation (or JCA PICO) that decisions are keyed by."""
-
-    id: str
-    label: str
-
-
-class SearchTopic(Record):
-    id: str
-    kind: Literal["rct_drug", "rct_indirect", "non_randomized", "other"]
-    mode: ScreeningMode
-    scopes: tuple[Scope, ...]
-    criteria: tuple[Criterion, ...]
-
-
-class ReviewProtocol(Record):
-    active_substance: str
-    version_label: str
-    topics: tuple[SearchTopic, ...]
-
-
-class ProtocolVersion(Record):
-    protocol: ReviewProtocol
-    content_hash: Sha256
-
-
-class ProtocolDiff(Record):
-    added_criteria: tuple[str, ...]
-    removed_criteria: tuple[str, ...]
-    changed_criteria: tuple[str, ...]
-    mode_changes: tuple[str, ...]
-
-
-def compile(source: Mapping[str, Any]) -> ProtocolVersion:
-    raise NotImplementedError("WP-03")
-
-
-def diff(a: ProtocolVersion, b: ProtocolVersion) -> ProtocolDiff:
-    raise NotImplementedError("WP-03")
-
+from kittum.protocol.compiler import (
+    ProtocolError,
+    ProtocolIssue,
+    ProtocolVersion,
+    compile,
+    path_of,
+    protocol_hash,
+)
+from kittum.protocol.diffing import FieldChange, ModeChange, ProtocolDiff, diff
+from kittum.protocol.model import (
+    AuditPlan,
+    Comparator,
+    Criterion,
+    Deviation,
+    EffectModifier,
+    FreshnessPolicy,
+    KnownInclude,
+    LocalizedText,
+    Outcome,
+    PicoSlot,
+    Polarity,
+    PressReview,
+    ReferenceSet,
+    ReviewProtocol,
+    ReviewQuestion,
+    Scope,
+    ScreeningMode,
+    SearchTopic,
+    Source,
+    SourcePlan,
+    Stage,
+    StoppingPlan,
+)
+from kittum.protocol.profile import (
+    ExtensionPoint,
+    Profile,
+    Rule,
+    get_profile,
+    register_profile,
+    registered_profiles,
+)
+from kittum.protocol.render import AnswerKey, CriterionQuestion, render_prompt, render_question
+from kittum.protocol.store import (
+    PUBLISHED_EVENT,
+    PostgresProtocolStore,
+    ProtocolStateError,
+    ProtocolStore,
+    StoredProtocol,
+    get_version,
+    latest_published,
+    list_versions,
+    publish,
+    save_draft,
+)
 
 __all__ = [
+    "PUBLISHED_EVENT",
+    "AnswerKey",
+    "AuditPlan",
+    "Comparator",
     "Criterion",
+    "CriterionQuestion",
+    "Deviation",
+    "EffectModifier",
+    "ExtensionPoint",
+    "FieldChange",
+    "FreshnessPolicy",
+    "KnownInclude",
+    "LocalizedText",
+    "ModeChange",
+    "Outcome",
     "PicoSlot",
+    "Polarity",
+    "PostgresProtocolStore",
+    "PressReview",
+    "Profile",
     "ProtocolDiff",
+    "ProtocolError",
+    "ProtocolIssue",
+    "ProtocolStateError",
+    "ProtocolStore",
     "ProtocolVersion",
+    "ReferenceSet",
     "ReviewProtocol",
+    "ReviewQuestion",
+    "Rule",
     "Scope",
     "ScreeningMode",
     "SearchTopic",
+    "Source",
+    "SourcePlan",
     "Stage",
+    "StoppingPlan",
+    "StoredProtocol",
     "compile",
     "diff",
+    "get_profile",
+    "get_version",
+    "latest_published",
+    "list_versions",
+    "path_of",
+    "protocol_hash",
+    "publish",
+    "register_profile",
+    "registered_profiles",
+    "render_prompt",
+    "render_question",
+    "save_draft",
 ]
