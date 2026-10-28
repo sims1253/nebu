@@ -18,7 +18,7 @@ The two-week spike in [DESIGN.md](../DESIGN.md#two-week-spike) picks from these 
 | 04 | `gateway` | Done: httpx transport, policies, shared buckets, budgets, cache, attempts; AppContext wiring open |
 | 05 | `search` | Done |
 | 06 | `enrich` | Clients, stored enrichment, and full-text waterfall done; local tagging open |
-| 07 | `corpus` | Types done; open |
+| 07 | `corpus` | Dedupe, link proposals, immutable identity revisions, PRISMA counts done |
 | 08 | `judge` and `models` | Types and recorded backend done; open |
 | 09 | `screening` | Types done; open |
 | 10 | `documents` | Types done; open |
@@ -235,10 +235,15 @@ Module `kittum.enrich`. Needs: `gateway`, `search`, `models`.
 
 Module `kittum.corpus`. Needs: `search`, `enrich`, `ledger`.
 
-- Dedupe rules (DOI, PMID, registry ID, normalized title, year) that keep every occurrence.
-- Link proposals for report and study with evidence strings.
-- Identity revisions written as ledger events; PRISMA counts from a frozen revision.
-- Acceptance: a fixture with duplicates, a multi-report study, and a conference abstract.
+- Dedupe rules over `SourceRecord`s: report identifiers (exact DOI, PMID) and rapidfuzz normalized title plus year and first author surname, keeping every occurrence.
+- Trial identifiers (NCT, EudraCT, CTIS numbers) drive only `same_study` proposals and never merge records or reports; distinct publications of one trial with the same NCT number stay separate reports linked to one study.
+- Link proposals for report (`same_record`, `same_report`) and study (`same_study`) with evidence strings.
+- Immutable identity revisions in Postgres (`report`, `study`, `corpus_revision`, `identity_revision`, `identity_link`, `proposal` tables with migration `20261028010000_corpus_identities.sql`).
+- Ledger integration: human confirmation, split, and merge write audit events (`corpus.confirmed`, `corpus.merged`, `corpus.split`) via `Ledger.append(tx, EventDraft)` to the hash-chained ledger.
+- PRISMA 2020 identification counts from a frozen identity revision: records identified per source, duplicates removed, unique records, studies identified.
+- HTTP routes in `src/kittum/api/routes/corpus.py`: list proposals, confirm, merge, split, get counts.
+- `FakeCorpus` in `src/kittum/corpus/testing.py` for downstream modules.
+- End-to-end tests against Postgres verifying PRISMA counts, revision immutability, history preservation on split, and separate reports for same-NCT publications.
 
 ## WP-08 Judge and models
 
