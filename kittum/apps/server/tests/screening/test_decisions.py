@@ -129,7 +129,7 @@ def test_replay_is_a_noop_stale_revisions_fail_and_undo_redecides(world: World) 
                 Decision(outcome="exclude", reason_criterion_id="FOLLOWUP"),
                 gum.etag,
             )
-        with pytest.raises(InvalidDecision, match="follows a provisional"):
+        with pytest.raises(InvalidDecision, match="only after a provisional"):
             decide(world, tx, a, gum.assignment_id, include, gum.etag, phase="final")
 
     # Undo puts the record back in the queue under a new token; the old decision stays.

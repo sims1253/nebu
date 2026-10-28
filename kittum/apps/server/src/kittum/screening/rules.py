@@ -141,14 +141,14 @@ def validate(decision: Decision, stage: Stage, criteria: Sequence[Criterion]) ->
     if decision.outcome not in OUTCOMES_AT[stage]:
         raise InvalidDecision(f"{decision.outcome!r} is not an outcome at {stage}")
     if decision.outcome == "exclude" and decision.reason_criterion_id is None:
-        raise InvalidDecision("an exclusion needs the criterion it excludes on")
+        raise InvalidDecision("An exclusion needs the criterion it excludes on.")
     if decision.reason_criterion_id is not None and decision.reason_criterion_id not in known:
         raise InvalidDecision(
             f"criterion {decision.reason_criterion_id!r} does not apply to this scope at {stage}"
         )
     readings = {c.criterion_id: c for c in decision.criteria}
     if len(readings) != len(decision.criteria) or not set(readings) <= known:
-        raise InvalidDecision("criterion readings must name each applicable criterion once")
+        raise InvalidDecision("Give each criterion of this scope one reading at most.")
     if stage == "title_abstract":
         return
     # One reason per report is what PRISMA asks for: an exclusion cites the criterion it fails, an

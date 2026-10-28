@@ -690,21 +690,19 @@ class Screening:
         def decide(_: Command, st: dict[str, Any]) -> RunDecision[_DecideChanges]:
             a, row = st["a"], st["stage"]
             if a["etag"] != expected_etag:
-                raise StaleRevision(
-                    f"assignment {assignment_id} changed since it was loaded; reload the queue"
-                )
+                raise StaleRevision("This item changed since you loaded it. Reload the queue.")
             _refuse_withdrawn(a)
             validate(decision, row["stage"], st["criteria"])
             reading: Reading | None = st["reading"]
             if reading is None:
-                raise InvalidDecision("the AI has not read this item yet")
+                raise InvalidDecision("The AI judge has not read this item yet.")
             decision_id = new_id()
             if phase == "provisional":
                 if a["state"] != "pending":
                     raise InvalidDecision(
-                        "this item awaits a final decision"
+                        "This item waits for your final decision."
                         if a["state"] == "awaiting_final"
-                        else "this item is decided; undo it first"
+                        else "You decided this item already. Undo the decision first."
                     )
                 reveal = None if a["revealed"] else reveal_for(row["reveal"], decision, reading)
                 if reveal is not None:
@@ -715,7 +713,9 @@ class Screening:
                 provisional = decision
             else:
                 if a["state"] != "awaiting_final":
-                    raise InvalidDecision("a final decision follows a provisional one and a reveal")
+                    raise InvalidDecision(
+                        "A final decision comes only after a provisional one and the AI's reading."
+                    )
                 reveal = None
                 provisional_id, final_id, new_state = (
                     a["provisional_decision_id"],
@@ -980,14 +980,12 @@ class Screening:
         def decide(_: Command, st: dict[str, Any]) -> RunDecision[dict[str, Any]]:
             a = st["a"]
             if a["etag"] != expected_etag:
-                raise StaleRevision(
-                    f"assignment {assignment_id} changed since it was loaded; reload the queue"
-                )
+                raise StaleRevision("This item changed since you loaded it. Reload the queue.")
             if a["state"] == "pending":
-                raise InvalidDecision("there is no decision to undo")
+                raise InvalidDecision("There is no decision to undo.")
             _refuse_withdrawn(a)
             if any(c["state"] == "resolved" for c in st["conflicts"]):
-                raise InvalidDecision("this item was adjudicated; its decisions stand")
+                raise InvalidDecision("This item was adjudicated. Its decisions stand.")
             undone = [
                 str(x)
                 for x in dict.fromkeys((a["provisional_decision_id"], a["final_decision_id"]))
@@ -1104,9 +1102,7 @@ class Screening:
         def decide(_: Command, st: dict[str, Any]) -> RunDecision[dict[str, Any]]:
             a, row = st["a"], st["stage"]
             if a["etag"] != expected_etag:
-                raise StaleRevision(
-                    f"assignment {assignment_id} changed since it was loaded; reload the queue"
-                )
+                raise StaleRevision("This item changed since you loaded it. Reload the queue.")
             if row["stage"] != "full_text":
                 raise InvalidDecision("Only a full text can be the wrong document.")
             _refuse_withdrawn(a)
@@ -1228,7 +1224,7 @@ class Screening:
         The result opens the AI column. The adjudicator must be a human who did not screen the
         record."""
         if (adopted is None) == (decision is None):
-            raise InvalidDecision("adopt a column or give an own decision, not both")
+            raise InvalidDecision("Adopt one column, or give your own decision.")
         command = Command(
             command_id=command_id,
             project_id=project_id,
@@ -1265,7 +1261,7 @@ class Screening:
             if c["state"] != "open":
                 raise InvalidDecision(f"conflict {conflict_id} is {c['state']}")
             if c["etag"] != expected_etag:
-                raise StaleRevision(f"conflict {conflict_id} changed since it was loaded")
+                raise StaleRevision("This conflict changed since you loaded it. Reload the queue.")
             if not st["human"]:
                 raise InvalidDecision("an adjudicator must be a human actor")
             if any(p["reviewer_id"] == adjudicator_id for p in st["peers"]):
