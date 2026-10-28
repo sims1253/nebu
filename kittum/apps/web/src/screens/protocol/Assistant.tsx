@@ -746,16 +746,26 @@ function RevisionView({
           ))}
         </ul>
 
-        {d.search_topics.map((topic) => (
+        {d.search_topics.map((topic, ti) => (
           <section key={topic.id}>
             <h2 className="mt-8 border-t border-rule-strong pt-3 text-lg font-semibold">
               {t(topic.label)} <span className="text-sm font-normal text-ink-3">{topic.mode}</span>
             </h2>
             <h3 className="mt-4 text-md font-semibold">Search strategies</h3>
             <ul className="mt-2 grid gap-4">
-              {topic.source_plan.sources.map((s) => {
+              {topic.source_plan.sources.map((s, si) => {
                 const dialect = dialectOf(s);
                 const part = strategyPath(topic, s);
+                const counted = dialect && s.strategy ? countOf(dialect, s.strategy) : undefined;
+                // What may be wrong though it compiles, and what the source said when it counted.
+                const notes = [
+                  ...(revision.warnings ?? [])
+                    .filter(
+                      (w) => w.path === `search_topics[${ti}].source_plan.sources[${si}].strategy`,
+                    )
+                    .map((w) => w.message),
+                  ...(counted?.state === "done" ? (counted.count.warnings ?? []) : []),
+                ];
                 return (
                   <li key={s.id} data-testid="source" data-source={s.id}>
                     <Written marks={marksOn(marks, part)}>
@@ -776,12 +786,15 @@ function RevisionView({
                         ) : null}
                       </div>
                       {s.strategy ? (
-                        <pre
-                          className="mt-1 text-[12.5px] leading-[19px] whitespace-pre-wrap text-ink"
-                          data-testid="strategy"
-                        >
-                          {s.strategy}
-                        </pre>
+                        <>
+                          <pre
+                            className="mt-1 text-[12.5px] leading-[19px] whitespace-pre-wrap text-ink"
+                            data-testid="strategy"
+                          >
+                            {s.strategy}
+                          </pre>
+                          <Notes notes={notes} />
+                        </>
                       ) : (
                         <p className="mt-0.5 text-xs text-ink-3">
                           No strategy: searched on its own platform.
@@ -817,6 +830,21 @@ function RevisionView({
         ))}
       </article>
     </section>
+  );
+}
+
+/** What a source or the compiler said about a strategy: a word it found nowhere, a tag it does
+ * not know. Not problems that stop anything, but usually a typo. */
+function Notes({ notes }: { notes: ReadonlyArray<string> }) {
+  if (!notes.length) return null;
+  return (
+    <ul className="mt-1 grid gap-0.5 text-xs text-unclear" data-testid="strategy-notes">
+      {notes.map((n) => (
+        <li key={n} className="border-l-2 border-unclear pl-2">
+          {n}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -1056,9 +1084,13 @@ function SuggestionReview({
             <tbody>
               {variants.map(([label, s]) => {
                 const counted = countOf(dialect, s);
+                const notes = counted?.state === "done" ? (counted.count.warnings ?? []) : [];
                 return (
-                  <tr key={label} className="border-b border-rule">
-                    <td className="py-1 text-ink-2">{label}</td>
+                  <tr key={label} className="border-b border-rule align-baseline">
+                    <td className="py-1 text-ink-2">
+                      {label}
+                      <Notes notes={notes} />
+                    </td>
                     <td
                       className="py-1 text-right font-semibold"
                       data-testid={`count-${label.split(" ").pop()}`}

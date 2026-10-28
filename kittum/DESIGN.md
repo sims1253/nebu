@@ -141,9 +141,11 @@ and that the AI judge answers as `met`, `not_met`, or `unclear` with a quote. Ex
 criterion IDs, so every exclusion list in every report comes from data instead of free text.
 
 A source in the plan may carry its search strategy in the source's own syntax. Compiling checks
-what can be checked without running it: balanced parentheses and quotes, and PubMed's field tags.
-A hit count from PubMed or ClinicalTrials.gov shows what the strategy finds today; it is
-informational and records no search.
+what can be checked without running it: balanced parentheses, brackets, and quotes. A field tag
+PubMed does not list is a warning beside the strategy, as PubMed itself only warns. A hit count
+from PubMed or ClinicalTrials.gov shows what the strategy finds today, with what PubMed said about
+its words (a phrase it found nowhere, a word it ignored); it is informational and records no
+search.
 
 A model can help write the protocol (`kittum.assist`). It drafts one from the lead's description,
 or suggests changes to one part, a question, a criterion, or a strategy, each with a reason. It

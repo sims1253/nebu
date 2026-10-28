@@ -15,7 +15,13 @@ from typing import TYPE_CHECKING
 from kittum import assist
 from kittum.app.lifecycle import require_project_lead
 from kittum.core import KittumError, canonical_json
-from kittum.models import BackendError, Completion, CompletionRequest, request_key
+from kittum.models import (
+    BackendError,
+    Completion,
+    CompletionRequest,
+    LlmRecordings,
+    request_key,
+)
 from kittum.search import QueryCount, QueryDialect, count_hits
 
 if TYPE_CHECKING:
@@ -42,7 +48,7 @@ class Assistant:
     backend: LlmBackend
 
 
-class ReplayBackend:
+class DemoBackend:
     """Answers a request with the answer recorded for it, keyed by `request_key` as
     `kittum.models.testing.RecordedBackend` keys them; a request with no recording fails as a
     model server would. The request and the answer go to the artifact store like live bytes."""
@@ -71,30 +77,54 @@ class ReplayBackend:
 
 def recorded_backend(
     store: ArtifactSink, path: Path = RECORDINGS / "answers.json"
-) -> tuple[str, ReplayBackend]:
+) -> tuple[str, DemoBackend]:
     """The recorded model answers and the recipe they were recorded with."""
     data = json.loads(path.read_text())
     identity = f"recorded:{data['model_identity']}"
-    return data["recipe_id"], ReplayBackend(data["answers"], identity, store)
+    return data["recipe_id"], DemoBackend(data["answers"], identity, store)
 
 
 def build_assistant(
     settings: Settings, backends: Mapping[str, LlmBackend], artifacts: ArtifactStore
 ) -> Assistant | None:
-    """The configured assistant, or None when no model is configured."""
+    """The configured assistant, or None when no model is configured.
+
+    The recipe is `KITTUM_ASSIST_MODEL`, else the judge's, else the first endpoint's. A recording
+    run (`KITTUM_LLM_RECORD`) notes it as the `assist` role of its recordings; a replay
+    (`KITTUM_LLM_REPLAY`) without `KITTUM_ASSIST_MODEL` takes that role, and refuses recordings of
+    several recipes that do not name it rather than guess, as the judge does.
+    `KITTUM_ASSIST_BACKEND=demo` and `KITTUM_LLM_REPLAY` both replay the assistant's answers, from
+    different recordings, so they are refused together."""
+    from kittum.app.context import ConfigurationError
+
     if settings.assist_backend == "demo":
+        if settings.llm_replay:
+            raise ConfigurationError(
+                "KITTUM_ASSIST_BACKEND=demo replays the shipped recordings and KITTUM_LLM_REPLAY"
+                f" replays {settings.llm_replay}; set one of them"
+            )
         recipe_id, backend = recorded_backend(artifacts)
         return Assistant(recipe_id=recipe_id, backend=backend)
-    recipe_id = settings.assist_model or settings.judge_model or next(iter(backends), None)
+    recipe_id = settings.assist_model
+    if recipe_id is None and settings.llm_replay:
+        # The recipe the live run's assistant used, not whichever the recordings list first.
+        recipe_id = LlmRecordings(settings.llm_replay).role("assist")
+        if recipe_id is None and len(backends) > 1:
+            raise ConfigurationError(
+                f"KITTUM_LLM_REPLAY: {settings.llm_replay} does not say which recipe the protocol"
+                f" assistant used, and it holds several ({', '.join(backends)});"
+                " set KITTUM_ASSIST_MODEL"
+            )
+    recipe_id = recipe_id or settings.judge_model or next(iter(backends), None)
     if recipe_id is None:
         return None
     backend = backends.get(recipe_id)
     if backend is None:
-        from kittum.app.context import ConfigurationError
-
         raise ConfigurationError(
             f"KITTUM_ASSIST_MODEL is {recipe_id}, but no KITTUM_LLM_ENDPOINTS entry serves it"
         )
+    if settings.llm_record:
+        LlmRecordings(settings.llm_record).set_role("assist", recipe_id)
     return Assistant(recipe_id=recipe_id, backend=backend)
 
 

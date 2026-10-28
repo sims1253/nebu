@@ -39,3 +39,8 @@ def drafted_pubmed(document: dict) -> str:
 def accepted_subset(change_ids: list[str]) -> list[str]:
     """The changes the tests and the journey accept: all but the last."""
     return change_ids[:-1]
+
+
+# A PubMed strategy with a mistyped word, a mistyped quoted phrase, and a word PubMed ignores:
+# its recorded count carries all three warnings.
+MISTYPED = 'by "nicotine replacment zzqx"[tiab] OR nicotinne[tiab] OR smoking cessation[tiab]'

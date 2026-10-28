@@ -159,8 +159,10 @@ A model helps the methods lead write the protocol: `kittum.assist`, `app/assist.
 Done:
 
 - Sources carry an optional `strategy`, left out of the document when absent so older protocols
-  keep their content hash. Compile checks quotes, parentheses, and PubMed's field tags
-  (`strategy_problems`); `strategy_dialect` names PubMed or ClinicalTrials.gov.
+  keep their content hash. Compile checks quotes, parentheses, and brackets (`strategy_problems`);
+  a PubMed field tag outside PubMed's documented list, each confirmed against ESearch, is a
+  warning (`strategy_warnings`, `protocol_warnings`, `ValidationReport.warnings`);
+  `strategy_dialect` names PubMed or ClinicalTrials.gov.
 - `draft` and `improve` (a question, a criterion, or a strategy as find-and-replace changes) ask
   the model in a strict JSON Schema derived from the protocol's models (`strict_schema`,
   `from_strict`), compile every answer, and send problems back at most twice (`REPAIRS`).
@@ -182,9 +184,13 @@ Done:
 - Improving a question or criterion keeps every nested profile extension (by ID); a language given
   twice in an answer goes back to the model; a model server that is down or fails is a recorded
   attempt with the bytes that exist.
-- `kittum.search.count_hits`: ESearch count or ClinicalTrials.gov `totalCount` through the gateway
+- `kittum.search.count_hits`: ESearch count, with every phrase PubMed found nowhere (quoted or
+  not), ignored, or could not field, or ClinicalTrials.gov `totalCount`, through the gateway
   (source `clinicaltrials`, the gateway policy's name, which the CT.gov search now uses too).
 - Settings: `KITTUM_ASSIST_MODEL`, `KITTUM_ASSIST_BACKEND` (`demo` replays recorded answers).
+  `KITTUM_LLM_RECORD` notes the assistant's recipe as the `assist` role of its recordings; a
+  `KITTUM_LLM_REPLAY` without `KITTUM_ASSIST_MODEL` uses it, and refuses recordings of several
+  recipes that do not name it. `KITTUM_ASSIST_BACKEND=demo` is refused beside `KITTUM_LLM_REPLAY`.
 - Tests: `tests/assist/test_assist.py` on GLM-5.3-Flash's recorded answers and PubMed's recorded
   counts; `e2e/assist.spec.ts` in the browser.
 

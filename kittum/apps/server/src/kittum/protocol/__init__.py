@@ -26,8 +26,10 @@ from kittum.protocol.compiler import (
     compile,
     path_of,
     protocol_hash,
+    protocol_warnings,
     strategy_dialect,
     strategy_problems,
+    strategy_warnings,
 )
 from kittum.protocol.diffing import FieldChange, ModeChange, ProtocolDiff, diff
 from kittum.protocol.model import (
@@ -127,6 +129,7 @@ __all__ = [
     "list_versions",
     "path_of",
     "protocol_hash",
+    "protocol_warnings",
     "publish",
     "register_attribution",
     "register_profile",
@@ -136,4 +139,5 @@ __all__ = [
     "save_draft",
     "strategy_dialect",
     "strategy_problems",
+    "strategy_warnings",
 ]

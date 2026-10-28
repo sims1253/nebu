@@ -41,6 +41,7 @@ from kittum.protocol import (
     StoredProtocol,
     compile,
     diff,
+    protocol_warnings,
     publish,
     save_draft,
 )
@@ -239,7 +240,9 @@ def _history(tx: Tx, project_id: Id) -> tuple[_History, list[ProtocolRevision]]:
     for row in rows:
         revision = _from_row(row)
         history.add(revision)
-        revisions.append(revision.model_copy(update={"ai_parts": history.marks(revision.document)}))
+        warnings = protocol_warnings(ReviewProtocol.model_validate(revision.document))
+        marks = history.marks(revision.document)
+        revisions.append(revision.model_copy(update={"ai_parts": marks, "warnings": warnings}))
     return history, revisions
 
 

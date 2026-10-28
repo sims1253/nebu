@@ -33,7 +33,8 @@ class QueryCount(Record):
     query_translation: str | None = None
     """What PubMed made of the query, with its automatic term mapping."""
     warnings: tuple[str, ...] = ()
-    """Phrases PubMed did not find and other notes, which usually mean a typo in the query."""
+    """Words and quoted phrases PubMed did not find (usually a typo), words it ignored, fields it
+    does not know, and its other notes, in the order it gave them."""
     raw_hash: Sha256
     counted_at: datetime
 
@@ -86,8 +87,12 @@ def count_hits(
     )
 
 
-_NOT_FOUND = {
+# What ESearch says about the words of a query, in its ErrorList and WarningList: a word or quoted
+# phrase it found nowhere (usually a typo), a word it left out, a field it does not know.
+_NOTES = {
     "PhraseNotFound": "PubMed did not find the phrase",
+    "QuotedPhraseNotFound": "PubMed did not find the quoted phrase",
+    "PhraseIgnored": "PubMed ignored",
     "FieldNotFound": "PubMed does not know the field",
 }
 
@@ -99,10 +104,9 @@ def _esearch_count(body: bytes) -> tuple[int, str | None, tuple[str, ...]]:
     if error or count is None:
         raise SourceError(f"PubMed could not count the query: {error or 'no count in the reply'}")
     warnings = [
-        f"{_NOT_FOUND.get(e.tag, e.tag)}: {(e.text or '').strip()}"
-        for e in root.findall("ErrorList/*")
+        f"{_NOTES[e.tag]}: {(e.text or '').strip()}" if e.tag in _NOTES else (e.text or "").strip()
+        for e in (*root.findall("ErrorList/*"), *root.findall("WarningList/*"))
     ]
-    warnings += [(m.text or "").strip() for m in root.findall("WarningList/OutputMessage")]
     return int(count), root.findtext("QueryTranslation"), tuple(w for w in warnings if w)
 
 

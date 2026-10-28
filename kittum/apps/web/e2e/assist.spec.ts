@@ -15,6 +15,9 @@ import { SERVER } from "./stack.ts";
 const ANSWERS = join(SERVER, "src", "kittum", "app", "demo_data", "assist", "answers.json");
 const { description } = JSON.parse(readFileSync(ANSWERS, "utf8")) as { description: string };
 const MEDLINE = "search_topics[topic_nrt].source_plan.sources[medline].strategy";
+// A strategy whose recorded count carries PubMed's notes on its words (tests/assist/support.py).
+const MISTYPED =
+  'by "nicotine replacment zzqx"[tiab] OR nicotinne[tiab] OR smoking cessation[tiab]';
 const SHOTS = process.env["KITTUM_E2E_SHOTS"];
 
 const shoot = async (page: Page, name: string) => {
@@ -137,6 +140,36 @@ test("a lead drafts, improves, counts, steps back, and publishes a protocol with
     expect(strategy["recipe_id"]).toBe("glm-5.3-flash");
     expect(strategy["accepted_in"]).not.toBe(strategy["revision_id"]);
     expect(parts.length).toBeGreaterThan(20); // and every field of the draft it left alone
+  });
+
+  await test.step("a count says what PubMed found nowhere, next to the strategy", async () => {
+    const headers = { "X-Kittum-Reviewer": lead };
+    const revisions = (await (
+      await request.get(`/api/projects/${project.id}/assist/revisions`, { headers })
+    ).json()) as Array<{ id: string; document: Record<string, unknown> }>;
+    const newest = revisions.at(-1)!;
+    const document = JSON.parse(JSON.stringify(newest.document)) as {
+      search_topics: Array<{ source_plan: { sources: Array<{ id: string; strategy?: string }> } }>;
+    };
+    document.search_topics[0]!.source_plan.sources.find((s) => s.id === "medline")!.strategy =
+      MISTYPED;
+    const saved = await request.post(`/api/projects/${project.id}/assist/revisions`, {
+      data: { source: document, base_id: newest.id },
+      headers,
+    });
+    expect(saved.status()).toBe(201);
+    await page.goto(`/p/${project.id}/protocol?as=${lead}`);
+    await expect(page.getByText("Write a new version")).toBeVisible(); // the published version
+    await page.keyboard.press("v");
+    await page.getByRole("tab", { name: "With the assistant" }).click();
+    await expect(page.getByText("Revision 4 of 4")).toBeVisible();
+    await medline.getByRole("button", { name: "Count" }).click();
+    await expect(medline.getByTestId("hit-count")).toHaveText("35,484 in PubMed today");
+    await expect(medline.getByTestId("strategy-notes")).toContainText(
+      'PubMed did not find the quoted phrase: "nicotine replacment zzqx"[tiab]',
+    );
+    await expect(medline.getByTestId("strategy-notes")).toContainText("PubMed ignored: by");
+    await shoot(page, "07-count-notes");
   });
 
   await test.step("a reviewer may not use the assistant", async () => {

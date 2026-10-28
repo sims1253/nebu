@@ -81,9 +81,9 @@ class Settings:
     # The protocol assistant's model: a recipe ID served by one of `llm_endpoints`. Defaults to the
     # judge's model, else the first endpoint's recipe.
     assist_model: str | None = None
-    # `endpoint` calls the model server and counts hits on PubMed and ClinicalTrials.gov; `demo`
-    # replays the recorded answers and counts in kittum/app/demo_data/assist, for the end-to-end
-    # test and a demo without network.
+    # `endpoint` calls the model server; `demo` replays the answers recorded in
+    # kittum/app/demo_data/assist, for the end-to-end test and a demo without a model server.
+    # Refused with `llm_replay`, which replays the assistant's answers from a recording of one's own.
     assist_backend: Literal["endpoint", "demo"] = "endpoint"
     # The built workbench (`pnpm build` writes apps/web/dist). `kittum serve` serves it when set.
     web_dist: Path | None = None

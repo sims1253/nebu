@@ -97,6 +97,8 @@ class ProtocolRevision(Record):
     suggestion: Suggestion | None = None
     accepted: Accepted | None = None
     ai_parts: tuple[AiMark, ...] = ()
+    warnings: tuple[ProtocolIssue, ...] = ()
+    """What may be wrong in the document though it compiles (`kittum.protocol.protocol_warnings`)."""
     note: str | None = None
     created_at: datetime
 

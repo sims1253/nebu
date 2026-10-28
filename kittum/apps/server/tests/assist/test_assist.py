@@ -15,6 +15,7 @@ import os
 import re
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -25,23 +26,39 @@ from fastapi.testclient import TestClient
 
 from kittum import assist
 from kittum.api import AppContext, create_app
-from kittum.app import Assistant, recorded_backend
+from kittum.app import (
+    Assistant,
+    ConfigurationError,
+    build_assistant,
+    build_backends,
+    build_judge,
+    recorded_backend,
+)
 from kittum.assist import ASSIST_EVENT, StrategyAnswer, strict_schema, value_at
 from kittum.assist.paths import written
 from kittum.cli import main
 from kittum.gateway import RecordedTransport, SourceGateway, default_policies
 from kittum.ledger import PostgresLedger
-from kittum.models import ModelRecipe, OpenAICompatibleBackend
+from kittum.models import (
+    CompletionRequest,
+    Message,
+    ModelRecipe,
+    ModelRegistry,
+    OpenAICompatibleBackend,
+    request_key,
+)
 from kittum.protocol import PUBLISHED_EVENT, ReviewProtocol, compile
 from kittum.report import load_review, render_files
-from kittum.settings import Settings
+from kittum.settings import LlmEndpoint, Settings
 from kittum.storage import FilesystemStore, MemoryStore
 from tests.assist.support import (
+    ANSWERS,
     CAPIVASERTIB,
     CONTACT_EMAIL,
     COUNTS,
     DESCRIPTION,
     EXAMPLE,
+    MISTYPED,
     PUBMED,
     QUESTION,
     accepted_subset,
@@ -383,6 +400,16 @@ def test_a_lead_drafts_improves_and_publishes_a_protocol_with_the_assistant(pg: 
     assert counted[0]["query_translation"] and all(artifacts.exists(c["raw_hash"]) for c in counted)
     registry = ok(count(strategy_of(mine, 4), dialect="ctgov"))
     assert (registry["count"], registry["query_translation"]) == (673, None)
+    # A mistyped strategy still counts, and says what PubMed found nowhere or left out.
+    mistyped = ok(count(MISTYPED))
+    assert (mistyped["count"], mistyped["warnings"]) == (
+        35484,
+        [
+            "PubMed did not find the phrase: nicotinne",
+            "PubMed ignored: by",
+            'PubMed did not find the quoted phrase: "nicotine replacment zzqx"[tiab]',
+        ],
+    )
 
     # Accept two of three: the base with exactly those, the field marked as the model's.
     assert (
@@ -688,3 +715,109 @@ def test_the_entries_of_lists_without_ids_stay_the_models_when_their_topic_is_re
         "source_plan.deviations[0].source_id",
     ):
         assert marks.get(f"search_topics[renamed].{field}") == drafted["id"], field
+
+
+GLM = """
+recipes:
+  - id: glm-5.3-flash
+    family: glm
+    repository: example-org/glm
+    served_name: glm-5.3-flash
+    revision: "2026-10"
+    weights_licence: mit
+    licence_url: https://example.org/LICENSE
+    serving: hosted
+    context_tokens: 131072
+"""
+
+
+def test_a_recorded_assistant_replays_with_the_recipe_it_used_not_the_judges(
+    pg: Tx, tmp_path: Path
+) -> None:
+    """The live run judged with one recipe and drafted with another, recording both
+    (`KITTUM_LLM_RECORD`). The replay, told neither, drafts with the assistant's recipe, listed
+    second, and gets the same draft; recordings that do not say which recipe the assistant used
+    are refused, and so is the shipped demo replay beside a replay of one's own."""
+    recipes = tmp_path / "recipes.yaml"
+    recipes.write_text(GLM)
+    answers = json.loads(ANSWERS.read_text())["answers"]
+
+    def server(request: httpx2.Request) -> httpx2.Response:
+        body = json.loads(request.content)
+        text = "{}"
+        if body["model"] == "glm-5.3-flash":  # GLM's recorded answer to this very request
+            call = CompletionRequest(
+                model_id="glm-5.3-flash",
+                messages=tuple(Message(**m) for m in body["messages"]),
+                json_schema=body["response_format"]["json_schema"]["schema"],
+                temperature=body["temperature"],
+                seed=body["seed"],
+                max_tokens=body["max_tokens"],
+            )
+            text = answers[request_key(call)]
+        choice = {"message": {"content": text}, "finish_reason": "stop"}
+        return httpx2.Response(200, json={"model": body["model"], "choices": [choice]})
+
+    path = tmp_path / "models"
+    live = Settings(
+        database_url="unused",
+        artifact_dir=tmp_path / "artifacts",
+        recipes_file=recipes,
+        llm_endpoints=(
+            LlmEndpoint(recipe_id="qwen3.8-27b-bf16", base_url="http://gpu:8000/v1"),
+            LlmEndpoint(recipe_id="glm-5.3-flash", base_url="http://glm.test/v1"),
+        ),
+        judge_model="qwen3.8-27b-bf16",
+        assist_model="glm-5.3-flash",
+        llm_record=path,
+    )
+    registry = ModelRegistry.load(local=recipes)
+
+    def draft_with(settings: Settings, backends: Any, artifacts: Any) -> dict[str, Any]:
+        db = savepoint_db(pg)
+        ctx = AppContext(
+            settings=settings,
+            db=db,
+            artifacts=artifacts,
+            ledger=PostgresLedger(),
+            assistant=build_assistant(settings, backends, artifacts),
+        )
+        client = TestClient(create_app(ctx))
+        project = client.post("/api/projects", json={"name": "NRT", "lead_name": "Lee"}).json()
+        outcome = client.post(
+            f"/api/projects/{project['id']}/assist/draft",
+            json={"description": DESCRIPTION},
+            headers={"X-Kittum-Reviewer": project["members"][0]["actor_id"]},
+        ).json()
+        assert outcome["revision"], outcome["issues"]
+        return outcome["revision"]
+
+    artifacts = FilesystemStore(live.artifact_dir)
+    client = httpx2.Client(transport=httpx2.MockTransport(server))
+    backends = build_backends(live, registry, artifacts, client=client)
+    assert build_judge(live, registry, backends) is not None  # notes the judge's role
+    judged = Message(role="user", content="Read this record.")
+    backends["qwen3.8-27b-bf16"].complete(
+        CompletionRequest(model_id="qwen3.8-27b-bf16", messages=(judged,))
+    )
+    drafted = draft_with(live, backends, artifacts)
+
+    replay = replace(live, llm_record=None, llm_replay=path, judge_model=None, assist_model=None)
+    store = FilesystemStore(tmp_path / "replayed")
+    replays = build_backends(replay, registry, store)
+    assert list(replays) == ["qwen3.8-27b-bf16", "glm-5.3-flash"]
+    replayed = draft_with(replay, replays, store)
+    assert replayed["document"] == drafted["document"]
+    assert replayed["model"]["recipe_id"] == "glm-5.3-flash"
+    assert replayed["model"]["endpoint"] == "replay of http://glm.test/v1"
+
+    meta = json.loads((path / "meta.json").read_text())
+    assert meta["roles"] == {"judge": "qwen3.8-27b-bf16", "assist": "glm-5.3-flash"}
+    del meta["roles"]["assist"]
+    (path / "meta.json").write_text(json.dumps(meta))
+    with pytest.raises(ConfigurationError, match="which recipe the protocol assistant used"):
+        build_assistant(replay, replays, store)
+    with pytest.raises(
+        ConfigurationError, match=r"KITTUM_ASSIST_BACKEND=demo .* KITTUM_LLM_REPLAY"
+    ):
+        build_assistant(replace(replay, assist_backend="demo"), replays, store)

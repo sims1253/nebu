@@ -31,6 +31,7 @@ from kittum.protocol import (
     get_version,
     latest_published,
     list_versions,
+    protocol_warnings,
     publish,
     save_draft,
 )
@@ -44,6 +45,8 @@ class ValidationReport(Record):
     ok: bool
     content_hash: str | None = None
     issues: tuple[ProtocolIssue, ...] = ()
+    warnings: tuple[ProtocolIssue, ...] = ()
+    """What may be wrong in a source that compiles, such as a field tag PubMed does not list."""
 
 
 class SourceText(Record):
@@ -164,7 +167,9 @@ def validate_protocol(source: ProtocolSource) -> ValidationReport:
         version = compile(source)
     except ProtocolError as e:
         return ValidationReport(ok=False, issues=e.issues)
-    return ValidationReport(ok=True, content_hash=version.content_hash)
+    return ValidationReport(
+        ok=True, content_hash=version.content_hash, warnings=protocol_warnings(version.protocol)
+    )
 
 
 @router.post(

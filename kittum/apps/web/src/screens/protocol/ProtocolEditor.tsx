@@ -30,6 +30,8 @@ type Check =
       readonly text: string;
       readonly source: ProtocolSource;
       readonly preview: DiffPreview;
+      /** What may be wrong though it compiles, such as a field tag PubMed does not list. */
+      readonly warnings: ReadonlyArray<ProtocolIssue>;
     };
 
 const show = (value: unknown): string =>
@@ -117,7 +119,13 @@ export function ProtocolEditor({
           source: parsed.source,
         }),
       );
-      setCheck({ state: "valid", text: current, source: parsed.source, preview });
+      setCheck({
+        state: "valid",
+        text: current,
+        source: parsed.source,
+        preview,
+        warnings: report.warnings ?? [],
+      });
     } catch (e) {
       setCheck({ state: "unchecked" });
       setError(failure(e, "The protocol could not be checked."));
@@ -337,7 +345,23 @@ function Result({ check, stale }: { check: Check; stale: boolean }) {
           </ol>
         </>
       ) : (
-        <Changes preview={check.preview} />
+        <>
+          <Changes preview={check.preview} />
+          {check.warnings.length ? (
+            <ol className="mt-4 grid gap-2.5" aria-label="Warnings">
+              {check.warnings.map((warning, i) => (
+                <li
+                  key={i}
+                  className="border-l-2 border-unclear pl-3 text-sm"
+                  data-testid="protocol-warning"
+                >
+                  <span className="block text-xs font-semibold text-ink-2">{warning.path}</span>
+                  {warning.message}
+                </li>
+              ))}
+            </ol>
+          ) : null}
+        </>
       )}
     </div>
   );

@@ -4942,6 +4942,14 @@
                 "type": "null"
               }
             ]
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ProtocolIssue"
+            },
+            "title": "Warnings",
+            "type": "array"
           }
         },
         "required": [
@@ -8477,6 +8485,14 @@
           "ok": {
             "title": "Ok",
             "type": "boolean"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ProtocolIssue"
+            },
+            "title": "Warnings",
+            "type": "array"
           }
         },
         "required": [

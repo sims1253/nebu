@@ -348,6 +348,9 @@
   "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=%28nicotine%20replacement%20therapy%5Bmh%5D%20OR%20%22nicotine%20replacement%22%5Btiab%5D%20OR%20%22nicotine%20patch%22%5Btiab%5D%20OR%20%22nicotine%20gum%22%5Btiab%5D%20OR%20%22nicotine%20lozenge%22%5Btiab%5D%20OR%20%22nicotine%20inhaler%22%5Btiab%5D%20OR%20%22nicotine%20spray%22%5Btiab%5D%29%20AND%20%28%22tobacco%20use%20cessation%22%5Bmh%5D%20OR%20%22smoking%20cessation%22%5Btiab%5D%20OR%20smok%2A%5Btiab%5D%20OR%20tobacco%2A%5Btiab%5D%29%20AND%20randomized%20controlled%20trial%5Bpt%5D&retmax=0&tool=kittum&email=test%40kittum.dev": {
     "file": "../../../assist/fixtures/counts/fa96fdd36097b9c4.json"
   },
+  "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=by%20%22nicotine%20replacment%20zzqx%22%5Btiab%5D%20OR%20nicotinne%5Btiab%5D%20OR%20smoking%20cessation%5Btiab%5D&retmax=0&tool=kittum&email=test%40kittum.dev": {
+    "file": "../../../assist/fixtures/counts/f615c21967da0662.json"
+  },
   "https://link.springer.com/content/pdf/10.1186/s12916-026-04943-4.pdf": {
     "content_type": "application/pdf",
     "file": "../../../documents/fixtures/gerber2026-lesotho-t2d-crct.pdf",

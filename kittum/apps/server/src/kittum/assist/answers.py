@@ -301,7 +301,7 @@ def _strategy_changes(
             issues.append(_issue(path_of(at, "find"), "overlaps another change"))
             continue
         alone = strategy[:start] + edit.replace + strategy[end:]
-        for problem in strategy_problems(alone, None):
+        for problem in strategy_problems(alone):
             issues.append(
                 _issue(path_of(at, "replace"), f"on its own, this change leaves {problem}")
             )
