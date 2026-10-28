@@ -3,6 +3,8 @@
 import json
 from datetime import UTC, datetime
 
+import pymupdf
+
 from kittum.core import FixedClock, new_id, sha256_hex
 from kittum.documents import (
     ACQUIRED,
@@ -11,6 +13,7 @@ from kittum.documents import (
     FullTextLocation,
     acquire,
     acquisitions,
+    check_report,
 )
 from kittum.enrich import EnrichmentConfig, WorkIds, lookup_full_text
 from kittum.gateway import RecordedTransport
@@ -192,3 +195,34 @@ def test_a_supplement_named_as_the_article_is_a_wrong_document_and_the_waterfall
     (event,) = ledger.events(pg, project)
     assert event.type == ACQUIRED
     assert [a["outcome"] for a in event.payload["attempts"]] == ["wrong_document", "acquired"]
+
+
+def _pdf(*lines: str) -> bytes:
+    with pymupdf.open() as document:
+        page = document.new_page()
+        page.insert_text((72, 72), "\n".join(lines), fontsize=11)
+        return document.tobytes()
+
+
+def test_a_pdf_is_the_records_report_only_by_its_whole_doi_or_its_whole_title():
+    # A page that holds a fragment of the record's title does not show the title.
+    fragment = _pdf("Clinical trial")
+    title = "A clinical trial of a completely different medicine"
+    assert check_report(fragment, doi=None, title=title).verdict == "mismatch"
+    assert (
+        check_report(
+            _pdf("A clinical trial of a completely different", "medicine"), doi=None, title=title
+        ).verdict
+        == "match"
+    )
+    # Another DOI that starts with the record's is another work.
+    longer = _pdf("Journal of Tests 2026", "doi: 10.1234/wrong-paper")
+    assert check_report(longer, doi="10.1234/wrong", title=None).verdict == "mismatch"
+    assert (
+        check_report(_pdf("doi: 10.1234/wrong."), doi="10.1234/wrong", title=None).verdict
+        == "match"
+    )
+    # A DOI the line break hyphenated is still the record's, and a DOI's own hyphen still matches.
+    wrapped = _pdf("https://doi.org/10.1234/long-", "identifier")
+    assert check_report(wrapped, doi="10.1234/longidentifier", title=None).by == "doi"
+    assert check_report(wrapped, doi="10.1234/long-identifier", title=None).by == "doi"
