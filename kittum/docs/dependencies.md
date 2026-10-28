@@ -89,24 +89,32 @@ retention, and set and lift a legal hold.
 
 ### Workbench
 
-| Dependency | Licence | Releases | Commits | Verdict |
-| --- | --- | --- | --- | --- |
-| React 19.3 | MIT | 31 | about 140 | **Use** |
-| Vite 8 (Rolldown bundler) | MIT | 100 | about 330 | **Use** |
-| TanStack Router and Query | MIT | 100 each | about 280 and 1,000 | **Use** |
-| Tailwind 4.3 | MIT | 12 | 64 | **Use** |
-| zustand 5 | MIT | | | **Use** |
-| Bun 1.4 | MIT (owned by Anthropic since December 2025) | 18 | about 1,900 | **Use** |
-| turbo 2.11 | MIT | 100 | about 1,000 | **Use** |
-| Playwright 1.64 | Apache-2.0 | 14 | about 690 | **Use** |
+The workbench follows [t3code](https://github.com/pingdotgg/t3code), a large, fast-moving React
+app (MIT, about 31,000 stars) whose stack was checked on 28.10.2026. Janus uses Bun and turbo;
+moving it over is a separate change.
+
+| Dependency | Licence | Releases | Commits | Role | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| pnpm 12 and Node 26 | MIT | 100 | about 2,400 | Workspace and runtime | **Use** |
+| Vite+ 1.4 (`vp`) | MIT | 100 | about 570 | One toolchain for Vite 8, Vitest, oxlint, and oxfmt, with cached task runs | **Use** |
+| oxc (oxlint, oxfmt) | MIT | 100 | about 2,000 | Lint and format through Vite+ | **Use** |
+| tsc-rs (`@tsc-rs/typescript`) | | | | Drop-in, faster typecheck, as t3code uses | **Use** |
+| knip | ISC | 100 | about 340 | Unused files, exports, and dependencies | **Use** |
+| React 19.3 | MIT | 31 | about 140 | | **Use** |
+| TanStack Router | MIT | 100 | about 280 | Typed routes | **Use** |
+| Effect 4 with Effect Schema and `@effect/atom-react` | MIT | 100 | about 1,900 | Contracts, typed client, and client state. `@effect/openapi-generator` builds the client from FastAPI's OpenAPI. | **Use** |
+| Base UI 1.9 | MIT | 15 | about 450 | Accessible unstyled components, styled with Tailwind | **Use** |
+| Tailwind 4.3 | MIT | 12 | 64 | | **Use** |
+| Legend List 3.7 | MIT | 32 | about 220 | Virtualized lists for screening queues and page strips | **Use** |
+| Vitest browser mode with Playwright | Apache-2.0 | 14 | about 690 | Component and end-to-end tests | **Use** |
+| Third-party licence notices | | | | t3code generates them with a script (`licenses:sync`). Kittum needs the same for AGPL distribution. | **Use** |
 
 The PDF viewer decides how fast a reviewer can check an anchor, so it got a closer look:
 
 | Viewer | Licence | Releases | Fit for a 300-page CSR with anchored highlights | Verdict |
 | --- | --- | --- | --- | --- |
-| Own viewer, as in Janus | AGPL (Kittum) | | The server renders page images with PyMuPDF. The client virtualizes pages with TanStack Virtual and lays an invisible text layer from the reader's word boxes over each image, plus the highlight overlay. The browser never interprets the PDF, so what the reviewer selects is what the parser saw. | **Use** |
+| Own viewer, as in Janus | AGPL (Kittum) | | The server renders page images with PyMuPDF. The client virtualizes pages with Legend List and lays an invisible text layer from the reader's word boxes over each image, plus the highlight overlay. The browser never interprets the PDF, so what the reviewer selects is what the parser saw. | **Use** |
 | pdfjs-dist 6.4 (Mozilla) | Apache-2.0 | 12 | Renders visible pages only. Kittum would still draw its own overlay. | Fallback if server rendering is too slow |
-| Lector | MIT | 51 | Headless React 19 parts on pdf.js, TanStack Virtual, and zustand, so it matches the stack. Small team. | Optional; prototype first |
 | EmbedPDF | MIT packages; its CloudPDF server is source-available | 55 | PDFium compiled to WASM in a worker, with tiling and virtual scrolling. The same engine as pypdfium2. | Spike against a real CSR |
 | react-pdf (wojtekmaj) | MIT | 5 | One component per page; needs added virtualization | Optional |
 | react-pdf-highlighter | MIT | 0 | No release since 2024 | Avoid |

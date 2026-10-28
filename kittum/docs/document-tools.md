@@ -83,7 +83,7 @@ a proposal that Kittum re-anchors. The leaderboards disagree, which says more th
 | --- | --- | --- | --- | --- | --- | --- |
 | PaddleOCR-VL-1.6 | 0.9B | 96.34 (table TEDS 94.8) | 67.4 | Blocks and reading order; line polygons in spotting mode; tables as HTML without cell boxes | Apache / Apache; vLLM | **Use** as the first vision adapter |
 | Nemotron 3.5 Parse (NVIDIA) | 0.6B | | **75.2**; 10 to 15 pages per second on an H100 (vendor) | Blocks with class and reading order | Apache / OpenMDW-1.1; vLLM; Docling adapter | **Use** as the second vision adapter |
-| LightOnOCR-3 | 0.8B to 4B | | 75.1 | Blocks in grounding mode | Apache / Apache; vLLM | Candidate |
+| LightOnOCR-3 | 0.8B to 4B | | 75.1 | Blocks with type labels in grounding mode; charts come back as an HTML table of their data points | Apache / Apache; vLLM | Candidate. The chart-to-table output could draft values from Kaplan-Meier and forest plots, which have no text span and need a reviewed grounding exception anyway. |
 | MinerU2.5-Pro-2605 | 1.2B | 95.75 | 72.8 | Blocks; tables as HTML | Weights and `mineru-vl-utils` Apache; not the MinerU application | Candidate, through Docling or `mineru-vl-utils` |
 | GLM-OCR | 0.9B | 95.22 | | Blocks | Apache / MIT; vLLM | Candidate; the OCR model in Firecrawl's hosted product |
 | Unlimited-OCR (Baidu) | 3B | 94.00 | | Block and line | MIT / MIT | Candidate |
@@ -91,7 +91,7 @@ a proposal that Kittum re-anchors. The leaderboards disagree, which says more th
 | TeleOCR | 1.2B | **96.91** | 58.7 | Blocks | No licence file in the code repository / Apache weights | Watch; two months old |
 | OvisOCR2 | 0.8B | 96.47 | | Images only, no text grounding | Apache / Apache | Not suitable |
 | dots.ocr / dots.mocr | 3B | 90.77 | 55.8 | Blocks | MIT plus a use policy banning "unauthorized digitization of publications" | **Exclude** |
-| Chandra OCR 2 (Datalab) | 5B | | 70.1 | Blocks | OpenRAIL-M variant with a USD 2M cap and a no-competition clause | **Exclude** |
+| Datalab: Chandra OCR 2, Indra OCR, Lift | 0.5B to 5B | | Chandra 70.1 | Blocks | Modified OpenRAIL-M: free only below USD 2M to 20M funding or revenue, and no use that competes with Datalab's API | **Exclude.** Indra (OCR) and Lift (extraction) look strong, but the cap and the no-competition clause are further restrictions under the AGPL. |
 | olmOCR 2 | 7B | | | None | Apache / Apache | Not suitable: no boxes |
 | Nanonets-OCR2 | 3B | | | None | No licence declared | Exclude |
 | Mistral OCR 4 | API | | | Boxes (press reports) | Proprietary, EU-hosted | Opt-in for public papers only, never for CSRs |
@@ -169,8 +169,8 @@ lists no current open model. Neither helps.
 | Judge, family 2 | **Gemma-4-31B-it** | Top of BRIDGE, best faithfulness score here, a separate lineage from Qwen. Already validated for Cochrane screening: paired with gpt-oss-120b it reached 95.9% sensitivity over 419 reviews (medRxiv, June 2026). | Apache-2.0 since Gemma 4 | One 80 GB GPU |
 | Long documents and second extractor | **Nemotron 3.5 Super VL** (120B, 12B active) | Best open model in the 40 to 150B class on Artificial Analysis; 1M context; reads page images. Covers CSRs beyond 256k tokens. | OpenMDW-1.1, permissive | NVFP4 on two H100s or one H200 |
 | Laptop | Qwen3.8-27B at Q4, or Gemma 4 12B | | Apache-2.0 | 24 GB GPU or 32 GB unified memory |
-| Embeddings for queue order and clustering | MedCPT (PubMed-trained, English) and Qwen3-Embedding (multilingual) | Never used for primary search | Public domain; Apache-2.0 | |
-| Reranker (later, large topics only) | MedCPT cross-encoder or Qwen3-Reranker | Orders the queue only | Public domain; Apache-2.0 | |
+| Embeddings for queue order and clustering | MedCPT (PubMed-trained, English) for abstracts. For German and mixed text, a bake-off of mDenseOn (LightOn, 307M, multilingual, open training data), EmbeddingGemma 2 (740M, 100+ languages, 8k context, Matryoshka sizes down to 128), and Qwen3-Embedding. | Never used for primary search | Public domain; Apache-2.0 for all three | CPU or a small GPU |
+| Reranker (later, large topics only) | MedCPT cross-encoder, or LightOn-rerank (on Qwen3.5-4B, also reads page images) | Orders the queue only | Public domain; Apache-2.0 | |
 
 Nemotron 3.5 Super VL is not the second judge, for two reasons. Qwen3.8-27B beats it on every
 independent score above. And NVIDIA post-trained its base model on outputs from Qwen3, gpt-oss,
@@ -184,6 +184,17 @@ Qwen3.8-27B recommends thinking mode at temperature 1.0. Kittum wants temperatur
 schema-constrained answer. The spike compares thinking at medium effort, with the reasoning parsed
 before the constrained JSON, against thinking off, which costs about two BRIDGE points.
 
+### Small domain models
+
+| Model | What it does | Licence | Verdict |
+| --- | --- | --- | --- |
+| OpenMed zero-shot NER (91 GLiNER models, 166M to 459M, for drugs, diseases, oncology, genes, and more) | Tags entities in any text, including labels it was not trained on | Apache-2.0 | **Use** for pre-decision highlights. Unlike PubTator, it runs locally, so it works on CSRs. |
+| OpenMed privacy-filter-nemotron-v2 (on `openai/privacy-filter`) | Detects personal identifiers | Apache-2.0 | Optional check at CSR intake. The card warns that clinical PHI needs its own validation. |
+| lion-ai MedDecider-4B (on Qwen3.5-4B) | Answers a yes/no or multiple-choice question about a clinical text with a calibrated probability per option. TrialGPT criteria 85.4% (partly in its training distribution), NLI4CT macro-F1 0.776. Follows a planted instruction only 5.4% of the time. | Apache-2.0 | Experiment as a calibrated check per criterion. It returns no quote, so it cannot exclude anything, and as a Qwen model it adds no family diversity. Released October 2026. |
+| lion-ai MedDecider-9B, 27B, 31B | The same, larger | CC BY-NC 4.0 | **Exclude** |
+| lion-ai medextractor-liquid | Medical span extraction on an LFM encoder | LFM Open License plus non-commercial training data | **Exclude** |
+| Liquid AI LFM2, LFM2.5, LFM3 (including the Extract, VL-Extract, Embedding, and ColBERT models) | Small, fast models; the Extract models fit document extraction well | LFM Open License v1.0: commercial use only below USD 10M annual revenue | **Exclude** |
+
 Medical fine-tunes are skipped. None beats Gemma 4 or Qwen3.8 on BRIDGE (MedGemma-27B 40.8,
 Hulu-Med-32B 38.3, Baichuan-M2-32B 38.0), and MedGemma's terms restrict use.
 
@@ -192,6 +203,7 @@ Excluded models:
 | Model | Reason |
 | --- | --- |
 | Qwen3.8-Flash-Next | Qwen Community License: a separate licence for "Model as a Service" and "AI Work Assistant" businesses |
+| Liquid AI LFM models, MedDecider above 4B, medextractor-liquid, Datalab weights, Reason-ModernColBERT | Revenue caps, non-commercial terms, or no-competition clauses (see the tables above) |
 | Llama family | Custom licence with an acceptable-use policy and a user cap |
 | Mistral Medium 3.5 | Modified MIT that withdraws rights above USD 20M monthly revenue |
 | MedGemma | Health AI Developer Foundations terms with a prohibited-use policy |
@@ -282,6 +294,12 @@ CSRs stay on local models unless the client signs off in writing.
   [Vectara](https://github.com/vectara/hallucination-leaderboard)
 - Screening studies: [Cochrane screening, medRxiv 2026](https://www.medrxiv.org/content/10.64898/2026.06.02.26354724v1.full),
   [SciLitBench](https://arxiv.org/abs/2609.05505), [SESR-Eval](https://arxiv.org/html/2610.10633v1)
+- Small models: [OpenMed](https://huggingface.co/OpenMed), [MedDecider-4B](https://huggingface.co/lion-ai/MedDecider-4B),
+  [medextractor-liquid](https://huggingface.co/lion-ai/medextractor-liquid),
+  [LFM Open License](https://huggingface.co/LiquidAI/LFM3-1.7B/blob/main/LICENSE),
+  [Indra OCR](https://huggingface.co/datalab-to/indra-ocr), [Lift](https://huggingface.co/datalab-to/lift),
+  [mDenseOn](https://huggingface.co/lightonai/mDenseOn), [EmbeddingGemma 2](https://huggingface.co/google/embeddinggemma-2),
+  [LightOn-rerank](https://huggingface.co/lightonai/LightOn-rerank-LW-4B)
 - Model cards: [Qwen3.8-27B](https://huggingface.co/Qwen/Qwen3.8-27B),
   [Gemma-4-31B-it](https://huggingface.co/google/gemma-4-31B-it),
   [Nemotron 3.5 Super VL](https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-NVFP4),

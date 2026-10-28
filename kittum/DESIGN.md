@@ -385,6 +385,12 @@ Kittum stores domain data as relational revisions and writes an audit event in t
 Screens query normal tables. Kittum does not rebuild every view from an event stream. Projections can
 still be rebuilt, because events carry schema versions.
 
+Writes follow the pattern of t3code's orchestrator. A pure decider turns a command into events
+without doing any I/O. One transaction then commits the events, the revision rows, the command
+receipt, and outbox jobs. Workers run the outbox jobs (a model call, a parse, a search) and feed the
+results back as new commands. A retried command finds its receipt and does nothing, so a crash
+never writes a decision twice.
+
 ### Schema sketch
 
 ```text
@@ -514,7 +520,7 @@ is for the PDF.
   the paper" box and no bulk include or exclude.
 
 Protocol-derived highlights are allowed before the decision, because they come from the protocol
-and not from the AI. They mark protocol terms in the abstract and PubTator entities such as drug
+and not from the AI. They mark protocol terms in the abstract and entities from PubTator or the local OpenMed taggers, such as drug
 and disease.
 
 ### Screens
@@ -604,10 +610,12 @@ forbid it.
 - **Python 3.13** with uv, FastAPI, Pydantic v2, psycopg 3, and plain SQL migrations (dbmate) for
   everything that touches documents, models, and statistics. PyMuPDF, Docling, GROBID clients,
   PydanticAI, vLLM, and Janus are Python. TypeScript has no equivalent of Docling or GROBID.
-- **TypeScript** with React 19, Vite, TanStack Router and Query, Tailwind, and Playwright for the
-  workbench, in a Bun and turbo monorepo like Janus. Contracts come from Pydantic JSON Schemas, as
-  `@janus/contracts` does. Shared components such as the source preview can move to a shared
-  package later. The PDF viewer shows server-rendered page images, as in Janus.
+- **TypeScript** for the workbench, on the stack of [t3code](https://github.com/pingdotgg/t3code):
+  pnpm and Node 26, Vite+ (Vite, Vitest, oxlint, oxfmt behind one `vp` command), React 19, TanStack
+  Router, Base UI with Tailwind 4, Legend List for virtualized queues, and Effect 4 with Effect
+  Schema for contracts and client state. FastAPI publishes OpenAPI, and `@effect/openapi-generator`
+  turns it into the typed client, so the Pydantic models stay the single source of truth. The PDF
+  viewer shows server-rendered page images, as in Janus. Janus stays on Bun and turbo for now.
 - **Postgres 18**, with IDs from its `uuidv7()`. Jobs are a `SKIP LOCKED` lease table in the same
   database, so a job's state and its audit event commit together.
 - **Object storage** behind a thin S3 interface: the filesystem for development, and a store that
