@@ -22,7 +22,7 @@ from kittum.screening.types import (
     StageMetrics,
     StopStatus,
 )
-from kittum.stats import Stratum, cohen_kappa, elusion_estimate, pabak, stop_test
+from kittum.stats import Stratum, elusion_estimate, stop_test
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -39,27 +39,6 @@ type RecordOutcome = Literal["include", "exclude", "conflict"] | None
 
 def _label(outcome: str | None) -> str:
     return "exclude" if outcome == "exclude" else "include"
-
-
-def _agreement(
-    kind: Literal["human_human", "human_ai", "human_ai_verified"],
-    raters: tuple[str, str],
-    a: Sequence[str],
-    b: Sequence[str],
-) -> PairAgreement:
-    kappa = None
-    if a:
-        try:
-            kappa = cohen_kappa(a, b)
-        except ValueError:
-            kappa = None  # one label throughout: kappa is undefined
-    return PairAgreement(
-        kind=kind,
-        raters=raters,
-        items=len(a),
-        kappa=kappa,
-        pabak=pabak(a, b) if a else None,
-    )
 
 
 @dataclass
@@ -192,7 +171,7 @@ def stage_metrics(
     for left, right in combinations(people, 2):
         refs = [r for r in records if (left, r) in provisional and (right, r) in provisional]
         agreement.append(
-            _agreement(
+            PairAgreement.of(
                 "human_human",
                 (left, right),
                 [_label(provisional[left, r]) for r in refs],
@@ -205,8 +184,8 @@ def stage_metrics(
         human = [_label(provisional[person, r]) for r in refs]
         own = ["include" if readings[r].includes_by_own_reading else "exclude" for r in refs]
         verified = ["exclude" if readings[r].excludes else "include" for r in refs]
-        agreement.append(_agreement("human_ai", (person, "ai"), human, own))
-        agreement.append(_agreement("human_ai_verified", (person, "ai"), human, verified))
+        agreement.append(PairAgreement.of("human_ai", (person, "ai"), human, own))
+        agreement.append(PairAgreement.of("human_ai_verified", (person, "ai"), human, verified))
 
     reveals = [a for a in assignments if a["p_reveal"] is not None]
     revised = [

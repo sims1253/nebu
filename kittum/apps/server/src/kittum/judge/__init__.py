@@ -30,7 +30,7 @@ from kittum.judge.metrics import (
     judge_metrics,
     pair_metrics,
 )
-from kittum.judge.prompt import PROMPT_VERSION, answer_schema, build_request
+from kittum.judge.prompt import PROMPT_VERSION, USER_TEMPLATE, answer_schema, build_request
 from kittum.judge.run import applicable, run_judge
 from kittum.judge.store import (
     VERDICT_RECORDED,
@@ -68,6 +68,7 @@ def judge(
 
 __all__ = [
     "PROMPT_VERSION",
+    "USER_TEMPLATE",
     "VERDICT_RECORDED",
     "VERIFIER_LIMITS",
     "CriterionStatus",

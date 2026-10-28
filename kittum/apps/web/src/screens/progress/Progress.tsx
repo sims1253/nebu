@@ -5,7 +5,13 @@ import { useRouteContext, useRouter } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
-import type { LedgerSummary, Progress, StageInfo, StageProgressView } from "../../data/schema.ts";
+import type {
+  LedgerSummary,
+  PairAgreement,
+  Progress,
+  StageInfo,
+  StageProgressView,
+} from "../../data/schema.ts";
 import { run, WorkbenchError } from "../../data/workbench.ts";
 import { KeyHint } from "../../ui/Key.tsx";
 import { useKeys } from "../../ui/keys.ts";
@@ -35,7 +41,12 @@ export function ProgressScreen() {
     run(workbench.progress({ projectId: project.id, as: me.actor_id })).then(
       (p) => live && setProgress(p),
       (e: unknown) =>
-        live && setNotice(e instanceof WorkbenchError ? e.message : "Progress could not load."),
+        live &&
+        setNotice(
+          e instanceof WorkbenchError
+            ? e.message
+            : "Kittum could not load the progress. Press r to try again.",
+        ),
     );
     if (lead && workbench.live) {
       run(workbench.ledger({ projectId: project.id, as: me.actor_id })).then(
@@ -73,7 +84,9 @@ export function ProgressScreen() {
         await router.invalidate();
         setTick((t) => t + 1);
       } catch (e) {
-        setNotice(e instanceof WorkbenchError ? e.message : "Full-text screening did not open.");
+        setNotice(
+          e instanceof WorkbenchError ? e.message : "Kittum could not open full-text screening.",
+        );
       }
     },
     [workbench, router, project.id, me.actor_id],
@@ -130,9 +143,8 @@ export function ProgressScreen() {
             ))
           ) : (
             <p className="max-w-[48ch] text-sm text-ink-2">
-              Agreement, the extra screens, and the audit gauge are the methods lead&rsquo;s.
-              Reviewers see only their own counts, so nothing here can hint at another
-              person&rsquo;s decisions.
+              Only the methods lead sees agreement, extra screens, and the audit gauge. You see your
+              own counts, so nothing here shows another person&rsquo;s decisions.
             </p>
           )}
           {ledger ? <LedgerLine ledger={ledger} /> : null}
@@ -277,57 +289,41 @@ function Side({ label, value, testId }: { label: string; value: number; testId: 
   );
 }
 
-const fixed = (n: number | null) => (n === null ? "Undefined" : n.toFixed(2));
+const fixed = (n: number | null) => (n === null ? "not defined" : n.toFixed(2));
 
 function StageQuality({ view, names }: { view: StageProgressView; names: Map<string, string> }) {
   const metrics = view.status.metrics;
   if (!metrics) return null;
   const rater = (id: string) => (id === "ai" ? "AI judge" : (names.get(id) ?? "Someone"));
   const audit = metrics.audit;
-  const kinds = {
-    human_human: "People",
-    human_ai: "Person and AI, model's reading",
-    human_ai_verified: "Person and AI, verified reading",
-  } as const;
   return (
     <section className="mb-10" aria-label={`${STAGE_LABEL[view.stage.stage]} quality`}>
       <h2 className="text-sm font-semibold text-ink-2">
         {STAGE_LABEL[view.stage.stage]}, {view.stage.mode}, reveal{" "}
         {view.stage.reveal.replace("_", " ")}
       </h2>
-      <table className="narrow mt-3 w-full text-sm tabular-nums">
-        <thead className="text-left text-xs text-ink-3">
-          <tr className="border-b border-rule">
-            <th className="py-1 font-normal">Agreement on blind decisions</th>
-            <th className="py-1 font-normal">Records</th>
-            <th className="py-1 font-normal">Kappa</th>
-            <th className="py-1 font-normal">PABAK</th>
-          </tr>
-        </thead>
-        <tbody>
-          {metrics.agreement.map((pair) => (
-            <tr key={`${pair.kind}-${pair.raters.join()}`} className="border-b border-rule">
-              <td className="py-1.5">
-                {rater(pair.raters[0])} and {rater(pair.raters[1])}
-                <span className="block text-xs text-ink-3">{kinds[pair.kind]}</span>
-              </td>
-              <td>{pair.items}</td>
-              <td data-testid={pair.kind === "human_human" ? "kappa" : undefined}>
-                {fixed(pair.kappa)}
-              </td>
-              <td>{fixed(pair.pabak)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <p className="mt-2 max-w-[60ch] text-xs text-ink-3">
+        Agreement on the blind decisions, made before any AI output was shown. Kappa and PABAK cover
+        every record both sides decided, agreed or not.
+      </p>
+      <ul className="mt-2">
+        {metrics.agreement.map((pair) => (
+          <Agreement
+            key={`${pair.kind}-${pair.raters.join()}`}
+            pair={pair}
+            first={rater(pair.raters[0])}
+            second={pair.kind === "human_human" ? rater(pair.raters[1]) : AI_READING[pair.kind]}
+          />
+        ))}
+      </ul>
       <dl className="mt-5 grid grid-cols-[minmax(0,1fr)_auto] gap-x-6 gap-y-1.5 text-sm tabular-nums">
         <dt className="text-ink-2">AI readings shown after a decision</dt>
         <dd>{metrics.reveals_shown}</dd>
-        <dt className="text-ink-2">Decisions revised after one</dt>
+        <dt className="text-ink-2">Decisions changed after one</dt>
         <dd>{metrics.revised_after_reveal}</dd>
         <dt className="text-ink-2">Conflicts adjudicated</dt>
         <dd data-testid={`${view.stage.stage}-adjudicated`}>{metrics.conflicts_resolved}</dd>
-        <dt className="text-ink-2">Extra screens of AI-only disagreements</dt>
+        <dt className="text-ink-2">Extra screens when only the AI disagreed</dt>
         <dd data-testid={`${view.stage.stage}-rescreens`}>
           {metrics.rescreens.triggered} sent, {metrics.rescreens.pending} waiting,{" "}
           {metrics.rescreens.upheld} upheld, {metrics.rescreens.adjudicated} adjudicated
@@ -376,7 +372,7 @@ function AuditGauge({ view }: { view: StageProgressView }) {
         </>
       ) : (
         <p className="mt-1.5 text-sm text-ink-2">
-          Not estimable yet: a stratum with excluded records has no screened audit sample.
+          No estimate yet. A group of excluded records has no screened audit sample.
         </p>
       )}
     </figure>
@@ -387,8 +383,88 @@ function LedgerLine({ ledger }: { ledger: LedgerSummary }) {
   return (
     <p className="mt-2 border-t border-rule pt-3 text-sm" data-testid="ledger">
       {ledger.ok
-        ? `Ledger verified: ${ledger.events ?? "?"} events, the hash chain holds through event ${ledger.checked_through_seq ?? "?"}.`
-        : `Ledger FAILED at event ${ledger.verify?.first_bad_seq ?? "?"}: ${ledger.verify?.reason ?? ledger.verify?.problem ?? "the chain does not verify"}.`}
+        ? `Ledger verified. All ${ledger.events ?? "?"} events up to event ${ledger.checked_through_seq ?? "?"} match their hashes.`
+        : `The ledger check failed at event ${ledger.verify?.first_bad_seq ?? "?"}. ${sentence(ledger.verify?.reason ?? ledger.verify?.problem ?? "the chain does not verify")}`}
     </p>
+  );
+}
+
+const AI_READING = {
+  human_ai: "the AI's own reading",
+  human_ai_verified: "the AI's checked reading",
+} as const;
+
+/** A reason from the server as a sentence of its own. */
+const sentence = (text: string) => `${text.charAt(0).toUpperCase()}${text.slice(1)}.`;
+
+/**
+ * One pair's agreement: how many records they agreed on, out of how many, the 2x2 table behind
+ * it, and kappa and PABAK over all of those records.
+ */
+function Agreement({
+  pair,
+  first,
+  second,
+}: {
+  pair: PairAgreement;
+  first: string;
+  second: string;
+}) {
+  const agreed = (pair.include_include ?? 0) + (pair.exclude_exclude ?? 0);
+  const cell = "px-2 py-1 text-right tabular-nums";
+  return (
+    <li
+      className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-6 border-b border-rule py-3"
+      data-testid="agreement"
+      data-kind={pair.kind}
+    >
+      <div>
+        <p className="text-sm">
+          {first} and {second}
+        </p>
+        <p className="mt-0.5 text-sm text-ink-2 tabular-nums" data-testid="agreed">
+          {pair.items === 0
+            ? "No record decided by both yet."
+            : `Agreed on ${agreed} of ${pair.items} records.`}
+        </p>
+        <p className="mt-0.5 text-xs text-ink-3 tabular-nums">
+          Kappa{" "}
+          <span
+            className="font-semibold text-ink"
+            data-testid={pair.kind === "human_human" ? "kappa" : undefined}
+          >
+            {fixed(pair.kappa)}
+          </span>
+          , PABAK {fixed(pair.pabak)}, both over all {pair.items} records
+        </p>
+      </div>
+      <table className="self-start text-xs" aria-label={`${first} against ${second}`}>
+        <thead className="text-ink-3">
+          <tr>
+            <th />
+            <th colSpan={2} className="px-2 py-1 text-center font-normal">
+              {second.charAt(0).toUpperCase() + second.slice(1)}
+            </th>
+          </tr>
+          <tr>
+            <th className="px-2 py-1 text-left font-normal">{first}</th>
+            <th className="px-2 py-1 text-right font-normal">include</th>
+            <th className="px-2 py-1 text-right font-normal">exclude</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr className="border-t border-rule">
+            <th className="px-2 py-1 text-left font-normal text-ink-2">include</th>
+            <td className={`${cell} bg-sheet-2 font-semibold`}>{pair.include_include ?? 0}</td>
+            <td className={cell}>{pair.include_exclude ?? 0}</td>
+          </tr>
+          <tr className="border-t border-rule">
+            <th className="px-2 py-1 text-left font-normal text-ink-2">exclude</th>
+            <td className={cell}>{pair.exclude_include ?? 0}</td>
+            <td className={`${cell} bg-sheet-2 font-semibold`}>{pair.exclude_exclude ?? 0}</td>
+          </tr>
+        </tbody>
+      </table>
+    </li>
   );
 }

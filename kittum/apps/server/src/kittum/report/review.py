@@ -21,6 +21,7 @@ from itertools import combinations
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from kittum.core import Id, KittumError, NotFoundError, Record
+from kittum.judge import USER_TEMPLATE
 from kittum.ledger import PostgresLedger
 from kittum.protocol import (
     ReviewProtocol,
@@ -31,6 +32,8 @@ from kittum.protocol import (
     StoredProtocol,
 )
 from kittum.protocol import get_version as get_protocol_version
+from kittum.report.extracted import ExtractedValue, load_extracted
+from kittum.report.model_calls import PromptCard, prompt_cards
 from kittum.screening import (
     ADJUDICATED,
     AI_DISAGREEMENT_RESCREEN,
@@ -45,13 +48,14 @@ from kittum.screening import (
     RevealSetting,
 )
 from kittum.search import SearchExecution, get_execution
-from kittum.stats import Stratum, cohen_kappa, elusion_estimate, pabak
+from kittum.stats import Stratum, elusion_estimate
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
     from kittum.db import Tx
     from kittum.ledger import AuditEvent, Ledger
+    from kittum.storage import ArtifactStore
 
 AUDIT_CONFIDENCE = 0.95
 SEARCH_EXECUTED = "search.executed"
@@ -307,6 +311,10 @@ class Review(Record):
     """The fields of the protocol in force that a model wrote, as its publication recorded them."""
     assist_requests: tuple[dict[str, Any], ...] = ()
     """Every request to the protocol assistant through the cutoff (`protocol.assist` payloads)."""
+    prompts: tuple[PromptCard, ...] = ()
+    """What each AI role sent its model, read from the stored requests; empty without a store."""
+    extracted: tuple[ExtractedValue, ...] = ()
+    """The accepted extraction values at the cutoff, the latest per semantic key."""
 
     @property
     def document(self) -> ReviewProtocol:
@@ -359,10 +367,12 @@ def load_review(
     cutoff_seq: int | None = None,
     identity_revision_id: Id | None = None,
     ledger: Ledger | None = None,
+    store: ArtifactStore | None = None,
 ) -> Review:
     """Read the review as the ledger recorded it through `cutoff_seq` (default: the head).
 
-    Without `identity_revision_id`, the latest identity revision at the cutoff is used.
+    Without `identity_revision_id`, the latest identity revision at the cutoff is used. With
+    `store`, the prompts each AI role sent are read back from the stored requests.
     """
     ledger = ledger or PostgresLedger()
     project = tx.execute("select * from project where id = %s", (project_id,)).fetchone()
@@ -407,6 +417,15 @@ def load_review(
             )
         ),
         assist_requests=tuple(e.payload for e in events if e.type == ASSIST_EVENT),
+        prompts=prompt_cards(
+            tx,
+            project_id,
+            events,
+            {j.id: j.model_dump(mode="json") for j in judges},
+            store,
+            judge_template=USER_TEMPLATE,
+        ),
+        extracted=load_extracted(tx, project_id, cutoff),
     )
 
 
@@ -791,17 +810,6 @@ def _agreement(screeners: Iterable[Id], items: list[ItemResult]) -> tuple[PairAg
     people = sorted(screeners, key=str)
     pairs: list[PairAgreement] = []
 
-    def pair(kind: Any, raters: tuple[str, str], a: list[str], b: list[str]) -> PairAgreement:
-        kappa = None
-        if a:
-            try:
-                kappa = cohen_kappa(a, b)
-            except ValueError:
-                kappa = None
-        return PairAgreement(
-            kind=kind, raters=raters, items=len(a), kappa=kappa, pabak=pabak(a, b) if a else None
-        )
-
     for left, right in combinations(people, 2):
         refs = [
             i.item_ref
@@ -809,7 +817,7 @@ def _agreement(screeners: Iterable[Id], items: list[ItemResult]) -> tuple[PairAg
             if (left, i.item_ref) in blind and (right, i.item_ref) in blind
         ]
         pairs.append(
-            pair(
+            PairAgreement.of(
                 "human_human",
                 (str(left), str(right)),
                 [_label(blind[left, r]) for r in refs],
@@ -821,8 +829,8 @@ def _agreement(screeners: Iterable[Id], items: list[ItemResult]) -> tuple[PairAg
         human = [_label(blind[person, i.item_ref]) for i in read]
         own = ["include" if i.ai_includes_by_own_reading else "exclude" for i in read]
         verified = ["exclude" if i.ai_excludes else "include" for i in read]
-        pairs.append(pair("human_ai", (str(person), "ai"), human, own))
-        pairs.append(pair("human_ai_verified", (str(person), "ai"), human, verified))
+        pairs.append(PairAgreement.of("human_ai", (str(person), "ai"), human, own))
+        pairs.append(PairAgreement.of("human_ai_verified", (str(person), "ai"), human, verified))
     return tuple(pairs)
 
 

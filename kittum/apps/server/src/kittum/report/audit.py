@@ -12,12 +12,20 @@ Everything here shows every reviewer's decisions and the AI's readings, so calle
 """
 
 from collections import defaultdict
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 from uuid import UUID
 
-from kittum.core import Id, NotFoundError, Record, Sha256, content_hash
-from kittum.ledger import PostgresLedger
+from kittum.core import Id, NotFoundError, Record, Sha256, content_hash, sha256_hex
+from kittum.ledger import PostgresLedger, event_hash, payload_hash
+from kittum.report.model_calls import (
+    ModelCall,
+    assist_calls,
+    extraction_calls,
+    judge_calls,
+    named_by_calls,
+    transcript,
+)
 from kittum.report.prisma import PrismaFlow, flows
 from kittum.report.renderers import disclosure
 from kittum.report.review import ReportRequestError, head_seq, load_review
@@ -73,11 +81,21 @@ class TracedEvent(Record):
     payload_hash: Sha256
     prev_hash: Sha256
     event_hash: Sha256
+    payload_hash_matches: bool
+    """Whether the stored payload still hashes to `payload_hash`, recomputed for this answer."""
+    event_hash_matches: bool
+    """Whether `hashed_fields` still hash to `event_hash`."""
+    hashed_fields: dict[str, Any]
+    """What the event hash covers: the event's own fields, its payload hash, and the hash of the
+    event before it."""
     kind: TraceKind
     stage: str | None
     summary: str
     facts: tuple[Fact, ...]
     artifacts: tuple[ArtifactRef, ...]
+    model_calls: tuple[ModelCall, ...] = ()
+    """The model requests and responses behind an AI step: a judge reading, an assistant answer,
+    or the LLM extraction path."""
     payload: dict[str, Any]
 
 
@@ -176,7 +194,7 @@ class AsOf(Record):
 
 class _Names:
     def __init__(self, tx: Tx, project_id: Id, store: ArtifactStore | None) -> None:
-        self._store = store
+        self.store = store
         self.actors: dict[Id, tuple[str, str]] = {}
         for row in tx.execute(
             "select a.id, a.kind, a.identity_ref,"
@@ -211,6 +229,21 @@ class _Names:
                 (project_id,),
             ).fetchall()
         }
+        # Each criterion's wording in the protocol's default language, from every published
+        # version (the latest wins), so an event names what a criterion asks, not only its ID.
+        self.criteria: dict[str, str] = {}
+        for row in tx.execute(
+            "select document from protocol_version where project_id = %s and status = 'published'"
+            " order by published_at, id",
+            (project_id,),
+        ).fetchall():
+            document = row["document"] or {}
+            language = document.get("default_language")
+            for topic in document.get("search_topics", []):
+                for c in topic.get("criteria", []):
+                    text = c.get("text") or {}
+                    wording = text.get(language) or next(iter(text.values()), "")
+                    self.criteria[c.get("id")] = wording
         self._tx = tx
 
     def actor(self, actor_id: Id | str | None) -> str:
@@ -221,10 +254,16 @@ class _Names:
         except ValueError:
             return str(actor_id)
 
+    def criterion(self, criterion_id: str | None) -> str | None:
+        if not criterion_id:
+            return None
+        wording = self.criteria.get(criterion_id)
+        return f"{criterion_id}. {wording}" if wording else criterion_id
+
     def artifact(self, sha256: str | None, label: str) -> ArtifactRef | None:
         if not sha256:
             return None
-        stored = self._store.exists(sha256) if self._store else False
+        stored = self.store.exists(sha256) if self.store else False
         return ArtifactRef(sha256=sha256, label=label, stored=stored)
 
     def anchor(self, anchor_id: str) -> dict[str, Any] | None:
@@ -233,10 +272,55 @@ class _Names:
             (anchor_id,),
         ).fetchone()
 
+    def quote(self, anchor_id: str) -> str | None:
+        """An anchor's quote with its pages, as a reader cites it."""
+        found = self.anchor(anchor_id)
+        if found is None:
+            return None
+        quote = found["quote"]
+        exact = quote.get("exact") if isinstance(quote, dict) else quote
+        pages = sorted({b.get("page") for b in found["boxes"] or [] if isinstance(b, dict)})
+        where = ", ".join(f"page {p}" for p in pages if p is not None)
+        return f'"{exact}"' + (f" ({where})" if where else "")
 
-def _criterion(payload: dict[str, Any]) -> str:
+    def verdict(self, verdict_id: str | None) -> dict[str, Any] | None:
+        if not verdict_id:
+            return None
+        return self._tx.execute(
+            "select criteria, attempts from verdict where id = %s", (verdict_id,)
+        ).fetchone()
+
+
+STATUS_WORDS = {"met": "met", "not_met": "not met", "unclear": "unclear"}
+OUTCOME_VERBS = {
+    "include": "included",
+    "exclude": "excluded",
+    "unclear": "marked as unclear",
+    "insufficient_information": "marked as insufficient information",
+}
+RELATIONS = {
+    "same_record": "the same record",
+    "same_report": "the same report",
+    "same_study": "the same study",
+    "report": "one report",
+    "study": "one study",
+}
+CONFLICT_KINDS = {
+    "human_disagreement": "the screeners disagree",
+    "exclusion_reason": "the screeners exclude on different criteria",
+    "audit_disagreement": "the auditor disagrees with the screeners",
+}
+RESCREEN_REASONS = {
+    "ai_include": "the AI found no failing criterion in a record both screeners excluded",
+    "ai_disagreement": "the AI disagrees with the one screener",
+}
+
+
+def _outcome(payload: dict[str, Any]) -> str:
+    outcome = str(payload.get("outcome"))
+    verb = OUTCOME_VERBS.get(outcome, outcome.replace("_", " "))
     reason = payload.get("reason_criterion_id")
-    return f" on {reason}" if reason else ""
+    return f"{verb} the record" + (f" on {reason}" if reason else "")
 
 
 def _seconds(start: str | None, end: str | None) -> str | None:
@@ -246,94 +330,157 @@ def _seconds(start: str | None, end: str | None) -> str | None:
     return f"{delta.total_seconds():g} s"
 
 
+def _counts(statuses: dict[str, Any] | None) -> str | None:
+    if not statuses:
+        return None
+    return ", ".join(f"{n} {status}" for status, n in sorted(statuses.items()))
+
+
+def _hashed_fields(e: AuditEvent) -> dict[str, Any]:
+    """The fields the event hash covers, as `kittum.ledger.event_hash` hashes them."""
+    return {
+        "project_id": str(e.project_id),
+        "seq": e.seq,
+        "event_id": str(e.event_id),
+        "type": e.type,
+        "schema_version": e.schema_version,
+        "actor_id": str(e.actor_id),
+        "recorded_at": e.recorded_at.astimezone(UTC).isoformat(),
+        "payload_hash": e.payload_hash,
+        "prev_hash": e.prev_hash,
+    }
+
+
 def _describe(
-    e: AuditEvent, names: _Names, ref: str | None, raw_hashes: Iterable[str] = ()
+    e: AuditEvent,
+    names: _Names,
+    ref: str | None,
+    raw_hashes: Iterable[str] = (),
 ) -> TracedEvent:
-    """What an event means, in a sentence, with the facts and artifacts worth showing."""
+    """What an event means, in a sentence that names who did what, with the facts and artifacts
+    worth showing and the model calls behind an AI step."""
     p = e.payload
     stage_id = p.get("stage_id")
     stage = p.get("stage") or (
         names.stages.get(str(stage_id), (None, None))[0] if stage_id else None
     )
+    who = names.actor(e.actor_id)
     facts: list[tuple[str, Any]] = []
     artifacts: list[ArtifactRef | None] = []
+    calls: list[ModelCall] = []
     kind: TraceKind = "project"
     summary = e.type
     t = e.type
     if t == "search.executed":
         kind = "search"
-        summary = f"Search run on {p.get('platform') or p.get('source')}: {p.get('retrieved_count')} records retrieved"
+        where = p.get("platform") or p.get("source")
+        summary = f"{who} searched {where} and retrieved {p.get('retrieved_count')} records"
         facts += [
             ("Source", p.get("source")),
-            ("Strategy", p.get("strategy")),
-            ("Run", f"{p.get('started_at')} to {p.get('ended_at')}"),
-            ("Reported, retrieved", f"{p.get('reported_count')}, {p.get('retrieved_count')}"),
+            ("Query", p.get("strategy")),
+            ("Started", p.get("started_at")),
+            ("Finished", p.get("ended_at")),
+            ("Records the source reported", p.get("reported_count")),
+            ("Records retrieved", p.get("retrieved_count")),
         ]
         own = set(raw_hashes)
         for h in p.get("raw_artifact_hashes", []):
-            label = "Raw response this record was read from" if h in own else "Raw response"
+            label = "Raw response this record came from" if h in own else "Raw response"
             artifacts.append(names.artifact(h, label))
     elif t == "corpus.ingested":
         kind = "identity"
         summary = (
-            f"Deduplicated {p.get('occurrences')} search results into identity revision"
-            f" {str(p.get('identity_revision_id'))[:8]}, {p.get('proposals')} link proposals"
+            f"{who} built the corpus from {p.get('occurrences')} search results and Kittum"
+            f" proposed {p.get('proposals')} links between them"
         )
+        facts.append(("Identity revision", p.get("identity_revision_id")))
     elif t in ("corpus.confirmed", "corpus.merged", "corpus.split"):
         kind = "identity"
-        verb = {"corpus.confirmed": "confirmed", "corpus.merged": "merged by hand"}.get(t, "split")
-        relation = str(p.get("relation") or p.get("level") or "").replace("_", " ")
-        summary = f"{len(p.get('occurrence_ids', []))} search results {verb} as the {relation}"
+        verb = {"corpus.confirmed": "confirmed", "corpus.merged": "merged"}.get(t, "split")
+        relation = str(p.get("relation") or p.get("level") or "")
+        n = len(p.get("occurrence_ids", []))
+        summary = f"{who} {verb} {n} search results as {RELATIONS.get(relation, relation)}"
         facts += [
             ("Reason", p.get("reason")),
             ("Identity revision", p.get("revision_id")),
-            ("Previous revision", p.get("parent_revision_id")),
+            ("Revision before", p.get("parent_revision_id")),
         ]
     elif t == "screening.stage_opened":
         kind = "stage"
         summary = (
-            f"{STAGE_LABELS.get(str(stage), stage)} screening opened for {p.get('scope_id')},"
-            f" {p.get('mode')}, AI reveal {str(p.get('reveal')).replace('_', ' ')}"
+            f"{who} opened {STAGE_LABELS.get(str(stage), stage)} screening for scope"
+            f" {p.get('scope_id')}"
         )
-        facts += [("Records", p.get("records"))]
+        facts += [
+            ("Mode", p.get("mode")),
+            ("AI reveal", str(p.get("reveal")).replace("_", " ")),
+            ("Records", p.get("records")),
+        ]
         if ref is not None and ref in p.get("audit_refs", []):
-            facts.append(("Audit sample", "This record is in the auditor's random sample"))
+            facts.append(("Audit sample", "Kittum drew this record for the audit sample"))
     elif t == "screening.judging_requested":
         kind = "ai"
-        summary = f"AI judge asked to read {p.get('items')} items with {p.get('judge_config_id')}"
+        summary = f"{who} asked the AI judge to read {p.get('items')} records"
+        facts.append(("Judge configuration", p.get("judge_config_id")))
     elif t == "judge.verdict_recorded":
         kind = "ai"
-        excludes = "would exclude" if p.get("excludes") else "would not exclude"
-        summary = f"AI judge read it and {excludes}; screeners do not see this before they decide"
         statuses = p.get("statuses") or {}
+        failing = [c for c, s in statuses.items() if s == "not_met"]
+        if p.get("excludes"):
+            summary = f"The AI judge proposed to exclude the record on {', '.join(failing)}"
+        elif failing:
+            summary = (
+                f"The AI judge answered not met on {', '.join(failing)}, but Kittum did not find"
+                " its quote in the record, so it proposes no exclusion"
+            )
+        else:
+            summary = "The AI judge found no criterion that the record fails"
+        verdict = names.verdict(p.get("verdict_id"))
+        for c in (verdict or {}).get("criteria") or []:
+            status = STATUS_WORDS.get(c.get("status"), c.get("status"))
+            parts = [str(status).capitalize() + "."]
+            if c.get("rationale"):
+                parts.append(str(c["rationale"]))
+            if c.get("quote"):
+                parts.append(f'Quote "{c["quote"]}".')
+            facts.append((names.criterion(c.get("criterion_id")) or "Criterion", " ".join(parts)))
+        if not verdict:
+            facts += [
+                (names.criterion(c) or c, STATUS_WORDS.get(s, s)) for c, s in statuses.items()
+            ]
         facts += [
-            ("Criteria", ", ".join(f"{k} {v.replace('_', ' ')}" for k, v in statuses.items())),
             ("Model", p.get("model_identity")),
-            ("Judge", p.get("judge_config_id")),
+            ("Judge configuration", p.get("judge_config_id")),
             ("Flags", ", ".join(p.get("flags", [])) or None),
+            ("Shown to screeners", "Only after their own decision, as the stage's reveal allows"),
         ]
-        artifacts += [
-            names.artifact(p.get("raw_output_hash"), "AI raw output"),
-            names.artifact(p.get("rendered_prompt_hash"), "Rendered prompt"),
-        ]
+        if verdict:
+            calls = judge_calls(verdict["attempts"], names.store)
+        artifacts.append(names.artifact(p.get("raw_output_hash"), "Answer text"))
     elif t == "screening.ai_read":
         kind = "ai"
         readings = [r for r in p.get("readings", []) if ref is None or r.get("item_ref") == ref]
-        summary = f"AI reading filed with the stage for {len(p.get('readings', []))} items, held back from screeners"
+        summary = (
+            f"Kittum filed the AI's readings of {len(p.get('readings', []))} records with the"
+            " stage. Screeners see a reading only after their own decision"
+        )
         for r in readings[:1] if ref is not None else []:
-            facts.append(("Verified reading", "excludes" if r.get("excludes") else "includes"))
-            artifacts.append(names.artifact(r.get("raw_output_hash"), "AI raw output"))
+            facts.append(
+                (
+                    "Reading of this record",
+                    "Proposes to exclude" if r.get("excludes") else "No exclusion proposed",
+                )
+            )
+            artifacts.append(names.artifact(r.get("raw_output_hash"), "Answer text"))
     elif t == "screening.decided":
         kind = "decision"
         role = names.roles.get(str(p.get("assignment_id")), "screener")
-        who = names.actor(e.actor_id)
         phase = p.get("phase")
-        outcome = str(p.get("outcome")).replace("_", " ")
         timing = p.get("timing") or {}
         if phase == "provisional":
-            summary = f"{who} decided {outcome}{_criterion(p)}, blind"
+            summary = f"{who} {_outcome(p)}, blind"
         else:
-            summary = f"{who} decided {outcome}{_criterion(p)}"
+            summary = f"{who} {_outcome(p)}"
             if timing.get("reveal_shown_at"):
                 summary += ", after seeing the AI's reading"
         if role == "auditor":
@@ -348,51 +495,68 @@ def _describe(
                 else " (the auditor)"
             )
         facts += [
-            ("Phase", phase),
+            ("Criterion", names.criterion(p.get("reason_criterion_id"))),
+            ("Decision", "Blind, before any AI output" if phase == "provisional" else "Final"),
             ("Role", role),
-            ("Shown, decided", f"{timing.get('shown_at')}, {timing.get('decided_at')}"),
+            ("Comment", p.get("comment")),
+        ]
+        for anchor_id in p.get("evidence_anchor_ids") or []:
+            facts.append(("Evidence", names.quote(str(anchor_id)) or anchor_id))
+        for c in p.get("criteria") or []:
+            status = c.get("status")
+            if status:
+                facts.append(
+                    (
+                        names.criterion(c.get("criterion_id")) or "Criterion",
+                        STATUS_WORDS.get(status, status),
+                    )
+                )
+        facts += [
+            ("Record shown at", timing.get("shown_at")),
+            ("Decided at", timing.get("decided_at")),
             ("Time to decide", _seconds(timing.get("shown_at"), timing.get("decided_at"))),
         ]
         reveal = p.get("reveal")
         if reveal:
+            status = STATUS_WORDS.get(reveal.get("status"), reveal.get("status"))
+            quote = f' Quote "{reveal["quote"]}".' if reveal.get("quote") else ""
             facts.append(
                 (
                     "AI reading shown after this decision",
-                    f"{reveal.get('criterion_id')} {str(reveal.get('status')).replace('_', ' ')}:"
-                    f" {reveal.get('rationale')}",
+                    f"{reveal.get('criterion_id')} {status}. {reveal.get('rationale')}{quote}",
                 )
             )
         if timing.get("reveal_shown_at"):
             facts.append(("AI reading shown at", timing.get("reveal_shown_at")))
-        if p.get("evidence_anchor_ids"):
-            facts.append(("Evidence anchors", ", ".join(p["evidence_anchor_ids"])))
     elif t == "screening.undone":
         kind = "decision"
-        summary = f"{names.actor(e.actor_id)} took back a decision"
+        summary = f"{who} took back their decision"
     elif t == "screening.ai_disagreement_rescreen":
         kind = "conflict"
+        reason = str(p.get("reason"))
         summary = (
-            f"Sent to {names.actor(p.get('auditor_id'))} for a blind extra screen:"
-            f" the AI disagreed with the screeners ({str(p.get('reason')).replace('_', ' ')})"
+            f"Kittum sent the record to {names.actor(p.get('auditor_id'))} for a blind extra"
+            f" screen because {RESCREEN_REASONS.get(reason, reason.replace('_', ' '))}"
         )
     elif t.startswith("screening.conflict_"):
         kind = "conflict"
-        what = t.removeprefix("screening.conflict_")
-        kinds = ", ".join(k.replace("_", " ") for k in p.get("kinds", []))
-        summary = f"Conflict {what}" + (f": {kinds}" if kinds else "")
+        what = {"opened": "opened", "updated": "updated", "withdrawn": "withdrew"}.get(
+            t.removeprefix("screening.conflict_"), t.removeprefix("screening.conflict_")
+        )
+        kinds = [CONFLICT_KINDS.get(k, k.replace("_", " ")) for k in p.get("kinds", [])]
+        summary = f"Kittum {what} a conflict" + (f" because {' and '.join(kinds)}" if kinds else "")
     elif t == "screening.adjudicated":
         kind = "adjudication"
         adopted = (
-            f"adopting {names.actor(p.get('adopted_reviewer_id'))}'s decision"
+            f", adopting {names.actor(p.get('adopted_reviewer_id'))}'s decision"
             if p.get("adopted_reviewer_id")
-            else "with an own decision"
+            else ", with a decision of their own"
         )
-        summary = (
-            f"{names.actor(e.actor_id)} adjudicated: {p.get('outcome')}{_criterion(p)}, {adopted}"
-        )
+        summary = f"{who} adjudicated and {_outcome(p)}{adopted}"
+        facts.append(("Criterion", names.criterion(p.get("reason_criterion_id"))))
     elif t == "project.full_text_attached" and p.get("acquisition_id"):
         kind = "full_text"
-        summary = f"Full text attached, fetched from {p.get('source')}"
+        summary = f"Kittum attached the full text it fetched from {p.get('source')}"
         facts += [
             ("Licence", p.get("licence") or "Not stated"),
             ("URL", p.get("url")),
@@ -401,25 +565,25 @@ def _describe(
         artifacts.append(names.artifact(p.get("artifact_hash"), "Full text PDF"))
     elif t == "project.full_text_attached":
         kind = "full_text"
-        summary = f"Full text uploaded by {names.actor(e.actor_id)}"
+        summary = f"{who} uploaded the full text"
         facts += [
-            ("Source", "Upload"),
             ("Licence", p.get("licence") or "Not stated"),
             ("Document", p.get("document_id")),
         ]
         artifacts.append(names.artifact(p.get("artifact_hash"), "Full text PDF"))
     elif t == "document.acquired":
         kind = "full_text"
-        summary = f"Full text acquired from {p.get('source')}"
+        summary = f"Kittum fetched the full text from {p.get('source')}"
         facts += [("Licence", p.get("licence") or "Not stated"), ("URL", p.get("url"))]
         artifacts.append(names.artifact(p.get("artifact_hash"), "Full text PDF"))
     elif t == "document.acquisition_failed":
         kind = "full_text"
-        summary = "Full text not acquired"
+        summary = "Kittum could not get the full text"
     elif t == "document.acquisition_attempted":
         kind = "full_text"
         attempt = p.get("attempt") or {}
-        summary = f"Full text not fetched from {attempt.get('source')}: {attempt.get('outcome')}"
+        outcome = str(attempt.get("outcome") or "").replace("_", " ")
+        summary = f"Kittum could not get the full text from {attempt.get('source')} ({outcome})"
         facts += [
             ("URL", attempt.get("url")),
             ("HTTP status", attempt.get("status")),
@@ -428,62 +592,95 @@ def _describe(
         ]
     elif t == "retrieval.open_access_requested":
         kind = "full_text"
-        summary = f"Open-access full texts requested for {len(p.get('report_ids', []))} reports"
+        summary = (
+            f"{who} asked Kittum to look for open-access full texts of"
+            f" {len(p.get('report_ids', []))} reports"
+        )
     elif t == "retrieval.no_open_access_location":
         kind = "full_text"
-        summary = "No open-access location known"
+        summary = "Kittum found no open-access copy of the full text"
     elif t == "extraction.run_requested":
         kind = "extraction"
-        path = f"the LLM path with {p['model_id']}" if p.get("model_id") else "the Janus path"
-        summary = f"Extraction requested on {path}"
+        path = (
+            f"the Janus path and the LLM path with {p['model_id']}"
+            if p.get("model_id")
+            else "the Janus path"
+        )
+        summary = f"{who} asked for an extraction with {path}"
         facts += [("Schema", p.get("schema_hash")), ("Document", p.get("document_id"))]
     elif t == "extraction.proposals_recorded":
         kind = "extraction"
-        summary = "Extraction proposals recorded"
+        summary = "Kittum recorded what both extraction paths proposed"
+        statuses = p.get("statuses") or {}
         facts += [
-            ("Janus", p.get("janus_version")),
+            ("Janus path", _counts(statuses.get("janus"))),
+            ("LLM path", _counts(statuses.get("llm"))),
+            ("Janus version", p.get("janus_version")),
             ("Model", p.get("model_identity")),
         ]
+        calls = extraction_calls(transcript(names.store, p.get("transcript_hash")), names.store)
         artifacts += [
-            names.artifact(p.get("output_hash"), "Extraction output"),
-            names.artifact(p.get("transcript_hash"), "Model transcript"),
+            names.artifact(p.get("output_hash"), "Proposals"),
+            names.artifact(p.get("transcript_hash"), "LLM path transcript"),
         ]
     elif t == "extraction.value_accepted":
         kind = "extraction"
         key = p.get("key") or {}
-        label = " ".join(str(v) for v in key.values() if v) or str(p.get("field_id"))
+        label = " ".join(
+            str(key[k]) for k in ("endpoint", "arm", "timepoint", "quantity") if key.get(k)
+        ) or str(p.get("field_id"))
         unit = f" {p['unit']}" if p.get("unit") else ""
-        how = "edited" if p.get("edited") else f"from the {p.get('path')} path"
-        summary = f"{names.actor(e.actor_id)} accepted {label}: {p.get('value')}{unit}, {how}"
+        how = "after editing it" if p.get("edited") else f"from the {p.get('path')} path"
+        summary = f"{who} accepted {label} = {p.get('value')}{unit}, {how}"
         anchor = names.anchor(str(p.get("anchor_id"))) if p.get("anchor_id") else None
-        facts.append(("Anchor", p.get("anchor_id")))
         if anchor:
             quote = anchor["quote"]
-            exact = quote.get("exact") if isinstance(quote, dict) else quote
             pages = sorted({b.get("page") for b in anchor["boxes"] if isinstance(b, dict)})
             facts += [
-                ("Quote", exact),
+                ("Quote", quote.get("exact") if isinstance(quote, dict) else quote),
                 ("Page", ", ".join(str(n) for n in pages if n is not None) or None),
             ]
         facts += [
-            ("Source on screen", f"{p.get('source_viewed_ms')} ms"),
-            ("Failed checks", ", ".join(p.get("failed_checks", [])) or None),
+            ("Anchor", p.get("anchor_id")),
+            ("Source on screen for", f"{p.get('source_viewed_ms')} ms"),
+            ("Checks that failed", ", ".join(p.get("failed_checks", [])) or None),
         ]
     elif t == "report.rendered":
         kind = "report"
-        summary = f"Report rendered: {p.get('target')} through seq {p.get('cutoff_seq')}"
-        artifacts.append(names.artifact(p.get("index_hash"), "Report index"))
+        summary = f"{who} rendered the {p.get('target')} report at event {p.get('cutoff_seq')}"
+        artifacts.append(names.artifact(p.get("index_hash"), "List of rendered files"))
     elif t == "ledger.bundle_sealed":
         kind = "ledger"
-        summary = f"Handover bundle sealed through seq {p.get('cutoff_seq')}"
-        facts.append(("Manifest", p.get("manifest_hash")))
+        summary = f"{who} sealed the handover bundle at event {p.get('cutoff_seq')}"
+        facts.append(("Manifest SHA-256", p.get("manifest_hash")))
     elif t == "protocol.published":
         kind = "project"
-        summary = f"Protocol {p.get('version_label')} published"
+        summary = f"{who} published protocol version {p.get('version_label')}"
         facts.append(("Content hash", p.get("content_hash")))
+    elif t == "protocol.assist":
+        kind = "ai"
+        task = (
+            "draft the protocol"
+            if p.get("purpose") == "draft"
+            else f"improve {p.get('part') or 'a part of the protocol'}"
+        )
+        result = {
+            "revision": "and accepted the answer as a new revision to review",
+            "unchanged": "and the model suggested no change",
+            "failed": "but no answer passed Kittum's checks",
+        }.get(str(p.get("outcome")), "")
+        summary = f"{who} asked the assistant to {task} {result}".strip()
+        facts += [
+            ("Model", p.get("model_identity") or p.get("recipe_id")),
+            ("Endpoint", p.get("endpoint")),
+            ("Prompt version", p.get("prompt_version")),
+            ("Attempts", len(p.get("attempts", []))),
+        ]
+        calls = assist_calls(p, names.store)
     elif t == "project.member_added":
-        summary = f"{p.get('display_name')} added as {', '.join(p.get('roles', []))}"
+        summary = f"{who} added {p.get('display_name')} as {', '.join(p.get('roles', []))}"
     actor, actor_kind = names.actors.get(e.actor_id, (str(e.actor_id), ""))
+    hashed = _hashed_fields(e)
     return TracedEvent(
         seq=e.seq,
         event_id=e.event_id,
@@ -496,11 +693,26 @@ def _describe(
         payload_hash=e.payload_hash,
         prev_hash=e.prev_hash,
         event_hash=e.event_hash,
+        payload_hash_matches=payload_hash(p) == e.payload_hash,
+        event_hash_matches=event_hash(
+            project_id=e.project_id,
+            seq=e.seq,
+            event_id=e.event_id,
+            type=e.type,
+            schema_version=e.schema_version,
+            actor_id=e.actor_id,
+            recorded_at=e.recorded_at,
+            payload_hash=e.payload_hash,
+            prev_hash=e.prev_hash,
+        )
+        == e.event_hash,
+        hashed_fields=hashed,
         kind=kind,
         stage=str(stage) if stage else None,
         summary=summary,
-        facts=tuple(Fact(label=k, value=str(v)) for k, v in facts if v not in (None, "")),
+        facts=tuple(Fact(label=k, value=str(v)) for k, v in facts if k and v not in (None, "")),
         artifacts=tuple(a for a in artifacts if a is not None),
+        model_calls=tuple(calls),
         payload=p,
     )
 
@@ -771,8 +983,58 @@ def events(
     )
 
 
-def referenced(tx: Tx, project_id: Id, sha256: str) -> bool:
-    """Whether a ledger event of the project names the artifact: only those may be fetched."""
+class ArtifactCheck(Record):
+    """An artifact read back from the store and hashed again."""
+
+    sha256: Sha256
+    stored: bool
+    bytes: int | None
+    recomputed: Sha256 | None
+    matches: bool
+    media_type: str | None
+
+
+def check_artifact(
+    tx: Tx, project_id: Id, sha256: str, store: ArtifactStore | None
+) -> ArtifactCheck:
+    """Read an artifact the project names and hash its bytes again, to show that what the
+    ledger points at is what it pointed at when it was recorded."""
+    if not referenced(tx, project_id, sha256, store):
+        raise NotFoundError(f"no event of the project names {sha256}")
+    if store is None or not store.exists(sha256):
+        return ArtifactCheck(
+            sha256=sha256, stored=False, bytes=None, recomputed=None, matches=False, media_type=None
+        )
+    data = store.get(sha256)
+    recomputed = sha256_hex(data)
+    return ArtifactCheck(
+        sha256=sha256,
+        stored=True,
+        bytes=len(data),
+        recomputed=recomputed,
+        matches=recomputed == sha256,
+        media_type=media_type(data),
+    )
+
+
+def media_type(data: bytes) -> str:
+    head = data[:64].lstrip()
+    if head.startswith(b"%PDF-"):
+        return "application/pdf"
+    if head.startswith((b"{", b"[")):
+        return "application/json"
+    if head.startswith(b"<"):
+        return "application/xml"
+    try:
+        data.decode("utf-8")
+    except UnicodeDecodeError:
+        return "application/octet-stream"
+    return "text/plain; charset=utf-8"
+
+
+def referenced(tx: Tx, project_id: Id, sha256: str, store: ArtifactStore | None = None) -> bool:
+    """Whether the project names the artifact: a ledger event, a search result's raw response,
+    or a model call behind an AI step. Only those may be fetched."""
     row = tx.execute(
         "select 1 from audit_event where project_id = %s and strpos(payload::text, %s) > 0 limit 1",
         (project_id, f'"{sha256}"'),
@@ -783,7 +1045,7 @@ def referenced(tx: Tx, project_id: Id, sha256: str) -> bool:
         "select 1 from source_occurrence where project_id = %s and raw_hash = %s limit 1",
         (project_id, sha256),
     ).fetchone()
-    return row is not None
+    return row is not None or named_by_calls(tx, project_id, sha256, store)
 
 
 # Cutoffs by name, and the review as of one.
@@ -809,7 +1071,7 @@ def milestones(tx: Tx, project_id: Id, *, ledger: Ledger | None = None) -> tuple
             case "protocol.published":
                 add("protocol", f"Protocol {p.get('version_label')} published")
             case "search.executed":
-                add("search", f"Search run on {p.get('platform') or p.get('source')}")
+                add("search", f"Search of {p.get('platform') or p.get('source')}")
             case "corpus.ingested":
                 add("corpus", "Corpus built from the searches")
             case "screening.stage_opened":
@@ -830,9 +1092,9 @@ def milestones(tx: Tx, project_id: Id, *, ledger: Ledger | None = None) -> tuple
                 if stage_id:
                     last_human[stage_id] = e
             case "ledger.bundle_sealed":
-                add("seal", f"Handover bundle sealed through seq {p.get('cutoff_seq')}")
+                add("seal", f"Handover bundle sealed at event {p.get('cutoff_seq')}")
             case "report.rendered":
-                add("report", f"Report rendered: {p.get('target')}")
+                add("report", f"{p.get('target')} report rendered")
             case _:
                 pass
     for stage_id, last in last_human.items():
@@ -855,11 +1117,18 @@ def milestones(tx: Tx, project_id: Id, *, ledger: Ledger | None = None) -> tuple
     return tuple(sorted(found, key=lambda m: (m.seq, m.kind)))
 
 
-def as_of(tx: Tx, project_id: Id, cutoff_seq: int | None, *, ledger: Ledger | None = None) -> AsOf:
+def as_of(
+    tx: Tx,
+    project_id: Id,
+    cutoff_seq: int | None,
+    *,
+    ledger: Ledger | None = None,
+    store: ArtifactStore | None = None,
+) -> AsOf:
     """The PRISMA flows and the AI disclosure as the ledger stood at `cutoff_seq` (default: the
     head), computed as `render` would, but stored nowhere."""
     ledger = ledger or PostgresLedger()
-    review = load_review(tx, project_id, cutoff_seq=cutoff_seq, ledger=ledger)
+    review = load_review(tx, project_id, cutoff_seq=cutoff_seq, ledger=ledger, store=store)
     found = flows(review)
     # Before the first protocol is published there is nothing to disclose.
     record = disclosure(review) if review.protocol is not None else {}

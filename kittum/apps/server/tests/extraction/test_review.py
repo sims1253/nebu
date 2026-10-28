@@ -4,6 +4,7 @@ import json
 import sqlite3
 from uuid import UUID
 
+import kittum.report  # noqa: F401 - registers the bundle checks `kittum verify` runs
 from kittum.core import new_id
 from kittum.extraction import (
     PROPOSALS_RECORDED,
@@ -220,7 +221,13 @@ def test_a_run_reconciles_both_paths_and_humans_accept_each_value(env, tmp_path)
         clock=env.clock,
     )
     for bundle, values in ((early, ["52"]), (late, ["52", "6.5"])):
-        assert verify_bundle(bundle.path, trusted_key=key.verify_key).ok
+        # A ledger-level seal carries no reports, so `kittum verify` asks for the extracted
+        # values the ledger accepted; `seal_bundle` writes them (tests/report/test_extracted.py).
+        assert verify_bundle(bundle.path, trusted_key=key.verify_key).problems == tuple(
+            f"reports/extraction/extracted_values.{suffix} is missing, though the ledger"
+            " accepted extracted values"
+            for suffix in ("json", "csv")
+        )
         db = sqlite3.connect(bundle.path / "kittum.sqlite")
         assert sorted(v for (v,) in db.execute("select value from extraction_acceptance")) == values
         assert db.execute("select count(*) from extraction_field").fetchone() == (10,)

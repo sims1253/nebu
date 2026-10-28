@@ -1,5 +1,6 @@
 """The extraction tables in a handover bundle, as of the bundle's cutoff."""
 
+import json
 from typing import TYPE_CHECKING
 
 from kittum.ledger import register_exporter
@@ -10,9 +11,13 @@ if TYPE_CHECKING:
     from kittum.ledger import BundleWriter
 
 
+NOT_STORED = "not in the artifact store when the bundle was sealed"
+
+
 class ExtractionExporter:
     """Runs requested, fields and proposals recorded, and acceptances made by `cutoff_seq`, with
-    the anchors they point at and the artifacts (proposal sets, agent transcripts) they name."""
+    the anchors they point at and the artifacts they name: proposal sets, agent transcripts, and
+    the request and response of every model call a transcript lists."""
 
     name = "extraction"
 
@@ -77,6 +82,19 @@ class ExtractionExporter:
             for column in ("transcript_hash", "output_hash"):
                 if run[column]:
                     bundle.artifact(run[column], media_type="application/json")
+            # The LLM path's calls: the exact request and response of each, as the transcript
+            # names them. One the store lacks is listed by hash with the reason.
+            data = bundle.read(run["transcript_hash"]) if run["transcript_hash"] else None
+            for call in json.loads(data).get("calls", []) if data else []:
+                for h in (call.get("raw_request_hash"), call.get("raw_response_hash")):
+                    if not h:
+                        continue
+                    try:
+                        bundle.artifact(h, media_type="application/json")
+                    except ValueError:
+                        bundle.artifact(
+                            h, media_type="application/json", withheld_reason=NOT_STORED
+                        )
 
 
 EXPORTER = register_exporter(ExtractionExporter())

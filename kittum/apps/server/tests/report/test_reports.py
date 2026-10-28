@@ -14,7 +14,7 @@ import yaml
 
 from kittum.core import new_id
 from kittum.corpus import confirm, get_counts, ingest, list_proposals
-from kittum.judge import VERIFIER_LIMITS
+from kittum.judge import USER_TEMPLATE, VERIFIER_LIMITS
 from kittum.models import weights_hash
 from kittum.report import flow, load_review, one_line, render, render_files
 from kittum.screening import Decision
@@ -134,7 +134,6 @@ def test_prisma_flow_reconciles_by_hand_with_screening_and_the_corpus(
     # The AI removes no record; what it took part in is counted beside the human counts. It
     # proposed two of the exclusions on a verified quote: the colitis trial's non-smokers and the
     # cohort study's design.
-    assert f.ai_title_abstract.marked_ineligible_by_automation == 0
     assert f.members["title_abstract:excluded_with_ai_proposal"] == refs(world, "colitis", "cohort")
     assert f.members["title_abstract:excluded_after_ai_rescreen"] == refs(
         world, "glpg", "predictors"
@@ -167,6 +166,23 @@ def test_prisma_flow_reconciles_by_hand_with_screening_and_the_corpus(
         "Duplicate records removed: n = 2",
     ):
         assert line in texts, line
+    # Each source sits under its PRISMA 2020 category: all three are databases here.
+    at = texts.index
+    assert at("Databases: n = 35") < at("  MEDLINE: n = 24") < at("Registers: n = 0")
+    assert at("Databases: n = 35") < at("  Embase: n = 5") < at("Other sources: n = 0")
+    # No box claims what cannot happen: the AI never marks a record ineligible on its own.
+    assert not any("automation" in (t or "") for t in texts)
+    # Legible at the width a report page or the Reports screen gives it: shown 870 px wide, the
+    # smallest text is still 14 px.
+    width = float(svg.get("width") or 0)
+    smallest = min(
+        float(t.get("font-size") or 0) for t in svg.iter("{http://www.w3.org/2000/svg}text")
+    )
+    assert smallest * 870 / width >= 14, (smallest, width)
+    # Every line fits its box, even in a monospaced fallback font (0.6 em a character).
+    _title, *lines = texts
+    boxes = [t for t in lines if t not in ("Identification", "Screening", "Included")]
+    assert max(len(t or "") * 16 * 0.6 for t in boxes) <= 420 - 2 * 12
 
     # The other scope was never screened, and its checks say so.
     failing = {c.name for c in prisma(review, "combination-vs-single").checks if not c.holds}
@@ -532,16 +548,59 @@ def test_ai_disclosure_names_the_models_both_readings_and_the_extra_screens(
     assert ta["rescreens"] == {"triggered": 2, "pending": 0, "upheld": 1, "adjudicated": 1}
     assert {c["result"] for c in ft["rescreen_cases"]} == {"upheld"}
     assert ft["rescreens"]["triggered"] == 2
-    assert ta["excluded_by_ai_alone"] == ft["excluded_by_ai_alone"] == 0
+    # Nothing that cannot happen is counted: the AI never excludes on its own.
+    assert "excluded_by_ai_alone" not in ta
 
+    # Agreement covers every record both sides decided, with its 2x2 table.
     text = files["ai_disclosure.md"].decode()
-    assert "not the standard" in text and RECIPE.repository in text
-    assert "| nrt-vs-control | title_abstract | 2 | 1 | 1 | 0 |" in text
+    assert "AI alone" not in text and "by AI alone" not in text
+    for stage in (ta, ft):
+        for a in stage["agreement"]:
+            cells = a["table"]
+            assert sum(cells.values()) == a["items"]
+            assert a["agreed"] == cells["include_include"] + cells["exclude_exclude"]
     human = next(a for a in ta["agreement"] if a["kind"] == "human_human")
-    assert f"Reviewer 1 and Reviewer 2 | 33 | {human['kappa']:.2f} |" in text
-    assert "(model's own reading)" in text and "(verified reading)" in text
+    assert (
+        f"Reviewer 1 and Reviewer 2 agreed on {human['agreed']} of {human['items']} records" in text
+    )
+    assert f"Cohen's kappa is {human['kappa']:.2f}" in text
+    assert f"Both cover all {human['items']} records, agreed or not." in text
+    own = next(
+        a for a in ta["agreement"] if a["kind"] == "human_ai" and a["raters"][0] == "Reviewer 1"
+    )
+    cells = own["table"]
+    assert "|  | the AI's own reading: include | the AI's own reading: exclude |" in text
+    assert (
+        f"| Reviewer 1: exclude | {cells['exclude_include']} | {cells['exclude_exclude']} |" in text
+    )
+    assert "the AI's own reading" in text and "the AI's checked reading" in text
+    assert "| nrt-vs-control | Title and abstract | 2 | 1 | 1 | 0 |" in text
+    assert RECIPE.repository in text
     for limit in VERIFIER_LIMITS:
         assert limit in text
+
+    # The prompts, read back from the stored requests: one card per stage the judge read.
+    with world.db.transaction() as tx:
+        review = load_review(tx, world.project_id, store=world.artifacts)
+    stored = {f.path: f.data for f in render_files(review, "ai_disclosure")}
+    d = json.loads(stored["ai_disclosure.json"])
+    cards = {card["label"]: card for card in d["prompts"]}
+    assert set(cards) == {f"Title and abstract, scope {NRT_SCOPE}", f"Full text, scope {NRT_SCOPE}"}
+    card = cards[f"Title and abstract, scope {NRT_SCOPE}"]
+    assert card["role"] == "judge" and card["request_form"] == "built_request"
+    assert card["system_prompt"].startswith("You screen records for a systematic literature")
+    assert "This is title and abstract screening." in card["system_prompt"]
+    assert card["user_prompt_template"] == USER_TEMPLATE
+    assert card["first_user_prompt"].startswith("Stage: title and abstract screening")
+    criteria = {c.id for c in world.criteria("title_abstract")}
+    assert set(card["json_schema"]["properties"]) == criteria
+    assert card["request_settings"]["temperature"] == 0.0
+    assert card["model"]["revision"] == RECIPE.revision
+    assert card["calls"] >= 33
+    md = stored["ai_disclosure.md"].decode()
+    assert "## 6. Prompts" in md
+    assert card["system_prompt"] in md and USER_TEMPLATE in md
+    assert json.dumps(card["json_schema"], indent=2) in md
 
 
 # Report computes these from the replayed rows instead of calling screening, so they stay exact at

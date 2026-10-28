@@ -11,6 +11,7 @@ import type {
   AdjudicationResult,
   Anchor,
   AsOf,
+  ArtifactCheck,
   ChainAudit,
   CheckpointStatus,
   EventPage,
@@ -335,8 +336,10 @@ export interface Workbench {
   readonly milestones: (caller: Caller) => Call<ReadonlyArray<Milestone>>;
   /** The PRISMA flows and the AI disclosure at a cutoff (the head when null). */
   readonly asOf: (request: Caller & { readonly cutoffSeq: number | null }) => Call<AsOf>;
-  /** An artifact a ledger event names: a raw response, a full text, a model's raw output. */
+  /** An artifact the project names: a raw response, a full text, a model call's request. */
   readonly auditArtifact: (request: Caller & { readonly sha256: string }) => Call<Uint8Array>;
+  /** The artifact read back from the store and hashed again by the server. */
+  readonly checkArtifact: (request: Caller & { readonly sha256: string }) => Call<ArtifactCheck>;
 
   // Extraction. The lead requests runs on reports with a full text (`fullTexts` names them); a
   // worker fills each run; a reviewer accepts each value after viewing its source.

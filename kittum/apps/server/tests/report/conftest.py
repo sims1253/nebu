@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from kittum.db import Database
+from tests.extraction.conftest import env  # noqa: F401 - extraction's project, for test_extracted
 from tests.report.support import capivasertib_review, nrt_review
 
 if TYPE_CHECKING:

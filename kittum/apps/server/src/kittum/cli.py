@@ -12,12 +12,15 @@ if TYPE_CHECKING:
 
 def _verify(bundle: Path, public_key: Path | None) -> int:
     """Check a handover bundle offline. Exit 0 if it verifies, 1 if not."""
+    import kittum.report  # noqa: F401 - registers the checks of the report files
     from kittum.ledger import VerifyKey, verify_bundle
 
     trusted = VerifyKey.from_pem(public_key.read_bytes()) if public_key else None
     report = verify_bundle(bundle, trusted_key=trusted)
     for problem in report.problems:
         print(f"FAIL {problem}")
+    for note in report.notes:
+        print(f"NOTE {note}")
     if report.key_id:
         pinned = "trusted" if report.key_pinned else "NOT PINNED, compare it with the sender's"
         print(f"key {report.key_id} ({pinned})")

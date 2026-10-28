@@ -70,8 +70,8 @@ def test_the_bundle_verifies_offline_and_carries_every_report(
 
     # The reports are the targets rendered at the cutoff, byte for byte.
     with world.db.transaction() as tx:
-        review = load_review(tx, world.project_id, cutoff_seq=seqs.full_text)
-    for target in ("prisma", "ris", "search_report", "ai_disclosure"):
+        review = load_review(tx, world.project_id, cutoff_seq=seqs.full_text, store=world.artifacts)
+    for target in ("prisma", "ris", "search_report", "ai_disclosure", "extraction"):
         for f in render_files(review, target):
             assert (sealed.path / "reports" / target / f.path).read_bytes() == f.data
     manifest = json.loads((sealed.path / "manifest.json").read_text())

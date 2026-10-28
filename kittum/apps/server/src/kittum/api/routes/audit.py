@@ -24,6 +24,7 @@ from kittum.ledger import (
     audit_chain,
 )
 from kittum.report import (
+    ArtifactCheck,
     AsOf,
     EventPage,
     Milestone,
@@ -31,7 +32,9 @@ from kittum.report import (
     RecordTrace,
     ReportRequestError,
     as_of,
+    check_artifact,
     events,
+    media_type,
     milestones,
     referenced,
     require_lead,
@@ -188,7 +191,7 @@ def review_as_of(
     empty). Computed, not stored: the Reports screen renders and keeps a report."""
     with _errors(), ctx.db.transaction() as tx:
         require_lead(tx, project_id, reviewer)
-        return as_of(tx, project_id, cutoff_seq, ledger=_ledger(ctx))
+        return as_of(tx, project_id, cutoff_seq, ledger=_ledger(ctx), store=ctx.artifacts)
 
 
 @router.get(
@@ -198,31 +201,25 @@ def review_as_of(
     responses={200: {"content": {"application/octet-stream": {}}}},
 )
 def download(project_id: Id, sha256: Sha256Path, reviewer: Reviewer, ctx: Context) -> Response:
-    """An artifact a ledger event of the project names: a raw search response, a full text, a
-    model's raw output, a rendered prompt. Nothing else by hash."""
+    """An artifact the project names: a raw search response, a full text, a model call's
+    request or response, a rendered prompt. Nothing else by hash."""
     with _errors(), ctx.db.transaction() as tx:
         require_lead(tx, project_id, reviewer)
-        known = referenced(tx, project_id, sha256)
+        known = referenced(tx, project_id, sha256, ctx.artifacts)
     if not known or not ctx.artifacts.exists(sha256):
         raise HTTPException(status_code=404, detail=f"no event of the project names {sha256}")
     data = ctx.artifacts.get(sha256)
     return Response(
         content=data,
-        media_type=_media_type(data),
+        media_type=media_type(data),
         headers={"Content-Disposition": f'inline; filename="{sha256}"'},
     )
 
 
-def _media_type(data: bytes) -> str:
-    head = data[:64].lstrip()
-    if head.startswith(b"%PDF-"):
-        return "application/pdf"
-    if head.startswith((b"{", b"[")):
-        return "application/json"
-    if head.startswith(b"<"):
-        return "application/xml"
-    try:
-        data.decode("utf-8")
-    except UnicodeDecodeError:
-        return "application/octet-stream"
-    return "text/plain; charset=utf-8"
+@router.get("/artifacts/{sha256}/check", operation_id="checkAuditArtifact")
+def check(project_id: Id, sha256: Sha256Path, reviewer: Reviewer, ctx: Context) -> ArtifactCheck:
+    """Read an artifact the project names from the store and hash it again: whether its bytes
+    still match the hash the ledger recorded."""
+    with _errors(), ctx.db.transaction() as tx:
+        require_lead(tx, project_id, reviewer)
+        return check_artifact(tx, project_id, sha256, ctx.artifacts)

@@ -50,6 +50,10 @@ export type SealedBundle = KittumApi.SealedBundle;
 // The audit trail: the ledger as the methods lead reads it.
 export type RecordTrace = KittumApi.RecordTrace;
 export type TracedEvent = KittumApi.TracedEvent;
+export type ModelCall = KittumApi.ModelCall;
+export type CallPart = KittumApi.CallPart;
+export type ArtifactCheck = KittumApi.ArtifactCheck;
+export type PairAgreement = KittumApi.PairAgreement;
 export type EventPage = KittumApi.EventPage;
 export type ChainAudit = KittumApi.ChainAudit;
 export type Finding = KittumApi.Finding;

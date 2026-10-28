@@ -420,7 +420,37 @@ test("a review from search to full text, blind, audited, adjudicated, and verifi
     ] as const) {
       await expect(flow.getByTestId(`prisma-${count}`), count).toHaveText(String(value));
     }
-    await expect(flow.getByRole("img")).toBeVisible();
+    // The diagram fills the page width, so its labels read at the default zoom; a click
+    // enlarges it, and it downloads as SVG.
+    const diagram = flow.getByTestId("prisma-diagram");
+    await expect(diagram).toBeVisible();
+    expect((await diagram.boundingBox())?.width ?? 0).toBeGreaterThan(1000);
+    // Inlined, so its labels use the workbench's font rather than a system fallback.
+    await expect(diagram.locator("text").first()).toHaveCSS("font-family", /IBM Plex Sans/);
+    await expect(flow.getByRole("link", { name: "Download as SVG" })).toHaveAttribute(
+      "download",
+      "prisma-nrt-vs-control.svg",
+    );
+    await diagram.click();
+    const large = page.getByRole("dialog");
+    await expect(large.getByRole("img")).toBeVisible();
+    expect((await large.getByRole("img").boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(1400);
+    await page.keyboard.press("Escape");
+    await expect(large).toHaveCount(0);
+
+    // The AI-use disclosure: agreement as raw counts with kappa over all of them, and the
+    // prompts the judge sent.
+    await page.keyboard.press("a");
+    const disclosure = page.getByTestId("disclosure");
+    await expect(disclosure.getByTestId("disclosure-agreement").first()).toContainText(
+      /Agreed on \d+ of 29 records\. Kappa .*, both over all 29\./,
+    );
+    await expect(disclosure).not.toContainText("AI alone");
+    const card = disclosure.getByTestId("prompt-card").first();
+    await card.locator("summary").click();
+    await expect(card).toContainText("You screen records for a systematic literature review.");
+    await expect(card).toContainText("User prompt template");
+    await expect(card).toContainText("JSON schema the answer must follow");
 
     await page.keyboard.press("s");
     const path = (await page.getByTestId("bundle-path").textContent()) ?? "";

@@ -283,11 +283,21 @@ const KEYS: ReadonlyArray<{
     ],
   },
   {
+    screen: "Reports (the methods lead)",
+    keys: [
+      [["p"], "Render the PRISMA flow"],
+      [["a"], "Show the AI-use disclosure with its prompts"],
+      [["e"], "Download the extracted values"],
+      [["s"], "Seal the handover bundle"],
+    ],
+  },
+  {
     screen: "Audit (the methods lead)",
     keys: [
-      [["1", "2", "3"], "Trace a number, integrity, the review as of an event"],
-      [["[", "]"], "Previous and next PRISMA count; j and k move through its records"],
-      [["v"], "Verify the whole chain again"],
+      [["1", "2", "3"], "Trace a count, check the chain, look back to an event"],
+      [[",", "."], "Previous and next PRISMA count"],
+      [["j", "k"], "Next and previous record of the count"],
+      [["v"], "Check the whole chain again"],
       [["c"], "Sign a checkpoint at the head"],
       [["p"], "Render and keep the reports at the chosen event"],
     ],

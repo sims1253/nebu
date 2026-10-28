@@ -175,7 +175,13 @@ def create_project(tx: Tx, *, name: str, lead_name: str, ledger: Ledger) -> tupl
     project_id: Id = row["id"]
     lead = _person(tx, lead_name)
     event = ledger.append(
-        tx, _event(project_id, PROJECT_CREATED, lead, {"name": name, "lead": str(lead)})
+        tx,
+        _event(
+            project_id,
+            PROJECT_CREATED,
+            lead,
+            {"name": name, "lead": str(lead), "lead_name": lead_name},
+        ),
     )
     _add_roles(tx, project_id, lead, lead_name, ("lead",), event.event_id, ledger, lead)
     return project_id, lead

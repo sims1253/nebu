@@ -722,7 +722,21 @@ decides. Migration `20261029020000_report_artifacts.sql`.
   topic with rationale and validation pack, reveal per stage, kappa and PABAK against the model's
   own and the verified reading, reveals, adjudicated conflicts, the audit gauge, the extra screens
   the AI triggered with each one's reason and result (upheld, adjudicated, pending),
-  `judge.VERIFIER_LIMITS`) and one RAISE-aligned Markdown rendering.
+  `judge.VERIFIER_LIMITS`) and one RAISE-aligned Markdown rendering. Agreement carries its 2x2
+  table (`PairAgreement.include_include` and the other cells) and reads as "agreed on N of M
+  records". `prompts` holds one card per AI role the review used (judge per stage and scope,
+  assistant per purpose, the LLM extraction path), read from the first stored request by
+  `report.model_calls.prompt_cards`: system prompt, user prompt template (the judge's) and the
+  first user prompt as sent, JSON schema, request settings, and the recorded recipe.
+- `extraction`: the accepted values at the cutoff, the latest per semantic key
+  (`report.extracted`), as `extracted_values.csv` and `extracted_values.json`: study, report,
+  field, value, unit, the path that produced it (`janus`, `llm`, or `manual_edit`), pages and
+  quote, who accepted it, and when. `kittum verify` checks both files against the ledger's
+  `extraction.value_accepted` events through `ledger.register_bundle_check`.
+- The audit trail (`report.audit`): each traced event says who did what in words, names the
+  criterion's wording, quotes, and files, and recomputes its payload and event hashes; an AI step
+  lists its model calls (`report.model_calls.calls_of`) with the stored request and response;
+  `GET .../audit/artifacts/{sha256}/check` hashes an artifact again.
 - `render(tx, target, project_id, scope_id, store=...)` stores the files by hash and returns an
   `Artifact`; `record_render` writes `report_artifact` and a `report.rendered` event.
 - `seal_bundle(tx, project_id, store, out_dir, signer=..., actor_id=..., rights=...)` renders
@@ -741,8 +755,10 @@ decides. Migration `20261029020000_report_artifacts.sql`.
   Rendering, downloading, and sealing are for the methods lead only (`report.require_lead`): a
   human who screens, audits, or adjudicates no stage of the project, the rule `Screening.status`
   uses for the lead's view. Everyone else gets 403.
-- Changes outside the module: `BundleWriter.file` in `ledger/bundle.py` (exporters add files the
-  manifest lists); `judge.VERIFIER_LIMITS`; `ALLOWED` lets `report` import `judge` and
+- Changes outside the module: `BundleWriter.file`, `BundleWriter.read`, and
+  `register_bundle_check` in `ledger/bundle.py` (exporters add files the manifest lists and
+  checks of them); `PairAgreement.of` and its 2x2 cells in `screening`; `judge.USER_TEMPLATE`;
+  `kittum verify` imports `kittum.report` so its checks run; `judge.VERIFIER_LIMITS`; `ALLOWED` lets `report` import `judge` and
   `profiles` import `report`.
 - Tests (`tests/report/`, `tests/profiles/test_gba_amnog_reports.py`) build the nicotine
   replacement review and the capivasertib dossier through search, corpus, judge, and screening

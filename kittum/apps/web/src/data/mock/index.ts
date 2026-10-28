@@ -515,6 +515,7 @@ export const makeMockWorkbench = (
     milestones: unavailable,
     asOf: unavailable,
     auditArtifact: unavailable,
+    checkArtifact: unavailable,
 
     extractionRuns: ({ projectId }) =>
       call("other", "extractionRuns", projectId, () =>

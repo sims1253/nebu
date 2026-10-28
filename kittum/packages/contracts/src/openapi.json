@@ -440,11 +440,6 @@
           "excluded_with_ai_proposal": {
             "title": "Excluded With Ai Proposal",
             "type": "integer"
-          },
-          "marked_ineligible_by_automation": {
-            "default": 0,
-            "title": "Marked Ineligible By Automation",
-            "type": "integer"
           }
         },
         "required": [
@@ -697,6 +692,65 @@
           "files"
         ],
         "title": "Artifact",
+        "type": "object"
+      },
+      "ArtifactCheck": {
+        "additionalProperties": false,
+        "description": "An artifact read back from the store and hashed again.",
+        "properties": {
+          "bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bytes"
+          },
+          "matches": {
+            "title": "Matches",
+            "type": "boolean"
+          },
+          "media_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Type"
+          },
+          "recomputed": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Sha256"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sha256": {
+            "$ref": "#/components/schemas/Sha256"
+          },
+          "stored": {
+            "title": "Stored",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sha256",
+          "stored",
+          "bytes",
+          "recomputed",
+          "matches",
+          "media_type"
+        ],
+        "title": "ArtifactCheck",
         "type": "object"
       },
       "ArtifactFile": {
@@ -1247,6 +1301,36 @@
           "y1"
         ],
         "title": "Box",
+        "type": "object"
+      },
+      "CallPart": {
+        "additionalProperties": false,
+        "description": "One side of a model call in the artifact store.",
+        "properties": {
+          "form": {
+            "enum": [
+              "http_body",
+              "built_request",
+              "http_response",
+              "answer_text"
+            ],
+            "title": "Form",
+            "type": "string"
+          },
+          "sha256": {
+            "$ref": "#/components/schemas/Sha256"
+          },
+          "stored": {
+            "title": "Stored",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sha256",
+          "form",
+          "stored"
+        ],
+        "title": "CallPart",
         "type": "object"
       },
       "CellRef": {
@@ -3712,6 +3796,76 @@
         "title": "ModelAttempt",
         "type": "object"
       },
+      "ModelCall": {
+        "additionalProperties": false,
+        "description": "One request to a model and its response.",
+        "properties": {
+          "finish_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finish Reason"
+          },
+          "model_identity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Identity"
+          },
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem"
+          },
+          "request": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CallPart"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "response": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CallPart"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "number",
+          "request",
+          "response"
+        ],
+        "title": "ModelCall",
+        "type": "object"
+      },
       "ModelUse": {
         "additionalProperties": false,
         "description": "Who wrote a model revision, and how: the recipe, where it ran, the fixed instructions by\nversion and hash, and every attempt with its raw request and response in the artifact store.",
@@ -4169,6 +4323,26 @@
         "additionalProperties": false,
         "description": "Agreement on include against exclude, from the blind provisional decisions.\n\n`human_ai` compares with the model's own reading (no criterion it answered `not_met`);\n`human_ai_verified` with the reading the judge's filter verified (`Verdict.excludes`).",
         "properties": {
+          "exclude_exclude": {
+            "default": 0,
+            "title": "Exclude Exclude",
+            "type": "integer"
+          },
+          "exclude_include": {
+            "default": 0,
+            "title": "Exclude Include",
+            "type": "integer"
+          },
+          "include_exclude": {
+            "default": 0,
+            "title": "Include Exclude",
+            "type": "integer"
+          },
+          "include_include": {
+            "default": 0,
+            "title": "Include Include",
+            "type": "integer"
+          },
           "items": {
             "title": "Items",
             "type": "integer"
@@ -8278,6 +8452,10 @@
           "event_hash": {
             "$ref": "#/components/schemas/Sha256"
           },
+          "event_hash_matches": {
+            "title": "Event Hash Matches",
+            "type": "boolean"
+          },
           "event_id": {
             "$ref": "#/components/schemas/Id"
           },
@@ -8288,8 +8466,21 @@
             "title": "Facts",
             "type": "array"
           },
+          "hashed_fields": {
+            "additionalProperties": true,
+            "title": "Hashed Fields",
+            "type": "object"
+          },
           "kind": {
             "$ref": "#/components/schemas/TraceKind"
+          },
+          "model_calls": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ModelCall"
+            },
+            "title": "Model Calls",
+            "type": "array"
           },
           "payload": {
             "additionalProperties": true,
@@ -8298,6 +8489,10 @@
           },
           "payload_hash": {
             "$ref": "#/components/schemas/Sha256"
+          },
+          "payload_hash_matches": {
+            "title": "Payload Hash Matches",
+            "type": "boolean"
           },
           "prev_hash": {
             "$ref": "#/components/schemas/Sha256"
@@ -8347,6 +8542,9 @@
           "payload_hash",
           "prev_hash",
           "event_hash",
+          "payload_hash_matches",
+          "event_hash_matches",
+          "hashed_fields",
           "kind",
           "stage",
           "summary",
@@ -9884,7 +10082,7 @@
     },
     "/api/projects/{project_id}/audit/artifacts/{sha256}": {
       "get": {
-        "description": "An artifact a ledger event of the project names: a raw search response, a full text, a\nmodel's raw output, a rendered prompt. Nothing else by hash.",
+        "description": "An artifact the project names: a raw search response, a full text, a model call's\nrequest or response, a rendered prompt. Nothing else by hash.",
         "operationId": "downloadAuditArtifact",
         "parameters": [
           {
@@ -9937,6 +10135,70 @@
           }
         },
         "summary": "Download",
+        "tags": [
+          "audit"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/audit/artifacts/{sha256}/check": {
+      "get": {
+        "description": "Read an artifact the project names from the store and hash it again: whether its bytes\nstill match the hash the ledger recorded.",
+        "operationId": "checkAuditArtifact",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sha256",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "Sha256",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactCheck"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Check",
         "tags": [
           "audit"
         ]

@@ -4,13 +4,17 @@ Every count is the length of a list of item references (`PrismaFlow.members`), s
 the flow traces to the reports behind it and, through the bundle, to their decisions, events,
 and reviewers. `checks` states the sums that must hold; a broken one is reported, not hidden.
 
-PRISMA 2020's "records marked as ineligible by automation tools" is always zero here: no
-screening mode lets the AI exclude a record that no human saw. What the AI did contribute is
-counted separately: exclusions the AI also proposed, exclusions decided after a reveal, and
-exclusions that stood after a blind extra screen the AI's disagreement triggered (whether the
-auditor upheld them or an adjudicator decided).
+The diagram leaves out PRISMA 2020's "records marked as ineligible by automation tools": no
+screening mode lets the AI exclude a record that no human saw, so the box could only ever say
+zero. What the AI did contribute is counted separately: exclusions the AI also proposed,
+exclusions decided after a reveal, and exclusions that stood after a blind extra screen the AI's
+disagreement triggered (whether the auditor upheld them or an adjudicator decided).
+
+The diagram is drawn to be read at the size a report page or a screen shows it: 16 px text in a
+980 px wide drawing, so text stays at 14 px or more down to 860 px of width.
 """
 
+import textwrap
 from collections import Counter
 from html import escape
 from typing import TYPE_CHECKING
@@ -37,7 +41,6 @@ class ReasonCount(Record):
 class AiInvolvement(Record):
     """Human exclusions the AI took part in. The AI alone never excludes."""
 
-    marked_ineligible_by_automation: int = 0
     excluded_with_ai_proposal: int
     """The humans excluded, and the AI's verified reading also excluded."""
     excluded_after_ai_reveal: int
@@ -316,21 +319,43 @@ def flows(review: Review, scope_id: str | None = None) -> list[PrismaFlow]:
 
 # The diagram: PRISMA 2020's flow for new reviews of databases and registers.
 
-_W, _GAP, _LINE, _PAD, _BAND = 330, 60, 17, 10, 34
+_W, _GAP, _LINE, _PAD, _BAND = 420, 60, 22, 12, 40
 _FAMILY = "font-family='IBM Plex Sans, Helvetica, Arial, sans-serif'"
-_FONT = f"{_FAMILY} font-size='12'"
+_FONT = f"{_FAMILY} font-size='16'"
 
 
-def _box(x: int, y: int, lines: list[str], *, bold_first: bool = True) -> tuple[str, int]:
-    height = _PAD * 2 + _LINE * len(lines)
+# Characters per line of a box. A viewer without IBM Plex Sans falls back to a wider font, up to
+# a monospaced one at 0.6 em a character, so lines wrap where even that still fits.
+_CHARS = int((_W - 2 * _PAD) / (16 * 0.6))
+
+
+def _wrap(line: str) -> list[str]:
+    """A line as it fits a box, continuation lines indented under it."""
+    indent = " " * (len(line) - len(line.lstrip()))
+    # A count ("n = 3") never breaks: its spaces are no-break spaces while wrapping.
+    kept = line.replace(" = ", "\u00a0=\u00a0")
+    wrapped = textwrap.wrap(
+        kept, _CHARS, subsequent_indent=indent + "  ", break_on_hyphens=False
+    ) or [kept]
+    return [part.replace("\u00a0", " ") for part in wrapped]
+
+
+def _box(
+    x: int, y: int, given: list[str], *, bold_first: bool = True, min_height: int = 0
+) -> tuple[str, int]:
+    lines = [part for line in given for part in _wrap(line)]
+    first = len(_wrap(given[0])) if given else 0  # the heading line, wrapped, stays bold
+    height = max(_PAD * 2 + _LINE * len(lines), min_height)
     parts = [
         f"<rect x='{x}' y='{y}' width='{_W}' height='{height}' rx='4' fill='#ffffff' "
         "stroke='#1f2933' stroke-width='1.2'/>"
     ]
     for n, line in enumerate(lines):
-        weight = " font-weight='600'" if bold_first and n == 0 else ""
+        weight = " font-weight='600'" if bold_first and n < first else ""
+        # SVG drops leading spaces, so a line's indent is its position: 8 px a space.
+        indent = 8 * (len(line) - len(line.lstrip(" ")))
         parts.append(
-            f"<text x='{x + _PAD}' y='{y + _PAD + _LINE * (n + 1) - 4}' {_FONT}{weight}>"
+            f"<text x='{x + _PAD + indent}' y='{y + _PAD + _LINE * (n + 1) - 4}' {_FONT}{weight}>"
             f"{escape(line)}</text>"
         )
     return "".join(parts), height
@@ -346,7 +371,11 @@ def _arrow(x1: int, y1: int, x2: int, y2: int) -> str:
 def svg(f: PrismaFlow, title: str) -> str:
     """The flow as a standalone SVG."""
     left, right = _BAND + 20, _BAND + 20 + _W + _GAP
-    source_lines = [f"  {s.name}: n = {s.records}" for s in f.identified_by_source]
+
+    def sources(*kinds: str) -> list[str]:
+        """The sources of a PRISMA 2020 category, each under it with its own count."""
+        return [f"  {s.name}: n = {s.records}" for s in f.identified_by_source if s.kind in kinds]
+
     reasons = [f"  {r.criterion_id}: n = {r.reports}" for r in f.exclusion_reasons]
     rows: list[tuple[str, list[str], list[str]]] = [
         (
@@ -354,17 +383,17 @@ def svg(f: PrismaFlow, title: str) -> str:
             [
                 "Records identified from:",
                 f"Databases: n = {f.identified_from_databases}",
+                *sources("bibliographic"),
                 f"Registers: n = {f.identified_from_registers}",
+                *sources("registry"),
                 f"Other sources: n = {f.identified_from_other_sources}",
-                *source_lines,
+                *sources("website", "other"),
             ],
             [
                 "Records removed before screening:",
                 f"Duplicate records removed: n = {f.duplicates_removed}",
-                "Records marked as ineligible by automation",
-                f"  tools: n = {f.ai_title_abstract.marked_ineligible_by_automation}",
                 *(
-                    [f"Not yet in the identity revision: n = {f.records_outside_identity}"]
+                    [f"Found after the corpus was built: n = {f.records_outside_identity}"]
                     if f.records_outside_identity
                     else []
                 ),
@@ -375,16 +404,15 @@ def svg(f: PrismaFlow, title: str) -> str:
             [
                 f"Records screened: n = {f.records_screened}",
                 *(
-                    [f"Awaiting screening: n = {f.records_awaiting_screening}"]
+                    [f"Not yet screened: n = {f.records_awaiting_screening}"]
                     if f.records_awaiting_screening
                     else []
                 ),
             ],
             [
                 f"Records excluded: n = {f.records_excluded}",
-                "  of which with AI involvement:",
-                f"  n = {f.ai_title_abstract.excluded_with_ai_involvement}",
-                *([f"Unresolved: n = {f.records_unresolved}"] if f.records_unresolved else []),
+                f"  AI took part in: n = {f.ai_title_abstract.excluded_with_ai_involvement}",
+                *([f"In conflict: n = {f.records_unresolved}"] if f.records_unresolved else []),
             ],
         ),
         (
@@ -397,7 +425,7 @@ def svg(f: PrismaFlow, title: str) -> str:
             [
                 f"Reports assessed for eligibility: n = {f.reports_assessed}",
                 *(
-                    [f"Awaiting assessment: n = {f.reports_awaiting_assessment}"]
+                    [f"Not yet assessed: n = {f.reports_awaiting_assessment}"]
                     if f.reports_awaiting_assessment
                     else []
                 ),
@@ -405,13 +433,13 @@ def svg(f: PrismaFlow, title: str) -> str:
             [
                 f"Reports excluded: n = {f.reports_excluded}",
                 *reasons,
-                f"  of which with AI involvement: n = {f.ai_full_text.excluded_with_ai_involvement}",
+                f"  AI took part in: n = {f.ai_full_text.excluded_with_ai_involvement}",
                 *(
-                    [f"Awaiting classification: n = {f.reports_awaiting_classification}"]
+                    [f"Insufficient information: n = {f.reports_awaiting_classification}"]
                     if f.reports_awaiting_classification
                     else []
                 ),
-                *([f"Unresolved: n = {f.reports_unresolved}"] if f.reports_unresolved else []),
+                *([f"In conflict: n = {f.reports_unresolved}"] if f.reports_unresolved else []),
             ],
         ),
         (
@@ -424,13 +452,14 @@ def svg(f: PrismaFlow, title: str) -> str:
         ),
     ]
     body: list[str] = [
-        f"<text x='{left}' y='24' {_FAMILY} font-size='15' font-weight='600'>{escape(title)}</text>"
+        f"<text x='{left}' y='30' {_FAMILY} font-size='19' font-weight='600'>{escape(title)}</text>"
     ]
-    y = 40
+    y = 52
     spans: list[tuple[str, int, int]] = []  # (band, top, bottom)
     previous_bottom: int | None = None
     for band, main, side in rows:
-        main_svg, main_h = _box(left, y, main)
+        # A band's rotated label needs the height of its word: "Included" spans one short box.
+        main_svg, main_h = _box(left, y, main, min_height=96 if band == "Included" else 0)
         side_svg, side_h = _box(right, y, side) if side else ("", 0)
         height = max(main_h, side_h)
         body += [main_svg, side_svg]
@@ -443,7 +472,7 @@ def svg(f: PrismaFlow, title: str) -> str:
         else:
             spans[-1] = (spans[-1][0], spans[-1][1], y + height)
         previous_bottom = y + main_h
-        y += height + 30
+        y += height + 36
     for band, top, bottom in spans:
         body.append(
             f"<rect x='8' y='{top}' width='{_BAND}' height='{bottom - top}' rx='4' "
