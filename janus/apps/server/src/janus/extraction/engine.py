@@ -16,6 +16,7 @@ from janus.comparison.models import (
     ValueRule,
 )
 from janus.comparison.reader import TextLayerDocumentReader
+from janus.extraction.canonical import canonical_json
 from janus.extraction.models import (
     ExtractionSpecification,
     FieldResult,
@@ -27,13 +28,15 @@ from janus.extraction.models import (
     ScalarField,
     StructuredExtraction,
 )
-from janus.extraction.parsing import parse_value
+from janus.extraction.parsing import NotReported, parse_value
 
 if TYPE_CHECKING:
+    from datetime import datetime
     from pathlib import Path
 
 
 def pointer(parent: str, key: str) -> str:
+    """The JSON Pointer of `key` inside the object at `parent` ("" for the root)."""
     return f"{parent}/{key.replace('~', '~0').replace('/', '~1')}"
 
 
@@ -41,19 +44,41 @@ def _fold(text: str) -> str:
     return " ".join(text.casefold().split())
 
 
-def extract(document: Path, specification: ExtractionSpecification) -> StructuredExtraction:
-    """Read a PDF and extract data. Does not create a review or write files."""
-    evidence = TextLayerDocumentReader().read(document, document.name, normalize_rotation=True)
-    return extract_evidence(evidence, specification)
+def specification_hash(specification: ExtractionSpecification) -> str:
+    """SHA-256 of the specification's canonical JSON (RFC 8785): equal content, equal hash,
+    whatever the member order of the file it was read from."""
+    return hashlib.sha256(canonical_json(specification.model_dump(mode="json"))).hexdigest()
+
+
+def extract(
+    document: Path,
+    specification: ExtractionSpecification,
+    *,
+    created_at: datetime | None = None,
+) -> StructuredExtraction:
+    """Read a PDF and extract data. Does not create a review or write files.
+
+    `created_at` stamps the result; pass a fixed time for byte-identical output across runs.
+    """
+    evidence = TextLayerDocumentReader().read(
+        document, document.name, normalize_rotation=True, created_at=created_at
+    )
+    return extract_evidence(evidence, specification, created_at=created_at)
 
 
 def extract_evidence(
     evidence: DocumentEvidence,
     specification: ExtractionSpecification,
+    *,
+    created_at: datetime | None = None,
 ) -> StructuredExtraction:
-    """Extract from reader evidence, retaining source locations and unresolved fields."""
+    """Extract from reader evidence, retaining source locations and unresolved fields.
+
+    For callers that read the document themselves. `created_at` stamps the result (default:
+    now); with a fixed time, equal evidence and specification give byte-identical results.
+    """
     pages = [PageContent.model_validate(page) for page in evidence.pages]
-    spec_hash = hashlib.sha256(specification.model_dump_json().encode()).hexdigest()
+    spec_hash = specification_hash(specification)
     scalars: dict[str, ScalarField] = {}
 
     def collect(fields: dict[str, OutputField], parent: str = "") -> None:
@@ -88,6 +113,13 @@ def extract_evidence(
     def convert(raw: str, rule: Scalar, path: str, source: EvidenceLocation | None) -> Any:
         try:
             value = parse_value(raw, rule)
+        except NotReported as exc:
+            results.append(
+                FieldResult(
+                    path=path, type=rule.type, status="missing", source=source, message=str(exc)
+                )
+            )
+            return None
         except ValueError as exc:
             results.append(
                 FieldResult(
@@ -235,4 +267,5 @@ def extract_evidence(
         data=data,
         fields=results,
         pages=[PageSize(width=page.width or 612, height=page.height or 792) for page in pages],
+        **({"created_at": created_at} if created_at is not None else {}),
     )

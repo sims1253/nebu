@@ -51,10 +51,21 @@ Numbers use `.` as the decimal separator and no grouping by default. Set
 grouping. `strip_prefix` and `strip_suffix` require and remove literal affixes such as `$` or
 `kg`. Percentage values remove an optional `%` and retain percentage units: `12.5%` becomes
 `"12.5"`, not `"0.125"`. Decimal and percentage outputs are strings to preserve precision.
+Numbers read the typeset minus signs U+2212, U+FE63, and U+FF0D as `-`. A short label in front of
+a number, such as `RR:` in `RR:1.124 (0.978, 1.290)` or `N =` in `N = 355`, is not part of the
+value. Text values keep these as printed.
 Integers are JSON numbers within the exact JavaScript integer range. Dates become ISO dates;
 the input must be accepted by Python's ISO date parser. Booleans accept true/false, yes/no, or 1/0.
 Text trims surrounding whitespace. Compound cells can declare `source_shape` and `component`
 using the [existing compound syntax](comparison-specification-v1.md#values-and-compound-cells).
+A declared affix around the whole compound cell is removed before the shape is matched. A
+`count_percentage` cell that prints only a count (`0`) yields the count; its percentage is
+`missing`, not invented.
+
+A value printed as `-`, an en or em dash, `NA`, `N/A`, `NR`, `NE`, or `not reported` (any case)
+marks a value that was not reported: the field is `missing` with a message naming the mark, not
+`invalid`. Set `not_reported` on a field to replace that list, or to `[]` to read every value as
+printed.
 
 ## Records
 
@@ -115,6 +126,14 @@ for field in result.fields:
     if field.status != "extracted":
         print(field.path, field.status, field.message)
 ```
+
+`extract` reads the PDF with Janus's reader. A caller that already has `DocumentEvidence` from
+its own reader uses `extract_evidence(evidence, spec)`. Both accept `created_at` to stamp the
+result; with a fixed time, the same document and specification give byte-identical output.
+`specification_hash` is the SHA-256 of the specification's canonical JSON
+([RFC 8785](https://www.rfc-editor.org/rfc/rfc8785)), so member order in the file does not
+change it. `parse_value(text, Scalar(...))` applies the same typed parsing to text you located
+yourself.
 
 The library does not write files. The existing three-input comparison specifications and saved
 review artifacts retain their existing format and behavior.

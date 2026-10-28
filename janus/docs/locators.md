@@ -39,11 +39,20 @@ The first column supplies row labels; row 0 supplies column context and also rem
 candidate, so headerless tables retain their first row. Use printed aliases, including footnote
 markers such as `Junp` or `2025r`. Fuzzy matching tolerates close variants.
 
+Rows below row 0 with an empty first cell and only header text or group sizes continue the
+header. A column's context is then its whole header path: under `Primary analysis set` spanning
+`Control | Intervention | Total`, the first column's context is `Primary analysis set Control`,
+so `column_labels` can tell it from `All participants set Control`. A group size printed in a
+header row (`N = 355` under `Vitamin C group`) is a candidate whose label is the header above it:
+locate it with `labels: ["Vitamin C group"]`.
+
 Use `column_labels` when a label has several value columns. Use `section_labels` when labels
 repeat under different groups. The reader splits merged grouped rows into subrows and stamps
 the group name as section context. For example, `Group\nSub A\nSub B` becomes two subrows under
 `Group` when the value lines align. Borderless tables rebuilt from word geometry also use
-indentation to identify parent groups. A section mismatch can lower the score by 30 percent.
+indentation to identify parent groups. A row whose values are all group sizes
+(`Primary analysis set | N = 51 | N = 52`) is the section context of the rows below it, up to the
+next such row. A section mismatch can lower the score by 30 percent.
 
 Tables continued across pages can inherit the preceding header. The reader also rebuilds
 borderless tables from text alignment and word positions; these inferred cells may have no
@@ -53,7 +62,9 @@ bounding box. Values can still compare, but missing boxes cannot support exact h
 
 `text_label` uses the nearest preceding heading as section context and has no column labels.
 It reads only the first value line. Wrapped values truncate, and a value below its label does
-not pair. Labels that exist only as pixels cannot match. Lower thresholds can admit unrelated
+not pair. A location's `row` is the ordinal of the line that prints the value, among the page's
+lines in reader order; when the value is a line of its own beside the label, that is the value's
+line, which `raw_text` and `cell_bbox` also describe. Labels that exist only as pixels cannot match. Lower thresholds can admit unrelated
 labels, so check the candidate's text and location before changing the threshold.
 
 ## Prose spans

@@ -74,6 +74,15 @@ def test_nested_data_and_comparison_need_no_review_or_reference_for_extraction(t
         ("12.5%", {"type": "percentage"}, "12.5"),
         ("$12.50", {"strip_prefix": "$"}, "12.50"),
         ("12 (34%)", {"source_shape": "count_percentage", "component": "percentage"}, "34"),
+        # Small and fullwidth minus signs read as "-", as U+2212 does.
+        ("\ufe630.5", {}, "-0.5"),
+        ("\uff0d1,275.50", {"group_separator": ","}, "-1275.50"),
+        # A declared prefix around the whole compound cell goes before the shape match.
+        (
+            "$12 (34%)",
+            {"strip_prefix": "$", "source_shape": "count_percentage", "component": "count"},
+            "12",
+        ),
     ],
 )
 def test_declared_number_formats(text, options, expected):

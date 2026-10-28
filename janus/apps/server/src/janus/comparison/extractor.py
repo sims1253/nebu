@@ -16,7 +16,7 @@ from typing import Any
 
 from rapidfuzz import fuzz
 
-from janus.comparison.content import BoundingBox, PageContent
+from janus.comparison.content import BoundingBox, PageContent, TableCell, TableStructure
 from janus.comparison.models import (
     ComparisonPlan,
     CompoundShape,
@@ -56,6 +56,61 @@ def _bbox(value: Any) -> dict[str, float] | None:
     return {key: float(getattr(value, key)) for key in ("x", "y", "width", "height")}
 
 
+# A per-group N printed in a header or group row: "N = 355", "n=51".
+_GROUP_N = re.compile(r"^[Nn]\s*=\s*\d[\d,]*$")
+# A data value opens with a number ("12", "-0.4", "1 (2.0)"); header text does not.
+_VALUE_START = re.compile(r"^[-+\u2212\ufe63\uff0d]?[.,]?\d")
+
+
+def _header_rows(
+    cells: dict[tuple[int, int], TableCell], rows: list[int], columns: list[int]
+) -> list[int]:
+    """Row 0 and the rows that continue the header below it.
+
+    A continuation row has an empty first cell and only header text or group sizes in its
+    other cells: the leaf headers under a spanning one ("Control | Intervention" under
+    "Primary analysis set"), or the per-arm "N = 355" printed under "Vitamin C group"."""
+    header = [rows[0]]
+    for row in rows[1:]:
+        label = cells.get((row, 0))
+        texts = [
+            cell.text.strip()
+            for column in columns
+            if column and (cell := cells.get((row, column))) is not None and cell.text.strip()
+        ]
+        if (label is not None and label.text.strip()) or not texts:
+            break
+        if any(_VALUE_START.match(text) for text in texts):
+            break
+        header.append(row)
+    return header
+
+
+def _header_paths(
+    cells: dict[tuple[int, int], TableCell], header: list[int], columns: list[int]
+) -> dict[int, list[str]]:
+    """Each column's header names from top to bottom ("Primary analysis set", "Control").
+
+    Above the leaf row, an empty cell the detector reports without a box is a spanned
+    position: it takes the name of the spanning cell to its left. Group sizes ("N = 355")
+    are values, not names, and stay out of the path."""
+    paths: dict[int, list[str]] = {column: [] for column in columns}
+    for depth, row in enumerate(header):
+        spanning = ""
+        for column in columns:
+            cell = cells.get((row, column))
+            text = cell.text.strip() if cell is not None else ""
+            if column == 0:
+                spanning = ""
+            elif text:
+                spanning = "" if _GROUP_N.match(text) else text
+            elif depth < len(header) - 1 and (cell is None or cell.bbox is None):
+                text = spanning
+            if text and not _GROUP_N.match(text):
+                paths[column].append(text)
+    return paths
+
+
 def _table_candidates(evidence: DocumentEvidence) -> list[_Candidate]:
     candidates: list[_Candidate] = []
     for raw_page in evidence.pages:
@@ -66,12 +121,63 @@ def _table_candidates(evidence: DocumentEvidence) -> list[_Candidate]:
             cells = {(cell.row, cell.column): cell for cell in table.cells}
             rows = sorted({cell.row for cell in table.cells})
             columns = sorted({cell.column for cell in table.cells})
-            headers = {
-                column: cells[(0, column)].text.strip()
-                for column in columns
-                if table.header_row and (0, column) in cells
-            }
+            header = _header_rows(cells, rows, columns) if table.header_row and rows else []
+            paths = _header_paths(cells, header, columns)
+            headers = {column: " ".join(paths[column]) for column in columns}
+
+            def candidate(
+                label: str,
+                value_cell: TableCell,
+                confidence: float,
+                row_context: str | None,
+                table_index: int = table_index,
+                table: TableStructure = table,
+                page: PageContent = page,
+                headers: dict[int, str] = headers,
+            ) -> _Candidate:
+                return _Candidate(
+                    label=label,
+                    value=value_cell.text.strip(),
+                    page=(
+                        value_cell.bbox.page if value_cell.bbox is not None else page.page_number
+                    ),
+                    table_index=table_index,
+                    row=value_cell.row,
+                    column=value_cell.column,
+                    confidence=confidence,
+                    cell_bbox=_bbox(value_cell.bbox),
+                    table_bbox=_bbox(table.bbox),
+                    column_context=headers.get(value_cell.column) or None,
+                    row_context=row_context,
+                    kind="table",
+                )
+
+            # A header row below row 0 has no row label; its group sizes ("N = 355") take the
+            # names above them in their column as their label.
+            for depth, row in enumerate(header[1:], start=1):
+                for column in columns:
+                    value_cell = cells.get((row, column))
+                    if not column or value_cell is None:
+                        continue
+                    if not _GROUP_N.match(value_cell.text.strip()):
+                        continue
+                    above = [
+                        text
+                        for r in header[:depth]
+                        if (cell := cells.get((r, column))) is not None
+                        and (text := cell.text.strip())
+                        and not _GROUP_N.match(text)
+                    ]
+                    if above:
+                        candidates.append(
+                            candidate(" ".join(above), value_cell, value_cell.confidence, None)
+                        )
+            # A body row whose values are all group sizes ("Primary analysis set | N = 51 |
+            # N = 52") heads the rows below it, up to the next such row.
+            group: str | None = None
             for row in rows:
+                if row in header[1:]:
+                    continue
                 # Row 0 supplies column_context, but it is also a data
                 # candidate: headerless tables (invoices, statements) put
                 # real values in their first row, and a genuine header row
@@ -80,32 +186,25 @@ def _table_candidates(evidence: DocumentEvidence) -> list[_Candidate]:
                 label_cell = cells.get((row, 0))
                 if label_cell is None or not label_cell.text.strip():
                     continue
-                for column in columns:
-                    if column == 0:
-                        continue
-                    value_cell = cells.get((row, column))
-                    if value_cell is None or not value_cell.text.strip():
-                        continue
+                values = [
+                    value_cell
+                    for column in columns
+                    if column
+                    and (value_cell := cells.get((row, column))) is not None
+                    and value_cell.text.strip()
+                ]
+                context = " / ".join(part for part in (group, label_cell.section) if part) or None
+                for value_cell in values:
                     candidates.append(
-                        _Candidate(
-                            label=label_cell.text.strip(),
-                            value=value_cell.text.strip(),
-                            page=(
-                                value_cell.bbox.page
-                                if value_cell.bbox is not None
-                                else page.page_number
-                            ),
-                            table_index=table_index,
-                            row=row,
-                            column=column,
-                            confidence=min(label_cell.confidence, value_cell.confidence),
-                            cell_bbox=_bbox(value_cell.bbox),
-                            table_bbox=_bbox(table.bbox),
-                            column_context=headers.get(column) or None,
-                            row_context=label_cell.section,
-                            kind="table",
+                        candidate(
+                            label_cell.text.strip(),
+                            value_cell,
+                            min(label_cell.confidence, value_cell.confidence),
+                            context,
                         )
                     )
+                if row and values and all(_GROUP_N.match(c.text.strip()) for c in values):
+                    group = label_cell.text.strip()
     return candidates
 
 
@@ -225,6 +324,8 @@ def _text_candidates(evidence: DocumentEvidence) -> list[_Candidate]:
         paired: set[int] = {i for i, line in enumerate(lines) if _split_label_value(line.text)}
         for row, line in enumerate(lines):
             pair = _split_label_value(line.text)
+            # The line that prints the value: this one, or the one beside a label line.
+            value_row = row
             if pair is not None:
                 label, value = pair
                 cell_bbox, confidence = line.bbox, line.confidence
@@ -238,7 +339,7 @@ def _text_candidates(evidence: DocumentEvidence) -> list[_Candidate]:
                 if not _label_like(label):
                     continue
                 values = [
-                    other
+                    (index, other)
                     for index, other in enumerate(lines)
                     if index != row
                     and index not in paired
@@ -253,7 +354,9 @@ def _text_candidates(evidence: DocumentEvidence) -> list[_Candidate]:
                 ]
                 if not values:
                     continue
-                value_line = min(values, key=lambda other: other.bbox.x if other.bbox else 0)
+                value_row, value_line = min(
+                    values, key=lambda item: item[1].bbox.x if item[1].bbox else 0
+                )
                 label, value, cell_bbox, confidence = (
                     label,
                     value_line.text,
@@ -265,10 +368,12 @@ def _text_candidates(evidence: DocumentEvidence) -> list[_Candidate]:
                     label=label,
                     value=value,
                     page=cell_bbox.page if cell_bbox is not None else page.page_number,
-                    # A text line is no table: row is the line's ordinal and
-                    # column 1 the value side, column 0 being the label.
+                    # A text line is no table: row is the ordinal of the line
+                    # that prints the value (with raw_text and cell_bbox, so
+                    # all three name the same line), column 1 the value side,
+                    # column 0 being the label.
                     table_index=0,
-                    row=row,
+                    row=value_row,
                     column=1,
                     confidence=confidence,
                     cell_bbox=_bbox(cell_bbox),
@@ -699,6 +804,10 @@ def _folded(value: str) -> str:
     return " ".join(value.casefold().split())
 
 
+# Typeset minus signs (U+2212, and its small and fullwidth forms). No locale
+# uses them for anything but a sign, so number matching reads them as "-".
+# The en and em dashes stay out: in "0.98\u20131.29" they are range separators.
+MINUS_SIGNS = str.maketrans({"\u2212": "-", "\ufe63": "-", "\uff0d": "-"})
 _NUMBER = r"[-+]?\d+(?:[.,]\d+)?"
 # A compared number inside a trailing annotation; unlike _NUMBER it also
 # accepts a bare decimal separator (".025" in "P=.025").
@@ -728,6 +837,8 @@ _DECIMAL_GAP = re.compile(r"(?<=[.,])\s+(?=\d)")
 _COMPOUND_PATTERNS: dict[CompoundShape, tuple[tuple[re.Pattern[str], tuple[str, ...]], ...]] = {
     CompoundShape.COUNT_PERCENTAGE: (
         (re.compile(rf"^\s*({_NUMBER})\s*\(\s*({_NUMBER})\s*%?\s*\)\s*$"), ("count", "percentage")),
+        # a count printed without its percentage, as a zero often is: 0
+        (re.compile(r"^\s*(\d+)\s*$"), ("count",)),
     ),
     CompoundShape.MEAN_STANDARD_DEVIATION: (
         # mean with its error, as in: 0.261 (0.025)
@@ -875,20 +986,30 @@ def _rival_fields(rival: _Rival) -> dict[str, Any]:
 
 
 def extract_component(value_rule: ValueRule, raw: str) -> tuple[str | None, str | None]:
+    component, error, _absent = match_component(value_rule, raw)
+    return component, error
+
+
+def match_component(value_rule: ValueRule, raw: str) -> tuple[str | None, str | None, bool]:
+    """The declared component of a compound cell, or why there is none.
+
+    The third item is True when the cell has the declared shape but does not
+    print the component (a bare count has no percentage): the value is absent
+    from the document, not malformed."""
     shape = value_rule.source_shape
     if shape is None:
-        return raw, None
-    text = _DECIMAL_GAP.sub("", raw)
+        return raw, None, False
+    text = _DECIMAL_GAP.sub("", raw).translate(MINUS_SIGNS)
     component = value_rule.component or ""
     if component in _ANNOTATION_COMPONENTS:
         # An annotation component rides a cell that still matches the declared
         # shape; the shape patterns tolerate (and skip) the annotation tail.
         if not any(pattern.match(text) for pattern, _ in _COMPOUND_PATTERNS[shape]):
-            return None, f"Value did not match the declared {shape.value} source shape"
+            return None, f"Value did not match the declared {shape.value} source shape", False
         annotation = _ANNOTATION_COMPONENTS[component].search(text)
         if annotation is None:
-            return None, f"The cell carries no {component} annotation to extract."
-        return annotation.group(1), None
+            return None, f"The cell carries no {component} annotation to extract.", True
+        return annotation.group(1), None, False
     for pattern, names in _COMPOUND_PATTERNS[shape]:
         match = pattern.match(text)
         if match is not None:
@@ -898,12 +1019,16 @@ def extract_component(value_rule: ValueRule, raw: str) -> tuple[str | None, str 
                 # The cell matched a variant of the shape that does not carry
                 # the requested component (a bare interval offers no standard
                 # error): loud, not a KeyError.
-                return None, (
-                    f"The matched {shape.value} cell carries no {component}; it offers "
-                    f"{', '.join(names)} only."
+                return (
+                    None,
+                    (
+                        f"The matched {shape.value} cell carries no {component}; it offers "
+                        f"{', '.join(names)} only."
+                    ),
+                    True,
                 )
-            return value, None
-    return None, (f"Value did not match the declared {shape.value} source shape")
+            return value, None, False
+    return None, f"Value did not match the declared {shape.value} source shape", False
 
 
 _CANDIDATE_NOUN = {"table_label": "table label", "text_label": "text label"}

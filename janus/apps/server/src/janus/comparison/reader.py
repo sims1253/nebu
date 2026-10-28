@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 import pymupdf
 
@@ -24,6 +24,7 @@ from janus.comparison.models import DocumentEvidence
 from janus.comparison.word_tables import rebuild_fragmented_tables
 
 if TYPE_CHECKING:
+    from datetime import datetime
     from pathlib import Path
 
 
@@ -212,8 +213,15 @@ class TextLayerDocumentReader:
     name = "pymupdf_text_layer"
 
     def read(
-        self, pdf: Path, document_id: str, *, normalize_rotation: bool = False
+        self,
+        pdf: Path,
+        document_id: str,
+        *,
+        normalize_rotation: bool = False,
+        created_at: datetime | None = None,
     ) -> DocumentEvidence:
+        """The document's evidence. `created_at` stamps it (default: now); a fixed time makes
+        reading the same PDF give byte-identical evidence."""
         # PyMuPDF advertises the optional pymupdf_layout package by PRINTING
         # a recommendation on first table detection — it is not routed through
         # the warnings machinery, so a warnings filter cannot suppress it
@@ -221,6 +229,7 @@ class TextLayerDocumentReader:
         # disables exactly that one message and nothing else.
         pymupdf.no_recommend_layout()
         content = pdf.read_bytes()
+        stamp: dict[str, Any] = {"created_at": created_at} if created_at is not None else {}
         pages: list[PageContent] = []
         previous_page_tables: list[TableStructure] = []
         with pymupdf.open(pdf) as document:
@@ -357,4 +366,5 @@ class TextLayerDocumentReader:
             reader_name=self.name,
             reader_configuration={"normalize_rotation": True} if normalize_rotation else {},
             pages=pages,
+            **stamp,
         )
