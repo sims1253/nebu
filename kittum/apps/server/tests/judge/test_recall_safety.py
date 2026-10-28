@@ -7,6 +7,7 @@ from kittum.models.testing import RecordedBackend
 from kittum.protocol import Criterion
 from tests.judge.records import (
     CHEMO_NAIVE,
+    CHEMO_NAIVE_AGED,
     CONFIG,
     CRITERIA,
     PRIOR_CHEMO,
@@ -223,7 +224,7 @@ MARKUP = item(
 
 @pytest.mark.parametrize("prefix", ["", "<think>The record reports adolescents.</think>\n"])
 def test_a_think_tag_inside_a_json_quote_is_kept(prefix: str) -> None:
-    quote = "patients without prior chemotherapy</think> with advanced"
+    quote = "patients without prior chemotherapy</think> with advanced non-small cell lung cancer"
     text = prefix + answer(
         C_POP_ADULT_NSCLC=("unclear", "", "Age is not reported."),
         C_PRIOR_CHEMO=("not_met", quote, "The patients were chemotherapy-naive."),
@@ -523,7 +524,7 @@ RANDOMIZED = Criterion(
         ),
         (
             RANDOMIZED,
-            "Quit success in the general population: a prospective cohort study.",
+            "This was a prospective cohort study of 3,214 adult smokers.",
             "a prospective cohort study",
         ),
         (
@@ -557,6 +558,70 @@ def test_evidence_against_the_criterions_own_requirement_excludes(
 @pytest.mark.parametrize(
     ("criterion", "sentence", "quote", "check"),
     [
+        # Sol round 2: the negation is read with its whole sentence, however much of it is quoted.
+        (
+            SMOKERS,
+            "We enrolled adults who did not regularly smoke tobacco.",
+            "did not regularly smoke tobacco",
+            "negation",
+        ),
+        (
+            SMOKERS,
+            "We enrolled adults who did not smoke tobacco every day.",
+            "did not smoke tobacco",
+            "negation",
+        ),
+        (
+            SMOKERS,
+            "We enrolled adults who did not smoke tobacco and smokers of cigars.",
+            "did not smoke tobacco",
+            "negation",
+        ),
+        (
+            SMOKERS,
+            "Cigar users were matched to adults who did not smoke tobacco.",
+            "adults who did not smoke tobacco",
+            "negation",
+        ),
+        (
+            _criterion("include", "Previously treated with chemotherapy"),
+            CHEMO_NAIVE_AGED.text.removeprefix("Methods: "),
+            "patients without prior chemotherapy",
+            "negation",
+        ),
+        # Sol round 2: another design only as the object of the record's own description, and
+        # never in a record with any hint of random allocation.
+        (
+            RANDOMIZED,
+            "We conducted baseline assessments using a survey. Participants were assigned by "
+            "lottery to nicotine patches or placebo.",
+            "a survey",
+            "polarity",
+        ),
+        (
+            RANDOMIZED,
+            "We conducted baseline assessments using a survey.",
+            "a survey",
+            "polarity",
+        ),
+        (
+            RANDOMIZED,
+            "This was a pragmatic cohort embedded in a CRT.",
+            "a pragmatic cohort",
+            "polarity",
+        ),
+        (
+            RANDOMIZED,
+            "This was a secondary cohort analysis. Die Zuteilung erfolgte nach dem Zufallsprinzip.",
+            "a secondary cohort analysis",
+            "polarity",
+        ),
+        (
+            RANDOMIZED,
+            "As in an earlier cohort study, smokers were followed for a year.",
+            "an earlier cohort study",
+            "polarity",
+        ),
         # Sol round 1. The negation is limited to an age or a frequency: smoking history, not
         # current non-smoking.
         (
@@ -686,6 +751,16 @@ def test_evidence_against_the_criterions_own_requirement_excludes(
         ),
     ],
     ids=[
+        "S5-regularly",
+        "S5-every-day-after-the-quote",
+        "S6-coordinated-cohort-after-a-shorter-quote",
+        "another-population-before-the-quote",
+        "age-in-the-sentence-of-an-absence",
+        "S7-survey-and-lottery",
+        "S7-survey-as-object-of-assessments",
+        "S8-crt",
+        "S8-zufallsprinzip",
+        "another-studys-design",
         "S1-negation-limited-to-an-age",
         "S1-shorter-quote",
         "S1-frequency",

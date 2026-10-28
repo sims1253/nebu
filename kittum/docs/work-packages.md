@@ -284,13 +284,15 @@ Modules `kittum.judge` and `kittum.models`. Needs: `protocol`, `core`.
   negation cue and it scoped to the key term, and the right polarity for an include or exclude
   criterion. The negation and design checks read the criterion (#44): a negation of one
   requirement of an affirmative condition ("adults ... who did not smoke tobacco" against
-  "Adults who smoke tobacco", with nothing after it in the sentence and no "before age 18" or
-  "daily") and, on a study design criterion, an unnegated other design named by a keyword as the
-  record's own ("a prospective cohort study" against "Randomized controlled trial", in a record
-  that names nothing of the required design, "RCT" included) support `not_met`. `Verdict.excludes` is a proposal for
-  humans and adjudication, never a final exclusion. `judge_many` stores verdicts (migration
-  `20261028120000_judge_verdicts.sql`), artifacts, and `judge.verdict_recorded` events, and
-  skips records already judged under the same cache key.
+  "Adults who smoke tobacco") and, on a study design criterion, another design named by a
+  keyword as the object of the record's own description ("This was a prospective cohort study",
+  or the title's "...: a prospective cohort study" against "Randomized controlled trial", in a
+  record with no hint of random allocation) support `not_met`. Any negated quote that excludes
+  is read with its whole sentence: it runs to the sentence's end, and the sentence names no
+  time, frequency, or age and coordinates or compares no other population. `Verdict.excludes`
+  is a proposal for humans and adjudication, never a final exclusion. `judge_many` stores
+  verdicts (migration `20261028120000_judge_verdicts.sql`), artifacts, and
+  `judge.verdict_recorded` events, and skips records already judged under the same cache key.
 - `judge.judge_metrics`, `pair_metrics` (double-fault rate, OR rule, Cohen's kappa), and
   `fleiss_kappa` for run-to-run agreement.
 - A small gold set (`tests/judge/fixtures/demo_gold.json`): the demo's 30 title and abstract
@@ -317,8 +319,11 @@ Modules `kittum.judge` and `kittum.models`. Needs: `protocol`, `core`.
   not read that way: "received varenicline" against "One arm receives NRT" stays `unclear`,
   because the other arm may have had NRT (the gold set's genetic study is such a case). A
   wording with a generic noun ("Randomized controlled study") verifies no other design, since
-  "a cohort study" names its word "study"; nor does a record that mentions trials in passing. Measure the work saved this costs on gold data before
-  loosening any rule.
+  "a cohort study" names its word "study"; nor does a record that mentions trials or
+  randomization in passing. The whole-sentence reading of negations also turns base cases
+  unclear: "patients without prior chemotherapy, aged 18 years or older, with ..." names an
+  age, and "Patients without prior chemotherapy were enrolled" excludes only if quoted whole.
+  Measure the work saved this costs on gold data before loosening any rule.
 - Accepted limitations of the filter, not to be chased with more patterns: foreign content words
   that carry negation ("Melanoma assente"); a negation in an intervening clause about another
   condition within the window ("Patients with no diabetes received chemotherapy"); evidence about

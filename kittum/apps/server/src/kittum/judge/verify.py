@@ -24,28 +24,32 @@ A `not_met` stands only if all of these hold:
    before a key term and in the same clause. A cue such as "excluded", "with or without", or
    "not only" anywhere in the sentence makes the scope ambiguous. A key term the quote negates
    does not also stand unnegated in the sentence ("adults who did not smoke tobacco and adults
-   who smoke tobacco"), and no word after it in its clause limits the negation to a time, a
-   frequency, or an age ("did not smoke tobacco before age 18").
+   who smoke tobacco").
 7. If the cue negates some of the quote's key terms and not others, the quote states the
    opposite of one requirement of an affirmative condition: "adults who did not smoke tobacco"
    against "Adults who smoke tobacco". Then the key terms it leaves unnegated come before the
-   cue, every key term after it is negated, the sentence ends with the last of them (no "and
-   smokers of cigars" after the quote), and the cue's clause has no word that limits the
-   negation to a time, a frequency, or an age ("before age 18", "daily"). A negative condition
-   is not read this way.
+   cue. A negative condition is not read this way.
 8. The quote fails the criterion in its polarity: it negates an affirmative inclusion condition,
    states a negative inclusion condition's term unnegated, or states an exclusion condition with
    the condition's own polarity. The condition's polarity is read the same way from each wording
    (at most one cue), and the wordings must agree.
-9. On a study design inclusion criterion with an affirmative wording, a key term with a word
+9. A negated quote that excludes is read with the whole sentence, or semicolon clause, that it
+   ends: the quote runs to its end, and nowhere in it does a word limit the negation to a time,
+   a frequency, or an age ("before age 18", "regularly", "every day", "aged 18 years") or
+   coordinate or compare another population ("and", "but", "compared with", "matched to").
+   Words of the criterion's own wording do not count. So a shorter quote hides nothing.
+10. On a study design inclusion criterion with an affirmative wording, a key term with a word
    the wording does not have names another design ("cohort" or "case-control" against
    "Randomized controlled trial"). A quote whose key terms all name another design fails the
-   criterion if it states the design unnegated, as the record's own: followed by a design noun
-   ("cohort study", "case-control analysis") or in a sentence that says what the study is ("This
-   was a ...", "We conducted a ..."). And the record names nothing of the required design
-   anywhere: no other word of the wording or a near spelling ("randomised", "randomly",
-   "trials"), and for a randomized design no "RCT". A prefixed "non-randomized" negates it and
-   does not count. A negated other design ("not a cohort study") is no evidence either way.
+   criterion only if the design is the record's own: the key term lies in the noun phrase of a
+   sentence that says what the study is ("This was a ...", "This study was a ...", "We
+   conducted a ...", "Design: ...", or the title's subtitle after its colon), and that phrase
+   ends in a design noun ("study", "analysis", "survey"). And the record names nothing of the
+   required design anywhere: no other word of the wording or a near spelling ("trials",
+   "randomised"), and for a randomized design no hint of random allocation in any language
+   ("RCT", "CRT", "randomly", "assigned by lottery", "Zufallsprinzip", "aleatorio"). A
+   prefixed "non-randomized" negates it and does not count. A negated other design ("not a
+   cohort study") is no evidence either way.
 
 What the filter cannot catch, by design:
 
@@ -53,7 +57,8 @@ What the filter cannot catch, by design:
 - A negation in an intervening clause about another condition, within the window ("Patients
   with no diabetes received chemotherapy").
 - Evidence about another arm, cohort, or population than the one the criterion is about.
-- A design named for another study than the record's own ("as in an earlier cohort study").
+- A self-description that is about another study than the record's own ("This was a cohort
+  study" in a commentary on it).
 - Partial matches of a condition ("skeletal metastases" against "brain metastases").
 - Anything else that needs understanding rather than structure.
 
@@ -78,7 +83,8 @@ LIMITS: tuple[str, ...] = (
     'A negation in an intervening clause about another condition, within the window ("Patients '
     'with no diabetes received chemotherapy").',
     "Evidence about another arm, cohort, or population than the one the criterion is about.",
-    'A design named for another study than the record\'s own ("as in an earlier cohort study").',
+    "A self-description that is about another study than the record's own "
+    '("This was a cohort study" in a commentary on it).',
     'Partial matches of a condition ("skeletal metastases" against "brain metastases").',
     "Anything else that needs understanding rather than structure.",
 )
@@ -160,28 +166,54 @@ _EQUIVALENT = {"chemotherapie": "chemotherapy", "chemotherapies": "chemotherapy"
 
 _WINDOW = 3  # a negation cue negates a key term at most this many tokens later
 
-# Words that limit a negation to a time, a frequency, or an age: "did not smoke tobacco before age
-# 18" or "did not smoke daily" does not say that someone does not smoke.
-_QUALIFIERS = _vocabulary(
-    """before after since until till during ever previously formerly past prior history
-    lifetime first initially yet anymore longer daily weekly monthly regularly occasionally
-    heavily habitually age vor nach seit bis während früher jemals zuvor täglich regelmäßig"""
-)
-
-# Nouns that make another design the record's own ("a cohort study", "a case-control analysis"),
-# and sentences that say what the study is. A bare "survey" may be a measurement.
-_DESIGN_NOUNS = _vocabulary(
-    """study studies design analysis analyses survey surveys review reviews series
-    studie studien analyse erhebung untersuchung"""
-)
-_OWN_DESIGN = re.compile(
-    r"\b(this|our|the present|the current)\s+(study|work|paper|article|report|analysis|research)"
-    r"\s+(is|was)\b|\bwe\s+(conducted|performed|carried out|undertook|designed)\b"
-    r"|\b(this|it)\s+(is|was)\s+an?\b|\bdiese\s+(studie|arbeit|analyse)\s+(ist|war)\b",
+# A negated quote that excludes is read with the whole sentence, or semicolon clause, it ends: in
+# it, no word may limit the negation to a time, a frequency, or an age ("did not smoke tobacco
+# before age 18", "did not regularly smoke"), and none may bring in another population ("and
+# smokers of cigars", "compared with"). A shorter quote cannot hide either.
+_QUALIFIER = re.compile(
+    r"\b(before|after|since|until|till|during|ever|every|each|daily|weekly|monthly|yearly|"
+    r"annually|nightly|regularly|occasionally|usually|always|often|frequently|sometimes|rarely|"
+    r"habitually|heavily|previously|formerly|lifetime|history|past|anymore|longer|yet|"
+    r"prior\s+to|at\s+least|at\s+most|more\s+than|less\s+than|fewer\s+than|per|"
+    r"age|aged|ages|old|older|younger|"
+    r"\d+(?:[.,]\d+)?\s*-?\s*(?:years?|yrs?|months?|weeks?|wks?|days?|hours?|hrs?|minutes?|mins?)|"
+    r"vor|nach|seit|bis|während|jemals|je|jede[nmrs]?|täglich|wöchentlich|monatlich|jährlich|"
+    r"regelmäßig|gelegentlich|früher|zuvor|bisher|mindestens|höchstens|alter|alt|älter|jünger|"
+    r"jahre?n?|monate?n?|wochen?|tage?n?)\b",
     re.IGNORECASE,
 )
-# Abbreviations that name a randomized design.
-_RANDOMIZED = frozenset({"rct", "crct"})
+_COORDINATION = re.compile(
+    r"\b(and|or|as\s+well\s+as|plus|including|but|except|excluding|versus|vs|compared|"
+    r"comparison|than|whereas|while|whilst|unlike|together\s+with|along\s+with|matched|"
+    r"und|oder|sowie|aber|außer|einschließlich|gegenüber|verglichen|sondern)\b|&|(?<=\w)/(?=\w)",
+    re.IGNORECASE,
+)
+
+# Where a record says what its own study is, so that the noun phrase after it names its design:
+# "This study was a ...", "This was a ...", "We conducted a ...", "Design: ...", and the title's
+# "...: a ...". The phrase runs to the first function word and ends in a design noun.
+_SELF_DESCRIPTION = re.compile(
+    r"(?:(?:methods?|design|study\s+design)\s*:\s*)?"
+    r"(?:(?:this|our|the(?:\s+present|\s+current)?)\s+(?:study|trial|analysis|work|paper|report)"
+    r"\s+(?:is|was)|this\s+(?:is|was)|we\s+(?:conducted|performed|carried\s+out|undertook|report"
+    r"|present|designed))\s+an?\s+"
+    r"|(?:design|study\s+design|study\s+type)\s*:\s*(?:an?\s+)?",
+    re.IGNORECASE,
+)
+_SUBTITLE = re.compile(r"\s*(?:an?\s+)?", re.IGNORECASE)
+_DESIGN_NOUNS = _vocabulary(
+    """study studies design analysis analyses survey surveys review reviews series"""
+)
+
+# Any hint that a record's allocation was random, in the languages abstracts come in. On a
+# randomized design criterion, it blocks every other design ("Randomization was not possible"
+# too: the filter stays conservative). A prefixed "non-randomized" is no such hint.
+_RANDOM_ALLOCATION = re.compile(
+    r"(?<!non-)(?<!nicht-)\b(?:c?rcts?|crts?|random\w*|quasi-?random\w*|lotter\w*|"
+    r"coin\s+(?:toss|flip)\w*|toss(?:ing)?\s+(?:of\s+)?a\s+coin|zufall\w*|aleatori\w*|"
+    r"al[eé]atoire\w*|al\s+azar|au\s+hasard|tirage\s+au\s+sort|sorteo|sorteggio)",
+    re.IGNORECASE,
+)
 
 # A line break alone does not end a sentence: abstracts are often wrapped mid-sentence.
 # A sentence ends at . ! or ?, after any closing bracket or quote mark. A semicolon joins two
@@ -357,11 +389,12 @@ def _other_designs(criterion: Criterion) -> frozenset[tuple[str, ...]]:
 
 
 def _names_required_design(criterion: Criterion, source: str) -> bool:
-    """Whether the record names the required design anywhere: a word of the wording, a near
-    spelling, or "RCT" for a randomized design, outside the other designs' own words."""
+    """Whether the record names the required design anywhere: a word of the wording or a near
+    spelling, outside the other designs' own words, or for a randomized design any hint of
+    random allocation ("RCT", "assigned by lottery", "Zufallsprinzip")."""
     own = _wording_terms(criterion)
-    if any(t.startswith("random") for t in own):
-        own |= _RANDOMIZED
+    if any(t.startswith("random") for t in own) and _RANDOM_ALLOCATION.search(source):
+        return True
     tokens = _tokens(source)
     words = [_term(w) for w, *_ in tokens]
     others = {
@@ -375,6 +408,47 @@ def _names_required_design(criterion: Criterion, source: str) -> bool:
         _related(w, own) and not _PREFIX.match(raw) and i not in others
         for i, (w, (raw, *_)) in enumerate(zip(words, tokens, strict=True))
     )
+
+
+def _design_phrase(source: str, start: int, end: int) -> list[tuple[str, int, int]]:
+    """The noun phrase in which the sentence names the record's own design, as (word, start,
+    end): after "This was a", "We conducted a", or "Design:", up to the first function word, or
+    in the title the whole subtitle after its last colon. Empty if the sentence has none."""
+    sentence = source[start:end]
+    frame = _SELF_DESCRIPTION.match(sentence)
+    subtitle = frame is None and start == 0 and ":" in sentence  # a title runs from offset 0
+    if subtitle:
+        frame = _SUBTITLE.match(sentence, sentence.rindex(":") + 1)
+    if frame is None:
+        return []
+    phrase = []
+    for w, s, e, _ in _tokens(sentence[frame.end() :], start + frame.end()):
+        if w in _PUNCTUATION or w in _FUNCTION_WORDS:
+            if subtitle and w not in ".!?":
+                return []  # a subtitle names the design only as a whole
+            break
+        phrase.append((w, s, e))
+    return phrase if phrase and phrase[-1][0] in _DESIGN_NOUNS else []
+
+
+def _reads_whole(criterion: Criterion, source: str, span: Span) -> bool:
+    """Whether a negated quote can be read with the whole sentence, or semicolon clause, that it
+    ends: nothing follows it there, and nothing in it limits the negation to a time, a
+    frequency, or an age or brings in another population."""
+    start, end = _sentence(source, span)
+    start = source.rfind(";", start, span.start) + 1 or start
+    if (semicolon := source.find(";", span.end, end)) >= 0:
+        end = semicolon
+    if source[span.end : end].strip(" \t\n.!?" + _CLOSERS):
+        return False
+    unit = source[start:end]
+    own = _wording_terms(criterion)
+    limits = [
+        m
+        for m in _QUALIFIER.finditer(unit)
+        if not all(_term(w) in own for w, *_ in _tokens(m.group()))  # "older" in "or older"
+    ]
+    return not limits and _COORDINATION.search(unit) is None
 
 
 def _anchored_negation(criterion: Criterion, source: str, span: Span) -> _Reading:
@@ -412,12 +486,12 @@ def _anchored_negation(criterion: Criterion, source: str, span: Span) -> _Readin
     if any(not any(_negates(raw, c, a) for a in anchors) for c in cues):
         return _Reading("negation")  # a negation the key term does not explain
     others = _other_designs(criterion)
+    phrase = {(s, e) for _, s, e in _design_phrase(source, start, end)}
     reading = _Reading(
         None,
         keys=frozenset(key for _, key in matches),
-        own_design=bool(_OWN_DESIGN.search(sentence))
-        or all(
-            i + len(key) < len(raw) and raw[i + len(key)] in _DESIGN_NOUNS
+        own_design=all(
+            all(tokens[j][1:3] in phrase for j in range(i, i + len(key)))
             for i, key in matches
             if key in others
         ),
@@ -427,22 +501,12 @@ def _anchored_negation(criterion: Criterion, source: str, span: Span) -> _Readin
         return reading
     if any(words[j] == words[a] for a in negated for j in range(len(words)) if j not in negated):
         return _Reading("negation")  # the sentence also states the negated term unnegated
-    last = max(i + len(key) - 1 for i, key in matches if i in negated)
-    after = next((i for i in range(last + 1, len(raw)) if raw[i] in _CLAUSE_BREAKS), len(raw))
-    if any(w in _QUALIFIERS for w in raw[last + 1 : after]):
-        return _Reading("negation")  # "did not smoke tobacco before age 18"
     if len(negated) == len(anchors):
         return reading._replace(negated=True)
     # Some key terms negated, some not: the quote negates one requirement of the condition only
-    # if the cue comes after every term it leaves alone, the sentence ends with the last negated
-    # term, and nothing in the cue's clause limits the negation.
+    # if the cue comes after every term it leaves alone.
     (cue,) = cues
-    clause = max((i for i in range(cue) if raw[i] in _CLAUSE_BREAKS), default=-1) + 1
-    if (
-        any(a > cue for a in anchors if a not in negated)
-        or any(w not in ".!?" for w in raw[last + 1 :])
-        or any(w in _QUALIFIERS for w in raw[clause:last])
-    ):
+    if any(a > cue for a in anchors if a not in negated):
         return _Reading("negation")
     return reading._replace(negated=True, partial=True)
 
@@ -492,7 +556,11 @@ def _check_not_met(
             return None
     contradicts = quote_negated != condition_negative
     fails = contradicts if criterion.polarity == "include" else not contradicts
-    return None if fails else "polarity"
+    if not fails:
+        return "polarity"
+    if quote_negated and not all(_reads_whole(criterion, source, span) for span in spans):
+        return "negation"  # "did not smoke tobacco" from "... every day", "... and smokers"
+    return None
 
 
 def verify(
