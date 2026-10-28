@@ -598,9 +598,12 @@ then. A record sent to the auditor's blind extra screen stays unresolved until t
 decides. Migration `20261029020000_report_artifacts.sql`.
 
 - `prisma`: `flow(review, topic, scope)` from one frozen identity revision (default: the latest
-  at the cutoff). Identification counts the occurrences that revision holds, as
-  `corpus.get_counts` does; records of searches run after it are reported apart
-  (`records_outside_identity`). Records per source and per kind (databases, registers, other),
+  at the cutoff). Identification counts the occurrences of the topic's searches that revision
+  holds; records of searches run after it are reported apart (`records_outside_identity`). Each
+  topic's flow is self-contained, as PRISMA reports one per question: a report several topics
+  found is identified and unique in each. So it equals `corpus.get_counts` (the whole revision)
+  only when one topic was searched; with several, the topics' identified records sum to its
+  total and the union of their unique records is its reports. Records per source and per kind (databases, registers, other),
   duplicates, screened and awaiting screening (screened as screening counts it: every screener
   decided, and the auditor of an extra screen), excluded, sought, not retrieved (sought but not
   in the full-text stage), assessed and awaiting assessment,

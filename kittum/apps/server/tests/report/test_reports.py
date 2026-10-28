@@ -20,6 +20,8 @@ from kittum.report import flow, load_review, one_line, render, render_files
 from kittum.screening import Decision
 from kittum.search import SearchPlan, import_file
 from tests.report.support import (
+    CAPI_SCOPE,
+    CAPI_TITLES,
     EXAMPLES,
     FIXTURES,
     NRT_SCOPE,
@@ -425,6 +427,57 @@ def test_identification_comes_from_the_frozen_revision_when_a_search_follows_it(
         0,
         len(proposal.occurrence_ids) - 1,
     )
+
+
+def test_each_topic_flow_identifies_its_own_searches_and_together_they_cover_the_revision(
+    capivasertib: ReviewWorld,
+) -> None:
+    """Two searched topics: the RCT searches, and the indirect comparison's bridge search, which
+    finds CAPItello-291 and FAKTION again. Each flow stands alone, as PRISMA reports one per
+    question, so both reports are identified and unique in both."""
+    world = capivasertib
+    review = review_at(world)
+    rct, ic = flow(review, "RCT", CAPI_SCOPE), flow(review, "IC", CAPI_SCOPE)
+    turner = world.record(CAPI_TITLES["turner"]).item_ref
+    jones = world.record(CAPI_TITLES["jones"]).item_ref
+
+    # By hand: RCT has 5 MEDLINE, 2 CENTRAL, and 3 CTIS records, two of them CENTRAL repeats of
+    # MEDLINE; IC has the 2 CENTRAL records, both reports RCT found too.
+    assert (rct.records_identified, rct.duplicates_removed, len(rct.members["unique_records"])) == (
+        10,
+        2,
+        8,
+    )
+    assert (ic.records_identified, ic.duplicates_removed, ic.members["unique_records"]) == (
+        2,
+        0,
+        tuple(sorted((turner, jones))),
+    )
+    assert {turner, jones} <= set(rct.members["unique_records"])
+
+    # Each topic identifies exactly its own searches' occurrences in the revision.
+    with world.db.transaction() as tx:
+        per_topic = {
+            r["topic_id"]: r["n"]
+            for r in tx.execute(
+                "select e.topic_id, count(*) as n from identity_link l"
+                " join source_occurrence o on o.occurrence_id = l.occurrence_id"
+                " join search_execution e on e.id = o.execution_id"
+                " where l.revision_id = %s group by e.topic_id",
+                (rct.identity_revision_id,),
+            ).fetchall()
+        }
+        counts = get_counts(tx, world.project_id, rct.identity_revision_id)  # type: ignore[arg-type]
+    assert per_topic == {"RCT": rct.records_identified, "IC": ic.records_identified}
+
+    # Together the flows cover the revision: the identified records sum to the corpus's total,
+    # and the union of the unique records is its reports. Neither flow alone equals get_counts.
+    assert review.identity is not None
+    union = set(rct.members["unique_records"]) | set(ic.members["unique_records"])
+    assert union == {str(link.report_id) for link in review.identity.links}
+    assert len(union) == counts.unique_records == 8
+    assert rct.records_identified + ic.records_identified == counts.total_records_identified == 12
+    assert counts.duplicates_removed == 4 != rct.duplicates_removed + ic.duplicates_removed
 
 
 def test_ai_disclosure_names_the_models_both_readings_and_the_extra_screens(

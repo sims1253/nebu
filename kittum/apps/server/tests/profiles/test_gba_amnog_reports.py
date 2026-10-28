@@ -52,9 +52,11 @@ def test_the_annexes_list_each_search_and_each_exclusion_with_its_criterion(
     assert "Wong 2006" in text  # the study filter from the source plan
     assert "| 4 | #4 #1 AND #2 AND #3 | 5 |" in text  # the last line carries the hits
     assert "Clinical Trials Information System" not in text  # registries go to 4-B
-    assert [(r["Quelle"], r["Treffer"]) for r in rows(a["4-A.csv"])] == [
-        ("MEDLINE", "5"),
-        ("Cochrane Central Register of Controlled Trials", "2"),
+    # Each Recherche has its own block: the IC bridge search is 4-A2.
+    assert [(r["Anhang"], r["Quelle"], r["Treffer"]) for r in rows(a["4-A.csv"])] == [
+        ("4-A1", "MEDLINE", "5"),
+        ("4-A1", "Cochrane Central Register of Controlled Trials", "2"),
+        ("4-A2", "Cochrane Central Register of Controlled Trials", "2"),
     ]
     b = files(review, "gba_amnog.anhang_4b")
     assert [(r["Quelle"], r["Suchstrategie"], r["Treffer"]) for r in rows(b["4-B.csv"])] == [
@@ -131,13 +133,23 @@ def test_the_anlage_ii_1_tree_and_the_annexes_travel_in_the_bundle(
     tree = files(review, "gba_amnog.anlage_ii_1")
     area = f"{ANLAGE_II_1['root']}/Modul4A"
     searches = sorted(p for p in tree if p.startswith(f"{area}/{ANLAGE_II_1['searches']}/"))
-    assert [p.rsplit("/", 1)[1].split("_")[:3] for p in searches] == [
+    names = [p.rsplit("/", 1)[1].split("_")[:3] for p in searches]
+    assert names == [
+        ["IC", "01", "central"],
         ["RCT", "01", "medline"],
         ["RCT", "02", "central"],
         ["RCT", "03", "ctis"],
     ]
-    for path, run in zip(searches, review.searches, strict=True):
-        assert len(rispy.loads(tree[path].decode())) == run.execution.retrieved_count
+    by_topic = {
+        (topic, f"{n:02d}"): run
+        for topic in ("RCT", "IC")
+        for n, run in enumerate(
+            (r for r in review.searches if r.execution.plan.topic_id == topic), start=1
+        )
+    }
+    for path, (topic, n, _) in zip(searches, names, strict=True):
+        expected = by_topic[topic, n].execution.retrieved_count
+        assert len(rispy.loads(tree[path].decode())) == expected
     lists = f"{area}/{ANLAGE_II_1['lists']}"
     included = rispy.loads(tree[f"{lists}/RCT_eingeschlossen.ris"].decode())
     assert len(included) == flow(review, "RCT", CAPI_SCOPE).reports_included == 3

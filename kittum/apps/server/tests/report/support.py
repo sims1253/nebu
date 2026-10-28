@@ -9,8 +9,9 @@ report of a CENTRAL trial; a human confirms every link proposal, so the PRISMA f
 duplicates and a study with two reports.
 
 `capivasertib_review`: the capivasertib example under the `gba_amnog` profile. MEDLINE and
-CENTRAL exports and a CTIS registry export; registry entries are excluded at title and abstract,
-and one report at full text, which Anhang 4-C and 4-D list.
+CENTRAL exports and a CTIS registry export for the RCT topic, and a CENTRAL bridge search for the
+indirect comparison (IC) that finds two of the same reports; registry entries are excluded at
+title and abstract, and one report at full text, which Anhang 4-C and 4-D list.
 
 The judge runs on recorded completions keyed by the exact request. Every decision goes through
 `Screening`, so the ledger holds every event a real review would.
@@ -150,9 +151,19 @@ class ReviewWorld:
     # Searches and the corpus
 
     def import_file(
-        self, tx: Tx, source: str, platform: str, strategy: str, path: Path, fmt: str
+        self,
+        tx: Tx,
+        source: str,
+        platform: str,
+        strategy: str,
+        path: Path,
+        fmt: str,
+        *,
+        topic: str | None = None,
     ) -> None:
-        plan = SearchPlan(topic_id=self.topic, source=source, platform=platform, strategy=strategy)
+        plan = SearchPlan(
+            topic_id=topic or self.topic, source=source, platform=platform, strategy=strategy
+        )
         self.executions.append(
             import_file(
                 tx,
@@ -619,6 +630,16 @@ def capivasertib_review(db: Database) -> ReviewWorld:
             "capivasertib",
             FIXTURES / "capivasertib_ctis.csv",
             "ctis",
+        )
+        # The indirect comparison's bridge search finds CAPItello-291 and FAKTION again.
+        world.import_file(
+            tx,
+            "central",
+            "Cochrane Library (Wiley)",
+            "#1 fulvestrant:ti,ab,kw\n#2 (randomized OR randomised):ti,ab\n#3 #1 AND #2",
+            FIXTURES / "capivasertib_central.ris",
+            "central",
+            topic="IC",
         )
         revision = world.build_corpus(tx, confirm_all=False)
         # The lead merges the reports that share a DOI, and nothing else.
