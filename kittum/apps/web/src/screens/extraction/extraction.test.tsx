@@ -144,6 +144,31 @@ describe("extraction review", () => {
     expect(app.workbench.groupAccepts[0]?.listViewedMs).toBeLessThan(VIEW_MS + 400);
   });
 
+  test("does not count the time the tab was hidden towards a source's view", async () => {
+    const app = mount(RUN);
+    unmount = app.unmount;
+    await expect.element(page.getByText("1 of 21 accepted"), settle).toBeVisible();
+    await press("Tab"); // patients randomised to ASC alone, on page 6
+    await expect
+      .poll(() => document.querySelector<HTMLImageElement>("[data-page='6'] img")?.complete, settle)
+      .toBe(true);
+    await expect.element(page.getByTestId("source-highlight").first(), settle).toBeVisible();
+    // A glance at the source, a second in another tab, and back: not a look at it.
+    await pause(150);
+    setHidden(true);
+    await pause(VIEW_MS + 600);
+    setHidden(false);
+    await pause(100);
+    await press("Enter");
+    await expect.element(notice(), settle).toMatchTextContent("Look at the highlighted source");
+    expect(app.workbench.acceptances).toHaveLength(0);
+    // Its time runs again once the page is back.
+    await pause(VIEW_MS + 200);
+    await press("Enter");
+    await expect.element(page.getByText("2 of 21 accepted"), settle).toBeVisible();
+    expect(app.workbench.acceptances[0]?.sourceViewedMs).toBeLessThan(VIEW_MS + 900);
+  });
+
   test("does not resume a group's time on return until a fresh report says the rows are in view", async () => {
     const app = mount(RUN);
     unmount = app.unmount;
@@ -170,6 +195,41 @@ describe("extraction review", () => {
     await pause(VIEW_MS + 200);
     await press("a");
     await expect.element(page.getByText("3 of 21 accepted"), settle).toBeVisible();
+  });
+
+  test("does not resume a source's time on return until a fresh report says it is in view", async () => {
+    const app = mount(RUN);
+    unmount = app.unmount;
+    await expect.element(page.getByText("1 of 21 accepted"), settle).toBeVisible();
+    await press("Tab"); // patients randomised to ASC alone, on page 6
+    await expect
+      .poll(() => document.querySelector<HTMLImageElement>("[data-page='6'] img")?.complete, settle)
+      .toBe(true);
+    const box = page.getByTestId("source-highlight").first();
+    await expect.element(box, settle).toBeVisible();
+    await pause(150);
+    // Away, the viewer scrolls the source out of view, its page still drawn; back, the observer
+    // is slow to say so.
+    const highlight = document.querySelector<HTMLElement>("[data-testid=source-highlight]")!;
+    const scroller = scrollParent(highlight);
+    setHidden(true);
+    hold();
+    scroller.scrollTop -=
+      scroller.getBoundingClientRect().bottom - highlight.getBoundingClientRect().top + 40;
+    await pause(300);
+    setHidden(false);
+    await pause(VIEW_MS + 200);
+    expect(highlight.getBoundingClientRect().top).toBeGreaterThan(
+      scroller.getBoundingClientRect().bottom,
+    );
+    await press("Enter");
+    await expect.element(notice(), settle).toMatchTextContent("Look at the highlighted source");
+    expect(app.workbench.acceptances).toHaveLength(0);
+    // The refusal brings the source back; once the reports arrive, its time runs again.
+    release();
+    await pause(VIEW_MS + 300);
+    await press("Enter");
+    await expect.element(page.getByText("2 of 21 accepted"), settle).toBeVisible();
   });
 
   test("does not count time before the page image has drawn", async () => {

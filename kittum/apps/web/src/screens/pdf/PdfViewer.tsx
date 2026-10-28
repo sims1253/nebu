@@ -260,18 +260,40 @@ function PageView({
     ];
     if (elements.length === 0 || !onCurrentVisible || !imageReady) return;
     const report = (visible: boolean) => onCurrentVisible(size.page, visible);
-    // `isIntersecting` is true for any overlap; the gate wants 90% of each box on screen.
+    // `isIntersecting` is true for any overlap; the gate wants 90% of each box on screen. A
+    // hidden page shows nothing; on its return each box needs a report computed after it, since
+    // the source may have scrolled away meanwhile.
     const ratios = new Map<Element, number>();
+    let shownSince = document.hidden ? Infinity : 0;
     const observer = new IntersectionObserver(
       (entries) => {
-        for (const entry of entries) ratios.set(entry.target, entry.intersectionRatio);
+        if (document.hidden) return;
+        for (const entry of entries) {
+          if (entry.time >= shownSince) ratios.set(entry.target, entry.intersectionRatio);
+        }
         report(elements.every((e) => (ratios.get(e) ?? 0) >= VISIBLE_RATIO));
       },
       { threshold: VISIBLE_RATIO },
     );
     for (const element of elements) observer.observe(element);
+    const onVisibility = () => {
+      ratios.clear();
+      if (document.hidden) {
+        shownSince = Infinity;
+        report(false);
+        return;
+      }
+      // Observing afresh makes the observer report each box as it is now.
+      shownSince = performance.now();
+      for (const element of elements) {
+        observer.unobserve(element);
+        observer.observe(element);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       observer.disconnect();
+      document.removeEventListener("visibilitychange", onVisibility);
       report(false);
     };
   }, [currentBoxes, onCurrentVisible, imageReady, size.page]);

@@ -134,13 +134,16 @@ export function ExtractionScreen({ review }: { review: ExtractionReview }) {
     : "";
 
   // Record how long the selected source is on screen. A new identity gets a new callback, so the
-  // viewer re-observes and reports afresh; reports for an old identity are ignored.
+  // viewer re-observes and reports afresh; reports for an old identity are ignored. The time runs
+  // only while the page is visible. On its return it waits for the viewer's fresh report (the
+  // viewer forgets what it saw while the page was hidden), never resuming on what it last said.
   const onCurrentVisible = useCallback(
     (isVisible: boolean) => {
       const now = performance.now();
       const open = visible.current;
       if (isVisible) {
-        if (open?.key !== sourceKey) visible.current = { key: sourceKey, since: now };
+        if (open?.key !== sourceKey && !document.hidden)
+          visible.current = { key: sourceKey, since: now };
       } else if (open?.key === sourceKey) {
         viewed.current.set(sourceKey, (viewed.current.get(sourceKey) ?? 0) + now - open.since);
         visible.current = null;
@@ -148,6 +151,19 @@ export function ExtractionScreen({ review }: { review: ExtractionReview }) {
     },
     [sourceKey],
   );
+  useEffect(() => {
+    const onVisibility = () => {
+      const open = visible.current;
+      if (!document.hidden || !open) return;
+      viewed.current.set(
+        open.key,
+        (viewed.current.get(open.key) ?? 0) + performance.now() - open.since,
+      );
+      visible.current = null;
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
   useEffect(() => {
     rows.current.get(field?.id ?? "")?.scrollIntoView({ block: "nearest" });
   }, [field?.id]);
