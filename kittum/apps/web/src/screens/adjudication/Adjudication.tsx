@@ -744,7 +744,9 @@ function AiColumn({
           const where = onPage
             ? page
               ? `Marked on page ${page}.`
-              : null
+              : span?.part === "title"
+                ? IN_TITLE
+                : null
             : span?.part === "title"
               ? "Marked in the title."
               : "Marked in the record.";
@@ -766,7 +768,11 @@ function AiColumn({
                 quote={c.quote ?? null}
                 verified={c.quote_verified}
                 markedAt={
-                  !span || where === null ? null : i !== active ? "Press , or . to mark it." : where
+                  !span || where === null
+                    ? null
+                    : i !== active && where !== IN_TITLE
+                      ? "Press , or . to mark it."
+                      : where
                 }
                 marked={i === active}
                 compact
@@ -778,6 +784,9 @@ function AiColumn({
     </section>
   );
 }
+
+/** At full text the title is in the header, not on a PDF page, so there is nothing to mark. */
+const IN_TITLE = "It is in the record's title, not on the page.";
 
 function Message({ title, children }: { title: string; children?: ReactNode }) {
   return (

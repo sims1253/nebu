@@ -559,7 +559,14 @@ function FullTextScreen({
                 : reveal.criterion_id,
               text: revealedCriterion?.text_en ?? null,
             }}
-            markedAt={aiPage ? `Marked on page ${aiPage}.` : null}
+            markedAt={
+              aiPage
+                ? `Marked on page ${aiPage}.`
+                : reveal.quote_verified && reveal.quote_span?.part === "title"
+                  ? "It is in the record's title, not on the page."
+                  : null
+            }
+            canJump={aiPage !== undefined}
             agrees={
               provisional !== null &&
               (provisional.outcome === "exclude") === (reveal.status === "not_met")
@@ -698,12 +705,14 @@ function FullTextReveal({
   reveal,
   criterion,
   markedAt,
+  canJump,
   agrees,
   settled,
 }: {
   reveal: Reveal;
   criterion: CriterionName;
   markedAt: string | null;
+  canJump: boolean;
   agrees: boolean;
   settled: boolean;
 }) {
@@ -732,7 +741,7 @@ function FullTextReveal({
         <p className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs">
           <KeyHint keys={[" "]}>Keep yours</KeyHint>
           <KeyHint keys={["i", "e", "x"]}>Change it</KeyHint>
-          {markedAt ? <KeyHint keys={["q"]}>Show the quote</KeyHint> : null}
+          {canJump ? <KeyHint keys={["q"]}>Show the quote</KeyHint> : null}
         </p>
       )}
     </section>
