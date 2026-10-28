@@ -282,12 +282,27 @@ Modules `kittum.judge` and `kittum.models`. Needs: `protocol`, `core`.
   downgrades `not_met` answers whose evidence is not structurally supported: one sentence, a
   whole-word key term without a negating compound prefix, an English or German quote, at most one
   negation cue and it scoped to the key term, and the right polarity for an include or exclude
-  criterion. `Verdict.excludes` is a proposal for humans and adjudication, never a final
-  exclusion. `judge_many` stores verdicts (migration
-  `20261028120000_judge_verdicts.sql`), artifacts, and `judge.verdict_recorded` events, and
-  skips records already judged under the same cache key.
+  criterion. The negation and design checks read the criterion (#44): a negation of one
+  requirement of an affirmative condition ("adults ... who did not smoke tobacco" against
+  "Adults who smoke tobacco") and, on a study design criterion, another design named by a
+  keyword as the object of the record's own description ("This was a prospective cohort study",
+  or the title's "...: a prospective cohort study" against "Randomized controlled trial", in a
+  record with no hint of random allocation) support `not_met`. Any negated quote that excludes
+  is read with its whole sentence: nothing but closing punctuation follows its last negated
+  term, the sentence names no time, frequency, or age and coordinates or compares no other
+  population, and no earlier sentence says who was excluded, across blank lines and list
+  items, unless a sentence stating who was enrolled or a section label comes between. A bare
+  survey, questionnaire, interview, or assessment is a measurement, not a design.
+  `Verdict.excludes` is a proposal for humans and adjudication, never a final exclusion.
+  `judge_many` stores verdicts (migration `20261028120000_judge_verdicts.sql`), artifacts, and
+  `judge.verdict_recorded` events, and skips records already judged under the same cache key.
 - `judge.judge_metrics`, `pair_metrics` (double-fault rate, OR rule, Cohen's kappa), and
   `fleiss_kappa` for run-to-run agreement.
+- A small gold set (`tests/judge/fixtures/demo_gold.json`): the demo's 30 title and abstract
+  items, the screeners' decisions from the end-to-end plan, and recorded answers from
+  GLM-5.3-Flash and qwen3.5:4b. The filter verifies 2 of GLM's 5 correct `not_met` readings (was
+  0) and 2 of qwen's 5 (was 1), and none that the screeners contradict. GLM's "This ComBaCaL
+  cohort study" stays `unclear`: the record also mentions "nested trials".
 
 **Left.**
 
@@ -302,7 +317,16 @@ Modules `kittum.judge` and `kittum.models`. Needs: `protocol`, `core`.
   one of its terms ("patients aged 12 to 17 years" against "adults") is `unclear`, as are
   exclusions on mixed conditions ("adults without EGFR mutation") and negations more than three
   tokens or a clause away from the key term. Protocol `keywords` let authors anchor such criteria
-  ("aged", "adolescent"), but an affirmative inclusion condition still needs a scoped negation.
+  ("aged", "adolescent"), but an affirmative inclusion condition still needs a scoped negation,
+  except that a study design criterion's keywords name other designs. Other interventions are
+  not read that way: "received varenicline" against "One arm receives NRT" stays `unclear`,
+  because the other arm may have had NRT (the gold set's genetic study is such a case). A
+  wording with a generic noun ("Randomized controlled study") verifies no other design, since
+  "a cohort study" names its word "study"; nor does a record that mentions trials or
+  randomization in passing. The whole-sentence reading of negations also turns base cases
+  unclear: "patients without prior chemotherapy, aged 18 years or older, with ..." names an
+  age, and "Patients without prior chemotherapy were enrolled" has words after the negated
+  term (German verb-final sentences mostly do).
   Measure the work saved this costs on gold data before loosening any rule.
 - Accepted limitations of the filter, not to be chased with more patterns: foreign content words
   that carry negation ("Melanoma assente"); a negation in an intervening clause about another
@@ -449,7 +473,8 @@ Left open:
   the audit samples sets how much an item there hints that the AI disagreed. A larger audit
   percentage dilutes it; the rate is not tuned against the expected number of disagreements.
 - The judge's filter confirms few exclusions on the example protocols (wordings with "without", or
-  keywords without a negation, fail the polarity check), so the verified reading mostly includes.
+  intervention keywords without a negation, fail the polarity check), so the verified reading
+  mostly includes.
   Escalation uses the model's own reading, so this no longer floods M1 adjudication, but M3 order
   and the audit strata see few verified exclusions.
 

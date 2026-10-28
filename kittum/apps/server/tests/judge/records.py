@@ -95,9 +95,18 @@ EXCLUDED_CHEMO_NAIVE = item(
 CHEMO_NAIVE = item(
     "occ-chemo-naive",
     "First-line osimertinib versus gefitinib in EGFR-mutated non-small cell lung cancer",
-    "Methods: This double-blind, randomised phase 3 trial enrolled 212 patients without prior "
-    "chemotherapy, aged 18 years or older, with EGFR-mutated advanced non-small cell lung cancer.\n"
+    "Methods: This double-blind, randomised phase 3 trial enrolled 212 adults aged 18 years or "
+    "older, with EGFR-mutated advanced non-small cell lung cancer. All were patients without prior "
+    "chemotherapy.\n"
     "Results: Median progression-free survival was 18.9 versus 10.2 months (HR 0.46).",
+)
+# The same absence in a sentence that also gives an age: a negated quote is read with its whole
+# sentence, which here holds "aged 18 years or older", so it cannot exclude.
+CHEMO_NAIVE_AGED = item(
+    "occ-chemo-naive-aged",
+    "First-line osimertinib versus gefitinib in EGFR-mutated non-small cell lung cancer",
+    "Methods: This double-blind, randomised phase 3 trial enrolled 212 patients without prior "
+    "chemotherapy, aged 18 years or older, with EGFR-mutated advanced non-small cell lung cancer.",
 )
 
 INJECTED = item(

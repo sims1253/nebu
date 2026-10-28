@@ -7,6 +7,7 @@ from kittum.models.testing import RecordedBackend
 from kittum.protocol import Criterion
 from tests.judge.records import (
     CHEMO_NAIVE,
+    CHEMO_NAIVE_AGED,
     CONFIG,
     CRITERIA,
     PRIOR_CHEMO,
@@ -216,14 +217,14 @@ def test_a_decision_directive_in_the_abstract_cannot_exclude() -> None:
 MARKUP = item(
     "occ-markup",
     "First-line osimertinib in non-small cell lung cancer",
-    "Methods: This randomised phase 3 trial enrolled 212 patients without prior "
-    "chemotherapy</think> with advanced non-small cell lung cancer.",
+    "Methods: This randomised phase 3 trial enrolled 212 patients</think> without prior "
+    "chemotherapy.",
 )
 
 
 @pytest.mark.parametrize("prefix", ["", "<think>The record reports adolescents.</think>\n"])
 def test_a_think_tag_inside_a_json_quote_is_kept(prefix: str) -> None:
-    quote = "patients without prior chemotherapy</think> with advanced"
+    quote = "patients</think> without prior chemotherapy"
     text = prefix + answer(
         C_POP_ADULT_NSCLC=("unclear", "", "Age is not reported."),
         C_PRIOR_CHEMO=("not_met", quote, "The patients were chemotherapy-naive."),
@@ -269,14 +270,14 @@ CHEMO_NO_DIABETES = item(
 NAIVE_ENROLLED = item(
     "occ-naive-enrolled",
     "Osimertinib in EGFR-mutated non-small cell lung cancer",
-    "Methods: This was a randomised phase 3 trial. Patients without prior chemotherapy were "
-    "enrolled.",
+    "Methods: This was a randomised phase 3 trial. We enrolled patients without prior "
+    "chemotherapy.",
 )
 NAIVE_ENROLLED_DE = item(
     "occ-naive-enrolled-de",
     "Osimertinib beim EGFR-mutierten nicht-kleinzelligen Lungenkarzinom",
-    "Methoden: Randomisierte Phase-3-Studie. Patienten ohne vorherige Chemotherapie wurden "
-    "eingeschlossen.",
+    "Methoden: Randomisierte Phase-3-Studie. Eingeschlossen wurden Patienten ohne vorherige "
+    "Chemotherapie.",
 )
 WITH_MELANOMA = item(
     "occ-melanoma",
@@ -352,12 +353,12 @@ def test_evidence_that_does_not_positively_verify_is_unclear(
         (
             ("include", PREVIOUSLY_TREATED),
             NAIVE_ENROLLED,
-            "Patients without prior chemotherapy were enrolled",
+            "patients without prior chemotherapy",
         ),
         (
             ("include", PREVIOUSLY_TREATED_DE),
             NAIVE_ENROLLED_DE,
-            "Patienten ohne vorherige Chemotherapie wurden eingeschlossen",
+            "Eingeschlossen wurden Patienten ohne vorherige Chemotherapie",
         ),
         (None, WITH_MELANOMA, "Patients with melanoma"),
     ],
@@ -468,6 +469,497 @@ def test_structurally_unsupported_exclusions_are_unclear(
 ) -> None:
     record = _record("occ-round-4", sentence)
     verdict = _judge_chemo(record, _criterion(*criterion), quote)
+    (result,) = verdict.criteria
+    assert result.quote_verified
+    assert (result.status, result.downgraded_from, result.failed_check) == (
+        "unclear",
+        "not_met",
+        check,
+    )
+    assert not verdict.excludes
+
+
+# Round 5: the negation and design checks read the criterion. A negation of one requirement of
+# an affirmative condition, and another design than the one required, support not_met.
+
+SMOKERS = Criterion(
+    id="C_CHEMO",  # the answer key `_judge_chemo` uses
+    slot="population",
+    text={
+        "en": "Adults (18 years or older) who smoke tobacco.",
+        "de": "Erwachsene (ab 18 Jahren), die Tabak rauchen.",
+    },
+    decidable_at=("title_abstract",),
+    applies_to=(SCOPE,),
+)
+
+
+def _plain(text: str) -> ScreeningItem:
+    """A record whose title names no design, so only `text` can."""
+    return item("occ-round-5", "Smoking cessation in primary care", text)
+
+
+RANDOMIZED = Criterion(
+    id="C_CHEMO",
+    slot="study_type",
+    text={"en": "Randomized or quasi-randomized controlled trial."},
+    decidable_at=("title_abstract",),
+    applies_to=(SCOPE,),
+    keywords=("cohort", "cross-sectional", "case-control", "observational", "review", "survey"),
+)
+
+
+@pytest.mark.parametrize(
+    ("criterion", "sentence", "quote"),
+    [
+        (
+            SMOKERS,
+            "We enrolled 64 adults with active ulcerative colitis who did not smoke tobacco.",
+            "adults with active ulcerative colitis who did not smoke tobacco",
+        ),
+        (
+            SMOKERS,
+            "Eingeschlossen wurden Erwachsene mit Colitis, die keinen Tabak rauchen.",
+            "Erwachsene mit Colitis, die keinen Tabak rauchen",
+        ),
+        (
+            RANDOMIZED,
+            "This was a prospective cohort study of 3,214 adult smokers.",
+            "a prospective cohort study",
+        ),
+        (
+            RANDOMIZED,
+            "This was a non-randomized observational study of 300 smokers.",
+            "a non-randomized observational study",
+        ),
+        (
+            RANDOMIZED,
+            "We conducted a matched case-control study in 12 hospitals.",
+            "a matched case-control study",
+        ),
+        (RANDOMIZED, "This was a cross-sectional survey.", "a cross-sectional survey"),
+        (
+            SMOKERS,
+            "We enrolled adults who did not smoke tobacco.",
+            "adults who did not smoke tobacco",
+        ),
+        (
+            SMOKERS,
+            "Pregnancy was a reason for exclusion. Adults with colitis were recruited in 12 "
+            "clinics.\n\nWe enrolled adults who did not smoke tobacco.",
+            "adults who did not smoke tobacco",
+        ),
+        # Sentences that state who was enrolled, and section labels, end an exclusion list.
+        (
+            SMOKERS,
+            "Patients were excluded if they had cancer. Adults with colitis were recruited in 12 "
+            "clinics. We enrolled adults who did not smoke tobacco.",
+            "adults who did not smoke tobacco",
+        ),
+        (
+            SMOKERS,
+            "Exclusion criteria were predefined. Uncontrolled infection.\n\nMETHODS: We enrolled "
+            "adults who did not smoke tobacco.",
+            "adults who did not smoke tobacco",
+        ),
+    ],
+    ids=[
+        "negated-requirement-en",
+        "negated-requirement-de",
+        "other-design",
+        "non-randomized",
+        "case-control",
+        "cross-sectional-survey",
+        "plain-negated-requirement",
+        "exclusion-in-an-earlier-paragraph",
+        "enrolment-ends-the-exclusion-list",
+        "section-label-ends-the-exclusion-list",
+    ],
+)
+def test_evidence_against_the_criterions_own_requirement_excludes(
+    criterion: Criterion, sentence: str, quote: str
+) -> None:
+    verdict = _judge_chemo(_plain(sentence), criterion, quote)
+    (result,) = verdict.criteria
+    assert (result.status, result.failed_check, result.quote_verified) == ("not_met", None, True)
+    assert verdict.excludes
+
+
+@pytest.mark.parametrize(
+    ("criterion", "sentence", "quote", "check"),
+    [
+        # Sol round 3: nothing but closing punctuation may follow the last negated term.
+        (
+            SMOKERS,
+            "We enrolled adults who did not smoke tobacco on weekdays.",
+            "adults who did not smoke tobacco on weekdays",
+            "negation",
+        ),
+        (
+            SMOKERS,
+            "We enrolled adults who did not smoke tobacco in adolescence.",
+            "adults who did not smoke tobacco in adolescence",
+            "negation",
+        ),
+        (
+            _criterion("include", "Previously treated with chemotherapy"),
+            "Patients without prior chemotherapy were enrolled.",
+            "Patients without prior chemotherapy were enrolled",
+            "negation",
+        ),
+        (
+            _chemo_criterion("include", PREVIOUSLY_TREATED_DE).model_copy(update={"keywords": ()}),
+            "Patienten ohne vorherige Chemotherapie wurden eingeschlossen.",
+            "Patienten ohne vorherige Chemotherapie wurden eingeschlossen",
+            "negation",
+        ),
+        # Sol round 3: the sentence before, or a list's introduction, says who was left out.
+        (
+            _criterion("include", "Previously treated with chemotherapy"),
+            "The following were exclusion criteria. No prior chemotherapy.",
+            "No prior chemotherapy",
+            "negation",
+        ),
+        (
+            _criterion("include", "Previously treated with chemotherapy"),
+            "Exclusion criteria were as follows: age under 18. No prior chemotherapy.",
+            "No prior chemotherapy",
+            "negation",
+        ),
+        # Sol round 4: the exclusion list's introduction is sentences back, without a colon.
+        (
+            _criterion("include", "Previously treated with chemotherapy"),
+            "Exclusion criteria were predefined. Uncontrolled infection. No prior chemotherapy.",
+            "No prior chemotherapy",
+            "negation",
+        ),
+        (
+            _criterion("include", "Previously treated with chemotherapy"),
+            "Exclusion criteria were predefined. Uncontrolled infection. Pregnancy. No prior "
+            "chemotherapy.",
+            "No prior chemotherapy",
+            "negation",
+        ),
+        (
+            SMOKERS,
+            "Patients were excluded if they had cancer. Most had colitis. We enrolled adults who "
+            "did not smoke tobacco.",
+            "adults who did not smoke tobacco",
+            "negation",
+        ),
+        # Sol round 5: the list runs on across blank lines, bullets, and numbered items.
+        (
+            _criterion("include", "Previously treated with chemotherapy"),
+            "Exclusion criteria were predefined. Uncontrolled infection.\n\nNo prior chemotherapy.",
+            "No prior chemotherapy",
+            "negation",
+        ),
+        (
+            _criterion("include", "Previously treated with chemotherapy"),
+            "Exclusion criteria:\n\n- Uncontrolled infection\n\n- Pregnancy\n\n- No prior "
+            "chemotherapy",
+            "No prior chemotherapy",
+            "negation",
+        ),
+        (
+            _criterion("include", "Previously treated with chemotherapy"),
+            "Exclusion criteria were predefined.\n\n1. Uncontrolled infection.\n\n2. No prior "
+            "chemotherapy.",
+            "No prior chemotherapy",
+            "negation",
+        ),
+        (
+            _criterion("include", "Previously treated with chemotherapy"),
+            "Exclusion criteria:\n\nNo prior chemotherapy.",
+            "No prior chemotherapy",
+            "negation",
+        ),
+        # Sol round 3: random allocation in ordinary phrasing or with accents, and a survey that
+        # is a measurement.
+        (
+            RANDOMIZED,
+            "We conducted a survey at baseline. Participants were assigned to nicotine patches or "
+            "placebo by drawing lots.",
+            "a survey",
+            "polarity",
+        ),
+        (
+            RANDOMIZED,
+            "We conducted a survey at baseline. Os participantes foram distribuídos de forma "
+            "aleatória.",
+            "a survey",
+            "polarity",
+        ),
+        (
+            RANDOMIZED,
+            "This was a prospective cohort study. Participants were assigned to nicotine patches "
+            "or placebo by drawing lots.",
+            "a prospective cohort study",
+            "polarity",
+        ),
+        (
+            RANDOMIZED,
+            "This was a prospective cohort study. Os participantes foram distribuídos de forma "
+            "aleatória.",
+            "a prospective cohort study",
+            "polarity",
+        ),
+        (RANDOMIZED, "We conducted a survey.", "a survey", "polarity"),
+        (
+            RANDOMIZED,
+            "This was a cross-sectional survey of 300 smokers.",
+            "a cross-sectional survey",
+            "polarity",
+        ),
+        (RANDOMIZED, "We conducted a cohort study at baseline.", "a cohort study", "polarity"),
+        # Sol round 2: the negation is read with its whole sentence, however much of it is quoted.
+        (
+            SMOKERS,
+            "We enrolled adults who did not regularly smoke tobacco.",
+            "did not regularly smoke tobacco",
+            "negation",
+        ),
+        (
+            SMOKERS,
+            "We enrolled adults who did not smoke tobacco every day.",
+            "did not smoke tobacco",
+            "negation",
+        ),
+        (
+            SMOKERS,
+            "We enrolled adults who did not smoke tobacco and smokers of cigars.",
+            "did not smoke tobacco",
+            "negation",
+        ),
+        (
+            SMOKERS,
+            "Cigar users were matched to adults who did not smoke tobacco.",
+            "adults who did not smoke tobacco",
+            "negation",
+        ),
+        (
+            _criterion("include", "Previously treated with chemotherapy"),
+            CHEMO_NAIVE_AGED.text.removeprefix("Methods: "),
+            "patients without prior chemotherapy",
+            "negation",
+        ),
+        # Sol round 2: another design only as the object of the record's own description, and
+        # never in a record with any hint of random allocation.
+        (
+            RANDOMIZED,
+            "We conducted baseline assessments using a survey. Participants were assigned by "
+            "lottery to nicotine patches or placebo.",
+            "a survey",
+            "polarity",
+        ),
+        (
+            RANDOMIZED,
+            "We conducted baseline assessments using a survey.",
+            "a survey",
+            "polarity",
+        ),
+        (
+            RANDOMIZED,
+            "This was a pragmatic cohort embedded in a CRT.",
+            "a pragmatic cohort",
+            "polarity",
+        ),
+        (
+            RANDOMIZED,
+            "This was a secondary cohort analysis. Die Zuteilung erfolgte nach dem Zufallsprinzip.",
+            "a secondary cohort analysis",
+            "polarity",
+        ),
+        (
+            RANDOMIZED,
+            "As in an earlier cohort study, smokers were followed for a year.",
+            "an earlier cohort study",
+            "polarity",
+        ),
+        # Sol round 1. The negation is limited to an age or a frequency: smoking history, not
+        # current non-smoking.
+        (
+            SMOKERS,
+            "We enrolled adults who did not smoke tobacco before age 18.",
+            "adults who did not smoke tobacco before age 18",
+            "negation",
+        ),
+        (
+            SMOKERS,
+            "We enrolled adults who did not smoke tobacco before age 18.",
+            "did not smoke tobacco",
+            "negation",
+        ),
+        (
+            SMOKERS,
+            "We enrolled adults who did not regularly smoke tobacco.",
+            "adults who did not regularly smoke tobacco",
+            "negation",
+        ),
+        # The sentence goes on past a shorter quote and adds smokers.
+        (
+            SMOKERS,
+            "We enrolled adults who did not smoke tobacco and smokers of cigars.",
+            "adults who did not smoke tobacco",
+            "negation",
+        ),
+        # A survey is a measurement here, and the record is a trial.
+        (
+            RANDOMIZED,
+            "This was a randomized controlled trial. Participants completed a survey at baseline.",
+            "a survey",
+            "polarity",
+        ),
+        (
+            RANDOMIZED,
+            "Participants completed a survey at baseline.",
+            "a survey",
+            "polarity",
+        ),
+        # The record names the required design by abbreviation, or in another sentence.
+        (
+            RANDOMIZED,
+            "This was a secondary cohort analysis of an RCT.",
+            "a secondary cohort analysis",
+            "polarity",
+        ),
+        (
+            RANDOMIZED,
+            "This was a prospective cohort study. Smokers were randomly assigned to two arms.",
+            "a prospective cohort study",
+            "polarity",
+        ),
+        # The negation is about another condition.
+        (
+            SMOKERS,
+            "We enrolled adults who smoke tobacco and did not have diabetes.",
+            "adults who smoke tobacco and did not have diabetes",
+            "negation",
+        ),
+        # "Not older than 25" does not say the participants were not adults.
+        (
+            SMOKERS,
+            "We enrolled adults not older than 25 who smoke tobacco.",
+            "adults not older than 25 who smoke tobacco",
+            "negation",
+        ),
+        # Another cohort in the same sentence meets the condition.
+        (
+            SMOKERS,
+            "Adults who did not smoke tobacco were compared with adults who smoke tobacco.",
+            "Adults who did not smoke tobacco",
+            "negation",
+        ),
+        # A clause after the negation adds people the negation does not cover.
+        (
+            SMOKERS,
+            "We enrolled adults who did not smoke tobacco and smokers of cigars.",
+            "adults who did not smoke tobacco and smokers of cigars",
+            "negation",
+        ),
+        (
+            SMOKERS,
+            "We enrolled adults who did not only smoke tobacco.",
+            "adults who did not only smoke tobacco",
+            "negation",
+        ),
+        # One negated requirement of a negative condition is not read.
+        (
+            _criterion("exclude", "No prior chemotherapy"),
+            "We enrolled patients with prior surgery and no chemotherapy.",
+            "patients with prior surgery and no chemotherapy",
+            "negation",
+        ),
+        # A negated other design says nothing about the design the criterion requires.
+        (
+            RANDOMIZED,
+            "This was not an observational study.",
+            "not an observational study",
+            "polarity",
+        ),
+        # The sentence names the required design too.
+        (
+            RANDOMIZED,
+            "We report a cohort study nested in a randomised controlled trial.",
+            "a cohort study",
+            "polarity",
+        ),
+        (
+            RANDOMIZED,
+            "A cohort of 300 smokers was randomly assigned to two groups.",
+            "A cohort of 300 smokers",
+            "polarity",
+        ),
+        (
+            RANDOMIZED,
+            "A case-control analysis within a controlled trial of 300 smokers.",
+            "A case-control analysis",
+            "polarity",
+        ),
+        # A design named in a language Kittum cannot read.
+        (
+            RANDOMIZED,
+            "Estudio de cohorte prospectivo (prospective cohort study).",
+            "Estudio de cohorte prospectivo (prospective cohort study)",
+            "language_unverifiable",
+        ),
+    ],
+    ids=[
+        "S10-on-weekdays",
+        "S10-in-adolescence",
+        "S10-were-enrolled-after-the-term",
+        "S10-wurden-eingeschlossen-after-the-term",
+        "S11-exclusion-criteria-in-the-sentence-before",
+        "S11-exclusion-list-introduction",
+        "S13-exclusion-list-two-sentences-back",
+        "S13-exclusion-list-three-items",
+        "S13-exclusion-earlier-in-the-paragraph",
+        "S14-across-a-blank-line",
+        "S14-bulleted",
+        "S14-numbered",
+        "exclusion-heading-above-a-blank-line",
+        "S12-survey-and-drawing-lots",
+        "S12-survey-and-aleatoria",
+        "S12-drawing-lots",
+        "S12-aleatoria",
+        "S12-bare-survey",
+        "S12-survey-of-people",
+        "S12-design-at-baseline",
+        "S5-regularly",
+        "S5-every-day-after-the-quote",
+        "S6-coordinated-cohort-after-a-shorter-quote",
+        "another-population-before-the-quote",
+        "age-in-the-sentence-of-an-absence",
+        "S7-survey-and-lottery",
+        "S7-survey-as-object-of-assessments",
+        "S8-crt",
+        "S8-zufallsprinzip",
+        "another-studys-design",
+        "S1-negation-limited-to-an-age",
+        "S1-shorter-quote",
+        "S1-frequency",
+        "S2-coordinated-cohort-after-the-quote",
+        "S3-survey-as-measurement-in-an-rct",
+        "S3-bare-survey",
+        "S4-rct-abbreviation",
+        "S4-randomly-assigned-elsewhere",
+        "other-condition-negated",
+        "negated-age-bound",
+        "other-cohort-in-the-sentence",
+        "clause-after-the-negation",
+        "not-only",
+        "negative-condition",
+        "negated-other-design",
+        "nested-in-a-trial",
+        "cohort-randomized",
+        "case-control-in-a-trial",
+        "spanish-design",
+    ],
+)
+def test_evidence_that_does_not_contradict_the_criterions_requirement_is_unclear(
+    criterion: Criterion, sentence: str, quote: str, check: str
+) -> None:
+    verdict = _judge_chemo(_plain(sentence), criterion, quote)
     (result,) = verdict.criteria
     assert result.quote_verified
     assert (result.status, result.downgraded_from, result.failed_check) == (
