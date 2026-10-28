@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import type { Browser, Page } from "@playwright/test";
 
+import { expectNothingLeaked, recordResponses } from "./blind.ts";
 import { SERVER, STACK_FILE } from "./stack.ts";
 
 interface Stack {
@@ -43,21 +44,6 @@ const rationaleOf = (titlePrefix: string, criterion: string) => {
   );
 };
 
-// Keys that only the AI's verdict or another person's decision carries.
-const AI_FIELDS = ["quote_verified", "downgraded_from", "failed_check", "excludes", "ai"];
-const DECISION_FIELDS = ["columns", "outcome", "reason_criterion_id", "evidence_anchor_ids"];
-
-/** Every object in a JSON value, with the path that leads to it. */
-const objects = (value: unknown, path = "$"): Array<[string, Record<string, unknown>]> => {
-  if (Array.isArray(value)) return value.flatMap((v, i) => objects(v, `${path}[${i}]`));
-  if (value === null || typeof value !== "object") return [];
-  const object = value as Record<string, unknown>;
-  return [
-    [path, object],
-    ...Object.entries(object).flatMap(([k, v]) => objects(v, `${path}.${k}`)),
-  ];
-};
-
 /**
  * A screener or auditor saw nothing they may not: the catalogue and the lead's figures are
  * refused or empty, and no answer they received has the shape of an AI verdict or another
@@ -88,31 +74,7 @@ const expectBlind = async (
     expect([stage.outcomes, stage.status.metrics]).toEqual([null, null]);
   }
 
-  // Decisions and verdicts travel only in screening and progress answers; the protocol's own
-  // words (its "outcome" label, say) are not anyone's decision.
-  let checked = 0;
-  for (const { url, body } of responses) {
-    if (!/\/(screening|progress)/.test(url)) continue;
-    let json: unknown;
-    try {
-      json = JSON.parse(body);
-    } catch {
-      continue; // page images and the workbench's own files
-    }
-    checked++;
-    for (const [path, object] of objects(json)) {
-      for (const key of [...AI_FIELDS, ...DECISION_FIELDS]) {
-        expect(key in object, `${url} ${path} has ${key}`).toBe(false);
-      }
-      if ("metrics" in object) expect(object["metrics"], `${url} ${path}`).toBeNull();
-      // An AI reading, not a stage's reveal setting ("on_disagreement").
-      if (typeof object["reveal"] === "object" && object["reveal"] !== null) {
-        const own = url.endsWith("/decide") || object["phase"] === "final";
-        expect(own, `${url} ${path} reveals the AI outside the person's own decision`).toBe(true);
-      }
-    }
-  }
-  expect(checked).toBeGreaterThan(20);
+  expect(expectNothingLeaked(responses)).toBeGreaterThan(20);
 };
 
 const POP = ["e", "1"];
@@ -152,20 +114,6 @@ const keysFor = (title: string, overrides: Record<string, ReadonlyArray<string>>
   const override = Object.entries(overrides).find(([prefix]) => title.startsWith(prefix));
   if (override) return override[1];
   return PLAN.find(([prefix]) => title.startsWith(prefix))?.[1] ?? INT; // the rest: no NRT arm
-};
-
-/** Everything the server sent this page, to check later what it saw. */
-const recordResponses = (page: Page) => {
-  const bodies: Array<{ url: string; body: string }> = [];
-  page.on("response", async (response) => {
-    if (!response.url().includes("/api/")) return;
-    try {
-      bodies.push({ url: response.url(), body: await response.text() });
-    } catch {
-      // a navigation dropped it
-    }
-  });
-  return bodies;
 };
 
 const open = async (browser: Browser, person: string, path: string) => {

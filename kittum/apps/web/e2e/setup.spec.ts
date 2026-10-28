@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import type { APIRequestContext, Page } from "@playwright/test";
 
+import { expectNothingLeaked, recordResponses } from "./blind.ts";
 import { SERVER, stackEnv } from "./stack.ts";
 
 const DEMO_DATA = join(SERVER, "src", "kittum", "app", "demo_data");
@@ -370,7 +371,7 @@ test("a lead sets up a review from nothing in the browser, as the CLI would", as
     for (const person of ["Sam Okafor", "Jun Park"]) {
       const mine = await fullQueue(page.request, ui.id, id(ui, person));
       expect(mine, person).toEqual(await fullQueue(page.request, viaCli.id, id(viaCli, person)));
-      // Every report, and the sentinel the protocol's seed draws, alike in every way.
+      // Every report, and the sentinel the protocol's seed draws (checked alike below).
       expect(mine.filter((t) => /^Nicotine (lozenge|mouth spray)/.test(t))).toHaveLength(1);
       expect(mine).toHaveLength(31);
     }
@@ -390,16 +391,60 @@ test("a lead sets up a review from nothing in the browser, as the CLI would", as
     await page.keyboard.press("t");
     await expect(page.getByTestId("record-title")).toBeVisible({ timeout: 60_000 });
     await expect(page.getByText("0 screened, 31 left")).toBeVisible();
-    // A screener sees none of the lead's setup data.
-    await page.keyboard.press("g");
-    await page.keyboard.press("v");
-    await expect(page.getByTestId("lead-only")).toBeVisible();
-    const refused = await page.request.get(`/api/projects/${projectId}/full-texts`, {
-      headers: {
-        "X-Kittum-Reviewer": (await project(page.request, projectId)).stages[0]?.screeners[0] ?? "",
-      },
-    });
-    expect(refused.status()).toBe(403);
+  });
+
+  await test.step("a reviewer who has decided nothing receives none of the setup's data", async () => {
+    const ui = await project(page.request, projectId);
+    const sam = ui.members.find((m) => m.display_name === "Sam Okafor")?.actor_id ?? "";
+    const own = await (await browser.newContext()).newPage();
+    const responses = recordResponses(own);
+    // Every screen of the review, as Sam sees it, before he has decided a single record.
+    for (const screen of ["setup", "protocol", "search", "studies", "retrieval", "progress"]) {
+      await own.goto(`/p/${projectId}/${screen}?as=${sam}`);
+      await expect(own.getByTestId("identity")).toContainText("Sam Okafor");
+      await expect(own.locator("main")).not.toBeEmpty();
+    }
+    await own.goto(`/p/${projectId}/extraction?as=${sam}`);
+    await expect(own.getByRole("heading", { level: 1 })).toBeVisible();
+    await own.goto(`/p/${projectId}/screening/title-abstract?as=${sam}`);
+    await expect(own.getByTestId("record-title")).toBeVisible();
+    await expect(own.getByTestId("lead-only")).toHaveCount(0);
+    for (const screen of ["search", "studies", "retrieval"]) {
+      await own.goto(`/p/${projectId}/${screen}?as=${sam}`);
+      await expect(own.getByTestId("lead-only")).toBeVisible();
+    }
+
+    const as = { "X-Kittum-Reviewer": sam };
+    for (const path of [
+      "corpus/revisions/latest",
+      "corpus/proposals",
+      "search/executions",
+      "full-texts",
+    ]) {
+      const refused = await own.request.get(`/api/projects/${projectId}/${path}`, { headers: as });
+      expect(refused.status(), path).toBe(403);
+    }
+    const progress = (await (
+      await own.request.get(`/api/projects/${projectId}/progress`, { headers: as })
+    ).json()) as { identification: unknown; searches: number; full_texts: number };
+    expect([progress.identification, progress.searches, progress.full_texts]).toEqual([null, 0, 0]);
+    expect(expectNothingLeaked(responses)).toBeGreaterThan(10);
+
+    // The sentinel in Sam's queue is alike in every key to the records beside it.
+    const items = (await (
+      await own.request.get(`/api/projects/${projectId}/screening/queue`, {
+        params: { scope_id: "nrt-vs-control", stage: "title_abstract", limit: 50 },
+        headers: as,
+      })
+    ).json()) as Array<{ title: string; record: Record<string, unknown> }>;
+    const sentinel = items.find((i) => /^Nicotine (lozenge|mouth spray)/.test(i.title));
+    expect(sentinel).toBeDefined();
+    const keys = (item: { record: Record<string, unknown> }) => [
+      Object.keys(item).sort(),
+      Object.keys(item.record).sort(),
+    ];
+    for (const item of items) expect(keys(item), item.title).toEqual(keys(sentinel!));
+    await own.context().close();
   });
   await page.context().close();
 });
