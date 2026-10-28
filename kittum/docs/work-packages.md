@@ -18,7 +18,7 @@ The two-week spike in [DESIGN.md](../DESIGN.md#two-week-spike) picks from these 
 | 04 | `gateway` | Done: httpx transport, policies, shared buckets, budgets, cache, attempts; AppContext wiring open |
 | 05 | `search` | Done |
 | 06 | `enrich` | Clients, stored enrichment, and full-text waterfall done; local tagging open |
-| 07 | `corpus` | Types done; open |
+| 07 | `corpus` | Dedupe, link proposals, immutable identity revisions, PRISMA counts done |
 | 08 | `judge` and `models` | Types and recorded backend done; open |
 | 09 | `screening` | Types done; open |
 | 10 | `documents` | Types done; open |
@@ -235,10 +235,17 @@ Module `kittum.enrich`. Needs: `gateway`, `search`, `models`.
 
 Module `kittum.corpus`. Needs: `search`, `enrich`, `ledger`.
 
-- Dedupe rules (DOI, PMID, registry ID, normalized title, year) that keep every occurrence.
-- Link proposals for report and study with evidence strings.
-- Identity revisions written as ledger events; PRISMA counts from a frozen revision.
-- Acceptance: a fixture with duplicates, a multi-report study, and a conference abstract.
+- Dedupe rules over `SourceRecord`s: report identifiers (exact DOI, PMID) and rapidfuzz normalized title plus year and first author surname, keeping every occurrence.
+- Trial identifiers (NCT, EudraCT, CTIS numbers) drive only `same_study` proposals and never merge records or reports; distinct publications of one trial with the same NCT number stay separate reports linked to one study.
+- Link proposals for report (`same_record`, `same_report`) and study (`same_study`) with evidence strings.
+- Immutable identity revisions in Postgres (`report`, `study`, `corpus_revision`, `identity_revision`, `identity_link`, `proposal` tables with migration `20261028020000_corpus_identities.sql`). A revision is written with its links in one transaction and then finalized; triggers reject any later update, delete, or added link.
+- Merge and confirm move whole groups: `same_record`/`same_report` union complete report groups (and their studies), `same_study` unions complete study groups. A stronger confirmed identity upgrades the chosen occurrences' labels and never downgrades one. A split names its level: `report` moves occurrences into new reports of the same study, `study` moves complete report groups into new studies.
+- A record without identifiers never bridges two different DOIs or PMIDs into one proposal; titles conflict, and are never fuzzy-matched, only when both name a trial (an acronym with two capitals, or a word both titles put before a number, other than common words such as stage or cohort), phase, follow-up length, or study number and the values differ (KEYNOTE 024 vs 042, 5-year vs 3-year); a number on one side only, such as a citation's year or pages, never blocks a match.
+- Ledger integration: human confirmation, split, and merge write audit events (`corpus.confirmed`, `corpus.merged`, `corpus.split`) via `Ledger.append(tx, EventDraft)` to the hash-chained ledger.
+- PRISMA 2020 identification counts from a frozen identity revision: records identified per source, duplicates removed, unique records, studies identified.
+- HTTP routes in `src/kittum/api/routes/corpus.py`: list proposals, confirm, merge, split, get counts, all scoped to the project (404 for another project's revision, 400 for invalid merges and splits).
+- `FakeCorpus` in `src/kittum/corpus/testing.py` for downstream modules.
+- End-to-end tests against Postgres verifying PRISMA counts, revision immutability, history preservation on split, and separate reports for same-NCT publications.
 
 ## WP-08 Judge and models
 
