@@ -391,6 +391,28 @@ class Screening:
     ) -> StageInfo:
         return store.stage_info(store.find_stage(tx, project_id, scope_id, stage, topic_id))
 
+    def stage(self, tx: Tx, project_id: Id, stage_id: Id) -> StageInfo:
+        return store.stage_info(store.stage_row(tx, project_id, stage_id))
+
+    def stages(self, tx: Tx, project_id: Id) -> list[StageInfo]:
+        """Every open stage of the project, title and abstract first, then by scope."""
+        rows = tx.execute(
+            "select * from screening_stage where project_id = %s"
+            " order by stage = 'full_text', scope_id, topic_id",
+            (project_id,),
+        ).fetchall()
+        return [store.stage_info(r) for r in rows]
+
+    def assignment_source(
+        self, tx: Tx, project_id: Id, reviewer_id: Id, assignment_id: Id
+    ) -> tuple[str, StageInfo, tuple[Criterion, ...]]:
+        """The record behind one of the reviewer's own assignments, its stage, and the stage's
+        criteria, for an entry point that shows the record's source (the full text). Never send
+        the reference to the reviewer: a sentinel's reference names it as one."""
+        a = self._own_assignment(tx, project_id, reviewer_id, assignment_id)
+        row = store.stage_row(tx, project_id, a["stage_id"])
+        return a["item_ref"], store.stage_info(row), self._criteria(tx, row)
+
     # AI judging
 
     def request_judging(

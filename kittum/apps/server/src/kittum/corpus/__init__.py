@@ -12,6 +12,7 @@ from kittum.core import Id, NotFoundError, new_id
 from kittum.corpus.dedupe import generate_link_proposals
 from kittum.corpus.identity import merge_links, split_links
 from kittum.corpus.models import (
+    CorpusReport,
     CorpusRevision,
     IdentityLink,
     IdentityRevision,
@@ -24,6 +25,7 @@ from kittum.corpus.models import (
     SplitLevel,
 )
 from kittum.ledger import EventDraft, Ledger
+from kittum.search import list_executions
 
 if TYPE_CHECKING:
     from psycopg import Cursor
@@ -334,6 +336,41 @@ def list_proposals(
         ]
 
 
+def latest_revision(tx: Tx, project_id: Id) -> IdentityRevision | None:
+    """The project's newest identity revision, the one every new decision reads."""
+    row = tx.execute(
+        "select id, project_id, parent_id, event_seq, event_id from identity_revision"
+        " where project_id = %s and finalized order by event_seq desc limit 1",
+        (project_id,),
+    ).fetchone()
+    return IdentityRevision.model_validate(row) if row else None
+
+
+_STRONGEST = {"standalone": 0, "same_study": 1, "same_report": 2, "same_record": 3}
+
+
+def reports(tx: Tx, project_id: Id, revision_id: Id) -> list[CorpusReport]:
+    """Every report of an identity revision with its source records, in the order of the first
+    occurrence (search order, then the record's place in its search)."""
+    with tx.cursor() as cur:
+        links = _parent_links(cur, project_id, revision_id)
+    executions = reversed(list_executions(tx, project_id))  # newest first, so oldest first
+    records = {r.occurrence_id: r for e in executions for r in e.records}
+    order = {oid: i for i, oid in enumerate(records)}
+    grouped: dict[Id, list[dict[str, Any]]] = {}
+    for link_row in sorted(links, key=lambda row: order.get(row["occurrence_id"], len(order))):
+        grouped.setdefault(link_row["report_id"], []).append(link_row)
+    return [
+        CorpusReport(
+            report_id=report_id,
+            study_id=rows[0]["study_id"],
+            relation=max((r["relation"] for r in rows), key=_STRONGEST.__getitem__),
+            records=tuple(records[r["occurrence_id"]] for r in rows),
+        )
+        for report_id, rows in grouped.items()
+    ]
+
+
 def link(
     proposal: LinkProposal,
     *,
@@ -438,6 +475,7 @@ def _write_revision(
 
 
 __all__ = [
+    "CorpusReport",
     "CorpusRevision",
     "IdentityLink",
     "IdentityRevision",
@@ -451,8 +489,10 @@ __all__ = [
     "confirm",
     "get_counts",
     "ingest",
+    "latest_revision",
     "link",
     "list_proposals",
     "merge",
+    "reports",
     "split",
 ]

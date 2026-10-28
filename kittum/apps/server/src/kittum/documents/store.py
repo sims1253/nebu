@@ -10,7 +10,15 @@ from typing import TYPE_CHECKING, Any, cast
 import pymupdf
 from psycopg.types.json import Jsonb
 
-from kittum.core import Id, NotFoundError, canonical_json, content_hash, new_id, sha256_hex
+from kittum.core import (
+    Id,
+    KittumError,
+    NotFoundError,
+    canonical_json,
+    content_hash,
+    new_id,
+    sha256_hex,
+)
 from kittum.documents.anchors import RESOLVE_VERSION, resolve
 from kittum.documents.model import (
     Anchor,
@@ -87,6 +95,10 @@ _LAYER_CACHE: OrderedDict[str, RawLayer] = OrderedDict()
 _LAYER_CACHE_SIZE = 8
 
 
+class LayerArtifactMissing(KittumError):
+    """A stored layer's JSON is not in the artifact store and cannot be rebuilt."""
+
+
 def _raw_layer(artifacts: ArtifactStore, output_hash: str) -> RawLayer:
     """Layers are immutable, so the parsed JSON of recent ones is kept in memory."""
     raw = _LAYER_CACHE.get(output_hash)
@@ -122,6 +134,8 @@ def derive(tx: Tx, document: Document, parser: Parser, *, artifacts: ArtifactSto
         "select * from layer where document_id = %s and recipe_hash = %s", (document.id, r_hash)
     ).fetchone()
     if row is not None:
+        if row["output_hash"] not in _LAYER_CACHE and not artifacts.exists(row["output_hash"]):
+            _restore(row, parser, document, artifacts)
         return _layer(row, _raw_layer(artifacts, row["output_hash"]))
     raw = parser.parse(artifacts.get(document.artifact_hash))
     body = canonical_json(raw)
@@ -146,6 +160,24 @@ def derive(tx: Tx, document: Document, parser: Parser, *, artifacts: ArtifactSto
     ).fetchone()
     assert row is not None
     return _layer(row, _raw_layer(artifacts, row["output_hash"]))
+
+
+def _restore(
+    row: dict[str, Any], parser: Parser, document: Document, artifacts: ArtifactStore
+) -> None:
+    """Put a layer that the database records but this store lacks back, by parsing again.
+
+    The recipe pins the parser, so the output must hash to the recorded value; anything else
+    is a different layer and is refused rather than stored under the old one's name.
+    """
+    raw = parser.parse(artifacts.get(document.artifact_hash))
+    body = canonical_json(raw)
+    if sha256_hex(body) != row["output_hash"]:
+        raise LayerArtifactMissing(
+            f"layer {row['id']} is not in the artifact store, and parsing again gives other output"
+        )
+    artifacts.put(body)
+    _remember(row["output_hash"], raw)
 
 
 def get_layer(tx: Tx, layer_id: Id, *, artifacts: ArtifactStore) -> Layer:
