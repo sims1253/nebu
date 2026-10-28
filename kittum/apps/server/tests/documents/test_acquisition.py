@@ -222,7 +222,16 @@ def test_a_pdf_is_the_records_report_only_by_its_whole_doi_or_its_whole_title():
         ).verdict
         == "match"
     )
-    # Another DOI that starts with the record's is another work.
+    # A page that ends inside the title does not show it either.
+    cut = _pdf("A clinical trial of a completely different medic")
+    assert check_report(cut, doi=None, title=title).verdict == "mismatch"
+    # Another DOI that starts with the record's is another work, on its line or the next.
+    for other in (("10.1234/abc(20)12345",), ("10.1234/abc", "-def")):
+        assert check_report(_pdf(*other), doi="10.1234/abc", title=None).verdict == "mismatch"
+    # A DOI's own parentheses match, and a bracket around it closes outside it.
+    lancet = "10.1016/S0140-6736(20)30183-5"
+    for printed in (f"doi:{lancet}", f"(https://doi.org/{lancet})"):
+        assert check_report(_pdf(printed), doi=lancet, title=None).by == "doi"
     longer = _pdf("Journal of Tests 2026", "doi: 10.1234/wrong-paper")
     assert check_report(longer, doi="10.1234/wrong", title=None).verdict == "mismatch"
     assert (

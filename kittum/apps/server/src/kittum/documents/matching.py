@@ -4,11 +4,16 @@ A source can name the wrong file: Unpaywall and Semantic Scholar both gave a JMI
 checklist, a supplement, as the trial's PDF. So a fetched or uploaded PDF is checked against the
 record: the record's DOI on its first pages, or the record's title on its first two.
 
-A DOI counts only as a whole identifier, never as the start of a longer one (10.1234/wrong is not
-in 10.1234/wrong-paper). It may wrap across lines, and a hyphen the line break added is dropped,
-while a DOI's own hyphens still match. A title counts when a stretch of a page as long as the
-whole title is at least `TITLE_THRESHOLD` similar to it, ignoring spacing, case, accents,
-punctuation, and hyphenation; a page shorter than the title cannot show it. The checklist carried
+A DOI counts only as a whole identifier, never as the start of a longer one (10.1234/abc is not in
+10.1234/abc-def, 10.1234/abc(20)12345, or 10.1234/abc wrapped onto a next line that starts with
+"-def"). It may wrap across lines, and a hyphen the line break added is dropped, while a DOI's own
+hyphens and parentheses still match. A title counts when a stretch of a page that covers the whole
+title is at least `TITLE_THRESHOLD` similar to it, ignoring spacing, case, accents, punctuation,
+and hyphenation; a page shorter than the title, or one that ends inside it, cannot show it.
+
+The check prefers precision to recall: a running header printed inside a title can make it reject
+the right PDF, which only sends Kittum on to the next source or the lead to an upload, while
+accepting a wrong PDF stores another document as the report, the bug of issue #60. The checklist carried
 the trial's draft title, 89 similar to the published one, on its second page. A PDF without text on
 its first pages, or a record without a DOI or a usable title, cannot be checked; the caller
 decides what that means.
@@ -41,33 +46,58 @@ class ReportCheck(Record):
     title_score: float | None = None
 
 
-_DOI_CHAR = r"[^\s\"'<>()\[\]{},;]"
-"""A character that can continue a DOI as printed."""
+_GAP = r"(?:-?[ \t]*\n[ \t]*)?"
+"""Where a DOI may wrap: a line break, with or without the hyphen the break added."""
+
+_CONTINUES = "-(/_"
+"""Marks that continue a DOI, on its line or at the start of the next."""
 
 
-def _readings(page: str) -> tuple[str, ...]:
-    """A page as printed, with wrapped lines joined, and with line-end hyphens dropped too."""
-    joined = re.sub(r"[ \t]*\n[ \t]*", "", page)
-    unhyphenated = re.sub(r"-[ \t]*\n[ \t]*", "", page)
-    return (page, joined, re.sub(r"[ \t]*\n[ \t]*", "", unhyphenated))
+def _continues(rest: str, doi: str) -> bool:
+    """Whether the text after a found DOI continues it into a longer identifier."""
+    if not rest:
+        return False
+    first = rest[0]
+    if first.isalnum() or first in _CONTINUES:
+        return True
+    if first in ".,;:":
+        return len(rest) > 1 and rest[1].isalnum()  # "10.1234/abc.5" goes on; "abc." ends
+    if first == ")":
+        # It closes a bracket outside the DOI, unless the DOI left one of its own open.
+        return doi.count("(") > doi.count(")")
+    if first in " \t\n":
+        line = rest.lstrip(" \t")
+        if line.startswith("\n"):
+            following = line[1:].lstrip(" \t")
+            # Prose on the next line starts a new line of text; a hyphen or bracket goes on.
+            return bool(following) and following[0] in _CONTINUES
+    return False
 
 
 def _shows_doi(pages: tuple[str, ...], doi: str) -> bool:
-    """`doi` as a whole identifier on one of the pages: not inside a longer DOI. A DOI starts with
-    "10.", so a letter, digit, or full stop before it would make it part of another; after it, a
-    full stop or a closing bracket ends a sentence or a link, not the DOI."""
-    pattern = re.compile(
-        rf"(?<![0-9a-z.]){re.escape(doi)}(?!{_DOI_CHAR}*[^\s.\"'<>()\[\]{{}},;])",
-        re.IGNORECASE,
+    """`doi` as a whole identifier on one of the pages: not inside a longer DOI. It may wrap
+    across lines (`_GAP`), and the text after it must not continue it (`_continues`). A DOI starts
+    with "10.", so a letter, digit, or full stop before it would make it part of another."""
+    body = _GAP.join(re.escape(char) for char in doi)
+    pattern = re.compile(rf"(?<![0-9a-z.]){body}", re.IGNORECASE)
+    return any(
+        not _continues(page[found.end() :], doi)
+        for page in pages
+        for found in pattern.finditer(page)
     )
-    return any(pattern.search(reading) for page in pages for reading in _readings(page))
 
 
 def _title_score(title: str, page: str) -> float:
-    """How well the best stretch of `page` as long as `title` matches it, 0 to 100."""
-    if len(page) < len(title):
-        return fuzz.ratio(title, page)
-    return fuzz.partial_ratio(title, page)
+    """How well the best stretch of `page` as long as the whole `title` matches it, 0 to 100. A
+    stretch the page cuts short (a page shorter than the title, or one that ends inside it) does
+    not count."""
+    size = len(title)
+    if len(page) < size:
+        return 0.0
+    best = fuzz.partial_ratio_alignment(title, page)
+    if best is not None and best.dest_end - best.dest_start == size:
+        return best.score
+    return max(fuzz.ratio(title, page[i : i + size]) for i in range(len(page) - size + 1))
 
 
 def _letters(text: str) -> str:
