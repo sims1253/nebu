@@ -598,8 +598,12 @@ then. A record sent to the auditor's blind extra screen stays unresolved until t
 decides. Migration `20261029020000_report_artifacts.sql`.
 
 - `prisma`: `flow(review, topic, scope)` from one frozen identity revision (default: the latest
-  at the cutoff). Records per source and per kind (databases, registers, other), duplicates,
-  screened, excluded, sought, not retrieved (sought but not in the full-text stage), assessed,
+  at the cutoff). Identification counts the occurrences that revision holds, as
+  `corpus.get_counts` does; records of searches run after it are reported apart
+  (`records_outside_identity`). Records per source and per kind (databases, registers, other),
+  duplicates, screened and awaiting screening (screened as screening counts it: every screener
+  decided, and the auditor of an extra screen), excluded, sought, not retrieved (sought but not
+  in the full-text stage), assessed and awaiting assessment,
   exclusions per criterion ID, awaiting classification (insufficient information), included
   reports and studies. `members` lists the reports behind every count; `checks` states every sum
   that must hold and reports a broken one. The PRISMA automation box is always 0 (the AI never
@@ -633,6 +637,9 @@ decides. Migration `20261029020000_report_artifacts.sql`.
   (Markdown and CSV, RIS for the tree).
 - Routes in `api/routes/report.py`: `GET .../reports/targets`, `POST .../reports/targets/{target}/render`,
   `GET .../reports/artifacts/{sha256}` (only files rendered for the project), `POST .../reports/bundle`.
+  Rendering, downloading, and sealing are for the methods lead only (`report.require_lead`): a
+  human who screens, audits, or adjudicates no stage of the project, the rule `Screening.status`
+  uses for the lead's view. Everyone else gets 403.
 - Changes outside the module: `BundleWriter.file` in `ledger/bundle.py` (exporters add files the
   manifest lists); `judge.VERIFIER_LIMITS`; `ALLOWED` lets `report` import `judge` and
   `profiles` import `report`.
@@ -663,8 +670,8 @@ Left open:
   rescreen gauge are recomputed from the replayed rows with `screening.metrics`'s definitions, so
   they stay exact at old cutoffs. `test_a_metric_the_report_computes_equals_what_screening_reports`
   compares each with `Screening.status` on both reviews, so a change there fails here by name.
-- The report routes take the actor in the body and expose stage metrics without authentication
-  (WP-15).
+- The report routes take the actor in the body or the `X-Kittum-Reviewer` header until WP-15 adds
+  authentication; the lead check is only as good as that stand-in.
 
 ## WP-15 API
 
