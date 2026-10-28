@@ -809,14 +809,17 @@ def milestones(tx: Tx, project_id: Id, *, ledger: Ledger | None = None) -> tuple
             case _:
                 pass
     for stage_id, last in last_human.items():
+        own = opened.get(stage_id)
+        if own is None:
+            # Its opening event is gone, as a superuser deleting that row would leave it: name no
+            # milestone rather than fail the screen; verify names the gap.
+            continue
         stage, scope = names.stages.get(stage_id, ("", ""))
         label = STAGE_LABELS.get(stage, stage)
         later = [
             o
             for sid, o in opened.items()
-            if names.stages.get(sid, ("", ""))[1] == scope
-            and sid != stage_id
-            and o.seq > opened[stage_id].seq
+            if names.stages.get(sid, ("", ""))[1] == scope and sid != stage_id and o.seq > own.seq
         ]
         closed = f"{label} closed, {scope}" if later else f"{label}, last decision so far, {scope}"
         found.append(

@@ -692,3 +692,12 @@ def test_a_tampered_decision_is_pinpointed_and_a_bundle_sealed_before_still_veri
         (checkpoint["seq"], "checkpoint", "rewritten"),
     ]
     assert main(["verify", sealed["path"]]) == 0
+
+    # 6. A stage's opening event deleted: the screen still loads, and verify names the gap.
+    page = r.audit("events", type="screening.stage_opened")
+    opening = page["events"][0]["seq"]
+    pg.execute("set local session_replication_role = replica")
+    pg.execute("delete from audit_event where project_id = %s and seq = %s", (r.pid, opening))
+    pg.execute("set local session_replication_role = origin")
+    assert r.audit("milestones")  # 200, with the milestones that remain
+    assert (opening, "seq", "seq_gap") in findings()
