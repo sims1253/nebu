@@ -1,5 +1,7 @@
 """Two small, complete reviews to report on, both screened in M1 by two humans with the AI judge
-as third reader, through title and abstract and full text, with adjudications.
+as third reader, through title and abstract and full text. An auditor screens the random audit
+sample and the blind extra screens of AI-only disagreements; an adjudicator resolves the human
+disagreements.
 
 `nrt_review`: the nicotine replacement example (no profile). The recorded PubMed search, the
 CENTRAL export of the screening tests, and an Embase export with two duplicates and a follow-up
@@ -84,6 +86,7 @@ class People:
     a: Id
     b: Id
     adjudicator: Id
+    auditor: Id
     model: Id
 
 
@@ -107,6 +110,7 @@ def seed_people(tx: Tx, name: str) -> People:
         a=actor("reviewer-a@example.org", "human"),
         b=actor("reviewer-b@example.org", "human"),
         adjudicator=actor("adjudicator@example.org", "human"),
+        auditor=actor("auditor@example.org", "human"),
         model=actor("model:qwen3.8-27b-bf16", "model"),
     )
 
@@ -199,6 +203,8 @@ class ReviewWorld:
                     stage=stage,
                     records=tuple(records),
                     screeners=(self.people.a, self.people.b),
+                    auditor_id=self.people.auditor,
+                    adjudicators=(self.people.adjudicator,),
                     sentinels=self.sentinels,
                     judge_config_id=self.config.id,
                 ),
@@ -259,7 +265,7 @@ class ReviewWorld:
                 assignment_id=item.assignment_id,
                 decision=decision,
                 phase="provisional",
-                expected_revision=item.revision,
+                expected_etag=item.etag,
                 timing=timing(0, revealed=False),
             )
             if result.phase == "provisional":
@@ -271,7 +277,7 @@ class ReviewWorld:
                     assignment_id=item.assignment_id,
                     decision=final or decision,
                     phase="final",
-                    expected_revision=result.revision,
+                    expected_etag=result.etag,
                     timing=timing(20, revealed=True),
                 )
                 return True
@@ -290,10 +296,40 @@ class ReviewWorld:
             n += 1
         return n
 
+    def audit(self, stage: Stage, overrides: dict[str, Decision] | None = None) -> int:
+        """The auditor screens every item in their queue: the random audit sample and the blind
+        extra screens AI-only disagreements sent. They agree with the screeners' standing
+        decision unless `overrides` names the record by title prefix. Returns how many."""
+        criteria = self.criteria(stage)
+        items = self.queue(self.people.auditor, stage)
+        for item in items:
+            chosen = next(
+                (d for prefix, d in (overrides or {}).items() if item.title.startswith(prefix)),
+                None,
+            )
+            if chosen is None:
+                with self.db.transaction() as tx:
+                    rows = tx.execute(
+                        "select d.outcome, d.reason_criterion_id from screening_assignment a"
+                        " join screening_assignment me on me.stage_id = a.stage_id"
+                        " and me.item_ref = a.item_ref"
+                        " join screening_decision d on d.id = a.final_decision_id"
+                        " where me.id = %s and a.role = 'screener' order by a.id",
+                        (item.assignment_id,),
+                    ).fetchall()
+                excluded = [r for r in rows if r["outcome"] == "exclude"]
+                chosen = (
+                    exclude(stage, criteria, excluded[0]["reason_criterion_id"])
+                    if rows and len(excluded) == len(rows)
+                    else include(stage, criteria)
+                )
+            self.decide(self.people.auditor, stage, item.title, chosen)
+        return len(items)
+
     def adjudicate(
         self, stage: Stage, choose: Callable[[AdjudicationItem], tuple[str | None, Decision | None]]
     ) -> int:
-        """Resolve every open conflict of the stage with the adjudicator's choice."""
+        """Resolve every conflict in the adjudicator's queue; returns how many."""
         with self.db.transaction() as tx:
             items = self.screening.adjudication_queue(
                 tx, self.project_id, self.people.adjudicator, self.scope, stage, topic_id=self.topic
@@ -307,7 +343,7 @@ class ReviewWorld:
                     project_id=self.project_id,
                     adjudicator_id=self.people.adjudicator,
                     conflict_id=item.conflict_id,
-                    expected_revision=item.revision,
+                    expected_etag=item.etag,
                     adopted=adopted,
                     decision=own,
                     timing=timing(40),
@@ -399,6 +435,7 @@ class NrtSeqs:
     corpus: int = 0
     title_abstract: int = 0
     inhaler_excluded: int = 0
+    rescreens_open: int = 0
     full_text: int = 0
 
 
@@ -442,7 +479,7 @@ def nrt_review(db: Database) -> tuple[ReviewWorld, NrtSeqs]:
     world.decide(b, ta, t["inhaler"], exclude(ta, c, "INT"))
     with db.transaction() as tx:
         (link,) = tx.execute(
-            "select a.id, a.revision from screening_assignment a join screening_item i"
+            "select a.id, a.etag from screening_assignment a join screening_item i"
             " on i.stage_id = a.stage_id and i.item_ref = a.item_ref"
             " where a.stage_id = %s and a.reviewer_id = %s and i.title like %s",
             (world.stages[ta].stage_id, b, t["inhaler"] + "%"),
@@ -456,18 +493,22 @@ def nrt_review(db: Database) -> tuple[ReviewWorld, NrtSeqs]:
             project_id=world.project_id,
             reviewer_id=b,
             assignment_id=link["id"],
-            expected_revision=link["revision"],
+            expected_etag=link["etag"],
         )
     world.decide(b, ta, t["inhaler"], include(ta, c))
     # Everything else is the off-topic PubMed search: both exclude on the population.
     world.decide_rest(a, ta, exclude(ta, c, "POP"))
     world.decide_rest(b, ta, exclude(ta, c, "POP"))
-    # The varenicline disagreement, and the two PubMed records the model saw nothing wrong with.
+    # The model saw nothing wrong with two PubMed records both humans excluded: the auditor screens
+    # them again, blind. They uphold one exclusion and include the other, a human disagreement.
+    seqs.rescreens_open = world.head()
+    world.audit(ta, overrides={t["predictors"]: include(ta, c)})
+    # Adjudication: the varenicline disagreement, and the auditor's disagreement.
     resolved = world.adjudicate(
         ta,
         lambda _: (None, exclude(ta, c, "INT" if _.title.startswith(t["varenicline"]) else "POP")),
     )
-    assert resolved == 3
+    assert resolved == 2
     seqs.title_abstract = world.head()
 
     # Full text: the inhaler trial's report could not be obtained.
@@ -484,14 +525,16 @@ def nrt_review(db: Database) -> tuple[ReviewWorld, NrtSeqs]:
     world.decide(b, ft, t["spray"], exclude(ft, c, "FOLLOWUP"))
     world.decide_rest(a, ft)
     world.decide_rest(b, ft)
+    # The AI read every full text as unclear, so both double exclusions get an extra screen; the
+    # auditor upholds them.
+    world.audit(ft)
 
     def choose(item: AdjudicationItem) -> tuple[str | None, Decision | None]:
-        if item.title.startswith(t["combination"]):
-            (column,) = [col for col in item.columns if col.reason_criterion_id == "COMP-CONTROL"]
-            return column.label, None
-        return "A", None
+        column = next(col for col in item.columns if col.reason_criterion_id == "COMP-CONTROL")
+        return column.label, None
 
-    assert world.adjudicate(ft, choose) == 2
+    # Only the screeners' different reasons for the combination trial need an adjudicator.
+    assert world.adjudicate(ft, choose) == 1
     seqs.full_text = world.head()
     return world, seqs
 
@@ -602,15 +645,10 @@ def capivasertib_review(db: Database) -> ReviewWorld:
     world.decide(b, ta, t["smyth"], include(ta, c))
     world.decide_rest(a, ta)
     world.decide_rest(b, ta)
-    # The AI read every criterion as unclear, so every double exclusion is adjudicated too.
-    world.adjudicate(
-        ta,
-        lambda item: (
-            ("A", None)
-            if not item.title.startswith(t["smyth"])
-            else (None, exclude(ta, c, "RCT-E5"))
-        ),
-    )
+    # The AI read every criterion as unclear, so the auditor screens every double exclusion again
+    # and upholds it; only the Smyth disagreement goes to the adjudicator.
+    world.audit(ta)
+    assert world.adjudicate(ta, lambda _: (None, exclude(ta, c, "RCT-E5"))) == 1
 
     ft: Stage = "full_text"
     world.open(
@@ -625,7 +663,8 @@ def capivasertib_review(db: Database) -> ReviewWorld:
     world.decide(b, ft, t["jones"], exclude(ft, c, "RCT-E1-ALT"))
     world.decide_rest(a, ft)
     world.decide_rest(b, ft)
-    world.adjudicate(ft, lambda _: ("A", None))
+    world.audit(ft)
+    assert world.adjudicate(ft, lambda _: ("A", None)) == 0
     return world
 
 

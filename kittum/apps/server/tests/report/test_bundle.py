@@ -214,6 +214,26 @@ def test_every_count_traces_to_decisions_events_and_people(sealed: Bundle) -> No
         "adjudicator@example.org",
     }
 
+    # "Excluded after an extra screen the AI triggered: 2": each has its rescreen event, and a
+    # human auditor screened it; one upheld the screeners, the other went to the adjudicator.
+    rescreened = flow["members"]["title_abstract:excluded_after_ai_rescreen"]
+    assert len(rescreened) == flow["ai_title_abstract"]["excluded_after_ai_rescreen"] == 2
+    triggers = {
+        json.loads(e["payload"])["item_ref"]: e
+        for e in events.values()
+        if e["type"] == "screening.ai_disagreement_rescreen"
+        and json.loads(e["payload"])["stage_id"] == stage("title_abstract")
+    }
+    results = set()
+    for ref in rescreened:
+        payload = json.loads(triggers[ref]["payload"])
+        assert payload["reason"] == "ai_include"
+        (audit,) = [d for d in ta[ref] if d["role"] == "auditor"]
+        assert human(audit["event_id"])["id"] == audit["reviewer_id"] == payload["auditor_id"]
+        assert actors[audit["reviewer_id"]]["identity_ref"].startswith("auditor@example.org")
+        results.add((audit["outcome"], ref in adjudicated))
+    assert results == {("exclude", False), ("include", True)}
+
     # "Reports excluded at full text, COMP-CONTROL: 1": the adjudicator adopted that reason.
     (ref,) = flow["members"]["reason:COMP-CONTROL"]
     j = db.execute(

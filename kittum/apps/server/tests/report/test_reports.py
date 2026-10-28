@@ -1,11 +1,12 @@
-"""The core report targets on the nicotine replacement review: the PRISMA flow reconciles, the RIS
-files round-trip through the search module's import, the search report holds every PRISMA-S
-field, and the AI disclosure names the models and the agreement that screening measured."""
+"""The core report targets on two screened reviews: the PRISMA flow reconciles by hand and with
+screening and the corpus, at the head and at earlier cutoffs; the RIS files round-trip through
+the search module's import; the search report holds every PRISMA-S field; the AI disclosure names
+the models, both agreement readings, and the extra screens the AI triggered; and every metric the
+report computes itself equals what screening reports."""
 
 import json
 import xml.etree.ElementTree as ET
-from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 import rispy
@@ -13,37 +14,40 @@ import rispy
 from kittum.corpus import get_counts
 from kittum.judge import VERIFIER_LIMITS
 from kittum.models import weights_hash
-from kittum.report import load_review, one_line, render, render_files
+from kittum.report import flow, load_review, one_line, render, render_files
 from kittum.search import SearchPlan, import_file
 from tests.report.support import NRT_SCOPE, NRT_TITLES, RECIPE, seed_people
 
 if TYPE_CHECKING:
-    from kittum.report import PrismaFlow, Review
+    from collections.abc import Callable
+
+    from kittum.report import PrismaFlow, Review, StageResult
+    from kittum.screening import StageMetrics
     from tests.report.support import NrtSeqs, ReviewWorld
 
 pytestmark = pytest.mark.postgres
 
-SRC = Path(__file__).resolve().parents[2] / "src" / "kittum"
 
-
-def review_at(world: ReviewWorld, seq: int) -> Review:
+def review_at(world: ReviewWorld, seq: int | None = None) -> Review:
     with world.db.transaction() as tx:
         return load_review(tx, world.project_id, cutoff_seq=seq)
 
 
 def prisma(review: Review, scope: str = NRT_SCOPE) -> PrismaFlow:
-    from kittum.report import flow
-
     return flow(review, "TRIALS", scope)
 
 
-def refs(world: ReviewWorld, *keys: str) -> list[str]:
-    return sorted(world.record(NRT_TITLES[k]).item_ref for k in keys)
+def refs(world: ReviewWorld, *keys: str) -> tuple[str, ...]:
+    return tuple(sorted(world.record(NRT_TITLES[k]).item_ref for k in keys))
 
 
-def test_prisma_flow_reconciles_by_hand_and_from_data(nrt: tuple[ReviewWorld, NrtSeqs]) -> None:
+def test_prisma_flow_reconciles_by_hand_with_screening_and_the_corpus(
+    nrt: tuple[ReviewWorld, NrtSeqs],
+) -> None:
     world, seqs = nrt
-    f = prisma(review_at(world, seqs.full_text))
+    review = review_at(world)
+    assert review.cutoff_seq == seqs.full_text
+    f = prisma(review)
 
     # By hand: 24 PubMed, 6 CENTRAL, 5 Embase records. Two Embase records repeat CENTRAL DOIs.
     assert {s.source: s.records for s in f.identified_by_source} == {
@@ -56,25 +60,24 @@ def test_prisma_flow_reconciles_by_hand_and_from_data(nrt: tuple[ReviewWorld, Nr
         35,
         0,
     )
-    assert f.duplicates_removed == 2
-    assert f.records_screened == 33
-    # 24 off-topic PubMed records, colitis, varenicline, the cohort study.
+    assert (f.duplicates_removed, f.records_screened) == (2, 33)
+    # 24 off-topic PubMed records, colitis, varenicline, the cohort study. The auditor's extra
+    # screens upheld one PubMed exclusion; the adjudicator kept the one the auditor included.
     assert (f.records_excluded, f.records_unresolved) == (27, 0)
-    assert f.members["reports_sought"] == tuple(
-        refs(world, "patch", "gum", "combination", "followup", "inhaler", "spray")
+    assert f.members["reports_sought"] == refs(
+        world, "patch", "gum", "combination", "followup", "inhaler", "spray"
     )
     # The inhaler trial's report was never obtained.
-    assert f.members["reports_not_retrieved"] == tuple(refs(world, "inhaler"))
+    assert f.members["reports_not_retrieved"] == refs(world, "inhaler")
     assert (f.reports_sought, f.reports_not_retrieved, f.reports_assessed) == (6, 1, 5)
     assert {r.criterion_id: r.reports for r in f.exclusion_reasons} == {
         "COMP-CONTROL": 1,
         "FOLLOWUP": 1,
     }
-    assert f.members["reason:COMP-CONTROL"] == tuple(refs(world, "combination"))
-    assert f.reports_excluded == 2
-    assert f.members["reports_included"] == tuple(refs(world, "patch", "gum", "followup"))
+    assert f.members["reason:COMP-CONTROL"] == refs(world, "combination")
+    assert f.members["reports_included"] == refs(world, "patch", "gum", "followup")
     # The follow-up is a second report of the patch trial: three reports, two studies.
-    assert (f.reports_included, f.studies_included) == (3, 2)
+    assert (f.reports_excluded, f.reports_included, f.studies_included) == (2, 3, 2)
 
     # From data: every box is the sum it must be, and every count is its list of members.
     assert all(c.holds for c in f.checks), [c for c in f.checks if not c.holds]
@@ -85,73 +88,45 @@ def test_prisma_flow_reconciles_by_hand_and_from_data(nrt: tuple[ReviewWorld, Nr
     assert f.reports_excluded == sum(r.reports for r in f.exclusion_reasons)
     for name in ("records_screened", "records_excluded", "reports_assessed", "studies_included"):
         assert len(f.members[name]) == getattr(f, name)
-    # The corpus counts the same identification from the same frozen revision.
+
+    # Screening and the corpus count the same records from the same rows.
     with world.db.transaction() as tx:
         counts = get_counts(tx, world.project_id, f.identity_revision_id)  # type: ignore[arg-type]
-    assert counts.total_records_identified == f.records_identified
-    assert counts.duplicates_removed == f.duplicates_removed
-    assert counts.unique_records == f.records_screened
-
-    # The AI never removes a record; what it took part in is counted beside the human counts.
-    ai = f.ai_title_abstract
-    assert ai.marked_ineligible_by_automation == 0
-    assert f.members["title_abstract:excluded_with_ai_proposal"] == tuple(refs(world, "colitis"))
-    assert f.members["title_abstract:excluded_after_ai_adjudication"] == tuple(
-        refs(world, "glpg", "predictors")
+        ta = world.screening.status(
+            tx, world.project_id, world.people.lead, NRT_SCOPE, "title_abstract"
+        )
+        ft = world.screening.status(tx, world.project_id, world.people.lead, NRT_SCOPE, "full_text")
+    assert (counts.total_records_identified, counts.duplicates_removed, counts.unique_records) == (
+        f.records_identified,
+        f.duplicates_removed,
+        f.records_screened,
     )
+    assert (ta.screened, ta.remaining, ta.conflicts) == (f.records_screened, 0, 0)
+    assert (ft.screened, ft.remaining, ft.conflicts) == (f.reports_assessed, 0, 0)
+
+    # The AI removes no record; what it took part in is counted beside the human counts.
+    assert f.ai_title_abstract.marked_ineligible_by_automation == 0
+    assert f.members["title_abstract:excluded_with_ai_proposal"] == refs(world, "colitis")
+    assert f.members["title_abstract:excluded_after_ai_rescreen"] == refs(
+        world, "glpg", "predictors"
+    )
+    assert f.members["full_text:excluded_after_ai_rescreen"] == refs(world, "combination", "spray")
     assert refs(world, "colitis")[0] in f.members["title_abstract:excluded_after_ai_reveal"]
-    assert ai.excluded_with_ai_involvement == len(
+    assert f.ai_title_abstract.excluded_with_ai_involvement == len(
         set(f.members["title_abstract:excluded_with_ai_proposal"])
         | set(f.members["title_abstract:excluded_after_ai_reveal"])
-        | set(f.members["title_abstract:excluded_after_ai_adjudication"])
+        | set(f.members["title_abstract:excluded_after_ai_rescreen"])
     )
 
-    # The other scope was never screened, and its checks say so.
-    other = prisma(review_at(world, seqs.full_text), "combination-vs-single")
-    failing = {c.name for c in other.checks if not c.holds}
-    assert "identified minus duplicates equals screened" in failing
-
-
-def test_prisma_at_earlier_cutoffs_shows_the_review_as_it_stood(
-    nrt: tuple[ReviewWorld, NrtSeqs],
-) -> None:
-    world, seqs = nrt
-    # Right after B excluded the inhaler trial, before the undo: an open disagreement.
-    before = prisma(review_at(world, seqs.inhaler_excluded))
-    assert refs(world, "inhaler")[0] in before.members["records_unresolved"]
-    assert refs(world, "inhaler")[0] not in before.members["reports_sought"]
-    assert before.reports_assessed == 0
-    # After title and abstract, before any full text: every sought report is not yet retrieved.
-    ta = prisma(review_at(world, seqs.title_abstract))
-    assert (ta.records_excluded, ta.reports_sought, ta.reports_assessed) == (27, 6, 0)
-    assert ta.reports_not_retrieved == 6
-    assert all(c.holds for c in ta.checks)
-    # Before screening, nothing is screened, and the identification is already final.
-    corpus = prisma(review_at(world, seqs.corpus))
-    assert (corpus.records_identified, corpus.duplicates_removed, corpus.records_screened) == (
-        35,
-        2,
-        0,
-    )
-
-
-def test_prisma_renders_json_and_an_svg_flow_diagram(nrt: tuple[ReviewWorld, NrtSeqs]) -> None:
-    world, seqs = nrt
+    # The rendered diagram shows these numbers, and the same cutoff renders the same bytes.
     with world.db.transaction() as tx:
-        artifact = render(
-            tx,
-            "prisma",
-            world.project_id,
-            NRT_SCOPE,
-            store=world.artifacts,
-            cutoff_seq=seqs.full_text,
-        )
-    files = {f.path: f for f in artifact.files}
-    assert set(files) == {"TRIALS-nrt-vs-control.json", "TRIALS-nrt-vs-control.svg"}
-    data = json.loads(world.artifacts.get(files["TRIALS-nrt-vs-control.json"].sha256))
-    assert data["records_screened"] == 33 and data["cutoff_seq"] == seqs.full_text
-    svg = world.artifacts.get(files["TRIALS-nrt-vs-control.svg"].sha256).decode()
-    texts = [t.text for t in ET.fromstring(svg).iter("{http://www.w3.org/2000/svg}text")]
+        artifact = render(tx, "prisma", world.project_id, NRT_SCOPE, store=world.artifacts)
+        again = render(tx, "prisma", world.project_id, NRT_SCOPE, store=world.artifacts)
+    assert again == artifact
+    files = {a.path: world.artifacts.get(a.sha256) for a in artifact.files}
+    assert json.loads(files["TRIALS-nrt-vs-control.json"]) == f.model_dump(mode="json")
+    svg = ET.fromstring(files["TRIALS-nrt-vs-control.svg"])
+    texts = [t.text for t in svg.iter("{http://www.w3.org/2000/svg}text")]
     for line in (
         "Records screened: n = 33",
         "Records excluded: n = 27",
@@ -163,17 +138,39 @@ def test_prisma_renders_json_and_an_svg_flow_diagram(nrt: tuple[ReviewWorld, Nrt
         "Duplicate records removed: n = 2",
     ):
         assert line in texts, line
-    # Rendering the same cutoff again gives the same bytes.
-    with world.db.transaction() as tx:
-        again = render(
-            tx,
-            "prisma",
-            world.project_id,
-            NRT_SCOPE,
-            store=world.artifacts,
-            cutoff_seq=seqs.full_text,
-        )
-    assert again == artifact
+
+    # The other scope was never screened, and its checks say so.
+    failing = {c.name for c in prisma(review, "combination-vs-single").checks if not c.holds}
+    assert "identified minus duplicates equals screened" in failing
+
+
+def test_prisma_at_earlier_cutoffs_shows_the_review_as_it_stood(
+    nrt: tuple[ReviewWorld, NrtSeqs],
+) -> None:
+    world, seqs = nrt
+    inhaler, rescreened = refs(world, "inhaler")[0], refs(world, "glpg", "predictors")
+    # Right after B excluded the inhaler trial, before the undo: an open disagreement.
+    before = prisma(review_at(world, seqs.inhaler_excluded))
+    assert inhaler in before.members["records_unresolved"]
+    assert inhaler not in before.members["reports_sought"]
+    # Both screeners are done, but the AI sent two exclusions to the auditor, who has not screened
+    # them yet: they are unresolved, not excluded, and the sums still hold.
+    # The varenicline disagreement waits for the adjudicator.
+    waiting = prisma(review_at(world, seqs.rescreens_open))
+    assert set(waiting.members["records_unresolved"]) == {*rescreened, *refs(world, "varenicline")}
+    assert (waiting.records_excluded, waiting.records_unresolved) == (24, 3)
+    assert all(c.holds for c in waiting.checks)
+    # After title and abstract, before any full text: every sought report is not yet retrieved.
+    ta = prisma(review_at(world, seqs.title_abstract))
+    assert (ta.records_excluded, ta.reports_sought, ta.reports_assessed) == (27, 6, 0)
+    assert ta.reports_not_retrieved == 6 and all(c.holds for c in ta.checks)
+    # Before screening, nothing is screened, and the identification is already final.
+    corpus = prisma(review_at(world, seqs.corpus))
+    assert (corpus.records_identified, corpus.duplicates_removed, corpus.records_screened) == (
+        35,
+        2,
+        0,
+    )
 
 
 def test_ris_files_round_trip_through_the_search_import(nrt: tuple[ReviewWorld, NrtSeqs]) -> None:
@@ -222,7 +219,7 @@ def test_ris_files_round_trip_through_the_search_import(nrt: tuple[ReviewWorld, 
     assert len(dedup) == len(reports) == 33
     assert reports == {str(link.report_id) for link in review.identity.links}  # type: ignore[union-attr]
     included = rispy.loads(files["TRIALS-nrt-vs-control/included.ris"].decode())
-    assert sorted(e["custom2"].removeprefix("kittum:report:") for e in included) == refs(
+    assert tuple(sorted(e["custom2"].removeprefix("kittum:report:") for e in included)) == refs(
         world, "patch", "gum", "followup"
     )
     assert len({e["custom3"] for e in included}) == 2
@@ -270,13 +267,11 @@ def test_search_report_records_every_prisma_s_field(nrt: tuple[ReviewWorld, NrtS
     assert "'nicotine replacement therapy'/exp" in text
 
 
-def test_ai_disclosure_lists_the_models_and_the_agreement_screening_measured(
+def test_ai_disclosure_names_the_models_both_readings_and_the_extra_screens(
     nrt: tuple[ReviewWorld, NrtSeqs],
 ) -> None:
-    world, seqs = nrt
-    files = {
-        f.path: f.data for f in render_files(review_at(world, seqs.full_text), "ai_disclosure")
-    }
+    world, _ = nrt
+    files = {f.path: f.data for f in render_files(review_at(world), "ai_disclosure")}
     d = json.loads(files["ai_disclosure.json"])
     (model,) = d["models"]
     assert (model["repository"], model["revision"], model["weights_licence"]) == (
@@ -293,59 +288,90 @@ def test_ai_disclosure_lists_the_models_and_the_agreement_screening_measured(
         verdicts = tx.execute(
             "select count(*) as n from verdict where judge_config_id = %s", (world.config.id,)
         ).fetchone()
+    assert config is not None and verdicts is not None
     assert (model["prompt_hash"], model["schema_hash"]) == (
         config["prompt_hash"],
         config["schema_hash"],
-    )  # type: ignore[index]
-    assert model["verdicts"] == verdicts["n"]  # type: ignore[index]
+    )
+    assert model["verdicts"] == verdicts["n"]
     assert [t["mode"] for t in d["topics"]] == ["M1"]
     assert d["verifier_limits"] == list(VERIFIER_LIMITS)
 
-    # Agreement, reveals, and the audit are the numbers screening reports to the methods lead.
-    with world.db.transaction() as tx:
-        for stage in d["stages"]:
-            status = world.screening.status(
-                tx, world.project_id, world.people.lead, NRT_SCOPE, stage["stage"]
-            )
-            assert status.metrics is not None
-            assert stage["reveal"] == status.metrics.reveal == "on_disagreement"
-            assert [
-                (a["kind"], a["actor_ids"], a["items"], a["kappa"], a["pabak"])
-                for a in stage["agreement"]
-            ] == [
-                (a.kind, list(a.raters), a.items, a.kappa, a.pabak)
-                for a in status.metrics.agreement
-            ]
-            assert stage["reveals_shown"] == status.metrics.reveals_shown
-            assert stage["revised_after_reveal"] == status.metrics.revised_after_reveal
-            assert stage["audit"] == status.metrics.audit.model_dump(mode="json")
-            assert stage["excluded_by_ai_alone"] == 0
-    ta = d["stages"][0]
-    human = next(a for a in ta["agreement"] if a["kind"] == "human_human")
-    assert human["items"] == 33 and human["kappa"] is not None
+    ta, ft = d["stages"]
+    # Both readings of the AI against each screener, from the blind decisions.
+    assert sorted(a["kind"] for a in ta["agreement"]) == [
+        "human_ai",
+        "human_ai",
+        "human_ai_verified",
+        "human_ai_verified",
+        "human_human",
+    ]
     assert ta["revised_after_reveal"] == 1  # A revised the colitis trial after the reveal
+    # The extra screens the AI triggered, and what came of them.
+    cases = {c["item_ref"]: (c["reason"], c["result"], c["outcome"]) for c in ta["rescreen_cases"]}
+    glpg, predictors = refs(world, "glpg")[0], refs(world, "predictors")[0]
+    assert cases == {
+        glpg: ("ai_include", "upheld", "exclude"),
+        predictors: ("ai_include", "adjudicated", "exclude"),
+    }
+    assert ta["rescreens"] == {"triggered": 2, "pending": 0, "upheld": 1, "adjudicated": 1}
+    assert {c["result"] for c in ft["rescreen_cases"]} == {"upheld"}
+    assert ft["rescreens"]["triggered"] == 2
+    assert ta["excluded_by_ai_alone"] == ft["excluded_by_ai_alone"] == 0
 
     text = files["ai_disclosure.md"].decode()
     assert "not the standard" in text and RECIPE.repository in text
-    assert f"| {human['kappa']:.2f} |" in text
+    assert "| nrt-vs-control | title_abstract | 2 | 1 | 1 | 0 |" in text
+    human = next(a for a in ta["agreement"] if a["kind"] == "human_human")
+    assert f"Reviewer 1 and Reviewer 2 | 33 | {human['kappa']:.2f} |" in text
+    assert "(model's own reading)" in text and "(verified reading)" in text
     for limit in VERIFIER_LIMITS:
         assert limit in text
 
 
-def test_core_report_code_names_no_profile() -> None:
-    """The core never imports a profile (tests/test_architecture.py) and names none."""
-    for path in sorted((SRC / "report").glob("*.py")):
-        text = path.read_text().lower()
-        for word in ("gba", "amnog", "iqwig", "modul 4", "anhang", "kittum.profiles"):
-            assert word not in text, f"{path.name} names {word!r}"
+# Report computes these from the replayed rows instead of calling screening, so they stay exact at
+# old cutoffs. Each is compared with what screening reports at the latest cutoff, so that a change
+# to screening's definitions fails here, under the metric's name.
+METRICS: dict[str, Callable[[StageResult], Any]] = {
+    "screened": lambda s: (s.screened, len(s.records) - s.screened, s.conflicts_open),
+    "conflicts_resolved": lambda s: s.conflicts_resolved,
+    "agreement": lambda s: s.agreement,
+    "reveals": lambda s: (s.reveals_shown, s.revised_after_reveal),
+    "audit": lambda s: s.audit,
+    "rescreens": lambda s: s.rescreens,
+}
+FROM_STATUS: dict[str, Callable[[Any], Any]] = {
+    "screened": lambda st: (st.screened, st.remaining, st.conflicts),
+    "conflicts_resolved": lambda st: st.metrics.conflicts_resolved,
+    "agreement": lambda st: st.metrics.agreement,
+    "reveals": lambda st: (st.metrics.reveals_shown, st.metrics.revised_after_reveal),
+    "audit": lambda st: st.metrics.audit,
+    "rescreens": lambda st: st.metrics.rescreens,
+}
 
 
-def test_render_rejects_unknown_targets_and_the_bundle(nrt: tuple[ReviewWorld, NrtSeqs]) -> None:
-    world, _ = nrt
-    with world.db.transaction() as tx:
-        with pytest.raises(ValueError, match="unknown report target"):
-            render(tx, "nobody.registered_this", world.project_id, store=world.artifacts)
-        with pytest.raises(ValueError, match="seal_bundle"):
-            render(tx, "bundle", world.project_id, store=world.artifacts)
-        with pytest.raises(ValueError, match="cutoff"):
-            render(tx, "prisma", world.project_id, store=world.artifacts, cutoff_seq=10**9)
+@pytest.mark.parametrize("metric", sorted(METRICS))
+def test_a_metric_the_report_computes_equals_what_screening_reports(
+    metric: str, nrt: tuple[ReviewWorld, NrtSeqs], capivasertib: ReviewWorld
+) -> None:
+    compared = 0
+    for world in (nrt[0], capivasertib):
+        review = review_at(world)
+        with world.db.transaction() as tx:
+            for stage in review.stages:
+                status = world.screening.status(
+                    tx,
+                    world.project_id,
+                    world.people.lead,
+                    stage.scope_id,
+                    stage.stage,
+                    topic_id=stage.topic_id,
+                )
+                metrics: StageMetrics | None = status.metrics
+                assert metrics is not None
+                assert METRICS[metric](stage) == FROM_STATUS[metric](status), (
+                    world.protocol.version.protocol.title,
+                    stage.stage,
+                )
+                compared += 1
+    assert compared == 4

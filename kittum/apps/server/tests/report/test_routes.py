@@ -108,18 +108,21 @@ def test_targets_render_download_and_seal_over_http(
     assert client.get(f"{base}/artifacts/{raw}").status_code == 404
     other = f"/api/projects/{capivasertib.project_id}/reports/artifacts/{rendered['sha256']}"
     assert client.get(other).status_code == 404
-    assert (
-        client.post(
-            f"{base}/targets/gba_amnog.anhang_4c/render", json={"actor_id": str(world.people.lead)}
-        ).status_code
-        == 400
-    )
-    assert (
-        client.post(
-            f"{base}/targets/nothing/render", json={"actor_id": str(world.people.lead)}
-        ).status_code
-        == 400
-    )
+    # Requests the review cannot answer say why, and record nothing.
+    lead = str(world.people.lead)
+    for target, body, reason in (
+        ("gba_amnog.anhang_4c", {}, "needs a protocol with profile 'gba_amnog'"),
+        ("nothing", {}, "unknown report target"),
+        ("bundle", {}, "sealed with seal_bundle"),
+        ("prisma", {"cutoff_seq": 10**9}, "outside the ledger"),
+    ):
+        refused = client.post(f"{base}/targets/{target}/render", json={"actor_id": lead, **body})
+        assert refused.status_code == 400 and reason in refused.json()["detail"], refused.text
+    with world.db.transaction() as tx:
+        rendered_events = [
+            e for e in world.ledger.events(tx, world.project_id) if e.type == "report.rendered"
+        ]
+    assert len(rendered_events) == 1
 
     # Seal at the head: the bundle includes the render just recorded, and verifies.
     sealed = client.post(f"{base}/bundle", json={"actor_id": str(world.people.lead)})
