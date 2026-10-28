@@ -28,8 +28,9 @@ The Modul 4 template (Anlage II.6, 18.11.2025) sets the minimum:
 - The G-BA website, searched by active substance and by zVT, with the *Vorgangsnummern*
   (procedure numbers) documented.
 
-IQWiG's methods (v8.0, §9.1.1 C) exclude preprint servers from benefit-assessment searches by
-default. Kittum can record preprints as supplementary material only.
+IQWiG's methods (v8.0, §9.1.1 C) exclude routine searches of preprint servers. Preprints found
+another way (citation chasing, Europe PMC, the company's study list) still go through normal
+screening and quality assessment.
 
 ## Free sources
 
@@ -88,8 +89,9 @@ All outbound HTTP goes through one gateway inside `enrich` and `search`:
 - The gateway reads `Retry-After` and rate-limit headers and slows down before a 429 response.
 - Retries with exponential backoff and full jitter on 429, 502, 503, and 504, up to five attempts.
   The ledger records every attempt.
-- A content-addressed response cache keyed by the request hash. A rerun of a frozen strategy makes
-  no network calls.
+- A content-addressed response cache keyed by the request hash. Replaying an existing execution
+  makes no network calls. A new execution of the same strategy, such as an update search, bypasses
+  the cache and stores its own response snapshot.
 - For enrichment, a "first healthy source" policy. A DOI lookup goes to Crossref, OpenAlex, or Europe
   PMC, whichever has budget and answers. Batched ID lookups (50 to 500 IDs per call where the source
   allows) cut call counts.

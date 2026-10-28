@@ -69,4 +69,4 @@ glossary to find the protocol code.
 | AI Omnibus, Regulation (EU) 2026/1744, in force 27.07.2026 | Opus | Confirmed. Annex III obligations moved to 02.12.2027. |
 | MinerU moved to a custom licence with commercial thresholds | Astra, Gemini | Confirmed through a secondary summary. Read the licence file before relying on it. |
 | Janus has a `DocumentReader` protocol and depends on PyMuPDF | Gemini, Fable | Confirmed in `janus/apps/server/src/janus/comparison/reader.py`. The tests import PyMuPDF too. |
-| Recall bounds: 10 of 10 found gives a 69% lower bound; 119 relevant records with no misses are needed for a miss rate below 2.5% | Opus | Recomputed: 0.025^(1/10) = 0.692, and 0.975^119 = 0.049 |
+| Recall bounds: 10 of 10 found gives a 69% lower bound; 119 relevant records with no misses are needed for a miss rate below 2.5% | Opus | Mixed conventions. 0.692 = 0.025^(1/10) is the two-sided 95% bound; 119 holds only one-sided (0.975^119 = 0.049). Kittum uses one-sided 95% throughout: 74.1% for 10 of 10, and 119. |

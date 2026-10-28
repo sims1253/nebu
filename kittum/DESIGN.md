@@ -52,8 +52,9 @@ PICO. When a new JCA PICO arrives, Kittum evaluates only the new criteria over t
 It does not rescreen everything.
 
 **Recall cannot be certified statistically at AMNOG scale.** Most search topics have tens of
-relevant records. If all 10 relevant records of a topic are found, the 95% lower confidence bound
-on recall is 69%. A miss rate below 2.5% needs at least 119 relevant records with no misses. The
+relevant records. If all 10 relevant records of a topic are found, the one-sided 95% lower confidence
+bound on recall is 74%. A miss rate below 2.5% at the same level needs at least 119 relevant
+records with no misses. (Kittum states every bound as one-sided 95% Clopper-Pearson.) The
 honest pitch for AI screening is that it finds studies humans miss. It is not that it cuts the
 human reading load on submission-critical topics. Workload savings are real only for large
 searches, such as indirect comparisons or JCA sweeps.
@@ -143,8 +144,10 @@ Two adapters sit behind the search seam from day one:
 Commercial interfaces (Embase, Scopus, Web of Science) become further `LiveApi` adapters when a
 contract grants automated access. A subscription does not imply that grant.
 
-An update search reruns the same strategies. Kittum diffs the result against the earlier execution,
-queues only new records, and shows both runs in the PRISMA flow.
+An update search reruns the same strategies. Kittum diffs the result against the earlier execution
+by identifier and by content: new records go to screening, and records whose content changed
+under the same identifier (a registry entry that now posts results, a corrected abstract) go to
+review. Both runs appear in the PRISMA flow.
 
 ### Enrichment and federation
 
@@ -152,7 +155,8 @@ Federation is where Kittum combines free sources and spreads load. It applies to
 filling missing abstracts, resolving DOIs, finding open-access PDFs, checking retractions, tagging
 entities, and citation chasing. Any of several sources can answer a lookup by DOI or PMID, so a
 per-source token bucket and a "first healthy source" policy spread the calls. Every HTTP response is
-cached by request hash, so a rerun replays offline.
+cached by request hash, so replaying an execution works offline. A new execution of the same
+query bypasses the cache.
 
 Enrichment never adds records to identification counts. Citation chasing creates a separate
 `SearchExecution` of kind `other_methods`, which PRISMA 2020 reports in its own column. Kittum never
@@ -162,8 +166,10 @@ rotates keys or accounts to get around quotas.
 
 ### Corpus and identities
 
-Deduplication matches on identifiers first (DOI, PMID, NCT, EudraCT, CTIS numbers), then on fuzzy
-title, author, and year. Kittum keeps every source occurrence even after merging, because Anhang
+Deduplication of records matches on report identifiers (DOI, PMID) first, then on fuzzy title,
+author, journal, and year. Trial identifiers (NCT, EudraCT, CTIS numbers) never merge records: a
+primary paper, a follow-up, and a subgroup analysis share them. They drive study-link proposals
+instead. Kittum keeps every source occurrence even after merging, because Anhang
 4-A counts all hits per database and Anhang 4-D requires an undeduplicated RIS file.
 
 Identity is versioned. An `IdentityRevision` records which occurrences belong to which report and
@@ -627,8 +633,9 @@ forbid it.
 
 ### Licence policy
 
-Kittum, like all of Nebu, is AGPL-3.0-or-later. Any open-source code licence
-is acceptable in a dependency, including AGPL and GPL, so PyMuPDF is in. Blocked, in code and in
+Kittum, like all of Nebu, is AGPL-3.0-or-later. A dependency's licence must be compatible with
+AGPL-3.0 for the way it is combined: AGPL, GPL-3.0, LGPL, MPL, and permissive licences are, so
+PyMuPDF is in; GPL-2.0-only and CDDL code are not. Blocked, in code and in
 model weights: non-commercial terms, revenue or user caps, field-of-use limits, no-competition
 clauses, and source-available licences. Those terms are further restrictions under AGPL section
 10, so they conflict with Kittum's own licence. That excludes the MinerU package, the marker,

@@ -27,7 +27,7 @@ them. The status column says how each fact was confirmed:
 | G-BA Verfahrensordnung, chapter 5 | Amendments of 17.07.2025 (EU HTA) and 20.11.2025 | Rules for referencing the EU dossier | `report` | Read (change list) |
 | IQWiG Allgemeine Methoden | v8.0, 19.12.2025 | §9.1.1 F: every selection step by two people independently | Mode M1 by default | Reported |
 | | | AI in study selection only with evidence of suitability against RAISE | Validation pack; M2 needs pooled evidence | Reported |
-| | | §9.1.1 C: no preprint servers by default | Preprints supplementary only | Reported |
+| | | §9.1.1 C: no routine search of preprint servers; preprints found otherwise are assessed | No preprint-server `SearchExecution` by default; preprints from other sources are screened and appraised normally | Reported |
 | | | Objective search approach with development and validation reference sets; PRESS peer review | `ReferenceSet` in the protocol; search review screen | Reported |
 | | | §9.2.2: IQWiG checks completeness, reruns searches, and spot-checks excluded citations | Every exclusion carries a criterion, a quote, and a reviewer | Reported |
 | | | §9.6: handling of untrustworthy, retracted, or fabricated studies | Retraction check from Crossref and PubMed during enrichment | Reported |

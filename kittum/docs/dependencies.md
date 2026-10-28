@@ -16,8 +16,10 @@ Kittum is licensed **AGPL-3.0-or-later**, as is the rest of the Nebu repository.
 
 What that changes:
 
-- Any open-source code licence is acceptable in a dependency, including AGPL, GPL, LGPL, and MPL.
-  PyMuPDF, Ghostscript, and psycopg (LGPL) are fine.
+- A dependency's licence must be compatible with AGPL-3.0 for the way Kittum combines it. AGPL,
+  GPL-3.0, LGPL, MPL-2.0, Apache-2.0, MIT, and BSD are; GPL-2.0-only and CDDL code cannot be
+  linked into Kittum. A separate program that Kittum only calls (a database, an OCR binary) is
+  judged on its own terms. PyMuPDF, Ghostscript, and psycopg (LGPL) are fine.
 - The Janus reader swap is no longer needed. Janus keeps PyMuPDF, and Kittum uses Janus as it is.
 - Anyone who uses Kittum over a network can get its source (AGPL section 13). The workbench footer
   links to the source of the running version.

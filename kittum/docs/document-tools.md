@@ -6,8 +6,8 @@ Face model cards, leaderboards, and licence files. Release counts cover the twel
 that date. "Vendor" marks a number reported by the tool's own authors. Recheck exact versions when
 pinning: weights licences change more often than code licences.
 
-Kittum is AGPL-3.0-or-later. The [licence policy](../DESIGN.md#licence-policy) allows any
-open-source code licence, including AGPL and GPL. It blocks non-commercial terms, revenue or user
+Kittum is AGPL-3.0-or-later. The [licence policy](../DESIGN.md#licence-policy) allows code
+licences compatible with AGPL-3.0, including AGPL and GPL-3.0. It blocks non-commercial terms, revenue or user
 caps, field-of-use limits, and no-competition clauses, in code and in weights.
 [Dependencies](dependencies.md) covers the rest of the stack.
 
