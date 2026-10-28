@@ -23,7 +23,7 @@ from tests.search.record_fixtures import (
 
 from kittum.api import AppContext, create_app
 from kittum.app import create_project
-from kittum.corpus import StaleRevision, confirm_exact
+from kittum.corpus import StaleRevision, confirm, confirm_exact
 from kittum.db import Database
 from kittum.gateway import RecordedTransport, SourceGateway
 from kittum.ledger import PostgresLedger
@@ -290,3 +290,91 @@ def test_two_bulk_confirmations_at_once_confirm_each_duplicate_once(
     assert sum(p["status"] == "confirmed" for p in proposals) == 4
     events = client.get(f"{base}/corpus/revisions/latest", headers=as_lead).json()
     assert events["revision"]["id"] == str(outcomes["first"].id)  # type: ignore[attr-defined]
+
+
+class PausingLedger:
+    """The Postgres ledger, pausing after it appends a confirmation until `resume` is set: the
+    moment a single confirmation holds the ledger and has yet to mark its proposal confirmed."""
+
+    def __init__(self) -> None:
+        self.inner = PostgresLedger()
+        self.appended = threading.Event()
+        self.resume = threading.Event()
+
+    def append(self, tx: Any, draft: Any) -> Any:
+        event = self.inner.append(tx, draft)
+        if draft.type == "corpus.confirmed":
+            self.appended.set()
+            self.resume.wait(timeout=30)
+        return event
+
+
+def test_a_bulk_and_a_single_confirmation_at_once_neither_deadlock_nor_confirm_twice(
+    api: tuple[TestClient, str, str],
+) -> None:
+    """The lead confirms one duplicate with Enter while `a` confirms them all, in another tab.
+    Both take the project's confirmation lock before any proposal or the ledger: the bulk one
+    waits for the single one, then finds the revision it read stale. Nothing deadlocks, and the
+    duplicate is confirmed once."""
+    client, project, lead = api
+    base = f"/api/projects/{project}"
+    for source, platform, strategy in SEARCHES[:2]:
+        plan = {"topic_id": "nrt", "source": source, "platform": platform, "strategy": strategy}
+        resp = client.post(f"{base}/search/run", json={"plan": plan, "actor_id": lead})
+        assert resp.status_code == 200, resp.text
+    assert client.post(f"{base}/corpus/ingest", json={"actor_id": lead}).status_code == 201
+    as_lead = {"X-Kittum-Reviewer": lead}
+    parent = UUID(
+        client.get(f"{base}/corpus/revisions/latest", headers=as_lead).json()["revision"]["id"]
+    )
+    # The proposal the bulk confirmation takes first.
+    first = next(
+        p for p in client.get(f"{base}/corpus/proposals", headers=as_lead).json() if p["exact"]
+    )
+    db = Database(os.environ["KITTUM_DATABASE_URL"], max_size=4)
+    pausing = PausingLedger()
+    outcomes: dict[str, object] = {}
+
+    def run(name: str, work: Any) -> None:
+        try:
+            with db.transaction() as tx:
+                outcomes[name] = work(tx)
+        except Exception as e:  # any failure, a deadlock too, is the outcome
+            outcomes[name] = e
+
+    single = threading.Thread(
+        target=run,
+        args=(
+            "single",
+            lambda tx: confirm(
+                tx, UUID(project), parent, UUID(first["id"]), UUID(lead), ledger=pausing
+            ),
+        ),
+    )
+    bulk = threading.Thread(
+        target=run,
+        args=(
+            "bulk",
+            lambda tx: confirm_exact(
+                tx, UUID(project), parent, UUID(lead), ledger=PostgresLedger()
+            ),
+        ),
+    )
+    single.start()
+    assert pausing.appended.wait(timeout=30)
+    bulk.start()
+    # Longer than Postgres's deadlock_timeout (1 s), so a deadlock would be found before the
+    # single confirmation goes on to mark its proposal.
+    bulk.join(timeout=2.0)
+    pausing.resume.set()
+    single.join(timeout=30)
+    bulk.join(timeout=30)
+    db.close()
+
+    assert not isinstance(outcomes["single"], Exception), outcomes["single"]
+    assert isinstance(outcomes["bulk"], StaleRevision), outcomes["bulk"]
+    proposals = client.get(f"{base}/corpus/proposals", headers=as_lead).json()
+    assert [p["id"] for p in proposals if p["status"] == "confirmed"] == [first["id"]]
+    latest = client.get(f"{base}/corpus/revisions/latest", headers=as_lead).json()["revision"]
+    counts = client.get(f"{base}/corpus/revisions/{latest['id']}/counts").json()
+    assert counts["duplicates_removed"] == 1

@@ -149,8 +149,10 @@ def confirm(
 ) -> IdentityRevision:
     """Human confirmation of a link proposal, creating a new identity revision and ledger event.
 
-    The proposal's occurrences are merged with their complete groups (see `merge`).
+    The proposal's occurrences are merged with their complete groups (see `merge`). Raises
+    `ValueError` for a proposal that is no longer pending.
     """
+    _lock_confirmations(tx, project_id)
     with tx.cursor() as cur:
         cur.execute(
             "select * from proposal where id = %s and project_id = %s",
@@ -159,6 +161,8 @@ def confirm(
         prop_row = cur.fetchone()
         if not prop_row:
             raise NotFoundError(f"Proposal {proposal_id} not found")
+        if prop_row["status"] != "pending":
+            raise ValueError("This link is decided already. Reload the page to see it.")
 
         relation: Relation = prop_row["relation"]
         occurrence_ids: list[Id] = prop_row["occurrence_ids"]
@@ -297,12 +301,9 @@ def confirm_exact(
     the newest revision. Raises `StaleRevision` when `parent_revision_id` is no longer the newest
     revision, and `ValueError` when there is nothing to confirm.
 
-    One bulk confirmation runs at a time per project, until the caller's transaction ends: a
-    second one waits, then finds its parent stale."""
-    tx.execute(
-        "select pg_advisory_xact_lock(hashtext('corpus.confirm_exact'), hashtext(%s::text))",
-        (project_id,),
-    )
+    It holds the project's confirmation lock, as `confirm` does, until the caller's transaction
+    ends: a second confirmation waits, then finds its parent stale or its proposal decided."""
+    _lock_confirmations(tx, project_id)
     newest = latest_revision(tx, project_id)
     if newest is None or newest.id != parent_revision_id:
         raise StaleRevision(
@@ -327,6 +328,15 @@ def confirm_exact(
     if revision is None:
         raise ValueError("no open duplicate shares a DOI, PMID, or PMCID")
     return revision
+
+
+def _lock_confirmations(tx: Tx, project_id: Id) -> None:
+    """One confirmation, single or bulk, at a time per project until `tx` ends. Taken before any
+    proposal row or the ledger, so the two kinds always lock in the same order."""
+    tx.execute(
+        "select pg_advisory_xact_lock(hashtext('corpus.confirm'), hashtext(%s::text))",
+        (project_id,),
+    )
 
 
 def merge(
