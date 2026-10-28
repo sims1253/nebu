@@ -1,7 +1,7 @@
 # Working on Kittum
 
-Kittum runs systematic literature reviews for AMNOG dossiers, from the protocol to the Modul 4
-annexes, with every decision in a hash-chained ledger. Read [DESIGN.md](DESIGN.md) before changing
+Kittum runs auditable, AI-assisted systematic literature reviews, from the protocol to the final
+reports, with every decision in a hash-chained ledger. Read [DESIGN.md](DESIGN.md) before changing
 behaviour. Pick work from [docs/work-packages.md](docs/work-packages.md).
 
 ## Layout
@@ -11,6 +11,7 @@ kittum/
 ├── apps/
 │   ├── server/                 # Python 3.14, uv: every module below, the API, and the CLI
 │   │   ├── src/kittum/<module>/   # one package per module from DESIGN.md
+│   │   ├── src/kittum/profiles/   # optional agency or jurisdiction profiles
 │   │   ├── tests/<module>/        # that module's tests
 │   │   └── db/migrations/         # dbmate SQL migrations
 │   └── web/                    # the reviewer workbench (React 19, TanStack Router, Vite+)
@@ -88,6 +89,11 @@ Several agents work at once, one work package each. The rules keep them out of e
   user would notice.
 - Tests never touch the network. Use the fakes, recorded responses, or fixtures in the repo.
 - Unimplemented interface functions raise `NotImplementedError("WP-NN")`. Replace, don't wrap.
+- **The core is domain-neutral.** Core modules and their docs name no jurisdiction, agency, or
+  agency template. Jurisdiction- or agency-specific terms, rules, vocabularies, report targets, and
+  appraisal instruments belong in `kittum.profiles.<id>` and `docs/profiles/`. Core modules
+  never import a profile; profiles register at the entry points. See
+  [DESIGN.md, "Profiles"](DESIGN.md#profiles).
 - Python and TypeScript match the surrounding code: comment density, naming, idiom.
 
 ## Dependencies and licences
