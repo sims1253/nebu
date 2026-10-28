@@ -1,7 +1,8 @@
 """The values screening reads and answers, and its errors."""
 
+from collections import Counter
 from datetime import datetime
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import Field
 
@@ -9,7 +10,10 @@ from kittum.core import Id, KittumError, Record
 from kittum.judge import CriterionStatus, CriterionVerdict
 from kittum.protocol import ScreeningMode, Stage
 from kittum.runs import CommandRejected
-from kittum.stats import Interval
+from kittum.stats import Interval, cohen_kappa, pabak
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 type Outcome = Literal["include", "exclude", "unclear", "insufficient_information"]
 type Phase = Literal["provisional", "final"]
@@ -249,6 +253,44 @@ class PairAgreement(Record):
     items: int
     kappa: float | None  # None when undefined: no items, or one label throughout
     pabak: float | None
+    # The 2x2 table over the same items, first rater's label then second's. The agreed records
+    # are `include_include + exclude_exclude`; kappa covers every one of `items`.
+    include_include: int = 0
+    include_exclude: int = 0
+    exclude_include: int = 0
+    exclude_exclude: int = 0
+
+    @classmethod
+    def of(
+        cls,
+        kind: Literal["human_human", "human_ai", "human_ai_verified"],
+        raters: tuple[str, str],
+        a: Sequence[str],
+        b: Sequence[str],
+    ) -> PairAgreement:
+        """Kappa, PABAK, and the 2x2 table for two raters' include or exclude labels, in order."""
+        kappa = None
+        if a:
+            try:
+                kappa = cohen_kappa(a, b)
+            except ValueError:
+                kappa = None  # one label throughout: kappa is undefined
+        cells = Counter(zip(a, b, strict=True))
+        return cls(
+            kind=kind,
+            raters=raters,
+            items=len(a),
+            kappa=kappa,
+            pabak=pabak(a, b) if a else None,
+            include_include=cells["include", "include"],
+            include_exclude=cells["include", "exclude"],
+            exclude_include=cells["exclude", "include"],
+            exclude_exclude=cells["exclude", "exclude"],
+        )
+
+    @property
+    def agreed(self) -> int:
+        return self.include_include + self.exclude_exclude
 
 
 class AuditStratum(Record):

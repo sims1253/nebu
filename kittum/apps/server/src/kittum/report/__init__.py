@@ -37,9 +37,10 @@ from pydantic import Field
 
 from kittum.core import Id, KittumError, Record, Sha256, SystemClock, canonical_json, new_id
 from kittum.ledger import EXPORTERS as LEDGER_EXPORTERS
-from kittum.ledger import EventDraft, PostgresLedger, register_exporter
+from kittum.ledger import EventDraft, PostgresLedger, register_bundle_check, register_exporter
 from kittum.ledger import seal as seal_ledger
 from kittum.report.audit import (
+    ArtifactCheck,
     ArtifactRef,
     AsOf,
     EventPage,
@@ -52,12 +53,24 @@ from kittum.report.audit import (
     TracedEvent,
     TracedOccurrence,
     as_of,
+    check_artifact,
     events,
+    media_type,
     milestones,
     referenced,
     trace,
 )
 from kittum.report.exporters import EXPORTERS as _EXPORTERS
+from kittum.report.extracted import ExtractedValue, check_bundle, load_extracted
+from kittum.report.model_calls import (
+    CallPart,
+    ModelCall,
+    PromptCard,
+    SentRequest,
+    calls_of,
+    prompt_cards,
+    read_request,
+)
 from kittum.report.prisma import (
     AiInvolvement,
     Check,
@@ -187,6 +200,7 @@ def render(
         cutoff_seq=cutoff_seq,
         identity_revision_id=identity_revision_id,
         ledger=ledger,
+        store=store,
     )
     files = render_files(review, target, scope_id)
     return Artifact(
@@ -391,7 +405,7 @@ def seal_bundle(
     clock = clock or SystemClock()
     ledger = ledger or PostgresLedger(clock)
     cutoff = head_seq(tx, project_id) if cutoff_seq is None else cutoff_seq
-    review = load_review(tx, project_id, cutoff_seq=cutoff, ledger=ledger)
+    review = load_review(tx, project_id, cutoff_seq=cutoff, ledger=ledger, store=store)
     exporters = [
         *LEDGER_EXPORTERS,
         _Reports(bundle_reports(review)),
@@ -413,6 +427,7 @@ def seal_bundle(
 
 for _exporter in _EXPORTERS:
     register_exporter(_exporter)
+register_bundle_check(check_bundle)
 
 
 __all__ = [
@@ -424,13 +439,16 @@ __all__ = [
     "Adjudication",
     "AiInvolvement",
     "Artifact",
+    "ArtifactCheck",
     "ArtifactFile",
     "ArtifactRef",
     "AsOf",
+    "CallPart",
     "Check",
     "Conflict",
     "CoreTarget",
     "EventPage",
+    "ExtractedValue",
     "Fact",
     "HumanDecision",
     "Identity",
@@ -439,8 +457,10 @@ __all__ = [
     "JudgeInfo",
     "Link",
     "Milestone",
+    "ModelCall",
     "NotTheLead",
     "PrismaFlow",
+    "PromptCard",
     "ReasonCount",
     "RecordTrace",
     "RenderedFile",
@@ -450,6 +470,7 @@ __all__ = [
     "Review",
     "RightsProfile",
     "SearchRun",
+    "SentRequest",
     "SourceCount",
     "StageDisclosure",
     "StageResult",
@@ -458,16 +479,22 @@ __all__ = [
     "TracedOccurrence",
     "as_of",
     "bundle_reports",
+    "calls_of",
+    "check_artifact",
     "disclosure",
     "events",
     "flow",
     "flows",
     "head_seq",
     "json_file",
+    "load_extracted",
     "load_review",
     "md_table",
+    "media_type",
     "milestones",
     "one_line",
+    "prompt_cards",
+    "read_request",
     "record_render",
     "referenced",
     "register_target",

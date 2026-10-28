@@ -419,24 +419,40 @@ def test_a_lead_enriches_the_corpus_and_fetches_open_access_full_texts(
         ]
 
     assert trail(report_of[LESOTHO_DOI]) == [
-        ("retrieval.open_access_requested", "Open-access full texts requested for 3 reports"),
-        ("document.acquisition_attempted", "Full text not fetched from europepmc: http_error"),
-        ("document.acquired", "Full text acquired from crossref"),
-        ("project.full_text_attached", "Full text attached, fetched from crossref"),
+        (
+            "retrieval.open_access_requested",
+            "Morgan Lee asked Kittum to look for open-access full texts of 3 reports",
+        ),
+        (
+            "document.acquisition_attempted",
+            "Kittum could not get the full text from europepmc (http error)",
+        ),
+        ("document.acquired", "Kittum fetched the full text from crossref"),
+        (
+            "project.full_text_attached",
+            "Kittum attached the full text it fetched from crossref",
+        ),
     ]
     assert trail(lancet["report_id"]) == [
-        ("retrieval.open_access_requested", "Open-access full texts requested for 3 reports"),
+        (
+            "retrieval.open_access_requested",
+            "Morgan Lee asked Kittum to look for open-access full texts of 3 reports",
+        ),
         *[
             (
                 "document.acquisition_attempted",
-                f"Full text not fetched from {a['source']}: {a['outcome']}",
+                f"Kittum could not get the full text from {a['source']}"
+                f" ({a['outcome'].replace('_', ' ')})",
             )
             for a in lancet["attempts"]
         ],
     ]
     assert trail(registry["report_id"]) == [
-        ("retrieval.open_access_requested", "Open-access full texts requested for 3 reports"),
-        ("retrieval.no_open_access_location", "No open-access location known"),
+        (
+            "retrieval.open_access_requested",
+            "Morgan Lee asked Kittum to look for open-access full texts of 3 reports",
+        ),
+        ("retrieval.no_open_access_location", "Kittum found no open-access copy of the full text"),
     ]
 
     # Every report sought has its full text or a recorded reason why not: a second run has only

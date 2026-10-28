@@ -14,7 +14,8 @@ the Postgres store, the SQLite handover bundle, and the offline `verify` tool ag
   that its end was cut or that it was rewritten from some point on; `verify` against a checkpoint
   can.
 - `seal` writes a handover bundle; `verify_bundle` (and `kittum verify`) checks one offline.
-  Modules add their tables to bundles with `register_exporter`.
+  Modules add their tables to bundles with `register_exporter`, and checks of the files they
+  add with `register_bundle_check`.
 """
 
 from kittum.ledger.bundle import (
@@ -24,6 +25,7 @@ from kittum.ledger.bundle import (
     BundleWriter,
     Exporter,
     ExporterRegistry,
+    register_bundle_check,
     register_exporter,
     seal,
     verify_bundle,
@@ -73,6 +75,7 @@ __all__ = [
     "audit_chain",
     "event_hash",
     "payload_hash",
+    "register_bundle_check",
     "register_exporter",
     "seal",
     "verify_bundle",

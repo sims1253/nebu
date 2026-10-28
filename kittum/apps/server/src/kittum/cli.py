@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 def _verify(bundle: Path, public_key: Path | None) -> int:
     """Check a handover bundle offline. Exit 0 if it verifies, 1 if not."""
+    import kittum.report  # noqa: F401 - registers the checks of the report files
     from kittum.ledger import VerifyKey, verify_bundle
 
     trusted = VerifyKey.from_pem(public_key.read_bytes()) if public_key else None

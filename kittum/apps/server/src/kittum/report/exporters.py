@@ -586,6 +586,21 @@ class ReportExporter:
                 _index(bundle, [f["sha256"]], f["media_type"])
 
 
+@dataclass
+class AssistExporter:
+    """The protocol assistant's model calls: each attempt's request and response, as the
+    `protocol.assist` events in the ledger file name them."""
+
+    name: str = "assist"
+
+    def export(self, tx: Tx, project_id: Id, cutoff_seq: int, bundle: BundleWriter) -> None:
+        for e in _events(tx, project_id, cutoff_seq):
+            if e["type"] != "protocol.assist":
+                continue
+            for a in e["payload"].get("attempts", []):
+                _index(bundle, [a.get("raw_request_hash"), a.get("raw_response_hash")])
+
+
 EXPORTERS = (
     ProtocolExporter(),
     SearchExporter(),
@@ -593,4 +608,5 @@ EXPORTERS = (
     JudgeExporter(),
     ScreeningExporter(),
     ReportExporter(),
+    AssistExporter(),
 )

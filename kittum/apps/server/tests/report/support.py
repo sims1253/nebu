@@ -18,10 +18,12 @@ The judge runs on recorded completions keyed by the exact request. Every decisio
 """
 
 import functools
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import httpx2
 import yaml
 
 from kittum.core import SystemClock, new_id
@@ -35,7 +37,7 @@ from kittum.judge import (
     judge_many,
 )
 from kittum.ledger import PostgresLedger
-from kittum.models import ModelRegistry
+from kittum.models import ModelRegistry, OpenAICompatibleBackend
 from kittum.models.testing import RecordedBackend
 from kittum.people import record_roles
 from kittum.profiles import load_profiles
@@ -70,6 +72,7 @@ if TYPE_CHECKING:
 
     from kittum.core import Id
     from kittum.db import Database, Tx
+    from kittum.models import Completion, CompletionRequest, LlmBackend, ModelRecipe
     from kittum.protocol import Criterion, Stage, StoredProtocol
     from kittum.screening import AdjudicationItem, QueueItem, ScopeStatus, StageInfo
     from kittum.search import SearchExecution
@@ -739,3 +742,51 @@ def _records_of(tx: Tx, world: ReviewWorld, revision: Id) -> list[ScreeningRecor
             )
         )
     return sorted(records, key=lambda r: r.title)
+
+
+class OverHttp:
+    """`inner`'s answers, served as an OpenAI-compatible server serves them, through Kittum's
+    live backend: every request body and every response lands in `store` exactly as in a real
+    review. The server thinks out loud first, so each response carries `reasoning_content`."""
+
+    def __init__(
+        self, inner: LlmBackend, recipe: ModelRecipe, store: MemoryStore, *, reasoning: str
+    ) -> None:
+        self._inner = inner
+        self._answer = ""
+        self.seen: list[httpx2.Request] = []
+        self.replies: list[bytes] = []
+
+        def serve(request: httpx2.Request) -> httpx2.Response:
+            self.seen.append(request)
+            reply = json.dumps(
+                {
+                    "id": f"chatcmpl-{len(self.seen)}",
+                    "model": recipe.api_model,
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {
+                                "role": "assistant",
+                                "content": self._answer,
+                                "reasoning_content": reasoning,
+                            },
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {"prompt_tokens": 900, "completion_tokens": 120},
+                }
+            ).encode()
+            self.replies.append(reply)
+            return httpx2.Response(200, content=reply, headers={"content-type": "application/json"})
+
+        self._http = OpenAICompatibleBackend(
+            recipe,
+            "http://gpu-box:8000/v1",
+            store,
+            client=httpx2.Client(transport=httpx2.MockTransport(serve)),
+        )
+
+    def complete(self, request: CompletionRequest) -> Completion:
+        self._answer = self._inner.complete(request).text
+        return self._http.complete(request)

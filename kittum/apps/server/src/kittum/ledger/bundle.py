@@ -28,13 +28,13 @@ from uuid import UUID
 
 from kittum.core import Id, Record, Sha256, SystemClock, canonical_json, sha256_hex
 from kittum.ledger.keys import VerifyKey, document_message
-from kittum.ledger.model import Checkpoint, EventDraft, LedgerIntegrityError
+from kittum.ledger.model import AuditEvent, Checkpoint, EventDraft, LedgerIntegrityError
 from kittum.ledger.postgres import PostgresLedger
 from kittum.ledger.sqlite import NO_TX, SqliteLedger
 from kittum.ledger.verify import verify_chain
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator, Mapping, Sequence
+    from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 
     from kittum.core import Clock
     from kittum.db import Tx
@@ -122,6 +122,11 @@ class BundleWriter:
             return
         self.artifacts[sha256] = (media_type, withheld_reason, self._exporter)
 
+    def read(self, sha256: str) -> bytes | None:
+        """An artifact's bytes from the store, or None if the store lacks it: for an exporter
+        that indexes what an artifact names, such as the model calls in a transcript."""
+        return self._store.get(sha256) if self._store.exists(sha256) else None
+
     def file(self, path: str, data: bytes) -> None:
         """Add a file at a relative POSIX path, such as `reports/prisma.json`.
 
@@ -196,6 +201,20 @@ EXPORTERS = ExporterRegistry()
 def register_exporter(exporter: Exporter) -> Exporter:
     """Add an exporter to every bundle this process seals. Call it at module import."""
     return EXPORTERS.register(exporter)
+
+
+type BundleCheck = Callable[[Path, list[AuditEvent], Mapping[str, str], list[str]], None]
+"""An offline check of files a module adds: (bundle root, the verified ledger events, the
+manifest's files, problems to append to). It runs only once the chain verifies."""
+
+_CHECKS: list[BundleCheck] = []
+
+
+def register_bundle_check(check: BundleCheck) -> BundleCheck:
+    """Add a check that `verify_bundle` runs on every bundle, as `register_exporter` adds rows."""
+    if check not in _CHECKS:
+        _CHECKS.append(check)
+    return check
 
 
 class Bundle(Record):
@@ -407,7 +426,7 @@ def verify_bundle(path: Path, *, trusted_key: VerifyKey | None = None) -> Bundle
         problems.append(f"cannot open {SQLITE_NAME}: {e}")
         return report(**result)
     try:
-        _verify_database(db, project_id, cutoff_seq, checkpoint, key, files, problems)
+        _verify_database(path, db, project_id, cutoff_seq, checkpoint, key, files, problems)
     except (sqlite3.Error, ValueError) as e:
         problems.append(f"{SQLITE_NAME} is malformed: {e}")
     finally:
@@ -431,6 +450,7 @@ def _entries(root: Path) -> list[tuple[str, bool]]:
 
 
 def _verify_database(
+    root: Path,
     db: SqliteLedger,
     project_id: Id,
     cutoff_seq: int,
@@ -450,6 +470,9 @@ def _verify_database(
         problems.append(
             f"the ledger runs to seq {chain.checked_through_seq}, past the cutoff {cutoff_seq}"
         )
+    else:
+        for check in _CHECKS:
+            check(root, list(events), files, problems)
     stored = db.checkpoints(NO_TX, project_id)
     if checkpoint not in stored:
         problems.append("the manifest's checkpoint is not in the ledger file")

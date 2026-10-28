@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from kittum.core import Id, Record
 from kittum.judge import VERIFIER_LIMITS
+from kittum.report.extracted import as_csv, as_json
 from kittum.report.prisma import flows, svg
 from kittum.report.ris_format import ris_dumps, ris_entry
 
@@ -297,7 +298,7 @@ def render_search_report(review: Review, scope_id: str | None) -> list[RenderedF
     lines = [
         f"# Search report: {review.project_name}",
         "",
-        f"Every search recorded in the ledger through event {review.cutoff_seq}, with the fields "
+        f"Every search the ledger recorded up to event {review.cutoff_seq}, with the fields "
         "PRISMA-S asks for.",
         "",
         md_table(
@@ -322,22 +323,25 @@ def render_search_report(review: Review, scope_id: str | None) -> list[RenderedF
             "",
             f"- Source: {r['source']} ({r['source_kind']})",
             f"- Search type: {r['search_type'].replace('_', ' ')}",
-            f"- Run: {r['started_at']} to {r['ended_at']} by {r['run_by']} (ledger event "
-            f"{r['event_seq']})",
-            f"- Limits: {'; '.join(r['limits']) or 'none in the strategy'}"
-            + (f"; protocol: {r['protocol_limits']}" if r["protocol_limits"] else ""),
-            f"- Study filter: {r['study_filter'] or 'none'}",
-            f"- Records reported by the source: {r['reported_count']}; retrieved: "
-            f"{r['retrieved_count']}"
-            + (
-                f"; not mapped: {len(r['skipped_record_ids'])} ({', '.join(r['skipped_record_ids'])})"
+            f"- Run by {r['run_by']} from {r['started_at']} to {r['ended_at']}, ledger event "
+            f"{r['event_seq']}",
+            f"- Limits in the strategy: {', '.join(r['limits']) or 'None'}",
+            f"- Limits in the protocol: {r['protocol_limits'] or 'None'}",
+            f"- Study filter: {r['study_filter'] or 'None'}",
+            f"- Records the source reported: {r['reported_count']}",
+            f"- Records retrieved: {r['retrieved_count']}",
+            *(
+                [
+                    f"- Records Kittum could not read: {len(r['skipped_record_ids'])} "
+                    f"({', '.join(r['skipped_record_ids'])})"
+                ]
                 if r["skipped_record_ids"]
-                else ""
+                else []
             ),
-            f"- Records as exported: `{r['ris_file']}`",
+            f"- RIS file of the records: `{r['ris_file']}`",
             f"- Raw responses (SHA-256): {', '.join(f'`{h}`' for h in r['raw_artifact_hashes'])}",
             "",
-            "Strategy as run:",
+            "The strategy as run:",
             "",
             "```text",
             r["strategy"],
@@ -345,10 +349,10 @@ def render_search_report(review: Review, scope_id: str | None) -> list[RenderedF
             "",
         ]
         if r["query_translation"]:
-            lines += ["Query translation reported by the platform:", "", "```text"]
+            lines += ["The platform's translation of the query:", "", "```text"]
             lines += [r["query_translation"], "```", ""]
     if unsearched:
-        lines += ["## Planned sources without a recorded search", ""]
+        lines += ["## Planned sources with no recorded search", ""]
         lines.append(
             md_table(
                 ["Topic", "Source", "Name", "Kind"],
@@ -361,7 +365,7 @@ def render_search_report(review: Review, scope_id: str | None) -> list[RenderedF
             md_table(
                 ["Topic", "Source", "Justification"],
                 [
-                    [t.id, dev.source_id, "; ".join(dev.justification.values())]
+                    [t.id, dev.source_id, " ".join(dev.justification.values())]
                     for t in review.document.search_topics
                     for dev in t.source_plan.deviations
                 ],
@@ -400,6 +404,7 @@ def disclosure(review: Review) -> dict[str, Any]:
                 "licence_url": recipe.get("licence_url"),
                 "serving": recipe.get("serving"),
                 "reasoning": recipe.get("reasoning"),
+                "extra_body": recipe.get("extra_body") or {},
                 "reported_model_identities": list(j.model_identities),
                 "endpoints": list(j.endpoints),
                 "verdicts": j.verdicts,
@@ -442,6 +447,13 @@ def disclosure(review: Review) -> dict[str, Any]:
                         "raters": [names.get(r, r) for r in a.raters],
                         "actor_ids": list(a.raters),
                         "items": a.items,
+                        "agreed": a.agreed,
+                        "table": {
+                            "include_include": a.include_include,
+                            "include_exclude": a.include_exclude,
+                            "exclude_include": a.exclude_include,
+                            "exclude_exclude": a.exclude_exclude,
+                        },
                         "kappa": a.kappa,
                         "pabak": a.pabak,
                     }
@@ -470,7 +482,6 @@ def disclosure(review: Review) -> dict[str, Any]:
                 ],
                 "excluded": len(excluded),
                 "excluded_with_ai_proposal": sum(1 for i in excluded if i.ai_excludes),
-                "excluded_by_ai_alone": 0,
                 "audit": s.audit.model_dump(mode="json"),
             }
         )
@@ -505,6 +516,7 @@ def disclosure(review: Review) -> dict[str, Any]:
         "protocol_hash": review.protocol.version.content_hash if review.protocol else None,
         "protocol_assistant": assistant,
         "models": models,
+        "prompts": [card.model_dump(mode="json") for card in review.prompts],
         "topics": topics,
         "stages": stages,
         "verifier_limits": list(VERIFIER_LIMITS),
@@ -512,42 +524,153 @@ def disclosure(review: Review) -> dict[str, Any]:
     }
 
 
-_READING = {"human_ai": " (model's own reading)", "human_ai_verified": " (verified reading)"}
+STAGE_NAMES = {"title_abstract": "Title and abstract", "full_text": "Full text"}
+
+AI_READING = {
+    "human_human": "",
+    "human_ai": "the AI's own reading",
+    "human_ai_verified": "the AI's checked reading",
+}
+"""How the AI's side of a pair is named: the model's reading before Kittum checks its quotes,
+or after."""
 
 
-def _fmt(value: float | None) -> str:
+def _number(value: float | None) -> str:
     return "not defined" if value is None else f"{value:.2f}"
 
 
-def _served_as(model: dict[str, Any]) -> str:
+def rater_names(agreement: dict[str, Any]) -> tuple[str, str]:
+    first, second = agreement["raters"]
+    return first, AI_READING[agreement["kind"]] or second
+
+
+def agreement_sentence(agreement: dict[str, Any]) -> str:
+    """ "Reviewer 1 and the AI's own reading agreed on 18 of 33 records. ..." """
+    first, second = rater_names(agreement)
+    n, agreed = agreement["items"], agreement["agreed"]
+    if n == 0:
+        return f"{first} and {second} have no record in common yet."
+    share = round(100 * agreed / n)
+    return (
+        f"{first} and {second} agreed on {agreed} of {n} records ({share}%). "
+        f"Cohen's kappa is {_number(agreement['kappa'])} and PABAK is "
+        f"{_number(agreement['pabak'])}. Both cover all {n} records, agreed or not."
+    )
+
+
+def agreement_table(agreement: dict[str, Any]) -> str:
+    first, second = rater_names(agreement)
+    t = agreement["table"]
+    return md_table(
+        ["", f"{second}: include", f"{second}: exclude"],
+        [
+            [f"{first}: include", t["include_include"], t["include_exclude"]],
+            [f"{first}: exclude", t["exclude_include"], t["exclude_exclude"]],
+        ],
+    )
+
+
+def _model(model: dict[str, Any]) -> str:
     served = ", ".join(model["reported_model_identities"]) or model["serving"]
     if model["endpoints"]:
         served += f" ({model['serving']} at {', '.join(model['endpoints'])})"
     return served
 
 
-def _served_as_assistant(entry: dict[str, Any]) -> str:
-    served = entry.get("model_identity") or entry.get("recipe_id") or "unknown"
+def _assistant_model(entry: dict[str, Any]) -> str:
+    served = entry.get("model_identity") or entry.get("recipe_id") or "not recorded"
     if entry.get("endpoint"):
         served += f" ({entry.get('serving')} at {entry['endpoint']})"
     return f"{entry.get('recipe_id')}: {served}"
 
 
+def _fenced(text: str, language: str = "text") -> list[str]:
+    """A code block that the text cannot close, however many backticks it holds."""
+    longest = max((len(run) for run in re.findall(r"`+", text)), default=0)
+    fence = "`" * max(3, longest + 1)
+    return [f"{fence}{language}", text, fence, ""]
+
+
+ROLE_NAMES = {"judge": "AI judge", "assistant": "Protocol assistant", "extraction": "Extraction"}
+
+
+def prompt_section(card: dict[str, Any]) -> list[str]:
+    """One AI role's prompts and model recipe, as section 6 of the disclosure shows them."""
+    model = card["model"]
+    lines = [f"### {ROLE_NAMES.get(card['role'], card['role'])}: {card['label']}", ""]
+    facts = [
+        ("Recipe", card["recipe_id"]),
+        ("Model", model.get("repository") or model.get("model_as_sent")),
+        ("Revision", model.get("revision") or "Not recorded for this role"),
+        ("Weights SHA-256", model.get("weights_hash") and f"`{model['weights_hash']}`"),
+        ("Licence", model.get("weights_licence")),
+        ("Serving", model.get("serving")),
+        ("Endpoint", ", ".join(model.get("endpoints") or []) or None),
+        (
+            "Model as reported by the server",
+            ", ".join(model.get("reported_model_identities") or []),
+        ),
+        ("Prompt version", card["prompt_version"]),
+        ("Prompt template SHA-256", card["prompt_hash"] and f"`{card['prompt_hash']}`"),
+        ("Calls through this cutoff", card["calls"]),
+    ]
+    lines += [f"- {label}: {value}" for label, value in facts if value not in (None, "")]
+    lines.append("")
+    if card["request_sha256"] is None:
+        lines += [
+            "Kittum has no stored request for this role, so it cannot show the prompts.",
+            "",
+        ]
+        return lines
+    where = (
+        "the request body sent to the model server"
+        if card["request_form"] == "http_body"
+        else "the request as Kittum built it. The backend stored no request body"
+    )
+    lines += [f"Read from {where}, SHA-256 `{card['request_sha256']}`.", ""]
+    settings = dict(card["request_settings"])
+    extra = model.get("extra_body") or {}
+    if extra:
+        lines += ["Server options from the recipe (`extra_body`):", ""]
+        lines += _fenced(json.dumps(extra, indent=2, sort_keys=True), "json")
+    if settings:
+        lines += ["Request settings as sent:", ""]
+        lines += _fenced(json.dumps(settings, indent=2, sort_keys=True), "json")
+    if card["system_prompt"] is not None:
+        lines += ["#### System prompt", "", *_fenced(card["system_prompt"])]
+    if card["user_prompt_template"] is not None:
+        lines += [
+            "#### User prompt template",
+            "",
+            "Kittum fills in the parts in braces for each record.",
+            "",
+            *_fenced(card["user_prompt_template"]),
+        ]
+    if card["first_user_prompt"] is not None:
+        lines += ["#### User prompt of the first call, as sent", ""]
+        lines += _fenced(card["first_user_prompt"])
+    if card["json_schema"] is not None:
+        lines += ["#### JSON schema the answer must follow", ""]
+        lines += _fenced(json.dumps(card["json_schema"], indent=2), "json")
+    return lines
+
+
 def render_disclosure(review: Review, scope_id: str | None) -> list[RenderedFile]:
     del scope_id
     d = disclosure(review)
+    stages = d["stages"]
     lines = [
         f"# AI-use disclosure: {d['project']}",
         "",
-        "This page is one rendering of the disclosure record that Kittum stores with the review "
-        "(`ai_disclosure.json`), arranged along the RAISE recommendations for reporting AI use in "
-        "evidence synthesis. It is a view of the data, not the standard, and not an endorsement "
-        f"by RAISE's authors. It covers the ledger through event {d['cutoff_seq']}.",
+        "Kittum wrote this page from the disclosure record it keeps with the review "
+        "(`ai_disclosure.json`). The sections follow the RAISE recommendations for reporting AI "
+        "use in evidence synthesis. The authors of RAISE have not reviewed this page. It covers "
+        f"the ledger up to event {d['cutoff_seq']}.",
         "",
         "## 1. AI tools and versions",
         "",
         md_table(
-            ["Judge config", "Model", "Revision", "Weights SHA-256", "Licence", "Served as"],
+            ["Judge configuration", "Model", "Revision", "Weights SHA-256", "Licence", "Served by"],
             [
                 [
                     m["judge_config_id"],
@@ -555,43 +678,33 @@ def render_disclosure(review: Review, scope_id: str | None) -> list[RenderedFile
                     m["revision"],
                     f"`{m['weights_hash']}`",
                     m["weights_licence"],
-                    _served_as(m),
+                    _model(m),
                 ]
                 for m in d["models"]
             ],
         ),
-        "Prompts and output schemas, by hash:",
+        "Section 6 shows every prompt in full.",
+        "",
+        "## 2. What the AI did and what people decided",
+        "",
+        "People screen every record. The AI never excludes a record. Each reviewer decides "
+        "before Kittum shows them any AI output. The stage's reveal setting says whether Kittum "
+        "then shows the AI's reading. When two people disagree, an adjudicator decides. When "
+        "only the AI disagrees, the stage's auditor screens the record once more, without "
+        "seeing the other decisions. In mode M1 that happens when both people excluded a record "
+        "and the AI found no criterion that fails. In mode M2 it happens when the AI disagrees "
+        "with the one person who screened. If the auditor disagrees with the screeners, an "
+        "adjudicator decides.",
         "",
         md_table(
-            ["Judge config", "Prompt version", "Prompt template SHA-256", "Schema SHA-256"],
-            [
-                [
-                    m["judge_config_id"],
-                    m["prompt_version"],
-                    f"`{m['prompt_hash']}`",
-                    f"`{m['schema_hash']}`",
-                ]
-                for m in d["models"]
-            ],
-        ),
-        "## 2. Role of the AI and human oversight",
-        "",
-        "No screening mode lets the AI exclude a record that no human saw. A reviewer decides "
-        "before any AI output is shown, and the AI's reading is revealed only as the stage's "
-        "reveal setting allows. Adjudication holds only disagreements between humans. When only "
-        "the AI disagrees (in M1, the model saw no failing criterion in a record both humans "
-        "excluded; in M2, the AI disagrees with the lone human), the stage's auditor screens the "
-        "record once more, blind; if the auditor disagrees with the screeners, an adjudicator "
-        "decides.",
-        "",
-        md_table(
-            ["Topic", "Mode", "Reason for the mode", "Validation pack"],
+            ["Topic", "Mode", "Why this mode", "Validation pack"],
             [
                 [
                     t["topic_id"],
                     t["mode"],
-                    "; ".join((t["mode_rationale"] or {}).values()) or "default (dual human)",
-                    t["validation_pack"] or "none",
+                    " ".join((t["mode_rationale"] or {}).values())
+                    or "Two people screen every record (the default).",
+                    t["validation_pack"] or "None",
                 ]
                 for t in d["topics"]
             ],
@@ -604,39 +717,39 @@ def render_disclosure(review: Review, scope_id: str | None) -> list[RenderedFile
                 "Mode",
                 "Reveal",
                 "Records",
-                "AI proposed exclusion",
-                "Excluded",
-                "Excluded by AI alone",
+                "Read by the AI",
+                "AI proposed to exclude",
+                "Excluded by people",
             ],
             [
                 [
                     s["topic_id"],
                     s["scope_id"],
-                    s["stage"],
+                    STAGE_NAMES.get(s["stage"], s["stage"]),
                     s["mode"],
-                    s["reveal"],
+                    s["reveal"].replace("_", " "),
                     s["records"],
+                    s["records_read_by_ai"],
                     s["ai_proposed_exclusions"],
                     s["excluded"],
-                    s["excluded_by_ai_alone"],
                 ]
-                for s in d["stages"]
+                for s in stages
             ],
         ),
         "### Writing the protocol",
         "",
-        "A model may draft the protocol or suggest changes to one part of it; a lead accepts each "
-        "change or not, and only a lead publishes. Every request to the assistant, with each "
-        "attempt Kittum checked and sent back:",
+        "A model can draft the protocol or suggest changes to one part of it. A lead accepts or "
+        "rejects each change, and only a lead can publish. Kittum checks each answer and sends "
+        "the problems back to the model. Every request to the assistant:",
         "",
         md_table(
-            ["Purpose", "Part", "Outcome", "Model", "Attempts", "Rejected", "Prompt"],
+            ["Purpose", "Part", "Outcome", "Model", "Attempts", "Sent back", "Prompt"],
             [
                 [
                     r["purpose"],
-                    f"`{r['part']}`" if r["part"] else "whole protocol",
+                    f"`{r['part']}`" if r["part"] else "Whole protocol",
                     r["outcome"],
-                    _served_as_assistant(r),
+                    _assistant_model(r),
                     r["attempts"],
                     r["rejected_attempts"],
                     f"{r['prompt_version']} `{(r['prompt_hash'] or '')[:16]}`",
@@ -645,8 +758,8 @@ def render_disclosure(review: Review, scope_id: str | None) -> list[RenderedFile
             ],
         )
         if d["protocol_assistant"]["requests"]
-        else "The protocol assistant was not used.\n",
-        "Fields of the protocol in force that a model wrote:",
+        else "Nobody used the protocol assistant.\n",
+        "Fields of the published protocol that a model wrote:",
         "",
         md_table(
             ["Field", "Written in revision", "Accepted in revision", "Model"],
@@ -654,52 +767,54 @@ def render_disclosure(review: Review, scope_id: str | None) -> list[RenderedFile
                 [
                     f"`{p['path']}`",
                     p["revision_id"],
-                    p["accepted_in"] or "at publication",
-                    _served_as_assistant(p),
+                    p["accepted_in"] or "At publication",
+                    _assistant_model(p),
                 ]
                 for p in d["protocol_assistant"]["ai_parts"]
             ],
         )
         if d["protocol_assistant"]["ai_parts"]
-        else "None: people wrote every field.\n",
-        "## 3. Performance in this review",
+        else "People wrote every field of the published protocol.\n",
+        "## 3. Agreement in this review",
         "",
-        "Agreement on include against exclude, from the blind decisions made before any reveal "
-        "(Cohen's kappa and PABAK):",
+        "Kittum compares the decisions each person made before any AI output was shown. A "
+        "decision counts as include or exclude. Unclear and insufficient information count as "
+        "include. The AI's own reading excludes a record when the model answered not met on any "
+        "criterion. The AI's checked reading excludes only when Kittum also found the model's "
+        "quote in the record. Cohen's kappa and PABAK cover every record both sides decided, "
+        "not only the records where they disagreed.",
         "",
-        md_table(
-            ["Scope", "Stage", "Pair", "Items", "Kappa", "PABAK"],
-            [
-                [
-                    s["scope_id"],
-                    s["stage"],
-                    " and ".join(a["raters"]) + _READING.get(a["kind"], ""),
-                    a["items"],
-                    _fmt(a["kappa"]),
-                    _fmt(a["pabak"]),
-                ]
-                for s in d["stages"]
-                for a in s["agreement"]
-            ],
-        ),
-        "Reveals, adjudication, and the audit:",
+    ]
+    for s in stages:
+        for a in s["agreement"]:
+            first, second = rater_names(a)
+            lines += [
+                f"### {STAGE_NAMES.get(s['stage'], s['stage'])}, scope {s['scope_id']}: "
+                f"{first} and {second}",
+                "",
+                agreement_sentence(a),
+                "",
+                agreement_table(a),
+            ]
+    lines += [
+        "## 4. Reveals, adjudication, and the audit",
         "",
         md_table(
             [
                 "Scope",
                 "Stage",
-                "Reveals shown",
-                "Revised after reveal",
-                "Adjudicated",
-                "Sentinels correct",
-                "Audit samples decided",
-                "Misses found",
-                "Elusion (upper bound)",
+                "AI readings shown",
+                "Decisions changed after one",
+                "Conflicts adjudicated",
+                "Sentinels screened right",
+                "Audit samples screened",
+                "Relevant records the audit found",
+                "Missed relevant records, estimate (upper bound)",
             ],
             [
                 [
                     s["scope_id"],
-                    s["stage"],
+                    STAGE_NAMES.get(s["stage"], s["stage"]),
                     s["reveals_shown"],
                     s["revised_after_reveal"],
                     s["conflicts_resolved"],
@@ -708,48 +823,71 @@ def render_disclosure(review: Review, scope_id: str | None) -> list[RenderedFile
                     s["audit"]["audit_relevant_found"],
                     _elusion(s["audit"]["elusion"]),
                 ]
-                for s in d["stages"]
+                for s in stages
             ],
         ),
-        "Extra screens the AI triggered: records only the AI disagreed on, screened once more, "
-        "blind, by the stage's auditor. Upheld means the auditor agreed with the screeners and "
-        "their decision stands; otherwise an adjudicator decided.",
+        "Extra screens when only the AI disagreed. The auditor screens the record again. Upheld "
+        "means the auditor agreed with the screeners, so their decision stands. Otherwise an "
+        "adjudicator decided.",
         "",
         md_table(
-            ["Scope", "Stage", "Triggered", "Upheld", "Sent to adjudication", "Pending"],
+            ["Scope", "Stage", "Sent", "Upheld", "Sent to adjudication", "Waiting"],
             [
                 [
                     s["scope_id"],
-                    s["stage"],
+                    STAGE_NAMES.get(s["stage"], s["stage"]),
                     s["rescreens"]["triggered"],
                     s["rescreens"]["upheld"],
                     s["rescreens"]["adjudicated"],
                     s["rescreens"]["pending"],
                 ]
-                for s in d["stages"]
+                for s in stages
             ],
         ),
-        "## 4. Known limitations",
+        "## 5. Known limits and reproducibility",
         "",
-        "An AI exclusion counts only if its quote is found verbatim in the record and passes a "
-        "conservative structural filter. The filter is not a semantic verifier. By design it "
-        "cannot catch:",
+        "The AI's reading proposes an exclusion only if Kittum finds the model's quote word for "
+        "word in the record and the quote passes a structural filter. The filter does not "
+        "check meaning. It cannot catch these cases:",
         "",
         *[f"- {limit}" for limit in d["verifier_limits"]],
         "",
-        "## 5. Reproducibility",
+        "Reproducibility tier: replay. Kittum stores the exact request and response of every "
+        "model call, and the handover bundle lists each by SHA-256. Running a model again may "
+        "give a different answer.",
         "",
-        "Tier: replay. Every AI reading derives from a stored raw output, identified by hash in "
-        "the handover bundle; re-running a model is not claimed to reproduce it bit for bit.",
+        "## 6. Prompts",
+        "",
+        "Each AI role this review used, with the prompts read from the first request it sent. "
+        "The Audit screen shows the exact request and response of every call.",
         "",
     ]
+    if not d["prompts"]:
+        lines += ["No AI role has sent a request yet.", ""]
+    for card in d["prompts"]:
+        lines += prompt_section(card)
     return [json_file("ai_disclosure.json", d), text_file("ai_disclosure.md", "\n".join(lines))]
 
 
 def _elusion(interval: dict[str, Any] | None) -> str:
     if interval is None:
-        return "no estimate"
-    return f"{interval.get('estimate')} (≤ {interval.get('upper')})"
+        return "No estimate yet"
+    return f"{interval.get('estimate')} (at most {interval.get('upper')})"
+
+
+# The accepted extraction values.
+
+
+def render_extraction(review: Review, scope_id: str | None) -> list[RenderedFile]:
+    del scope_id  # values belong to studies, which the scopes share
+    return [
+        RenderedFile(
+            path="extracted_values.csv",
+            media_type="text/csv; charset=utf-8",
+            data=as_csv(review.extracted),
+        ),
+        json_file("extracted_values.json", as_json(review.extracted, review.cutoff_seq)),
+    ]
 
 
 CORE_RENDERERS: dict[str, Renderer] = {
@@ -757,4 +895,5 @@ CORE_RENDERERS: dict[str, Renderer] = {
     "ris": render_ris,
     "search_report": render_search_report,
     "ai_disclosure": render_disclosure,
+    "extraction": render_extraction,
 }

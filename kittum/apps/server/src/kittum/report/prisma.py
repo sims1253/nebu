@@ -4,11 +4,14 @@ Every count is the length of a list of item references (`PrismaFlow.members`), s
 the flow traces to the reports behind it and, through the bundle, to their decisions, events,
 and reviewers. `checks` states the sums that must hold; a broken one is reported, not hidden.
 
-PRISMA 2020's "records marked as ineligible by automation tools" is always zero here: no
-screening mode lets the AI exclude a record that no human saw. What the AI did contribute is
-counted separately: exclusions the AI also proposed, exclusions decided after a reveal, and
-exclusions that stood after a blind extra screen the AI's disagreement triggered (whether the
-auditor upheld them or an adjudicator decided).
+The diagram leaves out PRISMA 2020's "records marked as ineligible by automation tools": no
+screening mode lets the AI exclude a record that no human saw, so the box could only ever say
+zero. What the AI did contribute is counted separately: exclusions the AI also proposed,
+exclusions decided after a reveal, and exclusions that stood after a blind extra screen the AI's
+disagreement triggered (whether the auditor upheld them or an adjudicator decided).
+
+The diagram is drawn to be read at the size a report page or a screen shows it: 16 px text in a
+980 px wide drawing, so text stays at 14 px or more down to 860 px of width.
 """
 
 from collections import Counter
@@ -37,7 +40,6 @@ class ReasonCount(Record):
 class AiInvolvement(Record):
     """Human exclusions the AI took part in. The AI alone never excludes."""
 
-    marked_ineligible_by_automation: int = 0
     excluded_with_ai_proposal: int
     """The humans excluded, and the AI's verified reading also excluded."""
     excluded_after_ai_reveal: int
@@ -316,9 +318,9 @@ def flows(review: Review, scope_id: str | None = None) -> list[PrismaFlow]:
 
 # The diagram: PRISMA 2020's flow for new reviews of databases and registers.
 
-_W, _GAP, _LINE, _PAD, _BAND = 330, 60, 17, 10, 34
+_W, _GAP, _LINE, _PAD, _BAND = 420, 60, 22, 12, 40
 _FAMILY = "font-family='IBM Plex Sans, Helvetica, Arial, sans-serif'"
-_FONT = f"{_FAMILY} font-size='12'"
+_FONT = f"{_FAMILY} font-size='16'"
 
 
 def _box(x: int, y: int, lines: list[str], *, bold_first: bool = True) -> tuple[str, int]:
@@ -361,10 +363,8 @@ def svg(f: PrismaFlow, title: str) -> str:
             [
                 "Records removed before screening:",
                 f"Duplicate records removed: n = {f.duplicates_removed}",
-                "Records marked as ineligible by automation",
-                f"  tools: n = {f.ai_title_abstract.marked_ineligible_by_automation}",
                 *(
-                    [f"Not yet in the identity revision: n = {f.records_outside_identity}"]
+                    [f"Found after the corpus was built: n = {f.records_outside_identity}"]
                     if f.records_outside_identity
                     else []
                 ),
@@ -375,16 +375,15 @@ def svg(f: PrismaFlow, title: str) -> str:
             [
                 f"Records screened: n = {f.records_screened}",
                 *(
-                    [f"Awaiting screening: n = {f.records_awaiting_screening}"]
+                    [f"Not yet screened: n = {f.records_awaiting_screening}"]
                     if f.records_awaiting_screening
                     else []
                 ),
             ],
             [
                 f"Records excluded: n = {f.records_excluded}",
-                "  of which with AI involvement:",
-                f"  n = {f.ai_title_abstract.excluded_with_ai_involvement}",
-                *([f"Unresolved: n = {f.records_unresolved}"] if f.records_unresolved else []),
+                f"  AI took part in: n = {f.ai_title_abstract.excluded_with_ai_involvement}",
+                *([f"In conflict: n = {f.records_unresolved}"] if f.records_unresolved else []),
             ],
         ),
         (
@@ -397,7 +396,7 @@ def svg(f: PrismaFlow, title: str) -> str:
             [
                 f"Reports assessed for eligibility: n = {f.reports_assessed}",
                 *(
-                    [f"Awaiting assessment: n = {f.reports_awaiting_assessment}"]
+                    [f"Not yet assessed: n = {f.reports_awaiting_assessment}"]
                     if f.reports_awaiting_assessment
                     else []
                 ),
@@ -405,13 +404,13 @@ def svg(f: PrismaFlow, title: str) -> str:
             [
                 f"Reports excluded: n = {f.reports_excluded}",
                 *reasons,
-                f"  of which with AI involvement: n = {f.ai_full_text.excluded_with_ai_involvement}",
+                f"  AI took part in: n = {f.ai_full_text.excluded_with_ai_involvement}",
                 *(
-                    [f"Awaiting classification: n = {f.reports_awaiting_classification}"]
+                    [f"Insufficient information: n = {f.reports_awaiting_classification}"]
                     if f.reports_awaiting_classification
                     else []
                 ),
-                *([f"Unresolved: n = {f.reports_unresolved}"] if f.reports_unresolved else []),
+                *([f"In conflict: n = {f.reports_unresolved}"] if f.reports_unresolved else []),
             ],
         ),
         (
@@ -424,9 +423,9 @@ def svg(f: PrismaFlow, title: str) -> str:
         ),
     ]
     body: list[str] = [
-        f"<text x='{left}' y='24' {_FAMILY} font-size='15' font-weight='600'>{escape(title)}</text>"
+        f"<text x='{left}' y='30' {_FAMILY} font-size='19' font-weight='600'>{escape(title)}</text>"
     ]
-    y = 40
+    y = 52
     spans: list[tuple[str, int, int]] = []  # (band, top, bottom)
     previous_bottom: int | None = None
     for band, main, side in rows:
@@ -443,7 +442,7 @@ def svg(f: PrismaFlow, title: str) -> str:
         else:
             spans[-1] = (spans[-1][0], spans[-1][1], y + height)
         previous_bottom = y + main_h
-        y += height + 30
+        y += height + 36
     for band, top, bottom in spans:
         body.append(
             f"<rect x='8' y='{top}' width='{_BAND}' height='{bottom - top}' rx='4' "
