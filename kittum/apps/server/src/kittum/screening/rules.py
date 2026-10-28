@@ -150,6 +150,10 @@ def validate(decision: Decision, stage: Stage, criteria: Sequence[Criterion]) ->
         raise InvalidDecision(
             f"a full-text decision needs a reading of every criterion ({missing})"
         )
+    if not decision.evidence_anchor_ids and not any(
+        c.evidence_anchor_ids for c in decision.criteria
+    ):
+        raise InvalidDecision("every full-text outcome cites at least one evidence anchor")
     statuses = {c.status for c in decision.criteria}
     if decision.outcome == "exclude":
         reason = readings[decision.reason_criterion_id or ""]
@@ -158,10 +162,6 @@ def validate(decision: Decision, stage: Stage, criteria: Sequence[Criterion]) ->
     elif decision.outcome == "include":
         if statuses - {"met"}:
             raise InvalidDecision("a full-text inclusion needs every criterion met")
-        if not decision.evidence_anchor_ids and not any(
-            c.evidence_anchor_ids for c in decision.criteria
-        ):
-            raise InvalidDecision("a full-text inclusion cites evidence")
     elif "unclear" not in statuses:
         raise InvalidDecision("insufficient information needs at least one unclear criterion")
 

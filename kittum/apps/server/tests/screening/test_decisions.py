@@ -340,6 +340,19 @@ def test_full_text_decisions_carry_per_criterion_readings_and_anchors(database: 
                 Decision(outcome="insufficient_information", criteria=readings()),
                 0,
             )
+        # Like every full-text outcome, it cites evidence.
+        unanchored = tuple(
+            r.model_copy(update={"evidence_anchor_ids": ()}) for r in readings(FOLLOWUP="unclear")
+        )
+        with pytest.raises(InvalidDecision, match="at least one evidence anchor"):
+            decide(
+                world,
+                tx,
+                a,
+                gum_a.assignment_id,
+                Decision(outcome="insufficient_information", criteria=unanchored),
+                0,
+            )
         insufficient = Decision(
             outcome="insufficient_information",
             criteria=readings(FOLLOWUP="unclear"),
