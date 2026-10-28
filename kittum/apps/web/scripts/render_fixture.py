@@ -135,7 +135,7 @@ def searchable(text: str) -> tuple[str, list[int]]:
     chars: list[str] = []
     origin: list[int] = []
     for i, ch in enumerate(text):
-        if ch == "­":
+        if ch == "\u00ad":
             continue
         if ch.isspace():
             if chars and chars[-1] == " ":
@@ -173,7 +173,7 @@ def anchor(name: str, text: str, pages, start: int, end: int, layer_id: str) -> 
 
 
 def find_all(haystack: str, origin: list[int], quote: str) -> list[tuple[int, int]]:
-    needle = re.sub(r"\s+", " ", quote.replace("­", "")).lower()
+    needle = re.sub(r"\s+", " ", quote.replace("\u00ad", "")).lower()
     spans = []
     for match in re.finditer(re.escape(needle), haystack):
         spans.append((origin[match.start()], origin[match.end() - 1] + 1))
