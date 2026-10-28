@@ -92,7 +92,8 @@ Several agents work at once, one work package each. The rules keep them out of e
 
 ## Dependencies and licences
 
-Kittum is AGPL-3.0-or-later. Any open-source code licence is fine in a dependency. Model weights
+Kittum is AGPL-3.0-or-later. A dependency's licence must be compatible with AGPL-3.0 for the way it
+is combined (not GPL-2.0-only or CDDL code linked into Kittum). Model weights
 must be on `kittum.models.ALLOWED_WEIGHTS_LICENCES`: no revenue caps, non-commercial terms,
 field-of-use limits, or no-competition clauses. Add every new dependency or model to
 [docs/dependencies.md](docs/dependencies.md) or [docs/document-tools.md](docs/document-tools.md)

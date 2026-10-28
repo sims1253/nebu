@@ -157,8 +157,8 @@ Module `kittum.appraisal`. Needs: `documents`, `extraction`.
 Module `kittum.stats`. Needs: nothing.
 
 - Every function in the module, with scipy where it helps.
-- Acceptance: tests against published worked examples, including 10 of 10 giving a 0.692 lower
-  bound and the 119-record case from DESIGN.md.
+- Acceptance: tests against published worked examples, including 10 of 10 giving a one-sided 95%
+  lower bound of 0.741 (0.692 two-sided) and the 119-record case from DESIGN.md.
 
 ## WP-14 Reports
 
