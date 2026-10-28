@@ -83,12 +83,15 @@ def normalize_title(title: str) -> str:
 # Typed tokens that tell trials and reports apart. Two titles conflict only when both have
 # tokens of one kind and the values differ; a token on one side only (a citation's volume, page,
 # or year, say) never blocks a match, and other numbers are ignored.
-_RANGE_TAIL = r"(?:\s*[-\u2013/]\s*(?P<b>\d+))?"
+_RANGE_TAIL = r"(?:\s*[-\u2013/]\s*(?P<b>\d+(?:\.\d+)?))?"
 _PHASE = re.compile(
-    r"\bphase\s*(?P<a>iv|v|i{1,3}|\d+)(?:\s*[-\u2013/]\s*(?P<b>iv|v|i{1,3}|\d+))?\b", re.I
+    r"\bphase\s*(?P<a>(?:iv|v|i{1,3}|\d+)[a-c]?)(?:\s*[-\u2013/]\s*(?P<b>(?:iv|v|i{1,3}|\d+)[a-c]?))?\b",
+    re.I,
 )
 _FOLLOW_UP = (
-    re.compile(rf"\b(?P<a>\d+){_RANGE_TAIL}[\s-]*(?P<unit>year|yr|month|week|day)s?\b", re.I),
+    re.compile(
+        rf"\b(?P<a>\d+(?:\.\d+)?){_RANGE_TAIL}[\s-]*(?P<unit>year|yr|month|week|day)s?\b", re.I
+    ),
     re.compile(rf"\b(?P<unit>year|month|week|day)s?\s+(?P<a>\d+){_RANGE_TAIL}\b", re.I),
 )
 _STUDY = re.compile(rf"\b(?:study|trial)\s*(?:no\.?|number|#)?\s*(?P<a>\d+){_RANGE_TAIL}\b", re.I)
@@ -109,20 +112,39 @@ _KINDS = ("trial", "phase", "follow_up", "study")
 
 
 def _number(token: str) -> str:
-    token = token.lower()
-    return _ROMAN_TO_NUM.get(token) or str(int(token))
+    """Normalize a number token: roman numerals, leading zeros, decimals, and a phase letter."""
+    m = re.fullmatch(r"(?P<base>iv|v|i{1,3}|\d+(?:\.\d+)?)(?P<suffix>[a-c]?)", token.lower())
+    if m is None:
+        return token.lower()
+    base = m["base"]
+    if base in _ROMAN_TO_NUM:
+        value = _ROMAN_TO_NUM[base]
+    elif "." in base:
+        value = format(float(base), "g")
+    else:
+        value = str(int(base))
+    return value + m["suffix"]
 
 
 def _ends(m: re.Match[str]) -> list[str]:
     return [_number(m[g]) for g in ("a", "b") if m[g]]
 
 
+_DASHES = re.compile(r"[\u2010-\u2015\u2212]")
+
+
+def _prepare(title: str) -> str:
+    """NFC, every dash as "-", and runs of whitespace as one space, before reading tokens."""
+    text = _DASHES.sub("-", unicodedata.normalize("NFC", title))
+    return re.sub(r"\s+", " ", text)
+
+
 def _trial_names(title: str) -> set[str]:
-    return {name.lower() for name in _TRIAL_NAME.findall(unicodedata.normalize("NFC", title))}
+    return {name.lower() for name in _TRIAL_NAME.findall(_prepare(title))}
 
 
 def _words_before_numbers(title: str) -> set[str]:
-    text = unicodedata.normalize("NFC", title)
+    text = _prepare(title)
     words = {m["w"].lower() for m in _NAMED_NUMBER.finditer(text) if len(m["w"]) > 1}
     return words - _NOT_TRIAL_NAMES
 
@@ -136,7 +158,7 @@ def extract_distinguishing_tokens(
     digits right after it, so `CheckMate 067(2016)` gives `checkmate 67`. Ranges such as
     `phase 1-2` or `12-24 months` give both ends.
     """
-    text = unicodedata.normalize("NFC", title)
+    text = _prepare(title)
     names = set(trial_names) | _trial_names(text)
     tokens: dict[str, set[str]] = {kind: set() for kind in _KINDS}
     for m in _NAMED_NUMBER.finditer(text):

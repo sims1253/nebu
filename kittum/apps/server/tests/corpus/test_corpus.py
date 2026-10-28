@@ -237,6 +237,22 @@ def test_trial_identifiers_drive_only_same_study_proposals() -> None:
             "Pembrolizumab versus chemotherapy in PD-L1 positive NSCLC: keynote 024",
             "Pembrolizumab versus chemotherapy in PD-L1 positive NSCLC: keynote 042",
         ),
+        (
+            "Pembrolizumab versus chemotherapy in metastatic NSCLC: KEYNOTE\u2013024",
+            "Pembrolizumab versus chemotherapy in metastatic NSCLC: KEYNOTE\u2013042",
+        ),
+        (
+            "Pembrolizumab versus chemotherapy in metastatic NSCLC: KEYNOTE  024",
+            "Pembrolizumab versus chemotherapy in metastatic NSCLC: KEYNOTE  042",
+        ),
+        (
+            "Pembrolizumab versus chemotherapy in metastatic NSCLC: a randomized phase 1b trial",
+            "Pembrolizumab versus chemotherapy in metastatic NSCLC: a randomized phase 2b trial",
+        ),
+        (
+            "Pembrolizumab versus chemotherapy in metastatic NSCLC: 1.5-year follow-up",
+            "Pembrolizumab versus chemotherapy in metastatic NSCLC: 2.5-year follow-up",
+        ),
     ],
 )
 def test_titles_naming_different_trials_or_follow_ups_are_not_the_same_record(
