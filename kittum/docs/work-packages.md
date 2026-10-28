@@ -273,10 +273,12 @@ Modules `kittum.judge` and `kittum.models`. Needs: `protocol`, `core`.
 - `judge.judge` and `judge.judge_many`: one call per record and scope, a per-criterion schema
   generated from Pydantic, verification and downgrades with `failed_check`, retry with the next
   seed on malformed output, then `unclear` with the `invalid_output` flag. Records that try to
-  instruct the model cannot be excluded. A `not_met` excludes only when its evidence positively
-  verifies (rules in `judge/verify.py`): a key term of the condition in the quote, an English or
-  German quote, negation scoped to the key term, and the right polarity for an include or exclude
-  criterion. `judge_many` stores verdicts (migration
+  instruct the model cannot be excluded. A cheap, conservative filter (`judge/verify.py`)
+  downgrades `not_met` answers whose evidence is not structurally supported: one sentence, a
+  whole-word key term without a negating compound prefix, an English or German quote, at most one
+  negation cue and it scoped to the key term, and the right polarity for an include or exclude
+  criterion. `Verdict.excludes` is a proposal for humans and adjudication, never a final
+  exclusion. `judge_many` stores verdicts (migration
   `20261028120000_judge_verdicts.sql`), artifacts, and `judge.verdict_recorded` events, and
   skips records already judged under the same cache key.
 - `judge.judge_metrics`, `pair_metrics` (double-fault rate, OR rule, Cohen's kappa), and
@@ -297,6 +299,15 @@ Modules `kittum.judge` and `kittum.models`. Needs: `protocol`, `core`.
   tokens or a clause away from the key term. Protocol `keywords` let authors anchor such criteria
   ("aged", "adolescent"), but an affirmative inclusion condition still needs a scoped negation.
   Measure the work saved this costs on gold data before loosening any rule.
+- Accepted limitations of the filter, not to be chased with more patterns: foreign content words
+  that carry negation ("Melanoma assente"); a negation in an intervening clause about another
+  condition within the window ("Patients with no diabetes received chemotherapy"); evidence about
+  another arm or population; partial matches ("skeletal metastases" against "brain metastases");
+  and in general anything semantic, since the filter is not a semantic verifier. Mitigation: every
+  record is seen by a human, an AI exclusion is a proposal, and disagreements, AI-only exclusions,
+  and audits go to adjudication. Requiring all wording terms (up to three) in the quote would
+  narrow partial matches, but it rejects the positive controls ("Patients without prior
+  chemotherapy" against "Previously treated with chemotherapy"), so it is not done.
 - Polarity is read in English and German only (`judge.verify.POLARITY_LANGUAGES`). A not_met
   on a criterion without an en or de wording, or with a quote that is not positively English or
   German, becomes `unclear` (`language_unverifiable`). Add a language by adding its function

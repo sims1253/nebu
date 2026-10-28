@@ -15,6 +15,7 @@ type FailedCheck = Literal[
     "negation",  # a negation or exclusion cue whose scope is not the key term
     "polarity",  # the quote does not contradict an inclusion or affirm an exclusion condition
     "language_unverifiable",  # the criterion or the quote is not positively English or German
+    "multiple_sentences",  # the quote spans a sentence boundary, so its scope cannot be read
     "injection_suspected",  # the record contains text that tries to instruct the model
     "invalid_output",  # the model gave no valid answer in any attempt
 ]

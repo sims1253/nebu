@@ -372,3 +372,93 @@ def test_evidence_that_positively_verifies_still_excludes(
     (result,) = verdict.criteria
     assert (result.status, result.failed_check, result.quote_verified) == ("not_met", None, True)
     assert verdict.excludes
+
+
+# Round 4: structural gaps in the filter, each reproduced through `judge`.
+
+
+def _criterion(polarity: str, text: str, keywords: tuple[str, ...] = ()) -> Criterion:
+    return Criterion(
+        id="C_CHEMO",  # the answer key `_judge_chemo` uses
+        slot="population",
+        polarity=polarity,  # ty: ignore[invalid-argument-type]
+        text={"en": text},
+        decidable_at=("title_abstract",),
+        applies_to=(SCOPE,),
+        keywords=keywords,
+    )
+
+
+def _record(ref: str, sentence: str) -> ScreeningItem:
+    return item(ref, "A randomised phase 3 trial in lung cancer", f"Methods: {sentence}")
+
+
+@pytest.mark.parametrize(
+    ("criterion", "sentence", "quote", "check"),
+    [
+        (
+            ("exclude", "Smokers", ("smokers",)),
+            "The study enrolled non-smokers.",
+            "The study enrolled non-smokers.",
+            "negation",
+        ),
+        (
+            ("exclude", "Non-smokers", ("non-smokers",)),
+            "The study enrolled smokers.",
+            "The study enrolled smokers.",
+            "negation",
+        ),
+        (
+            ("exclude", "Melanoma", ()),
+            "The melanocytes were examined in healthy adults.",
+            "The melanocytes were examined in healthy adults.",
+            "off_criterion",
+        ),
+        (
+            ("include", "Prior chemotherapy", ()),
+            "The assay was not performed. Chemotherapy was administered.",
+            "The assay was not performed. Chemotherapy was administered.",
+            "multiple_sentences",
+        ),
+        (
+            ("include", "Prior chemotherapy", ()),
+            "Patients were not without chemotherapy.",
+            "Patients were not without chemotherapy.",
+            "negation",
+        ),
+        (
+            ("exclude", "Not without chemotherapy", ("chemotherapy",)),
+            "We enrolled 212 patients without prior chemotherapy.",
+            "patients without prior chemotherapy",
+            "polarity",
+        ),
+        (
+            ("exclude", "Melanoma", ()),
+            "Melanoma NON presente in alcun paziente arruolato.",
+            "Melanoma NON presente in alcun paziente arruolato.",
+            "language_unverifiable",
+        ),
+    ],
+    ids=[
+        "S4-non-smokers-vs-smokers",
+        "S4-smokers-vs-non-smokers",
+        "S5-melanocytes-vs-melanoma",
+        "S7-quote-spans-two-sentences",
+        "S3-double-negation-in-quote",
+        "S3-double-negation-in-criterion",
+        "S2-uppercase-NON",
+    ],
+)
+def test_structurally_unsupported_exclusions_are_unclear(
+    criterion: tuple[str, str, tuple[str, ...]], sentence: str, quote: str, check: str
+) -> None:
+    record = _record("occ-round-4", sentence)
+    verdict = _judge_chemo(record, _criterion(*criterion), quote)
+    (result,) = verdict.criteria
+    assert result.quote_verified
+    assert (result.status, result.downgraded_from, result.failed_check) == (
+        "unclear",
+        "not_met",
+        check,
+    )
+    assert not verdict.excludes

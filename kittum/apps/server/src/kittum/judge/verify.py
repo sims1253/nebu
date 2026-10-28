@@ -1,25 +1,44 @@
-"""Deterministic checks that decide whether a model's answer may stand.
+"""A cheap, conservative filter on the judge's answers.
 
-A `not_met` excludes only when the evidence positively verifies; every other case becomes
-`unclear` and names the check. A wrong downgrade costs a human a look, a wrong exclusion can
-lose a study, so the rules are conservative by construction:
+The filter rejects exclusions that its evidence does not structurally support: every such
+`not_met` becomes `unclear` and names the check. It is not a semantic verifier and proves
+nothing. `Verdict.excludes` is a proposal: no screening mode lets the AI exclude a record that no
+human saw (DESIGN.md, "Screening modes"), and AI-only exclusions, disagreements, and audit
+samples go to adjudication.
+
+A `not_met` stands only if all of these hold:
 
 1. The quote is in the record (`kittum.core.find_quote`) and the record does not try to
    instruct the model.
 2. The criterion has an English or German wording: negation is read only in those languages.
-3. The quote contains a key term of the condition: the protocol's `keywords` if it has any,
-   otherwise the content words of the en and de wordings. No key term, no exclusion, even when
-   the quote states a different value ("aged 12 to 17 years" against "adults").
-4. The quote is positively English or German: it has a function word of those languages (or is
-   made only of the condition's own terms and digits), and no short token that could be a
-   function word or negation of another language ("non", "sin", "pas").
-5. Every negation cue in the quote's sentence lies inside the quote, at most three tokens before
-   a key term and in the same clause. Any other cue, or a cue such as "excluded" or "with or
-   without", makes the scope ambiguous.
-6. The scoped quote fails the criterion in its polarity: it negates an affirmative inclusion
-   condition, states a negative inclusion condition's term unnegated, or states an exclusion
-   condition with the condition's own polarity. The condition's polarity is read the same way
-   from its wordings, which must agree.
+3. The quote lies within one sentence.
+4. The quote contains a key term of the condition: the protocol's `keywords` if it has any,
+   otherwise the content words of the en and de wordings. Terms match as whole words with one
+   inflection (-s, -es, -en, -e, -n) and a tiny en/de table. A term that differs from a key term
+   only by a negating compound prefix ("non-smokers", "nicht-") does not count, and a match on a
+   prefixed term is not read.
+5. The quote is positively English or German: it has a function word of those languages (or is
+   made only of the condition's own terms and digits), and no token, in any case, that could be
+   a function word or negation of another language ("non", "sin", "pas").
+6. The quote's sentence has at most one negation cue, inside the quote, at most three tokens
+   before a key term and in the same clause. A cue such as "excluded" or "with or without"
+   anywhere in the sentence makes the scope ambiguous.
+7. The quote fails the criterion in its polarity: it negates an affirmative inclusion condition,
+   states a negative inclusion condition's term unnegated, or states an exclusion condition with
+   the condition's own polarity. The condition's polarity is read the same way from each wording
+   (at most one cue), and the wordings must agree.
+
+What the filter cannot catch, by design:
+
+- Foreign content words that carry negation ("Melanoma assente").
+- A negation in an intervening clause about another condition, within the window ("Patients
+  with no diabetes received chemotherapy").
+- Evidence about another arm, cohort, or population than the one the criterion is about.
+- Partial matches of a condition ("skeletal metastases" against "brain metastases").
+- Anything else that needs understanding rather than structure.
+
+The mitigation is the screening design, not more patterns: every record is seen by a human, an AI
+exclusion is a proposal, and disagreements, AI-only exclusions, and audits go to adjudication.
 """
 
 import re
@@ -66,7 +85,7 @@ POLARITY_LANGUAGES = frozenset({"en", "de"})
 
 # Negation cues and common function words of other languages, to notice quotes Kittum cannot read.
 _FOREIGN_NEGATION = _vocabulary(
-    """sin nunca ningún ninguna ninguno ni sans aucun aucune jamais pas senza nessun nessuna
+    """non sin nunca ningún ninguna ninguno ni sans aucun aucune jamais pas senza nessun nessuna
     sem nenhum nenhuma não nao zonder geen niet nooit"""
 )
 _FOREIGN_WORDS = (
@@ -98,7 +117,14 @@ _SHORT_WORDS = _vocabulary(
 )
 
 # Tokens that end a clause between a negation cue and the term it would negate.
-_CLAUSE_BREAKS = _vocabulary(", ; : and or but whereas while und oder aber sowie während")
+_CLAUSE_BREAKS = _vocabulary(", ; : . ! ? and or but whereas while und oder aber sowie während")
+
+# All-caps tokens shorter than three letters that are known abbreviations, not foreign words.
+_ACRONYMS = _vocabulary("hr ci os iv sc im po ae uk us eu")
+
+# Inflections a term may carry, longest first, and en/de pairs that differ by more.
+_SUFFIXES = ("es", "en", "s", "e", "n")
+_EQUIVALENT = {"chemotherapie": "chemotherapy", "chemotherapies": "chemotherapy"}
 
 _WINDOW = 3  # a negation cue negates a key term at most this many tokens later
 
@@ -144,28 +170,40 @@ def injection_suspected(text: str) -> bool:
     return _INJECTION.search(text) is not None
 
 
-_TOKEN = re.compile(r"[^\W_]+|[,;:]")
-_COMPOUND = frozenset({"non", "nicht", "kein"})  # "non-small", "nicht-kleinzellig"
+# Words, with a negating compound prefix kept as part of the word ("non-smokers" is not
+# "smokers"), clause punctuation, and sentence ends.
+_TOKEN = re.compile(r"(?:non|nicht|kein)-[^\W_]+|[^\W_]+|[,;:]|[.!?](?=\s|$)", re.IGNORECASE)
+_PREFIX = re.compile(r"^(?:non|nicht|kein)-")
+_PUNCTUATION = frozenset(",;:.!?")
 
 
 def _tokens(text: str, offset: int = 0) -> list[tuple[str, int, int, str]]:
     """Lowercased tokens with their offsets (plus `offset`) and original form."""
-    out = []
-    for m in _TOKEN.finditer(text):
-        word = m.group()
-        if word.lower() in _COMPOUND and text[m.end() : m.end() + 1] == "-":
-            continue
-        out.append((word.lower(), m.start() + offset, m.end() + offset, word))
-    return out
+    return [
+        (m.group().lower(), m.start() + offset, m.end() + offset, m.group())
+        for m in _TOKEN.finditer(text)
+    ]
 
 
 def _term(word: str) -> str:
-    return (word[:-1] if word.endswith("s") and len(word) > 4 else word)[:6]
+    """A whole word without one inflection: "patients" and "Patienten" are both "patient"."""
+    word = _EQUIVALENT.get(word, word)
+    for suffix in _SUFFIXES:
+        if word.endswith(suffix) and len(word) - len(suffix) >= 3:
+            return word[: -len(suffix)]
+    return word
+
+
+def _unprefixed(term: str) -> str:
+    return _term(_PREFIX.sub("", term))
 
 
 def _content(word: str) -> bool:
     return (
-        len(word) > 2 and word.isalpha() and word not in _STOPWORDS and word not in _NEGATION_WORDS
+        len(word) > 2
+        and word.replace("-", "").isalpha()
+        and word not in _STOPWORDS
+        and word not in _NEGATION_WORDS
     )
 
 
@@ -181,7 +219,8 @@ def _key_terms(criterion: Criterion) -> tuple[tuple[str, ...], ...]:
     """Each key term as a sequence of stems: the protocol's keywords, else the wording's terms."""
     if criterion.keywords:
         return tuple(
-            tuple(_term(w) for w, *_ in _tokens(k) if w not in ",;:") for k in criterion.keywords
+            tuple(_term(w) for w, *_ in _tokens(k) if w not in _PUNCTUATION)
+            for k in criterion.keywords
         )
     return tuple((t,) for t in sorted(_wording_terms(criterion)))
 
@@ -199,6 +238,8 @@ def _condition_negative(wording: str) -> bool | None:
     cues = [i for i, w in enumerate(words) if w in _NEGATION_WORDS]
     if not cues:
         return False
+    if len(cues) > 1:
+        return None  # "not without chemotherapy": a double negation is not read
     terms = [j for j, w in enumerate(words) if _content(w)]
     every_term_negated = all(any(_negates(words, c, j) for c in cues) for j in terms)
     every_cue_used = all(any(_negates(words, c, j) for j in terms) for c in cues)
@@ -207,7 +248,7 @@ def _condition_negative(wording: str) -> bool | None:
 
 def _quote_readable(quote: str, criterion: Criterion) -> bool:
     known = _wording_terms(criterion) | {t for key in _key_terms(criterion) for t in key}
-    tokens = [(w, original) for w, _, _, original in _tokens(quote) if w not in ",;:"]
+    tokens = [(w, original) for w, _, _, original in _tokens(quote) if w not in _PUNCTUATION]
     if not any(w in _FUNCTION_WORDS for w, _ in tokens) and not all(
         w.isdigit() or _term(w) in known for w, _ in tokens
     ):
@@ -222,7 +263,8 @@ def _quote_readable(quote: str, criterion: Criterion) -> bool:
             and w not in _SHORT_WORDS
             and _term(w) not in known
         )
-        if short_unknown and not (original.isupper() and len(original) > 1):
+        acronym = (original.isupper() and len(original) >= 3) or w in _ACRONYMS
+        if short_unknown and not acronym:
             return False
     return True
 
@@ -248,12 +290,22 @@ def _anchored_negation(
         for i in range(len(words) - len(key) + 1)
         if all(inside[i : i + len(key)]) and tuple(words[i : i + len(key)]) == key
     ]
+    keys = {t for key in _key_terms(criterion) for t in key}
+    quoted = {w for w, i in zip(words, inside, strict=True) if i}
+    if any(
+        _unprefixed(q) == _unprefixed(k) and (_PREFIX.match(q) or _PREFIX.match(k))
+        for q in quoted
+        for k in keys
+    ):
+        return "negation", False  # "non-smokers" against "smokers", or either way round
     if not anchors:
         return "off_criterion", False
     if _SCOPE_CUES.search(sentence):
         return "negation", False
     raw = [w for w, *_ in tokens]
     cues = [i for i, w in enumerate(raw) if w in _NEGATION_WORDS]
+    if len(cues) > 1:
+        return "negation", False  # "not without chemotherapy": a double negation is not read
     if any(not inside[c] for c in cues):
         return "negation", False  # a negation outside the quote may reverse it
     if any(not any(_negates(raw, c, a) for a in anchors) for c in cues):
@@ -270,6 +322,8 @@ def _check_not_met(
     wordings = _wordings(criterion)
     if not wordings:
         return "language_unverifiable"
+    if any(_SENTENCE_END.search(source, span.start, span.end) for span in spans):
+        return "multiple_sentences"
     readings = {(span, _anchored_negation(criterion, source, span)) for span in spans}
     failures = [failed for _, (failed, _) in readings if failed]
     if "off_criterion" in failures:
