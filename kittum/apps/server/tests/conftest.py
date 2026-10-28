@@ -1,8 +1,11 @@
 import os
-from collections.abc import Iterator
+from typing import TYPE_CHECKING
 
 import psycopg
 import pytest
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 
 @pytest.fixture
