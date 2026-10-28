@@ -80,26 +80,23 @@ def normalize_title(title: str) -> str:
     return t
 
 
-# Numbers a citation adds to a title: bracketed years, volume(issue), volume:page, page ranges.
-# They are written without inner spaces, so "KEYNOTE-024: 5-year" or "phase 1-2" stay intact.
-_CITATION = re.compile(
-    r"[(\[]\s*(?:19|20)\d{2}[a-z]?\s*[)\]]"
-    r"|\b\d+\(\d+(?:[-\u2013]\d+)?\)"
-    r"|\b\d+:\d+(?:[-\u2013]\d+)?\b"
-    r"|\b\d{2,}[-\u2013\u2014]\d{2,}\b"
+# Typed tokens that tell trials and reports apart. Two titles conflict only when both have
+# tokens of one kind and the values differ; a token on one side only (a citation's volume, page,
+# or year, say) never blocks a match, and other numbers are ignored.
+_RANGE_TAIL = r"(?:\s*[-\u2013/]\s*(?P<b>\d+))?"
+_PHASE = re.compile(
+    r"\bphase\s*(?P<a>iv|v|i{1,3}|\d+)(?:\s*[-\u2013/]\s*(?P<b>iv|v|i{1,3}|\d+))?\b", re.I
 )
-# Numbers that tell trials or reports apart: phases, follow-up lengths, numbered studies.
-_MEANINGFUL = (
-    ("phase", re.compile(r"\bphase\s*(?P<n>iv|v|i{1,3}|\d+)\b", re.I)),
-    ("follow-up", re.compile(r"\b(?P<n>\d+)[\s-]*(?P<w>year|yr|month|week|day)s?\b", re.I)),
-    ("follow-up", re.compile(r"\b(?P<w>year|month|week|day)s?\s+(?P<n>\d+)\b", re.I)),
-    ("trial", re.compile(r"\b(?P<w>trial|study|id)\s*(?:no\.?|number|#)?\s*(?P<n>\d+)\b", re.I)),
+_FOLLOW_UP = (
+    re.compile(rf"\b(?P<a>\d+){_RANGE_TAIL}[\s-]*(?P<unit>year|yr|month|week|day)s?\b", re.I),
+    re.compile(rf"\b(?P<unit>year|month|week|day)s?\s+(?P<a>\d+){_RANGE_TAIL}\b", re.I),
 )
-# A trial name is a word with two capitals before a number (KEYNOTE 024, IMpower150). Once
-# either title writes it that way, the word counts as a trial name in any case.
-_TRIAL_NAME = re.compile(r"\b(?P<w>[A-Za-z]*[A-Z][A-Za-z]*[A-Z][A-Za-z]*)[\s_-]?(?P<n>\d+)\b")
-_NAMED_NUMBER = re.compile(r"\b(?P<w>[A-Za-z]+)[\s_-]?(?P<n>\d+)\b")
-_YEAR_LIKE = re.compile(r"(?:19|20)\d{2}")
+_STUDY = re.compile(rf"\b(?:study|trial)\s*(?:no\.?|number|#)?\s*(?P<a>\d+){_RANGE_TAIL}\b", re.I)
+# A trial name is a word with two capitals right before a number (KEYNOTE 024, IMpower150).
+# Once either title writes it that way, the word counts as a trial name in any case.
+_TRIAL_NAME = re.compile(r"\b([A-Za-z]*[A-Z][A-Za-z]*[A-Z][A-Za-z]*)[\s_-]?\d")
+_NAMED_NUMBER = re.compile(r"\b(?P<w>[A-Za-z]+)[\s_-]?(?P<n>\d+)")
+_KINDS = ("trial", "phase", "follow_up", "study")
 
 
 def _number(token: str) -> str:
@@ -107,56 +104,48 @@ def _number(token: str) -> str:
     return _ROMAN_TO_NUM.get(token) or str(int(token))
 
 
-def _without_citations(title: str) -> str:
-    return _CITATION.sub(" ", unicodedata.normalize("NFC", title))
+def _ends(m: re.Match[str]) -> list[str]:
+    return [_number(m[g]) for g in ("a", "b") if m[g]]
 
 
 def _trial_names(title: str) -> set[str]:
-    return {m["w"].lower() for m in _TRIAL_NAME.finditer(_without_citations(title))}
+    return {name.lower() for name in _TRIAL_NAME.findall(unicodedata.normalize("NFC", title))}
 
 
 def extract_distinguishing_tokens(
-    title: str, year: int | None = None, trial_names: Iterable[str] = ()
-) -> tuple[set[str], set[str]]:
-    """Meaningful numbered tokens of a title, and its other numbers minus citation numbers.
+    title: str, trial_names: Iterable[str] = ()
+) -> dict[str, set[str]]:
+    """Trial, phase, follow-up, and study tokens of a title, by kind.
 
-    Citation numbers (bracketed years, page ranges, volume and issue) go first. Meaningful tokens
-    are phases, follow-up lengths (5-year, week 24), and trial numbers (study 302, or a trial
-    name from `trial_names` or written in capitals, such as KEYNOTE 024). The record's own year
-    is dropped from the other numbers.
+    A trial token is a trial name (from `trial_names` or written with two capitals) and the
+    digits right after it, so `CheckMate 067(2016)` gives `checkmate 67`. Ranges such as
+    `phase 1-2` or `12-24 months` give both ends.
     """
-    text = _without_citations(title)
+    text = unicodedata.normalize("NFC", title)
     names = set(trial_names) | _trial_names(text)
-    meaningful: set[str] = set()
+    tokens: dict[str, set[str]] = {kind: set() for kind in _KINDS}
+    for m in _NAMED_NUMBER.finditer(text):
+        if m["w"].lower() in names:
+            tokens["trial"].add(f"{m['w'].lower()} {_number(m['n'])}")
+    for m in _PHASE.finditer(text):
+        tokens["phase"].update(_ends(m))
+    for pattern in _FOLLOW_UP:
+        for m in pattern.finditer(text):
+            unit = "year" if m["unit"].lower() == "yr" else m["unit"].lower()
+            tokens["follow_up"].update(f"{unit} {n}" for n in _ends(m))
+    for m in _STUDY.finditer(text):
+        tokens["study"].update(_ends(m))
+    return tokens
 
-    def take(m: re.Match[str], kind: str) -> str:
-        word = (m.groupdict().get("w") or "").lower()
-        meaningful.add(f"{kind}:{'year' if word == 'yr' else word} {_number(m['n'])}")
-        return " "
 
-    for kind, pattern in _MEANINGFUL:
-        text = pattern.sub(lambda m, kind=kind: take(m, kind), text)
-    text = _NAMED_NUMBER.sub(lambda m: take(m, "trial") if m["w"].lower() in names else m[0], text)
-    others = {str(int(n)) for n in re.findall(r"\d+", text)}
-    others.discard(str(year))
-    return meaningful, others
-
-
-def distinguishing_tokens_conflict(
-    title_a: str, title_b: str, year_a: int | None = None, year_b: int | None = None
-) -> bool:
-    """Whether the titles differ in a number that is not incidental to a citation.
-
-    Meaningful tokens must match exactly. Other numbers must match too, except a year-like
-    number only one side has.
-    """
+def distinguishing_tokens_conflict(title_a: str, title_b: str) -> bool:
+    """Whether both titles name a trial, phase, follow-up, or study number, and they differ."""
     names = _trial_names(title_a) | _trial_names(title_b)
-    meaningful_a, others_a = extract_distinguishing_tokens(title_a, year_a, names)
-    meaningful_b, others_b = extract_distinguishing_tokens(title_b, year_b, names)
-    if meaningful_a != meaningful_b:
-        return True
-    one_sided = {n for n in others_a ^ others_b if not _YEAR_LIKE.fullmatch(n)}
-    return bool(one_sided)
+    tokens_a = extract_distinguishing_tokens(title_a, names)
+    tokens_b = extract_distinguishing_tokens(title_b, names)
+    return any(
+        tokens_a[kind] and tokens_b[kind] and tokens_a[kind] != tokens_b[kind] for kind in _KINDS
+    )
 
 
 def check_same_record(rec_a: SourceRecord, rec_b: SourceRecord) -> tuple[bool, str | None]:
@@ -178,7 +167,7 @@ def check_same_record(rec_a: SourceRecord, rec_b: SourceRecord) -> tuple[bool, s
             return True, f"exact PMID {pmid_a}"
         return False, None
 
-    if distinguishing_tokens_conflict(rec_a.title, rec_b.title, rec_a.year, rec_b.year):
+    if distinguishing_tokens_conflict(rec_a.title, rec_b.title):
         return False, None
 
     if rec_a.year is not None and rec_b.year is not None and abs(rec_a.year - rec_b.year) > 1:

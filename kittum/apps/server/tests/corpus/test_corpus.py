@@ -217,6 +217,22 @@ def test_trial_identifiers_drive_only_same_study_proposals() -> None:
             "Atezolizumab plus chemotherapy in squamous NSCLC: overall survival of IMpower 131",
             "Atezolizumab plus chemotherapy in squamous NSCLC: overall survival of IMbrave 131",
         ),
+        (
+            "Pembrolizumab plus chemotherapy in metastatic NSCLC: a randomized phase 1-2 trial",
+            "Pembrolizumab plus chemotherapy in metastatic NSCLC: a randomized phase 2-3 trial",
+        ),
+        (
+            "Pembrolizumab versus chemotherapy in metastatic NSCLC: 12-24 months follow-up",
+            "Pembrolizumab versus chemotherapy in metastatic NSCLC: 24-36 months follow-up",
+        ),
+        (
+            "Pembrolizumab versus chemotherapy in metastatic NSCLC: Study 1540-1550",
+            "Pembrolizumab versus chemotherapy in metastatic NSCLC: Study 1541-1551",
+        ),
+        (
+            "Pembrolizumab versus chemotherapy in metastatic NSCLC: results at week 24",
+            "Pembrolizumab versus chemotherapy in metastatic NSCLC: results at week 48",
+        ),
     ],
 )
 def test_titles_naming_different_trials_or_follow_ups_are_not_the_same_record(
@@ -241,11 +257,12 @@ def test_titles_naming_different_trials_or_follow_ups_are_not_the_same_record(
     [
         "Pembrolizumab versus chemotherapy for PD-L1-positive NSCLC: KEYNOTE 024",
         "Pembrolizumab versus chemotherapy for PD-L1-positive metastatic NSCLC",
+        "Nivolumab plus ipilimumab in advanced melanoma: CheckMate 067",
     ],
 )
 @pytest.mark.parametrize(
     "citation_suffix",
-    [" (2016)", " [2016]", " 1540-1550", " 375(19)"],
+    [" (2016)", "(2016)", " [2016]", " 1540-1550", " 375(19)", " 375 (19)", " 375:1823"],
 )
 def test_citation_numbers_in_a_title_do_not_hide_a_true_duplicate(
     title: str, citation_suffix: str
