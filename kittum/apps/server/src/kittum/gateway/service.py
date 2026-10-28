@@ -197,6 +197,7 @@ class SourceGateway:
 
         self._pool = _SharedPool(database)
         self._buckets: dict[str, AbstractBucket] = {}
+        self._bucket_locks: dict[str, threading.Lock] = {}
         self._buckets_lock = threading.Lock()
         self._retrying = stamina.RetryingCaller(attempts=max_attempts, timeout=None)
 
@@ -232,6 +233,7 @@ class SourceGateway:
             for bucket in self._buckets.values():
                 bucket.close()
             self._buckets.clear()
+            self._bucket_locks.clear()
 
     # -- one attempt ----------------------------------------------------------------------
 
@@ -282,19 +284,23 @@ class SourceGateway:
     # -- throttling -----------------------------------------------------------------------
 
     def _acquire(self, source: str, policy: SourcePolicy) -> None:
-        bucket = self._bucket(policy)
+        bucket, lock = self._bucket(policy)
         for _ in range(1_000):
             self._wait_for_cooldown(source)
-            now = int(self._clock.now().timestamp() * 1000)
-            cast("int", bucket.leak(now))
-            item = RateItem(source, now)
-            if cast("bool", bucket.put(item)):
-                return
-            wait_ms = cast("int", bucket.waiting(item))
+            # A bucket keeps the rate that refused its last `put` for `waiting` to read, so
+            # another thread's `put` in between would leave `waiting` without one. Hold the
+            # bucket for the pair, never for the sleep.
+            with lock:
+                now = int(self._clock.now().timestamp() * 1000)
+                cast("int", bucket.leak(now))
+                item = RateItem(source, now)
+                if cast("bool", bucket.put(item)):
+                    return
+                wait_ms = cast("int", bucket.waiting(item))
             self._sleep(min(max(wait_ms, 1), _MAX_REQUEST_WAIT_MS) / 1000)
         raise GatewayError(f"could not acquire a rate-limit token for {source}")
 
-    def _bucket(self, policy: SourcePolicy) -> AbstractBucket:
+    def _bucket(self, policy: SourcePolicy) -> tuple[AbstractBucket, threading.Lock]:
         with self._buckets_lock:
             bucket = self._buckets.get(policy.source)
             if bucket is None:
@@ -306,7 +312,8 @@ class SourceGateway:
                         cast("Any", self._pool), _table_name(policy.source), rates
                     )
                 self._buckets[policy.source] = bucket
-            return bucket
+                self._bucket_locks[policy.source] = threading.Lock()
+            return bucket, self._bucket_locks[policy.source]
 
     @contextmanager
     def _concurrency(self, policy: SourcePolicy) -> Generator[None]:
