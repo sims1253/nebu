@@ -18,7 +18,7 @@ type Relation = Literal["same_record", "same_report", "same_study"]
 
 
 class Occurrence(Record):
-    id: Id
+    id: Id  # equals `SourceRecord.occurrence_id`
     search_id: Id
     provider_record_id: str
 

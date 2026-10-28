@@ -24,8 +24,13 @@ class SearchPlan(Record):
 
 
 class SourceRecord(Record):
-    """One record as a source returned it, before dedupe."""
+    """One record as a source returned it, before dedupe.
 
+    `occurrence_id` is assigned when the search module stores the execution; corpus and every
+    later stage refer to records by it.
+    """
+
+    occurrence_id: Id
     source: str
     provider_record_id: str
     ordinal: int
