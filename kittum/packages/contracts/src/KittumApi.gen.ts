@@ -2819,7 +2819,8 @@ readonly "listHeldUploads": {
   }
   /**
 * One PDF of a bulk upload: attached to the report its file name or first pages match, or
-* held for the lead when it matches none or several. 415 for a file that is not a PDF.
+* held for the lead when it matches none or several. 415 for a file that is not a PDF, 413 for
+* one larger than `KITTUM_UPLOAD_MAX_BYTES`.
 */
 readonly "uploadFullTexts": {
     <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly params: typeof UploadFullTextsParams.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<UploadFullTexts201, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"UploadFullTexts422", UploadFullTexts422>>;

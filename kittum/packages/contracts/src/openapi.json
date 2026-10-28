@@ -14392,7 +14392,7 @@
         ]
       },
       "post": {
-        "description": "One PDF of a bulk upload: attached to the report its file name or first pages match, or\nheld for the lead when it matches none or several. 415 for a file that is not a PDF.",
+        "description": "One PDF of a bulk upload: attached to the report its file name or first pages match, or\nheld for the lead when it matches none or several. 415 for a file that is not a PDF, 413 for\none larger than `KITTUM_UPLOAD_MAX_BYTES`.",
         "operationId": "uploadFullTexts",
         "parameters": [
           {
