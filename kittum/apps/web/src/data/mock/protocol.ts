@@ -49,7 +49,8 @@ export const CRITERIA: ReadonlyArray<Criterion> = [
     id: "C_POP_PRETREATED",
     slot: "population",
     text_en: "Disease progressed after at least one prior systemic therapy for advanced disease",
-    text_de: "Progress nach mindestens einer systemischen Vortherapie der fortgeschrittenen Erkrankung",
+    text_de:
+      "Progress nach mindestens einer systemischen Vortherapie der fortgeschrittenen Erkrankung",
     decidable_at: both,
     applies_to: [SCOPE_A],
     positive_examples: ["progressed on first-line gemcitabine plus cisplatin"],
@@ -139,3 +140,24 @@ export const PROTOCOL: ProtocolVersion = {
     },
   },
 };
+
+/** A project whose protocol is still a draft: no topics yet, and its own profile's words. */
+export const draftProtocol = (project: ProjectSummary): ProtocolVersion => ({
+  protocol: {
+    active_substance: project.active_substance,
+    version_label: "0.1 (draft)",
+    topics: [],
+  },
+  content_hash: "0000000000000000000000000000000000000000000000000000000000000000",
+  profile:
+    project.id === "durvalumab-btc-jca"
+      ? {
+          id: "pico-sets",
+          labels: {
+            ...PROTOCOL.profile.labels,
+            scope: "PICO question",
+            report: "Assessment report",
+          },
+        }
+      : PROTOCOL.profile,
+});

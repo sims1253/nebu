@@ -16,7 +16,7 @@ const Timestamp = Schema.String; // ISO 8601 UTC
 export const Stage = Schema.Literals(["title_abstract", "full_text"]);
 export type Stage = typeof Stage.Type;
 
-export const PicoSlot = Schema.Literals([
+const PicoSlot = Schema.Literals([
   "population",
   "intervention",
   "comparator",
@@ -24,9 +24,8 @@ export const PicoSlot = Schema.Literals([
   "study_type",
   "other",
 ]);
-export type PicoSlot = typeof PicoSlot.Type;
 
-export const ScreeningMode = Schema.Literals(["M1", "M2", "M3"]);
+const ScreeningMode = Schema.Literals(["M1", "M2", "M3"]);
 
 export const Criterion = Schema.Struct({
   id: Schema.String,
@@ -43,16 +42,15 @@ export type Criterion = typeof Criterion.Type;
 export const Scope = Schema.Struct({ id: Schema.String, label: Schema.String });
 export type Scope = typeof Scope.Type;
 
-export const SearchTopic = Schema.Struct({
+const SearchTopic = Schema.Struct({
   id: Schema.String,
   kind: Schema.Literals(["rct_drug", "rct_indirect", "non_randomized", "other"]),
   mode: ScreeningMode,
   scopes: Schema.Array(Scope),
   criteria: Schema.Array(Criterion),
 });
-export type SearchTopic = typeof SearchTopic.Type;
 
-export const ReviewProtocol = Schema.Struct({
+const ReviewProtocol = Schema.Struct({
   active_substance: Schema.String,
   version_label: Schema.String,
   topics: Schema.Array(SearchTopic),
@@ -76,7 +74,7 @@ export const ProfileLabels = Schema.Struct({
 });
 export type ProfileLabels = typeof ProfileLabels.Type;
 
-export const ProtocolProfile = Schema.Struct({ id: Schema.String, labels: ProfileLabels });
+const ProtocolProfile = Schema.Struct({ id: Schema.String, labels: ProfileLabels });
 
 export const ProtocolVersion = Schema.Struct({
   protocol: ReviewProtocol,
@@ -102,7 +100,12 @@ export type CriterionVerdict = typeof CriterionVerdict.Type;
 
 // kittum.screening
 
-export const Outcome = Schema.Literals(["include", "exclude", "unclear", "insufficient_information"]);
+export const Outcome = Schema.Literals([
+  "include",
+  "exclude",
+  "unclear",
+  "insufficient_information",
+]);
 export type Outcome = typeof Outcome.Type;
 
 export const Phase = Schema.Literals(["provisional", "final"]);
@@ -157,18 +160,16 @@ export const Box = Schema.Struct({
 });
 export type Box = typeof Box.Type;
 
-export const Word = Schema.Struct({ start: Schema.Number, end: Schema.Number, box: Box });
-export type Word = typeof Word.Type;
+const Word = Schema.Struct({ start: Schema.Number, end: Schema.Number, box: Box });
 
-export const Document = Schema.Struct({
+const Document = Schema.Struct({
   id: Id,
   artifact_hash: Sha256,
   media_type: Schema.String,
   page_count: Schema.NullOr(Schema.Number),
 });
-export type Document = typeof Document.Type;
 
-export const TextQuote = Schema.Struct({
+const TextQuote = Schema.Struct({
   exact: Schema.String,
   prefix: Schema.String,
   suffix: Schema.String,
@@ -189,7 +190,13 @@ export type Anchor = typeof Anchor.Type;
 export const Policy = Schema.Literals(["critical", "standard", "descriptive"]);
 export type Policy = typeof Policy.Type;
 
-export const ProposalStatus = Schema.Literals(["extracted", "missing", "ambiguous", "invalid", "error"]);
+export const ProposalStatus = Schema.Literals([
+  "extracted",
+  "missing",
+  "ambiguous",
+  "invalid",
+  "error",
+]);
 export type ProposalStatus = typeof ProposalStatus.Type;
 
 export const SemanticKey = Schema.Struct({
@@ -213,12 +220,11 @@ export const FieldSpec = Schema.Struct({
 });
 export type FieldSpec = typeof FieldSpec.Type;
 
-export const ValidatorResult = Schema.Struct({
+const ValidatorResult = Schema.Struct({
   validator: Schema.String,
   passed: Schema.Boolean,
   message: Schema.NullOr(Schema.String),
 });
-export type ValidatorResult = typeof ValidatorResult.Type;
 
 export const Proposal = Schema.Struct({
   key: SemanticKey,
@@ -234,7 +240,7 @@ export type Proposal = typeof Proposal.Type;
 // Workbench additions: not on the backend records yet.
 
 /** Bibliographic facts the queue shows above the abstract (WP-07 corpus, served by WP-15). */
-export const RecordMeta = Schema.Struct({
+const RecordMeta = Schema.Struct({
   pmid: Schema.NullOr(Schema.String),
   doi: Schema.NullOr(Schema.String),
   journal: Schema.String,
@@ -246,7 +252,6 @@ export const RecordMeta = Schema.Struct({
   /** Structured-abstract labels as (label, start, end) code-point ranges of `text`. */
   sections: Schema.Array(Schema.Tuple([Schema.String, Schema.Number, Schema.Number])),
 });
-export type RecordMeta = typeof RecordMeta.Type;
 
 /** `kittum.screening.QueueItem` plus the record facts. Never carries AI output or sentinel flags. */
 export const QueueItem = Schema.Struct({
@@ -309,7 +314,7 @@ export const PageLayer = Schema.Struct({
 });
 export type PageLayer = typeof PageLayer.Type;
 
-export const ReportSummary = Schema.Struct({
+const ReportSummary = Schema.Struct({
   id: Id,
   study_id: Id,
   study_label: Schema.String,
@@ -317,7 +322,6 @@ export const ReportSummary = Schema.Struct({
   citation: Schema.String,
   licence: Schema.String,
 });
-export type ReportSummary = typeof ReportSummary.Type;
 
 /** A full text to screen: the report, its layer, and the protocol-term mentions per criterion. */
 export const FullTextAssignment = Schema.Struct({
