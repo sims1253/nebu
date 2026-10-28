@@ -485,6 +485,31 @@ export const makeApiWorkbench = (): Workbench => ({
       }),
     ),
 
+  adjudicationFullText: ({ projectId, as, conflictId, text }) =>
+    call((api) =>
+      Effect.gen(function* () {
+        const source = yield* api.getScreeningAdjudicationFullText(projectId, conflictId, {
+          params: reviewer(as),
+        });
+        const view = yield* api.getDocument(source.document_id, undefined);
+        return {
+          // A full-text item's text is its layer's text, so offsets agree with the words.
+          layer: {
+            id: source.layer_id,
+            document_id: source.document_id,
+            text,
+            pages: view.pages.map((p) => ({ page: p.number, width: p.width, height: p.height })),
+          },
+          mentions: source.mentions.map(
+            (m) => [m.criterion_id, m.mentions.map(anchorView)] as const,
+          ),
+          aiQuotes: Object.fromEntries(
+            Object.entries(source.ai_quotes).map(([id, a]) => [id, anchorView(a)]),
+          ),
+        };
+      }),
+    ),
+
   adjudicate: ({ projectId, as, conflictId, expectedEtag, adopted, decision, timing }) =>
     call((api) =>
       api.decideScreeningAdjudication(projectId, conflictId, {

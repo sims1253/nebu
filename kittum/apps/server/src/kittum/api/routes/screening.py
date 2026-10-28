@@ -16,10 +16,12 @@ from fastapi import APIRouter, Header, HTTPException, Query, status
 from kittum.api import AppContext, Context  # noqa: TC001 - FastAPI resolves it at runtime
 from kittum.app import (
     AssignmentFullText,
+    ConflictFullText,
     LifecycleError,
     NotLead,
     WrongDocument,
     ai_quote,
+    ai_quotes,
     full_text,
     mark_wrong_document,
     mentions,
@@ -301,6 +303,32 @@ def adjudications(
         return screening.adjudication_queue(
             tx, project_id, reviewer, scope_id, stage, topic_id=topic_id
         )
+
+
+@router.get(
+    "/adjudications/{conflict_id}/full-text", operation_id="getScreeningAdjudicationFullText"
+)
+def adjudication_full_text(
+    project_id: Id, conflict_id: Id, reviewer: Reviewer, ctx: Context
+) -> ConflictFullText:
+    """The full text behind a full-text conflict the caller adjudicates, with the protocol-term
+    mentions of each criterion in document order. Once the caller has adjudicated it,
+    `ai_quotes` places the AI's verified quotes on the page."""
+    screening = _screening(ctx)
+    with _errors(), ctx.db.transaction() as tx:
+        ref, _, criteria, ai = screening.conflict_source(tx, project_id, reviewer, conflict_id)
+        found = full_text(tx, project_id, ref)
+        if found is None:
+            raise NotFoundError("this conflict has no full text")
+        layer = get_layer(tx, found.layer_id, artifacts=ctx.artifacts)
+    return ConflictFullText(
+        document_id=found.document_id,
+        layer_id=found.layer_id,
+        page_count=found.page_count,
+        licence=found.licence,
+        mentions=mentions(layer, criteria),
+        ai_quotes=ai_quotes(layer, ai),
+    )
 
 
 @router.post("/adjudications/{conflict_id}/decide", operation_id="decideScreeningAdjudication")

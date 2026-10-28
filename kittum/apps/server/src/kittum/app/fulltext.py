@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from kittum.db import Tx
     from kittum.documents import Layer
     from kittum.protocol import Criterion
-    from kittum.screening import Reveal
+    from kittum.screening import AiColumn, QuoteSpan, Reveal
 
 FULL_TEXT_DETACHED = "project.full_text_detached"
 
@@ -113,6 +113,19 @@ class AssignmentFullText(Record):
     decision, as an unsaved anchor; None before that, and when the quote is not in the text."""
 
 
+class ConflictFullText(Record):
+    """The full text behind a full-text conflict, for the adjudicator."""
+
+    document_id: Id
+    layer_id: Id
+    page_count: int | None
+    licence: str | None
+    mentions: tuple[CriterionMentions, ...]
+    ai_quotes: dict[str, Anchor]
+    """The AI's verified quotes on the page, by criterion ID, as unsaved anchors. Empty until
+    the adjudicator has adjudicated the conflict."""
+
+
 class WrongDocument(Record):
     recorded_at: datetime
 
@@ -147,9 +160,24 @@ def mentions(layer: Layer, criteria: tuple[Criterion, ...]) -> tuple[CriterionMe
 
 
 def ai_quote(layer: Layer, reveal: Reveal | None) -> Anchor | None:
-    """The revealed quote on the page. A full-text item's text is its layer's text, so the
-    reveal's text offsets are layer offsets."""
-    span = reveal.quote_span if reveal else None
+    """The revealed quote on the page."""
+    return _on_page(layer, reveal.quote_span if reveal else None)
+
+
+def ai_quotes(layer: Layer, ai: AiColumn | None) -> dict[str, Anchor]:
+    """Each verified quote of the AI column on the page, by criterion ID."""
+    if ai is None:
+        return {}
+    return {
+        cid: anchor
+        for cid, span in ai.quote_spans.items()
+        if (anchor := _on_page(layer, span)) is not None
+    }
+
+
+def _on_page(layer: Layer, span: QuoteSpan | None) -> Anchor | None:
+    """A quote span of a full-text item as an anchor. The item's text is its layer's text, so
+    text offsets are layer offsets; a span in the title is not on the page."""
     if span is None or span.part != "text" or span.end > len(layer.text):
         return None
     return make_anchor(layer, Span(span.start, span.end))
@@ -241,9 +269,11 @@ __all__ = [
     "FULL_TEXT_DETACHED",
     "MAX_MENTIONS",
     "AssignmentFullText",
+    "ConflictFullText",
     "CriterionMentions",
     "WrongDocument",
     "ai_quote",
+    "ai_quotes",
     "mark_wrong_document",
     "mentions",
     "terms",

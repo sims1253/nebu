@@ -391,3 +391,40 @@ def test_one_reason_per_decision_and_a_wrong_document_is_missing_not_excluded(pg
 
     # The lead can now give the record its real full text.
     attach(cohort["item_ref"], LESOTHO.read_bytes())
+
+    # The adjudicator reads the trial's PDF and excludes on a criterion nobody cited, with
+    # evidence of their own. The AI's quotes come only after the decision; screeners get nothing.
+    params = {"scope_id": SCOPE, "stage": "full_text"}
+    (conflict,) = ok(
+        client.get(
+            f"/api/projects/{pid}/screening/adjudications", params=params, headers=as_("Elena")
+        )
+    )
+    source_path = f"/api/projects/{pid}/screening/adjudications/{conflict['conflict_id']}/full-text"
+    assert client.get(source_path, headers=as_("Sam")).status_code == 404
+    page = ok(client.get(source_path, headers=as_("Elena")))
+    assert page["document_id"] == source["document_id"]
+    assert page["ai_quotes"] == {}
+    intervention = next(c for c in page["mentions"] if c["criterion_id"] == "INT")["mentions"][0]
+    own = ok(
+        client.post(
+            f"/api/layers/{page['layer_id']}/anchors",
+            json={"quote": intervention["quote"]["exact"], "start": intervention["start"]},
+        ),
+        201,
+    )
+    reading = {"criterion_id": "INT", "status": "not_met", "evidence_anchor_ids": [own["id"]]}
+    adjudicated = ok(
+        client.post(
+            f"/api/projects/{pid}/screening/adjudications/{conflict['conflict_id']}/decide",
+            json={
+                "command_id": str(new_id()),
+                "expected_etag": conflict["etag"],
+                "decision": outcome("exclude", "INT", [reading], [own["id"]]),
+            },
+            headers=as_("Elena"),
+        )
+    )
+    assert adjudicated["reason_criterion_id"] == "INT"
+    after = ok(client.get(source_path, headers=as_("Elena")))
+    assert after["ai_quotes"] == {}  # the model quoted nothing it could verify in this trial

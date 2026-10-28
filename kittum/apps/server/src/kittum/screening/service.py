@@ -1381,21 +1381,37 @@ class Screening:
         ).fetchone()
         if row is None or row["adjudicator_id"] != adjudicator_id:
             raise NotAssigned(f"command {command_id} recorded no adjudication of this adjudicator")
-        reading = store.reading(tx, row["stage_id"], row["item_ref"])
-        assert reading is not None
-        item = store.item(tx, row["stage_id"], row["item_ref"])
-        spans = {
-            c.criterion_id: span
-            for c in reading.criteria
-            if c.quote_verified
-            and (span := locate_quote(c.quote, item["title"], item["text"])) is not None
-        }
         return AdjudicationResult(
             outcome=row["outcome"],
             reason_criterion_id=row["reason_criterion_id"],
             recorded_at=row["recorded_at"],
-            ai=AiColumn(excludes=reading.excludes, criteria=reading.criteria, quote_spans=spans),
+            ai=_ai_column(tx, row["stage_id"], row["item_ref"]),
         )
+
+    def conflict_source(
+        self, tx: Tx, project_id: Id, adjudicator_id: Id, conflict_id: Id
+    ) -> tuple[str, StageInfo, tuple[Criterion, ...], AiColumn | None]:
+        """The record behind a conflict the adjudicator may adjudicate, its stage, and the stage's
+        criteria, for an entry point that shows the record's source (the full text). The AI
+        column comes only once this adjudicator has adjudicated the conflict. Never send the
+        reference to the adjudicator: a sentinel's reference names it as one."""
+        c = tx.execute("select * from screening_conflict where id = %s", (conflict_id,)).fetchone()
+        if c is None:
+            raise NotAssigned(f"conflict {conflict_id} not found")
+        row = store.stage_row(tx, project_id, c["stage_id"])
+        peers = store.item_assignments(tx, c["stage_id"], c["item_ref"])
+        if adjudicator_id not in row["adjudicators"] or any(
+            p["reviewer_id"] == adjudicator_id for p in peers
+        ):
+            raise NotAssigned(f"conflict {conflict_id} not found")
+        adjudicated = tx.execute(
+            "select 1 from screening_adjudication where conflict_id = %s and adjudicator_id = %s",
+            (conflict_id, adjudicator_id),
+        ).fetchone()
+        if c["state"] != "open" and adjudicated is None:
+            raise NotAssigned(f"conflict {conflict_id} not found")
+        ai = _ai_column(tx, c["stage_id"], c["item_ref"]) if adjudicated else None
+        return c["item_ref"], store.stage_info(row), self._criteria(tx, row), ai
 
     # Status
 
@@ -1481,6 +1497,20 @@ class Screening:
             conflicts=conflicts,
             metrics=metrics,
         )
+
+
+def _ai_column(tx: Tx, stage_id: Id, item_ref: str) -> AiColumn:
+    """The AI's reading of an item, with each verified quote placed in it."""
+    reading = store.reading(tx, stage_id, item_ref)
+    assert reading is not None
+    item = store.item(tx, stage_id, item_ref)
+    spans = {
+        c.criterion_id: span
+        for c in reading.criteria
+        if c.quote_verified
+        and (span := locate_quote(c.quote, item["title"], item["text"])) is not None
+    }
+    return AiColumn(excludes=reading.excludes, criteria=reading.criteria, quote_spans=spans)
 
 
 def _refuse_withdrawn(a: dict[str, Any]) -> None:

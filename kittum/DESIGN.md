@@ -271,9 +271,10 @@ missing data, an author query, or a CSR request, and it prevents false exclusion
 still give a verdict and evidence for every criterion.
 
 A PDF that is not the record's report (a reporting checklist, a different paper) is not a reason
-to exclude. The reviewer marks it as the wrong document, with an optional note. Kittum takes the
-report out of screening, detaches the PDF from the record, and records who said so and when. The
-record then has no full text again, and PRISMA counts it as not retrieved.
+to exclude. The reviewer marks it as the wrong document, with an optional note, before anyone has
+decided the report. Kittum takes the report out of full-text screening in every scope, detaches the
+PDF from the record, and records who said so and when. The record then has no full text again, and
+PRISMA counts it as not retrieved. Once someone has decided the report, it stays in screening.
 
 ### Extraction
 
@@ -658,7 +659,7 @@ the terms of their own templates.
 | Studies | Proposed record-to-study clusters with the linking evidence (shared NCT number, DOI family, title similarity) | `Enter` confirm, `s` split, `m` merge |
 | Full-text screening | The PDF on the left, criteria on the right, one active criterion. Mentions of the active criterion in document order, without verdict colours. After the decision, the AI's reading of one criterion with its rationale and its verified quote marked on the page. | `,` and `.` step through mentions, `Enter` adopt a mention as evidence, `y` met, `n` not met, `?` unclear (optional). `i` include, `e` then `1` to `9` exclude on a criterion, `x` then `1` to `9` insufficient information, `w` wrong document, `q` show the AI's quote. |
 | Extraction | Fields grouped by endpoint, arm, and timepoint, with value, unit, status, origin path, agreement, and validator results; the source region on the PDF | `Tab` next field, `Enter` accept after viewing the source, `e` edit (needs a span), `1` or `2` pick a path when they disagree |
-| Adjudication | Reviewers A and B side by side, pseudonymized, each with outcome, criterion, span, and comment. The AI column opens after the adjudicator commits: each criterion's verdict, rationale, and quote, the verified one marked in the record. | `1` adopt A, `2` adopt B, `i`, `e`, `u` own decision, then `,` and `.` step through the AI's criteria |
+| Adjudication | Reviewers A and B side by side, pseudonymized, each with outcome, criterion, span, and comment. At full text, the PDF with the mentions of the active criterion, for the adjudicator's own evidence. The AI column opens after the adjudicator commits: each criterion's verdict, rationale, and quote, the verified one marked in the record or on the page. | `1` adopt A, `2` adopt B, `i`, `e`, `u` own decision. At full text, `↑` and `↓` choose a criterion, `,` and `.` step through its mentions, `Enter` adopts one. After the decision, `,` and `.` step through the AI's criteria |
 | AI-exclusion audit | Strata, sample sizes, misses found, estimated missed relevant records with a 95% upper bound, pass or fail against the protocol's threshold | A found miss creates a queue of the 20 nearest AI-excluded records for human rescreening. |
 | Risk of bias | Signalling questions on the left with assembled quotes, the PDF on the right; the rendering on each instrument the review needs (RoB 2, ROBINS-I V2, or a profile's form) | `1` to `5` for yes, probably yes, probably no, no, no information. `o` override with a reason. |
 | Progress | The live PRISMA flow per scope with the update-search delta, throughput, kappa and PABAK for human pairs and human-AI pairs, conflict rate, the audit gauge, and the disclosure summary | Read only |

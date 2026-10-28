@@ -5,12 +5,11 @@
 // met. A verdict on each criterion is optional. A PDF that is not the record's report is marked
 // as the wrong document, which takes it out of screening and is not an exclusion.
 import { useRouteContext } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import type {
   Anchor,
-  Box,
   Criterion,
   CriterionStatus,
   Decision,
@@ -21,27 +20,13 @@ import type {
 import { run, WorkbenchError } from "../../data/workbench.ts";
 import { Key, KeyHint } from "../../ui/Key.tsx";
 import { useKeys } from "../../ui/keys.ts";
-import { ADOPTED, Mark, OUTCOMES, Status, VERDICTS } from "../../ui/Status.tsx";
+import { Mark, OUTCOMES, Status, VERDICTS } from "../../ui/Status.tsx";
 import { PdfViewer } from "../pdf/PdfViewer.tsx";
-import type { PageHighlight, TextSelection } from "../pdf/PdfViewer.tsx";
+import type { PageHighlight } from "../pdf/PdfViewer.tsx";
 import { useProject } from "../project.tsx";
 import { AiReading } from "./AiReading.tsx";
 import type { CriterionName } from "./AiReading.tsx";
-
-interface Evidence {
-  /** The saved anchor's ID. */
-  readonly id: string;
-  /** The mention or selection it came from, so Enter on it again removes it. */
-  readonly key: string;
-  readonly quote: string;
-  readonly boxes: ReadonlyArray<Box>;
-}
-
-interface CriterionState {
-  readonly verdict: CriterionStatus | null;
-  readonly evidence: ReadonlyArray<Evidence>;
-  readonly cursor: number; // index into the mentions, -1 before the first jump
-}
+import { Mentions, useEvidence } from "./evidence.tsx";
 
 const VERDICT_KEYS: Record<string, CriterionStatus> = { y: "met", n: "not_met", "?": "unclear" };
 /** Outcomes that name one criterion: the key, then the criterion's number. */
@@ -152,10 +137,29 @@ function FullTextScreen({
     [criteriaFor, assignment.scope_id],
   );
   const mentions = useMemo(() => new Map(assignment.mentions), [assignment.mentions]);
-  const [active, setActive] = useState(0);
-  const [states, setStates] = useState<Record<string, CriterionState>>({});
-  const [selection, setSelection] = useState<TextSelection | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const nameOf = (c: Criterion) => `${criteria.indexOf(c) + 1} ${labels[c.slot] ?? c.slot}`;
+  const {
+    active,
+    setActive,
+    criterion,
+    stateOf,
+    update,
+    currentMention,
+    selection,
+    setSelection,
+    notice,
+    setNotice,
+    busy: adopting,
+    highlights: evidenceHighlights,
+    jump: jumpMention,
+    adopt,
+  } = useEvidence({
+    workbench,
+    layerId: assignment.layer.id,
+    criteria,
+    mentions,
+    nameOf,
+  });
   const [outcome, setOutcome] = useState<{ outcome: Outcome; reason: string | null } | null>(null);
   // `e` or `x` waits for the criterion's number.
   const [armed, setArmed] = useState<"exclude" | "insufficient_information" | null>(null);
@@ -175,18 +179,6 @@ function FullTextScreen({
   const firstKeyAt = useRef<string | null>(null);
   // A reveal that came with the item was shown when the item was.
   const revealedAt = useRef<string | null>(assignment.reveal ? shownAt : null);
-
-  const criterion = criteria[active];
-  const stateOf = useCallback(
-    (id: string): CriterionState => states[id] ?? { verdict: null, evidence: [], cursor: -1 },
-    [states],
-  );
-  const update = (id: string, change: (s: CriterionState) => CriterionState) =>
-    setStates((all) => ({
-      ...all,
-      [id]: change(all[id] ?? { verdict: null, evidence: [], cursor: -1 }),
-    }));
-  const nameOf = (c: Criterion) => `${criteria.indexOf(c) + 1} ${labels[c.slot] ?? c.slot}`;
 
   // The AI's quote on the page, once its reading is shown: the server places it.
   const revealed = reveal !== null;
@@ -213,39 +205,11 @@ function FullTextScreen({
     };
   }, [revealed, workbench, project.id, me.actor_id, assignment.assignment_id]);
 
-  const activeMentions = useMemo(
-    (): ReadonlyArray<Anchor> => (criterion ? (mentions.get(criterion.id) ?? []) : []),
-    [criterion, mentions],
-  );
-
-  const activeState = criterion ? stateOf(criterion.id) : null;
-  const currentMention =
-    activeState && activeState.cursor >= 0 ? activeMentions[activeState.cursor] : undefined;
   const verdicts = criteria.filter((c) => stateOf(c.id).verdict !== null).length;
 
   const highlights = useMemo(
     (): PageHighlight[] => [
-      ...criteria.flatMap((c) =>
-        stateOf(c.id).evidence.map((e) => ({
-          id: `adopted-${c.id}-${e.id}`,
-          boxes: e.boxes,
-          kind: "adopted" as const,
-          label: "Adopted evidence",
-        })),
-      ),
-      ...activeMentions
-        .filter((m) => m !== currentMention)
-        .map((m) => ({ id: m.id, boxes: m.boxes, kind: "mention" as const, label: "Mention" })),
-      ...(currentMention
-        ? [
-            {
-              id: currentMention.id,
-              boxes: currentMention.boxes,
-              kind: "current" as const,
-              label: "Current mention",
-            },
-          ]
-        : []),
+      ...evidenceHighlights,
       ...(aiQuote
         ? [
             {
@@ -257,7 +221,7 @@ function FullTextScreen({
           ]
         : []),
     ],
-    [criteria, stateOf, activeMentions, currentMention, aiQuote],
+    [evidenceHighlights, aiQuote],
   );
   const aiBox = aiQuote?.boxes[0];
   const mentionBox = currentMention?.boxes[0];
@@ -269,81 +233,8 @@ function FullTextScreen({
         : null;
 
   const jump = (step: 1 | -1) => {
-    if (!criterion) return;
-    if (activeMentions.length === 0) {
-      setNotice("This report never uses the protocol terms of this criterion.");
-      return;
-    }
-    update(criterion.id, (s) => ({
-      ...s,
-      cursor:
-        s.cursor < 0
-          ? step === 1
-            ? 0
-            : activeMentions.length - 1
-          : (s.cursor + step + activeMentions.length) % activeMentions.length,
-    }));
+    jumpMention(step);
     setFollow("mention");
-    setNotice(null);
-  };
-
-  const adopt = async () => {
-    if (!criterion) return;
-    const source = selection
-      ? {
-          key: `selection-${selection.start}-${selection.end}`,
-          quote: selection.quote,
-          start: selection.start,
-          boxes: selection.boxes,
-        }
-      : currentMention
-        ? {
-            key: currentMention.id,
-            quote: currentMention.quote.exact,
-            start: currentMention.start,
-            boxes: currentMention.boxes,
-          }
-        : null;
-    if (!source) {
-      setNotice("Go to a mention with . first, or select text on the page.");
-      return;
-    }
-    const already = stateOf(criterion.id).evidence.find((e) => e.key === source.key);
-    if (already) {
-      update(criterion.id, (s) => ({
-        ...s,
-        evidence: s.evidence.filter((e) => e.key !== source.key),
-      }));
-      setNotice("Removed from the evidence.");
-      return;
-    }
-    setBusy(true);
-    try {
-      // The span becomes an anchor on the layer: the decision cites it by ID.
-      const anchor = await run(
-        workbench.adopt({ layerId: assignment.layer.id, quote: source.quote, start: source.start }),
-      );
-      const evidence: Evidence = {
-        id: anchor.id,
-        key: source.key,
-        quote: anchor.quote.exact,
-        boxes: source.boxes,
-      };
-      update(criterion.id, (s) => ({ ...s, evidence: [...s.evidence, evidence] }));
-      setNotice(`Adopted as evidence for ${nameOf(criterion)}.`);
-    } catch (e) {
-      setNotice(
-        e instanceof WorkbenchError
-          ? `Not adopted. ${e.message}`
-          : "Not adopted. Select whole words and try again.",
-      );
-    } finally {
-      setBusy(false);
-    }
-    if (selection) {
-      window.getSelection()?.removeAllRanges();
-      setSelection(null);
-    }
   };
 
   const send = async (decision: Decision, phase: "provisional" | "final") => {
@@ -493,7 +384,7 @@ function FullTextScreen({
   };
 
   function handleKey(event: KeyboardEvent): boolean {
-    if (busy || !criterion || outcome || wrong) return false;
+    if (busy || adopting || !criterion || outcome || wrong) return false;
     const key = event.key;
     // A held key repeats; adopting toggles and verdicts advance, so act on the first press only.
     if (
@@ -802,83 +693,6 @@ function WrongDocumentForm({
     </form>
   );
 }
-
-function Mentions({
-  mentions,
-  cursor,
-  adopted,
-  selections,
-}: {
-  mentions: ReadonlyArray<Anchor>;
-  cursor: number;
-  adopted: ReadonlySet<string>;
-  selections: ReadonlyArray<Evidence>;
-}) {
-  if (mentions.length === 0 && selections.length === 0) {
-    return (
-      <p className="mt-2 text-xs text-ink-3">
-        The protocol terms of this criterion do not occur in this report. Select text on the page to
-        cite it.
-      </p>
-    );
-  }
-  return (
-    <ol className="mt-2.5 grid gap-1" aria-label="Mentions in document order">
-      {mentions.map((mention, index) => {
-        const page = mention.boxes[0]?.page ?? 0;
-        const current = index === cursor;
-        return (
-          <li
-            key={mention.id}
-            aria-current={current || undefined}
-            data-testid="mention"
-            className={`grid grid-cols-[2.6rem_minmax(0,1fr)_auto] items-baseline gap-2 rounded-[2px] py-1 pr-2 pl-2 text-xs ${current ? "evidence-item" : ""}`}
-          >
-            <span className="text-ink-3">p. {page}</span>
-            <span className="line-clamp-2 text-ink-2">
-              {tail(mention.quote.prefix)}
-              <span className="font-medium text-ink">
-                {mention.quote.exact.replace(/\s+/g, " ")}
-              </span>
-              {head(mention.quote.suffix)}
-            </span>
-            {adopted.has(mention.id) ? <Mark term={ADOPTED} /> : <span />}
-          </li>
-        );
-      })}
-      {selections.map((selection) => (
-        <li
-          key={selection.id}
-          className="grid grid-cols-[2.6rem_minmax(0,1fr)_auto] gap-2 py-1 pr-2 pl-2 text-xs"
-        >
-          <span className="text-ink-3">p. {selection.boxes[0]?.page}</span>
-          <span className="line-clamp-2 font-medium">{selection.quote.replace(/\s+/g, " ")}</span>
-          <Mark term={ADOPTED} />
-        </li>
-      ))}
-      <li className="mt-1 flex gap-3 text-2xs text-ink-3">
-        <span>
-          {cursor < 0 ? "–" : cursor + 1} of {mentions.length}
-        </span>
-        <span>
-          <Key k="," /> <Key k="." /> to go through them, <Key k="Enter" /> to adopt
-        </span>
-      </li>
-    </ol>
-  );
-}
-
-// Context around a mention, cut at a word boundary.
-const tail = (text: string) => {
-  const flat = text.replace(/\s+/g, " ");
-  if (flat.length <= 28) return flat;
-  return `…${flat.slice(-28).replace(/^\S*\s/, "")}`;
-};
-const head = (text: string) => {
-  const flat = text.replace(/\s+/g, " ");
-  if (flat.length <= 28) return flat;
-  return `${flat.slice(0, 28).replace(/\s\S*$/, "")}…`;
-};
 
 function FullTextReveal({
   reveal,

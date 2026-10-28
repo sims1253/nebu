@@ -52,9 +52,11 @@ from kittum.app.enrichment import (
 from kittum.app.fulltext import (
     FULL_TEXT_DETACHED,
     AssignmentFullText,
+    ConflictFullText,
     CriterionMentions,
     WrongDocument,
     ai_quote,
+    ai_quotes,
     mark_wrong_document,
     mentions,
 )
@@ -129,6 +131,7 @@ __all__ = [
     "Assistant",
     "AttemptView",
     "ConfigurationError",
+    "ConflictFullText",
     "CriterionMentions",
     "DemoProject",
     "EnrichmentRun",
@@ -154,6 +157,7 @@ __all__ = [
     "WrongDocument",
     "add_member",
     "ai_quote",
+    "ai_quotes",
     "attach_acquired_full_text",
     "attach_full_text",
     "attach_sentinel_full_text",

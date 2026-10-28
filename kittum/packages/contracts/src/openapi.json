@@ -1675,6 +1675,64 @@
         "title": "ConfirmRequest",
         "type": "object"
       },
+      "ConflictFullText": {
+        "additionalProperties": false,
+        "description": "The full text behind a full-text conflict, for the adjudicator.",
+        "properties": {
+          "ai_quotes": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Anchor"
+            },
+            "title": "Ai Quotes",
+            "type": "object"
+          },
+          "document_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "layer_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "licence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Licence"
+          },
+          "mentions": {
+            "items": {
+              "$ref": "#/components/schemas/CriterionMentions"
+            },
+            "title": "Mentions",
+            "type": "array"
+          },
+          "page_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Count"
+          }
+        },
+        "required": [
+          "document_id",
+          "layer_id",
+          "page_count",
+          "licence",
+          "mentions",
+          "ai_quotes"
+        ],
+        "title": "ConflictFullText",
+        "type": "object"
+      },
       "CorpusReport": {
         "additionalProperties": false,
         "description": "One report of an identity revision with the source records that make it up.\n\n`records` are in source order; a report found by several searches has one record per\noccurrence. `relation` is the strongest link label among them.",
@@ -13469,6 +13527,70 @@
           }
         },
         "summary": "Adjudicate",
+        "tags": [
+          "screening"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/screening/adjudications/{conflict_id}/full-text": {
+      "get": {
+        "description": "The full text behind a full-text conflict the caller adjudicates, with the protocol-term\nmentions of each criterion in document order. Once the caller has adjudicated it,\n`ai_quotes` places the AI's verified quotes on the page.",
+        "operationId": "getScreeningAdjudicationFullText",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conflict_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conflict Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictFullText"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Adjudication Full Text",
         "tags": [
           "screening"
         ]

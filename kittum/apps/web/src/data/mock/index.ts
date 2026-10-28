@@ -581,6 +581,7 @@ export const makeMockWorkbench = (
       }),
 
     adjudications: () => call("other", "adjudications", null, () => []),
+    adjudicationFullText: unavailable,
     adjudicate: unavailable,
     progress: ({ projectId, as }) =>
       call("other", "progress", { projectId, as }, () => ({

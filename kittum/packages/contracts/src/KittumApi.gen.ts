@@ -447,6 +447,8 @@ export type Sentinel = { readonly "expected_outcome"?: "include" | "exclude", re
 export const Sentinel = Schema.Struct({ "expected_outcome": Schema.optionalKey(Schema.Literals(["include", "exclude"]).annotate({ "title": "Expected Outcome", "default": "include" })), "record": ScreeningRecord }).annotate({ "title": "Sentinel", "description": "A record with a known label, seeded invisibly into every screener's queue.", "identifier": "Sentinel" })
 export type ReviewField = { readonly "acceptance": Acceptance | null, readonly "accepted": Path | null, readonly "agreement": Agreement, readonly "gate": Gate, readonly "id": Id, readonly "key": SemanticKey, readonly "labels": FieldLabels, readonly "proposals": ReadonlyArray<Proposal>, readonly "recheck": boolean, readonly "second_extractor": boolean, readonly "spec": FieldSpec }
 export const ReviewField = Schema.Struct({ "acceptance": Schema.Union([Acceptance, Schema.Null]), "accepted": Schema.Union([Path, Schema.Null]), "agreement": Agreement, "gate": Gate, "id": Id, "key": SemanticKey, "labels": FieldLabels, "proposals": Schema.Array(Proposal).annotate({ "title": "Proposals" }), "recheck": Schema.Boolean.annotate({ "title": "Recheck" }), "second_extractor": Schema.Boolean.annotate({ "title": "Second Extractor" }), "spec": FieldSpec }).annotate({ "title": "ReviewField", "description": "One field to review: both paths' proposals for one semantic key, and the gate.", "identifier": "ReviewField" })
+export type ConflictFullText = { readonly "ai_quotes": { readonly [x: string]: Anchor }, readonly "document_id": Id, readonly "layer_id": Id, readonly "licence": string | null, readonly "mentions": ReadonlyArray<CriterionMentions>, readonly "page_count": number | null }
+export const ConflictFullText = Schema.Struct({ "ai_quotes": Schema.Record(Schema.String, Anchor).annotate({ "title": "Ai Quotes" }), "document_id": Id, "layer_id": Id, "licence": Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Licence" }), "mentions": Schema.Array(CriterionMentions).annotate({ "title": "Mentions" }), "page_count": Schema.Union([Schema.Int, Schema.Null]).annotate({ "title": "Page Count" }) }).annotate({ "title": "ConflictFullText", "description": "The full text behind a full-text conflict, for the adjudicator.", "identifier": "ConflictFullText" })
 export type AssignmentFullText = { readonly "ai_quote"?: Anchor | null, readonly "document_id": Id, readonly "layer_id": Id, readonly "licence": string | null, readonly "mentions": ReadonlyArray<CriterionMentions>, readonly "page_count": number | null }
 export const AssignmentFullText = Schema.Struct({ "ai_quote": Schema.optionalKey(Schema.Union([Anchor, Schema.Null])), "document_id": Id, "layer_id": Id, "licence": Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Licence" }), "mentions": Schema.Array(CriterionMentions).annotate({ "title": "Mentions" }), "page_count": Schema.Union([Schema.Int, Schema.Null]).annotate({ "title": "Page Count" }) }).annotate({ "title": "AssignmentFullText", "description": "The full text behind a reviewer's full-text assignment.", "identifier": "AssignmentFullText" })
 export type TracedEvent = { readonly "actor": string, readonly "actor_id": Id, readonly "actor_kind": string, readonly "artifacts": ReadonlyArray<ArtifactRef>, readonly "event_hash": Sha256, readonly "event_hash_matches": boolean, readonly "event_id": Id, readonly "facts": ReadonlyArray<Fact>, readonly "hashed_fields": { readonly [x: string]: Schema.Json }, readonly "kind": TraceKind, readonly "model_calls"?: ReadonlyArray<ModelCall>, readonly "payload": { readonly [x: string]: Schema.Json }, readonly "payload_hash": Sha256, readonly "payload_hash_matches": boolean, readonly "prev_hash": Sha256, readonly "recorded_at": string, readonly "schema_version": number, readonly "seq": number, readonly "stage": string | null, readonly "summary": string, readonly "type": string }
@@ -918,6 +920,12 @@ export type DecideScreeningAdjudication200 = AdjudicationResult
 export const DecideScreeningAdjudication200 = AdjudicationResult
 export type DecideScreeningAdjudication422 = HTTPValidationError
 export const DecideScreeningAdjudication422 = HTTPValidationError
+export type GetScreeningAdjudicationFullTextParams = { readonly "X-Kittum-Reviewer": Id }
+export const GetScreeningAdjudicationFullTextParams = Schema.Struct({ "X-Kittum-Reviewer": Schema.suspend((): Schema.Codec<Id> => Id).annotate({ "description": "The caller's actor ID. A stand-in until the API has authentication." }) })
+export type GetScreeningAdjudicationFullText200 = ConflictFullText
+export const GetScreeningAdjudicationFullText200 = ConflictFullText
+export type GetScreeningAdjudicationFullText422 = HTTPValidationError
+export const GetScreeningAdjudicationFullText422 = HTTPValidationError
 export type DecideScreeningAssignmentParams = { readonly "X-Kittum-Reviewer": Id }
 export const DecideScreeningAssignmentParams = Schema.Struct({ "X-Kittum-Reviewer": Schema.suspend((): Schema.Codec<Id> => Id).annotate({ "description": "The caller's actor ID. A stand-in until the API has authentication." }) })
 export type DecideScreeningAssignmentRequestJson = DecideRequest
@@ -1870,6 +1878,16 @@ export const make = (
     }))
     ))
   ),
+    "getScreeningAdjudicationFullText": (projectId, conflictId, options: Parameters<KittumApi["getScreeningAdjudicationFullText"]>[2]) => __makePathRequest(HttpClientRequest.get, [projectId, conflictId], () => "/api/projects/" + __encodePathParam(projectId) + "/screening/adjudications/" + __encodePathParam(conflictId) + "/full-text").pipe(
+    Effect.flatMap((request) => request.pipe(
+      HttpClientRequest.setHeaders({ "X-Kittum-Reviewer": options.params["X-Kittum-Reviewer"] ?? undefined }),
+      withResponse(options.config)(HttpClientResponse.matchStatus({
+      "2xx": decodeSuccess(GetScreeningAdjudicationFullText200),
+      "422": decodeError("GetScreeningAdjudicationFullText422", GetScreeningAdjudicationFullText422),
+      orElse: unexpectedStatus
+    }))
+    ))
+  ),
     "decideScreeningAssignment": (projectId, assignmentId, options: Parameters<KittumApi["decideScreeningAssignment"]>[2]) => __makePathRequest(HttpClientRequest.post, [projectId, assignmentId], () => "/api/projects/" + __encodePathParam(projectId) + "/screening/assignments/" + __encodePathParam(assignmentId) + "/decide").pipe(
     Effect.flatMap((request) => request.pipe(
       HttpClientRequest.setHeaders({ "X-Kittum-Reviewer": options.params["X-Kittum-Reviewer"] ?? undefined }),
@@ -2586,6 +2604,15 @@ readonly "listScreeningAdjudications": {
 readonly "decideScreeningAdjudication": {
     <Config extends OperationConfig | undefined = undefined>(projectId: string, conflictId: string, options: { readonly params: typeof DecideScreeningAdjudicationParams.Encoded; readonly payload: typeof DecideScreeningAdjudicationRequestJson.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<DecideScreeningAdjudication200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"DecideScreeningAdjudication422", DecideScreeningAdjudication422>>;
     <Config extends OperationConfig | undefined = undefined>(projectId: string, conflictId: string, options: { readonly params: typeof DecideScreeningAdjudicationParams.Encoded; readonly payload: typeof DecideScreeningAdjudicationRequestJson.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<DecideScreeningAdjudication200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"DecideScreeningAdjudication422", DecideScreeningAdjudication422>>;
+  }
+  /**
+* The full text behind a full-text conflict the caller adjudicates, with the protocol-term
+* mentions of each criterion in document order. Once the caller has adjudicated it,
+* `ai_quotes` places the AI's verified quotes on the page.
+*/
+readonly "getScreeningAdjudicationFullText": {
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, conflictId: string, options: { readonly params: typeof GetScreeningAdjudicationFullTextParams.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<GetScreeningAdjudicationFullText200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetScreeningAdjudicationFullText422", GetScreeningAdjudicationFullText422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, conflictId: string, options: { readonly params: typeof GetScreeningAdjudicationFullTextParams.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<GetScreeningAdjudicationFullText200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetScreeningAdjudicationFullText422", GetScreeningAdjudicationFullText422>>;
   }
   /**
 * A provisional decision, then a final one if the AI was revealed.

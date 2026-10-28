@@ -275,21 +275,36 @@ test("one reason per full-text decision, the AI's reading after it, and a wrong 
     await page.context().close();
   });
 
-  await test.step("the adjudicator sees both reasons, decides, then sees the AI's reading", async () => {
+  await test.step("the adjudicator reads the PDF, excludes on a criterion nobody cited, then sees the AI's reading", async () => {
     const page = await open(elena, "adjudication");
     await expect(page.getByTestId("record-title")).toContainText(TRIAL);
+    await expect(page.getByText("Page 1 of 13")).toBeVisible();
     await expect(page.getByTestId("ai-column")).toHaveCount(0);
     const columns = [page.getByTestId("column-A"), page.getByTestId("column-B")];
-    const excluder = (await columns[0]?.textContent())?.includes("Exclude") ? "1" : "2";
-    await expect(columns[Number(excluder) - 1]!).toContainText("on 1 Population");
-    await page.keyboard.press(excluder);
-    await expect(page.getByTestId("adjudicated")).toContainText("Excluded on 1 Population");
+    const excluder = (await columns[0]?.textContent())?.includes("Exclude") ? 0 : 1;
+    await expect(columns[excluder]!).toContainText("on 1 Population");
+    // An own exclusion on the intervention, which no reviewer cited, needs evidence of its own.
+    const notice = page.getByTestId("adjudication-notice");
+    await page.keyboard.press("e");
+    await page.keyboard.press("2");
+    await expect(notice).toContainText("To exclude on 2 Intervention, adopt evidence for it first");
+    await expect(page.getByTestId("your-evidence").locator("li[aria-current]")).toContainText(
+      "2 Intervention",
+    );
+    await page.keyboard.press(".");
+    await expect(page.getByTestId("source-highlight").first()).toBeVisible();
+    await page.keyboard.press("Enter");
+    await expect(notice).toContainText("Adopted as evidence for 2 Intervention");
+    await shot(page, "08-adjudication-own-evidence.png");
+    await page.keyboard.press("e");
+    await page.keyboard.press("2");
+    await expect(page.getByTestId("adjudicated")).toContainText("Excluded on 2 Intervention");
     const ai = page.getByTestId("ai-column");
     await expect(ai).toBeVisible();
     await expect(ai.getByTestId("ai-reading").first()).toBeVisible();
-    await shot(page, "08-adjudication-ai-reading.png");
-    await page.keyboard.press(".");
-    await shot(page, "09-adjudication-next-criterion.png");
+    await expect(page.getByTestId("your-evidence")).toHaveCount(0);
+    await page.waitForTimeout(300); // the column's entrance
+    await shot(page, "09-adjudication-ai-reading.png");
     await page.context().close();
   });
 

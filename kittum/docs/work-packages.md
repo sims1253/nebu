@@ -506,15 +506,20 @@ Module `kittum.screening`. Needs: `protocol`, `corpus`, `judge`, `ledger`, `runs
   `downgraded_from`, and where the verified quote is (`QuoteSpan`: title or text, code points,
   found by `find_quote`). An unverified quote is never placed. The full-text route returns the
   revealed quote as an unsaved anchor (`ai_quote`) once the reviewer's own provisional decision
-  revealed it (`Screening.own_reveal`).
-- Wrong document (round 3, refs #60). `withdraw_item` takes the item of a reviewer's own
-  full-text assignment out of screening (`screening.item_withdrawn`, migration
-  `20261031010000_screening_withdrawn_items.sql`): it leaves every queue, count, outcome,
-  agreement figure, and audit stratum, and an open conflict on it is withdrawn. It is not an
-  exclusion. `kittum.app.mark_wrong_document` does it with the detach of the PDF from the record
+  revealed it (`Screening.own_reveal`). The adjudicator of a full-text conflict reads its PDF
+  (`GET .../adjudications/{id}/full-text`, `Screening.conflict_source`) and adopts evidence of
+  their own; the AI's verified quotes come on the page (`ai_quotes`) only after they adjudicated.
+- Wrong document (round 3, refs #60). `withdraw_item` takes the record of a reviewer's own,
+  undecided full-text assignment out of every full-text stage of the project that holds it, one
+  `screening.item_withdrawn` per stage (migration `20261031010000_screening_withdrawn_items.sql`):
+  it leaves every queue, count, outcome, agreement figure, and audit stratum. It is not an
+  exclusion. It is refused once anyone has decided the record in any of those stages, even
+  provisionally, so a reveal cannot be escaped and nobody's decision is undone. A lead-only way to
+  replace a document after decisions is left open. `kittum.app.mark_wrong_document` does it with the detach of the PDF from the record
   (`project.full_text_detached` with who, when, and the note; `full_text_detachment`), so the
   record has no full text again and the report's PRISMA flow counts it as not retrieved as of the
-  event. Left open: a record whose real full text arrives later cannot join a full-text stage that
+  event, under the project's command lock, so a retry waits for the first request and returns its
+  result. Left open: a record whose real full text arrives later cannot join a full-text stage that
   is already open, the same as any late full text.
 - Routes in `api/routes/screening.py`: `GET .../screening/queue`, `POST .../assignments/{id}/decide`,
   `POST .../assignments/{id}/undo`, `POST .../assignments/{id}/wrong-document`,
