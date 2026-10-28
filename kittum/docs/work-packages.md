@@ -353,7 +353,7 @@ Done:
   and empty header cells merge upwards. Cells carry spans and header paths.
 - `OcrMyPdfParser` OCRs the pages triage flags. It needs `ocrmypdf` and `tesseract`; without them
   `ocr_available()` is False and the parser refuses to start. Not exercised here (not installed).
-- Storage (migration `20261028020000_documents_layers.sql`): `document` by SHA-256, `acquisition`,
+- Storage (migration `20261028025000_documents_layers.sql`): `document` by SHA-256, `acquisition`,
   immutable `layer` (unique per document and recipe hash, JSON in the artifact store, output hash
   = artifact hash) and `anchor`, `anchor_mapping`, and `page_render`. `derive(tx, document, parser,
   artifacts=...)` is idempotent per recipe. `ingest` refuses truncated PDFs.

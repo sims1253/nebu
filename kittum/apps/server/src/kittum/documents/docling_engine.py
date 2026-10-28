@@ -112,13 +112,14 @@ class DoclingParser:
         )
 
     def _convert(self, pdf: bytes) -> Any:
-        from docling.datamodel.base_models import DocumentStream, InputFormat
-        from docling.datamodel.pipeline_options import (
+        # Docling is the optional `docling` extra; CI type-checks without it.
+        from docling.datamodel.base_models import DocumentStream, InputFormat  # ty: ignore[unresolved-import]
+        from docling.datamodel.pipeline_options import (  # ty: ignore[unresolved-import]
             PdfPipelineOptions,
             TableFormerMode,
             TableStructureOptions,
         )
-        from docling.document_converter import DocumentConverter, PdfFormatOption
+        from docling.document_converter import DocumentConverter, PdfFormatOption  # ty: ignore[unresolved-import]
 
         options = PdfPipelineOptions(
             artifacts_path=self._artifacts,
@@ -138,7 +139,7 @@ class DoclingParser:
         return result.document
 
     def parse(self, pdf: bytes) -> RawLayer:
-        from docling_core.types.doc import ContentLayer, TableItem
+        from docling_core.types.doc import ContentLayer, TableItem  # ty: ignore[unresolved-import]
 
         document = self._convert(pdf)
         regions: dict[int, list[tuple[Rect, Grid | None]]] = {}
