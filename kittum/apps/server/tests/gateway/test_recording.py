@@ -7,7 +7,6 @@ recovers again. The live run sees the same bytes its replay will, so their hashe
 """
 
 import json
-import os
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
@@ -15,7 +14,6 @@ import httpx2
 import pytest
 
 from kittum.core import FixedClock, sha256_hex
-from kittum.db import Database
 from kittum.gateway import (
     CONTACT_PLACEHOLDER,
     HttpRequest,
@@ -32,8 +30,9 @@ from kittum.gateway.testing import response
 from kittum.storage import MemoryStore
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
     from pathlib import Path
+
+    from kittum.db import Database
 
 ALICE = "alice@example.org"
 SECRET = "cs-9f8e7d6c5b4a"
@@ -129,18 +128,6 @@ def test_a_recording_refuses_secrets_and_holds_the_contact_address_only_as_a_pla
                 url="https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=bob@example.org"
             )
         )
-
-
-@pytest.fixture
-def database() -> Iterator[Database]:
-    url = os.environ.get("KITTUM_DATABASE_URL")
-    if not url:
-        pytest.skip("KITTUM_DATABASE_URL is not set")
-    db = Database(url, max_size=2)
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 @pytest.mark.postgres

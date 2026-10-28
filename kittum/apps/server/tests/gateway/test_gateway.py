@@ -6,10 +6,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 import stamina
-from psycopg import sql
 
 from kittum.core import FixedClock
-from kittum.db import Database
 from kittum.gateway import (
     HttpRequest,
     HttpResponse,
@@ -23,7 +21,7 @@ from kittum.gateway.testing import FakeTransport, response
 from kittum.storage import MemoryStore
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from kittum.db import Database
 
 pytestmark = pytest.mark.postgres
 
@@ -79,31 +77,6 @@ def _gateway(
         max_attempts=max_attempts,
         sleep=sleep,
     )
-
-
-def _reset(database: Database) -> None:
-    with database.transaction() as tx:
-        tx.execute("truncate gateway_attempt, gateway_cache, gateway_budget, gateway_cooldown")
-        tables = tx.execute(
-            "select tablename from pg_tables"
-            " where schemaname = 'public' and tablename like 'ratelimit___gateway%'"
-        ).fetchall()
-        for row in tables:
-            tx.execute(sql.SQL("drop table if exists {}").format(sql.Identifier(row["tablename"])))
-
-
-@pytest.fixture
-def database() -> Iterator[Database]:
-    url = os.environ.get("KITTUM_DATABASE_URL")
-    if not url:
-        pytest.skip("KITTUM_DATABASE_URL is not set")
-    db = Database(url)
-    _reset(db)
-    try:
-        yield db
-    finally:
-        _reset(db)
-        db.close()
 
 
 def _request(url: str) -> HttpRequest:
@@ -495,7 +468,6 @@ def test_retry_after_keeps_the_full_deadline(database: Database) -> None:
 
 
 def test_a_request_queued_for_a_slot_honours_a_cooldown_set_meanwhile(database: Database) -> None:
-    import os
 
     import psycopg
     from psycopg.pq import TransactionStatus
