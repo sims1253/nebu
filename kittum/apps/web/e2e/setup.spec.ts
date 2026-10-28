@@ -2,8 +2,9 @@
 // stack.ts): the review and its people, a protocol from the shipped example (a slip shown beside
 // the text, then two published versions with the change between them), three searches imported
 // from the demo's export files, the corpus, and title and abstract screening with the example
-// sentinels. The same steps then run through `kittum project`, and the two reviews must open the
-// same stage and fill the same queues; the first reviewer takes over in the browser.
+// sentinels; building the corpus has the worker enrich it from the open sources (recorded). The
+// same steps then run through `kittum project`, and the two reviews must open the same stage and
+// fill the same queues; the first reviewer takes over in the browser.
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -279,6 +280,18 @@ test("a lead sets up a review from nothing in the browser, as the CLI would", as
     await expect(page.getByTestId("proposal").first()).toContainText(
       "The same record, found twice",
     );
+    // Building it queued its enrichment; the worker fills it from the recorded open sources.
+    await expect(page.getByTestId("enrichment-status")).toContainText(
+      "Enriched 30 records after the corpus was built",
+      { timeout: 60_000 },
+    );
+    for (const source of ["openalex", "europepmc", "crossref", "unpaywall", "pubtator"]) {
+      const cells = await page
+        .locator(`[data-testid=source-row][data-source=${source}] td`)
+        .allInnerTexts();
+      expect(Number(cells[1]), `${source} filled a field`).toBeGreaterThan(0);
+      expect(cells[3], `${source} failed`).toBe("0");
+    }
   });
 
   let projectId = "";
