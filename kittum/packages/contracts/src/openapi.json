@@ -45,6 +45,27 @@
         "pattern": "^[0-9]{1,3}(\\.[0-9]+)?$",
         "type": "string"
       },
+      "ConfirmRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "proposal_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "revision_id": {
+            "$ref": "#/components/schemas/Id"
+          }
+        },
+        "required": [
+          "revision_id",
+          "proposal_id",
+          "actor_id"
+        ],
+        "title": "ConfirmRequest",
+        "type": "object"
+      },
       "Criterion": {
         "additionalProperties": false,
         "description": "An executable eligibility criterion.\n\n`text` states the condition. For an `include` criterion a record must meet it; for an\n`exclude` criterion a record that shows it is excluded. Either way the judge answers whether\nthe record *passes*: `not_met` with a verified quote is what excludes.",
@@ -241,6 +262,48 @@
         ],
         "type": "string"
       },
+      "IdentityRevision": {
+        "additionalProperties": false,
+        "properties": {
+          "event_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "event_seq": {
+            "default": 0,
+            "title": "Event Seq",
+            "type": "integer"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "project_id": {
+            "$ref": "#/components/schemas/Id"
+          }
+        },
+        "required": [
+          "id",
+          "project_id"
+        ],
+        "title": "IdentityRevision",
+        "type": "object"
+      },
       "ImportSearchRequest": {
         "additionalProperties": false,
         "properties": {
@@ -299,6 +362,42 @@
         "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$",
         "type": "string"
       },
+      "LinkProposal": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "occurrence_ids": {
+            "items": {
+              "$ref": "#/components/schemas/Id"
+            },
+            "title": "Occurrence Ids",
+            "type": "array"
+          },
+          "relation": {
+            "$ref": "#/components/schemas/Relation"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProposalStatus",
+            "default": "pending"
+          }
+        },
+        "required": [
+          "occurrence_ids",
+          "relation",
+          "evidence"
+        ],
+        "title": "LinkProposal",
+        "type": "object"
+      },
       "LocalizedText": {
         "additionalProperties": {
           "$ref": "#/components/schemas/Text"
@@ -307,6 +406,40 @@
         "propertyNames": {
           "$ref": "#/components/schemas/LanguageCode"
         },
+        "type": "object"
+      },
+      "MergeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "occurrence_ids": {
+            "items": {
+              "$ref": "#/components/schemas/Id"
+            },
+            "title": "Occurrence Ids",
+            "type": "array"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "relation": {
+            "$ref": "#/components/schemas/Relation"
+          },
+          "revision_id": {
+            "$ref": "#/components/schemas/Id"
+          }
+        },
+        "required": [
+          "revision_id",
+          "occurrence_ids",
+          "relation",
+          "actor_id"
+        ],
+        "title": "MergeRequest",
         "type": "object"
       },
       "Outcome": {
@@ -418,6 +551,51 @@
         ],
         "title": "PressReview",
         "type": "object"
+      },
+      "PrismaCounts": {
+        "additionalProperties": false,
+        "properties": {
+          "duplicates_removed": {
+            "title": "Duplicates Removed",
+            "type": "integer"
+          },
+          "records_identified_per_source": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Records Identified Per Source",
+            "type": "object"
+          },
+          "studies_identified": {
+            "title": "Studies Identified",
+            "type": "integer"
+          },
+          "total_records_identified": {
+            "title": "Total Records Identified",
+            "type": "integer"
+          },
+          "unique_records": {
+            "title": "Unique Records",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "records_identified_per_source",
+          "total_records_identified",
+          "duplicates_removed",
+          "unique_records",
+          "studies_identified"
+        ],
+        "title": "PrismaCounts",
+        "type": "object"
+      },
+      "ProposalStatus": {
+        "enum": [
+          "pending",
+          "confirmed",
+          "rejected"
+        ],
+        "type": "string"
       },
       "ProtocolIssue": {
         "additionalProperties": false,
@@ -574,6 +752,14 @@
         },
         "title": "ReferenceSet",
         "type": "object"
+      },
+      "Relation": {
+        "enum": [
+          "same_record",
+          "same_report",
+          "same_study"
+        ],
+        "type": "string"
       },
       "ReviewProtocol": {
         "additionalProperties": false,
@@ -1184,6 +1370,47 @@
         "title": "SourceRecord",
         "type": "object"
       },
+      "SplitLevel": {
+        "enum": [
+          "report",
+          "study"
+        ],
+        "type": "string"
+      },
+      "SplitRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "level": {
+            "$ref": "#/components/schemas/SplitLevel"
+          },
+          "occurrence_ids": {
+            "items": {
+              "$ref": "#/components/schemas/Id"
+            },
+            "title": "Occurrence Ids",
+            "type": "array"
+          },
+          "reason": {
+            "default": "",
+            "title": "Reason",
+            "type": "string"
+          },
+          "revision_id": {
+            "$ref": "#/components/schemas/Id"
+          }
+        },
+        "required": [
+          "revision_id",
+          "occurrence_ids",
+          "level",
+          "actor_id"
+        ],
+        "title": "SplitRequest",
+        "type": "object"
+      },
       "Stage": {
         "enum": [
           "title_abstract",
@@ -1410,6 +1637,297 @@
           }
         },
         "summary": "Health"
+      }
+    },
+    "/api/projects/{project_id}/corpus/confirm": {
+      "post": {
+        "operationId": "confirmCorpusProposal",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityRevision"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Route",
+        "tags": [
+          "corpus"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/corpus/merge": {
+      "post": {
+        "operationId": "mergeCorpusOccurrences",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MergeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityRevision"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Merge Route",
+        "tags": [
+          "corpus"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/corpus/proposals": {
+      "get": {
+        "operationId": "listCorpusProposals",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "corpus_revision_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Id"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Corpus Revision Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ProposalStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LinkProposal"
+                  },
+                  "title": "Response Listcorpusproposals",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Proposals Route",
+        "tags": [
+          "corpus"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/corpus/revisions/{revision_id}/counts": {
+      "get": {
+        "operationId": "getCorpusPrismaCounts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "revision_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Revision Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrismaCounts"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Counts Route",
+        "tags": [
+          "corpus"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/corpus/split": {
+      "post": {
+        "operationId": "splitCorpusOccurrences",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SplitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityRevision"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Split Route",
+        "tags": [
+          "corpus"
+        ]
       }
     },
     "/api/projects/{project_id}/protocol-versions": {

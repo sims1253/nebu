@@ -14,6 +14,14 @@ export type Id = string
 export const Id = Schema.String.annotate({ "format": "uuid", "identifier": "Id" })
 export type ValidationError = { readonly "ctx"?: { readonly [x: string]: Schema.Json }, readonly "input"?: Schema.Json, readonly "loc": ReadonlyArray<string | number>, readonly "msg": string, readonly "type": string } & { readonly [x: string]: Schema.Json }
 export const ValidationError = Schema.StructWithRest(Schema.Struct({ "ctx": Schema.optionalKey(Schema.Record(Schema.String, Schema.Json.annotate({ "expected": "JSON value" })).annotate({ "title": "Context" })), "input": Schema.optionalKey(Schema.Json.annotate({ "expected": "JSON value", "title": "Input" })), "loc": Schema.Array(Schema.Union([Schema.String, Schema.Int])).annotate({ "title": "Location" }), "msg": Schema.String.annotate({ "title": "Message" }), "type": Schema.String.annotate({ "title": "Error Type" }) }), [Schema.Record(Schema.String, Schema.Json.annotate({ "expected": "JSON value" }))]).annotate({ "title": "ValidationError", "identifier": "ValidationError" })
+export type Relation = "same_record" | "same_report" | "same_study"
+export const Relation = Schema.Literals(["same_record", "same_report", "same_study"]).annotate({ "identifier": "Relation" })
+export type ProposalStatus = "pending" | "confirmed" | "rejected"
+export const ProposalStatus = Schema.Literals(["pending", "confirmed", "rejected"]).annotate({ "identifier": "ProposalStatus" })
+export type PrismaCounts = { readonly "duplicates_removed": number, readonly "records_identified_per_source": { readonly [x: string]: number }, readonly "studies_identified": number, readonly "total_records_identified": number, readonly "unique_records": number }
+export const PrismaCounts = Schema.Struct({ "duplicates_removed": Schema.Number.annotate({ "title": "Duplicates Removed" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "records_identified_per_source": Schema.Record(Schema.String, Schema.Int).annotate({ "title": "Records Identified Per Source" }), "studies_identified": Schema.Number.annotate({ "title": "Studies Identified" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "total_records_identified": Schema.Number.annotate({ "title": "Total Records Identified" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "unique_records": Schema.Number.annotate({ "title": "Unique Records" }).check(Schema.isInt().annotate({ "expected": "an integer" })) }).annotate({ "title": "PrismaCounts", "identifier": "PrismaCounts" })
+export type SplitLevel = "report" | "study"
+export const SplitLevel = Schema.Literals(["report", "study"]).annotate({ "identifier": "SplitLevel" })
 export type Sha256 = string
 export const Sha256 = Schema.String.check(Schema.isPattern(new RegExp("^[0-9a-f]{64}$", "u")).annotate({ "expected": "a string matching the RegExp ^[0-9a-f]{64}$", "identifier": "Sha256" }))
 export type LanguageCode = string
@@ -50,12 +58,22 @@ export type SearchPlan = { readonly "limits"?: ReadonlyArray<string>, readonly "
 export const SearchPlan = Schema.Struct({ "limits": Schema.optionalKey(Schema.Array(Schema.String).annotate({ "title": "Limits", "default": [] })), "platform": Schema.String.annotate({ "title": "Platform" }), "source": Schema.String.annotate({ "title": "Source" }), "strategy": Schema.String.annotate({ "title": "Strategy" }), "topic_id": Schema.String.annotate({ "title": "Topic Id" }) }).annotate({ "title": "SearchPlan", "identifier": "SearchPlan" })
 export type ProtocolIssue = { readonly "message": string, readonly "path": string }
 export const ProtocolIssue = Schema.Struct({ "message": Schema.String.annotate({ "title": "Message" }), "path": Schema.String.annotate({ "title": "Path" }) }).annotate({ "title": "ProtocolIssue", "identifier": "ProtocolIssue" })
+export type ConfirmRequest = { readonly "actor_id": Id, readonly "proposal_id": Id, readonly "revision_id": Id }
+export const ConfirmRequest = Schema.Struct({ "actor_id": Id, "proposal_id": Id, "revision_id": Id }).annotate({ "title": "ConfirmRequest", "identifier": "ConfirmRequest" })
+export type IdentityRevision = { readonly "event_id"?: Id | null, readonly "event_seq"?: number, readonly "id": Id, readonly "parent_id"?: Id | null, readonly "project_id": Id }
+export const IdentityRevision = Schema.Struct({ "event_id": Schema.optionalKey(Schema.Union([Id, Schema.Null])), "event_seq": Schema.optionalKey(Schema.Number.annotate({ "title": "Event Seq", "default": 0 }).check(Schema.isInt().annotate({ "expected": "an integer" }))), "id": Id, "parent_id": Schema.optionalKey(Schema.Union([Id, Schema.Null])), "project_id": Id }).annotate({ "title": "IdentityRevision", "identifier": "IdentityRevision" })
 export type ProtocolVersionSummary = { readonly "content_hash": string, readonly "created_at": string, readonly "id": Id, readonly "parent_id": Id | null, readonly "published_at": string | null, readonly "status": "draft" | "published", readonly "version_label": string }
 export const ProtocolVersionSummary = Schema.Struct({ "content_hash": Schema.String.annotate({ "title": "Content Hash" }), "created_at": Schema.String.annotate({ "title": "Created At", "format": "date-time" }), "id": Id, "parent_id": Schema.Union([Id, Schema.Null]), "published_at": Schema.Union([Schema.String.annotate({ "format": "date-time" }), Schema.Null]).annotate({ "title": "Published At" }), "status": Schema.Literals(["draft", "published"]).annotate({ "title": "Status" }), "version_label": Schema.String.annotate({ "title": "Version Label" }) }).annotate({ "title": "ProtocolVersionSummary", "identifier": "ProtocolVersionSummary" })
 export type PublishRequest = { readonly "approved_by": Id, readonly "reason"?: string | null }
 export const PublishRequest = Schema.Struct({ "approved_by": Id, "reason": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Reason" })) }).annotate({ "title": "PublishRequest", "identifier": "PublishRequest" })
 export type HTTPValidationError = { readonly "detail"?: ReadonlyArray<ValidationError> } & { readonly [x: string]: Schema.Json }
 export const HTTPValidationError = Schema.StructWithRest(Schema.Struct({ "detail": Schema.optionalKey(Schema.Array(ValidationError).annotate({ "title": "Detail" })) }), [Schema.Record(Schema.String, Schema.Json.annotate({ "expected": "JSON value" }))]).annotate({ "title": "HTTPValidationError", "identifier": "HTTPValidationError" })
+export type MergeRequest = { readonly "actor_id": Id, readonly "occurrence_ids": ReadonlyArray<Id>, readonly "reason"?: string, readonly "relation": Relation, readonly "revision_id": Id }
+export const MergeRequest = Schema.Struct({ "actor_id": Id, "occurrence_ids": Schema.Array(Id).annotate({ "title": "Occurrence Ids" }), "reason": Schema.optionalKey(Schema.String.annotate({ "title": "Reason", "default": "" })), "relation": Relation, "revision_id": Id }).annotate({ "title": "MergeRequest", "identifier": "MergeRequest" })
+export type LinkProposal = { readonly "evidence": ReadonlyArray<string>, readonly "id"?: Id, readonly "occurrence_ids": ReadonlyArray<Id>, readonly "relation": Relation, readonly "status"?: ProposalStatus }
+export const LinkProposal = Schema.Struct({ "evidence": Schema.Array(Schema.String).annotate({ "title": "Evidence" }), "id": Schema.optionalKey(Id), "occurrence_ids": Schema.Array(Id).annotate({ "title": "Occurrence Ids" }), "relation": Relation, "status": Schema.optionalKey(Schema.suspend((): Schema.Codec<ProposalStatus> => ProposalStatus).annotate({ "default": "pending" })) }).annotate({ "title": "LinkProposal", "identifier": "LinkProposal" })
+export type SplitRequest = { readonly "actor_id": Id, readonly "level": SplitLevel, readonly "occurrence_ids": ReadonlyArray<Id>, readonly "reason"?: string, readonly "revision_id": Id }
+export const SplitRequest = Schema.Struct({ "actor_id": Id, "level": SplitLevel, "occurrence_ids": Schema.Array(Id).annotate({ "title": "Occurrence Ids" }), "reason": Schema.optionalKey(Schema.String.annotate({ "title": "Reason", "default": "" })), "revision_id": Id }).annotate({ "title": "SplitRequest", "identifier": "SplitRequest" })
 export type SourceRecord = { readonly "abstract"?: string | null, readonly "authors"?: ReadonlyArray<string>, readonly "doi"?: string | null, readonly "journal"?: string | null, readonly "occurrence_id": Id, readonly "ordinal": number, readonly "pmid"?: string | null, readonly "provider_record_id": string, readonly "publication_types"?: ReadonlyArray<string>, readonly "raw_hash": Sha256, readonly "registry_ids"?: ReadonlyArray<string>, readonly "source": string, readonly "title": string, readonly "year"?: number | null }
 export const SourceRecord = Schema.Struct({ "abstract": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Abstract" })), "authors": Schema.optionalKey(Schema.Array(Schema.String).annotate({ "title": "Authors", "default": [] })), "doi": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Doi" })), "journal": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Journal" })), "occurrence_id": Id, "ordinal": Schema.Number.annotate({ "title": "Ordinal" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "pmid": Schema.optionalKey(Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Pmid" })), "provider_record_id": Schema.String.annotate({ "title": "Provider Record Id" }), "publication_types": Schema.optionalKey(Schema.Array(Schema.String).annotate({ "title": "Publication Types", "default": [] })), "raw_hash": Sha256, "registry_ids": Schema.optionalKey(Schema.Array(Schema.String).annotate({ "title": "Registry Ids", "default": [] })), "source": Schema.String.annotate({ "title": "Source" }), "title": Schema.String.annotate({ "title": "Title" }), "year": Schema.optionalKey(Schema.Union([Schema.Int, Schema.Null]).annotate({ "title": "Year" })) }).annotate({ "title": "SourceRecord", "description": "One record as a source returned it, before dedupe.\n\n`occurrence_id` is assigned when the search module stores the execution; corpus and every\nlater stage refer to records by it.", "identifier": "SourceRecord" })
 export type LocalizedText = { readonly [x: string]: Text }
@@ -107,6 +125,34 @@ export const StoredProtocol = Schema.Struct({ "approved_by": Schema.optionalKey(
 // schemas
 export type GetHealth200 = Health
 export const GetHealth200 = Health
+export type ConfirmCorpusProposalRequestJson = ConfirmRequest
+export const ConfirmCorpusProposalRequestJson = ConfirmRequest
+export type ConfirmCorpusProposal200 = IdentityRevision
+export const ConfirmCorpusProposal200 = IdentityRevision
+export type ConfirmCorpusProposal422 = HTTPValidationError
+export const ConfirmCorpusProposal422 = HTTPValidationError
+export type MergeCorpusOccurrencesRequestJson = MergeRequest
+export const MergeCorpusOccurrencesRequestJson = MergeRequest
+export type MergeCorpusOccurrences200 = IdentityRevision
+export const MergeCorpusOccurrences200 = IdentityRevision
+export type MergeCorpusOccurrences422 = HTTPValidationError
+export const MergeCorpusOccurrences422 = HTTPValidationError
+export type ListCorpusProposalsParams = { readonly "corpus_revision_id"?: Id | null, readonly "status"?: ProposalStatus | null }
+export const ListCorpusProposalsParams = Schema.Struct({ "corpus_revision_id": Schema.optionalKey(Schema.Union([Id, Schema.Null]).annotate({ "title": "Corpus Revision Id" })), "status": Schema.optionalKey(Schema.Union([ProposalStatus, Schema.Null]).annotate({ "title": "Status" })) })
+export type ListCorpusProposals200 = ReadonlyArray<LinkProposal>
+export const ListCorpusProposals200 = Schema.Array(LinkProposal).annotate({ "title": "Response Listcorpusproposals" })
+export type ListCorpusProposals422 = HTTPValidationError
+export const ListCorpusProposals422 = HTTPValidationError
+export type GetCorpusPrismaCounts200 = PrismaCounts
+export const GetCorpusPrismaCounts200 = PrismaCounts
+export type GetCorpusPrismaCounts422 = HTTPValidationError
+export const GetCorpusPrismaCounts422 = HTTPValidationError
+export type SplitCorpusOccurrencesRequestJson = SplitRequest
+export const SplitCorpusOccurrencesRequestJson = SplitRequest
+export type SplitCorpusOccurrences200 = IdentityRevision
+export const SplitCorpusOccurrences200 = IdentityRevision
+export type SplitCorpusOccurrences422 = HTTPValidationError
+export const SplitCorpusOccurrences422 = HTTPValidationError
 export type ListProtocolVersions200 = ReadonlyArray<ProtocolVersionSummary>
 export const ListProtocolVersions200 = Schema.Array(ProtocolVersionSummary).annotate({ "title": "Response Listprotocolversions" })
 export type ListProtocolVersions422 = HTTPValidationError
@@ -264,6 +310,55 @@ export const make = (
       orElse: unexpectedStatus
     }))
     ),
+    "confirmCorpusProposal": (projectId, options: Parameters<KittumApi["confirmCorpusProposal"]>[1]) => __makePathRequest(HttpClientRequest.post, [projectId], () => "/api/projects/" + __encodePathParam(projectId) + "/corpus/confirm").pipe(
+    Effect.flatMap((request) => request.pipe(
+      HttpClientRequest.bodyJsonUnsafe(options.payload),
+      withResponse(options.config)(HttpClientResponse.matchStatus({
+      "2xx": decodeSuccess(ConfirmCorpusProposal200),
+      "422": decodeError("ConfirmCorpusProposal422", ConfirmCorpusProposal422),
+      orElse: unexpectedStatus
+    }))
+    ))
+  ),
+    "mergeCorpusOccurrences": (projectId, options: Parameters<KittumApi["mergeCorpusOccurrences"]>[1]) => __makePathRequest(HttpClientRequest.post, [projectId], () => "/api/projects/" + __encodePathParam(projectId) + "/corpus/merge").pipe(
+    Effect.flatMap((request) => request.pipe(
+      HttpClientRequest.bodyJsonUnsafe(options.payload),
+      withResponse(options.config)(HttpClientResponse.matchStatus({
+      "2xx": decodeSuccess(MergeCorpusOccurrences200),
+      "422": decodeError("MergeCorpusOccurrences422", MergeCorpusOccurrences422),
+      orElse: unexpectedStatus
+    }))
+    ))
+  ),
+    "listCorpusProposals": (projectId, options: Parameters<KittumApi["listCorpusProposals"]>[1]) => __makePathRequest(HttpClientRequest.get, [projectId], () => "/api/projects/" + __encodePathParam(projectId) + "/corpus/proposals").pipe(
+    Effect.flatMap((request) => request.pipe(
+      HttpClientRequest.setUrlParams({ "corpus_revision_id": options?.params?.["corpus_revision_id"] as any, "status": options?.params?.["status"] as any }),
+      withResponse(options?.config)(HttpClientResponse.matchStatus({
+      "2xx": decodeSuccess(ListCorpusProposals200),
+      "422": decodeError("ListCorpusProposals422", ListCorpusProposals422),
+      orElse: unexpectedStatus
+    }))
+    ))
+  ),
+    "getCorpusPrismaCounts": (projectId, revisionId, options: Parameters<KittumApi["getCorpusPrismaCounts"]>[2]) => __makePathRequest(HttpClientRequest.get, [projectId, revisionId], () => "/api/projects/" + __encodePathParam(projectId) + "/corpus/revisions/" + __encodePathParam(revisionId) + "/counts").pipe(
+    Effect.flatMap((request) => request.pipe(
+      withResponse(options?.config)(HttpClientResponse.matchStatus({
+      "2xx": decodeSuccess(GetCorpusPrismaCounts200),
+      "422": decodeError("GetCorpusPrismaCounts422", GetCorpusPrismaCounts422),
+      orElse: unexpectedStatus
+    }))
+    ))
+  ),
+    "splitCorpusOccurrences": (projectId, options: Parameters<KittumApi["splitCorpusOccurrences"]>[1]) => __makePathRequest(HttpClientRequest.post, [projectId], () => "/api/projects/" + __encodePathParam(projectId) + "/corpus/split").pipe(
+    Effect.flatMap((request) => request.pipe(
+      HttpClientRequest.bodyJsonUnsafe(options.payload),
+      withResponse(options.config)(HttpClientResponse.matchStatus({
+      "2xx": decodeSuccess(SplitCorpusOccurrences200),
+      "422": decodeError("SplitCorpusOccurrences422", SplitCorpusOccurrences422),
+      orElse: unexpectedStatus
+    }))
+    ))
+  ),
     "listProtocolVersions": (projectId, options: Parameters<KittumApi["listProtocolVersions"]>[1]) => __makePathRequest(HttpClientRequest.get, [projectId], () => "/api/projects/" + __encodePathParam(projectId) + "/protocol-versions").pipe(
     Effect.flatMap((request) => request.pipe(
       withResponse(options?.config)(HttpClientResponse.matchStatus({
@@ -360,6 +455,41 @@ export interface KittumApi {
 readonly "getHealth": {
     <Config extends OperationConfig | undefined = undefined>(options: { readonly config: Config }): Effect.Effect<WithOptionalResponse<GetHealth200, Config>, HttpClientError.HttpClientError | SchemaError>;
     <Config extends OperationConfig | undefined = undefined>(options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<GetHealth200, Config | undefined>, HttpClientError.HttpClientError | SchemaError>;
+  }
+  /**
+* Confirm Route
+*/
+readonly "confirmCorpusProposal": {
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly payload: typeof ConfirmCorpusProposalRequestJson.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<ConfirmCorpusProposal200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ConfirmCorpusProposal422", ConfirmCorpusProposal422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly payload: typeof ConfirmCorpusProposalRequestJson.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<ConfirmCorpusProposal200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ConfirmCorpusProposal422", ConfirmCorpusProposal422>>;
+  }
+  /**
+* Merge Route
+*/
+readonly "mergeCorpusOccurrences": {
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly payload: typeof MergeCorpusOccurrencesRequestJson.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<MergeCorpusOccurrences200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"MergeCorpusOccurrences422", MergeCorpusOccurrences422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly payload: typeof MergeCorpusOccurrencesRequestJson.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<MergeCorpusOccurrences200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"MergeCorpusOccurrences422", MergeCorpusOccurrences422>>;
+  }
+  /**
+* List Proposals Route
+*/
+readonly "listCorpusProposals": {
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly params?: typeof ListCorpusProposalsParams.Encoded | undefined; readonly config: Config }): Effect.Effect<WithOptionalResponse<ListCorpusProposals200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ListCorpusProposals422", ListCorpusProposals422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly params?: typeof ListCorpusProposalsParams.Encoded | undefined; readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<ListCorpusProposals200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ListCorpusProposals422", ListCorpusProposals422>>;
+  }
+  /**
+* Get Counts Route
+*/
+readonly "getCorpusPrismaCounts": {
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, revisionId: string, options: { readonly config: Config }): Effect.Effect<WithOptionalResponse<GetCorpusPrismaCounts200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetCorpusPrismaCounts422", GetCorpusPrismaCounts422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, revisionId: string, options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<GetCorpusPrismaCounts200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetCorpusPrismaCounts422", GetCorpusPrismaCounts422>>;
+  }
+  /**
+* Split Route
+*/
+readonly "splitCorpusOccurrences": {
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly payload: typeof SplitCorpusOccurrencesRequestJson.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<SplitCorpusOccurrences200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"SplitCorpusOccurrences422", SplitCorpusOccurrences422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly payload: typeof SplitCorpusOccurrencesRequestJson.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<SplitCorpusOccurrences200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"SplitCorpusOccurrences422", SplitCorpusOccurrences422>>;
   }
   /**
 * List Protocol Versions
