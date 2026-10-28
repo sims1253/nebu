@@ -32,6 +32,9 @@ class Settings:
     openalex_api_key: str | None = None
     llm_endpoints: tuple[LlmEndpoint, ...] = field(default=())
     grobid_url: str | None = None
+    # Ed25519 private key (PEM) that signs ledger checkpoints and bundles. Hold it apart from the
+    # database administrator: `openssl genpkey -algorithm ed25519 -out checkpoint.pem`.
+    checkpoint_key_path: Path | None = None
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -46,4 +49,7 @@ class Settings:
             openalex_api_key=env.get("KITTUM_OPENALEX_API_KEY"),
             llm_endpoints=_endpoints(env.get("KITTUM_LLM_ENDPOINTS", "")),
             grobid_url=env.get("KITTUM_GROBID_URL"),
+            checkpoint_key_path=(
+                Path(env["KITTUM_CHECKPOINT_KEY"]) if env.get("KITTUM_CHECKPOINT_KEY") else None
+            ),
         )

@@ -12,8 +12,8 @@ The two-week spike in [DESIGN.md](../DESIGN.md#two-week-spike) picks from these 
 | WP | Module | Status |
 | --- | --- | --- |
 | 00 | Scaffold: `core`, layout, CI, compose, contracts pipeline | Done |
-| 01 | `ledger` | Chain definition and in-memory fake done; stores open |
-| 02 | `runs` | Types done; queue open |
+| 01 | `ledger` | Done: Postgres and SQLite stores, checkpoints, `seal`, `kittum verify`; TSA and WORM copies open |
+| 02 | `runs` | Done: job queue, worker, receipts, decider helper, fakes; run manifests and `diff` open |
 | 03 | `protocol` | First-cut types; open |
 | 04 | `gateway` | Done: httpx transport, policies, shared buckets, budgets, cache, attempts; AppContext wiring open |
 | 05 | `search` | Types done; open |
@@ -42,6 +42,36 @@ Module `kittum.ledger`. Needs: `core`.
 - Acceptance: both stores pass one shared test suite. Verify catches a changed payload, a removed
   event, a reordered event, and a cut tail after a checkpoint.
 
+**Done.** `PostgresLedger`, `SqliteLedger`, and `InMemoryLedger` share one implementation of the
+chain rules (`ledger/store.py`); `tests/ledger/test_stores.py` runs one suite over all three.
+
+- Postgres appends take `pg_advisory_xact_lock` on the project, held until the caller commits.
+- `checkpoint(tx, project_id, signer)` verifies the chain, signs the head with Ed25519, and stores
+  the row. `verify(tx, project_id, checkpoint=..., key=...)` catches a cut tail and a chain
+  rewritten from some point on, which the chain alone cannot. `VerifyReport.problem` names what
+  failed. The key comes from `KITTUM_CHECKPOINT_KEY` (`Settings.checkpoint_key_path`); the key ID
+  is the SHA-256 of the raw public key.
+- `seal(tx, project_id, cutoff_seq, store, out_dir, signer=..., actor_id=...)` writes
+  `kittum.sqlite` (ledger through the cutoff, checkpoints, artifact index), `artifacts/`, and a
+  signed `manifest.json`, and records a `ledger.bundle_sealed` event. Modules add tables and
+  artifacts with `register_exporter(exporter)`; a withheld artifact is indexed by hash with a
+  reason, and a withhold wins over an include.
+- `kittum verify <bundle> [--public-key pem]` checks offline: the manifest signature, the
+  checkpoint signature, chain continuity to the cutoff, file hashes, unlisted files, and the
+  artifact index. Without `--public-key` it uses the bundle's own key and says the key is not
+  pinned.
+
+Left open:
+
+- RFC 3161 timestamps over checkpoints (`tsa_token_hash` stays empty) and copies of checkpoints
+  outside the database (WORM storage). Until then, pass `verify` a checkpoint kept elsewhere.
+- Scheduled checkpoints at stage gates and daily, once `runs` and the stage gates exist.
+- The `checkpoint` table has no append-only trigger, because it is in the foundation migration.
+  A trusted external copy covers this; a trigger would be a small foundation change.
+- Bundle contents from DESIGN.md beyond the ledger: `dossier/`, `registry/`, count
+  reconciliation, and the "every accepted value has an anchor" check belong to the exporters of
+  `report`, `extraction`, and `documents`.
+
 ## WP-02 Runs and jobs
 
 Module `kittum.runs`. Needs: `ledger`.
@@ -53,6 +83,30 @@ Module `kittum.runs`. Needs: `ledger`.
 - A worker loop with graceful shutdown, and an in-memory queue fake.
 - Acceptance: two workers never run the same job; a crashed worker's job is reclaimed after its
   lease; a replayed command is a no-op.
+
+**Done.** `tests/runs/test_queue.py` runs one suite over `PostgresJobQueue` and the
+`InMemoryJobQueue` fake.
+
+- `JobQueue` methods take the caller's `tx`. A claimed `Job` is the lease token: `heartbeat`,
+  `complete`, and `fail` check owner and attempt and raise `LeaseLost` otherwise. Expired leases
+  are reclaimed; an expired lease on the last attempt dead-letters the job.
+- `fail` requeues with exponential backoff and jitter (`RetryPolicy`), and marks the job `dead`
+  after `max_attempts`; `retryable=False` (or `PermanentJobError` in a handler) marks it `failed`.
+- `enqueue` with an existing `stage_key` returns the existing job, or raises `StageKeyConflict` if
+  the inputs differ.
+- `Commands(ledger, queue, receipts).execute(tx, command, decide, load=..., apply=...)` locks the
+  command ID, returns a stored receipt unchanged, or decides, appends events, applies rows,
+  enqueues jobs, and saves the receipt in one transaction.
+- `Worker(db, queue, handlers, name=...)` claims, heartbeats in a thread, and completes the job in
+  the same transaction as the handler's `JobOutput.publish`. `stop()` (or `stop_on_signals()`)
+  lets the current job finish. Fakes: `InMemoryJobQueue`, `InMemoryReceipts`, `NullTransactions`.
+
+Left open:
+
+- Run manifests, cache keys, branch runs, and `runs.diff` (DESIGN.md "Runs and reproducibility").
+- A `kittum worker` entry point that builds handlers from the modules.
+- Receipts do not store a command hash, so a reused command ID with a different payload but the
+  same type returns the old receipt. Detecting that needs a column on `command_receipt`.
 
 ## WP-03 Protocol
 

@@ -4,68 +4,66 @@ Every module that changes state writes an `EventDraft` in the same transaction a
 The ledger assigns the sequence number and the chain hash. `chain.event_hash` defines the hash, so
 the Postgres store, the SQLite handover bundle, and the offline `verify` tool agree.
 
-Owner: WP-01. Shipped now: the event types, the hash definition, and an in-memory fake in
-`kittum.ledger.testing`. Still to build: the Postgres and SQLite stores, checkpoints, and `seal`.
+- `PostgresLedger` is the live store. Appends serialize per project on an advisory lock held
+  until the caller commits.
+- `SqliteLedger` is the bundle's store and a test store; `InMemoryLedger` in
+  `kittum.ledger.testing` is the fake. All three share one implementation of the chain rules.
+- `checkpoint` signs the chain head with an Ed25519 `SigningKey`. A hash chain alone cannot show
+  that its end was cut or that it was rewritten from some point on; `verify` against a checkpoint
+  can.
+- `seal` writes a handover bundle; `verify_bundle` (and `kittum verify`) checks one offline.
+  Modules add their tables to bundles with `register_exporter`.
 """
 
-from datetime import datetime
-from typing import TYPE_CHECKING, Any, Protocol
-
-from kittum.core import Id, Record, Sha256
+from kittum.ledger.bundle import (
+    EXPORTERS,
+    Bundle,
+    BundleReport,
+    BundleWriter,
+    Exporter,
+    ExporterRegistry,
+    register_exporter,
+    seal,
+    verify_bundle,
+)
 from kittum.ledger.chain import GENESIS_HASH, event_hash, payload_hash
-
-if TYPE_CHECKING:
-    from kittum.db import Tx
-
-
-class EventDraft(Record):
-    """An event before the ledger has placed it in the chain."""
-
-    project_id: Id
-    type: str
-    schema_version: int
-    actor_id: Id
-    payload: dict[str, Any]
-
-
-class AuditEvent(Record):
-    project_id: Id
-    seq: int
-    event_id: Id
-    type: str
-    schema_version: int
-    actor_id: Id
-    recorded_at: datetime
-    payload: dict[str, Any]
-    payload_hash: Sha256
-    prev_hash: Sha256
-    event_hash: Sha256
-
-
-class VerifyReport(Record):
-    project_id: Id
-    checked_through_seq: int
-    ok: bool
-    first_bad_seq: int | None = None
-    reason: str | None = None
-
-
-class Ledger(Protocol):
-    """Appends run inside the caller's transaction (see `kittum.db`)."""
-
-    def append(self, tx: Tx, draft: EventDraft) -> AuditEvent: ...
-
-    def events(self, tx: Tx, project_id: Id, *, after_seq: int = 0) -> list[AuditEvent]: ...
-
-    def verify(self, tx: Tx, project_id: Id) -> VerifyReport: ...
-
+from kittum.ledger.keys import SigningKey, VerifyKey
+from kittum.ledger.model import (
+    AuditEvent,
+    Checkpoint,
+    EventDraft,
+    Ledger,
+    LedgerIntegrityError,
+    Problem,
+    VerifyReport,
+)
+from kittum.ledger.postgres import PostgresLedger
+from kittum.ledger.sqlite import SqliteLedger
+from kittum.ledger.verify import verify_chain
 
 __all__ = [
+    "EXPORTERS",
     "GENESIS_HASH",
     "AuditEvent",
+    "Bundle",
+    "BundleReport",
+    "BundleWriter",
+    "Checkpoint",
     "EventDraft",
+    "Exporter",
+    "ExporterRegistry",
     "Ledger",
+    "LedgerIntegrityError",
+    "PostgresLedger",
+    "Problem",
+    "SigningKey",
+    "SqliteLedger",
+    "VerifyKey",
     "VerifyReport",
     "event_hash",
     "payload_hash",
+    "register_exporter",
+    "seal",
+    "verify_bundle",
+    "verify_chain",
 ]

@@ -1,86 +1,66 @@
 """An in-memory ledger for tests in any module. It follows the real chain rules.
 
-It ignores the transaction; pass `kittum.db.testing.NullTx()`.
+It ignores the transaction; pass `kittum.db.testing.null_tx()`. `seed_project` creates the
+foundation rows that a Postgres `audit_event` needs.
 """
 
+import threading
+from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
-from kittum.core import Clock, Id, SystemClock, new_id
-from kittum.ledger import AuditEvent, EventDraft, VerifyReport
-from kittum.ledger.chain import GENESIS_HASH, event_hash, payload_hash
+from kittum.core import new_id
+from kittum.ledger.store import ChainStore
 
 if TYPE_CHECKING:
+    from collections.abc import Generator, Iterator
+
+    from kittum.core import Clock, Id
     from kittum.db import Tx
+    from kittum.ledger.model import AuditEvent, Checkpoint
 
 
-class InMemoryLedger:
+class InMemoryLedger(ChainStore):
     def __init__(self, clock: Clock | None = None) -> None:
-        self._clock = clock or SystemClock()
+        super().__init__(clock)
+        self._lock = threading.RLock()
         self._events: dict[Id, list[AuditEvent]] = {}
+        self._checkpoints: dict[Id, list[Checkpoint]] = {}
 
-    def append(self, tx: Tx, draft: EventDraft) -> AuditEvent:
-        chain = self._events.setdefault(draft.project_id, [])
-        seq = len(chain) + 1
-        prev = chain[-1].event_hash if chain else GENESIS_HASH
-        event_id = new_id()
-        recorded_at = self._clock.now()
-        p_hash = payload_hash(draft.payload)
-        event = AuditEvent(
-            project_id=draft.project_id,
-            seq=seq,
-            event_id=event_id,
-            type=draft.type,
-            schema_version=draft.schema_version,
-            actor_id=draft.actor_id,
-            recorded_at=recorded_at,
-            payload=draft.payload,
-            payload_hash=p_hash,
-            prev_hash=prev,
-            event_hash=event_hash(
-                project_id=draft.project_id,
-                seq=seq,
-                event_id=event_id,
-                type=draft.type,
-                schema_version=draft.schema_version,
-                actor_id=draft.actor_id,
-                recorded_at=recorded_at,
-                payload_hash=p_hash,
-                prev_hash=prev,
-            ),
-        )
-        chain.append(event)
-        return event
+    @contextmanager
+    def _atomic(self, tx: Tx) -> Generator[None]:
+        with self._lock:
+            yield
 
-    def events(self, tx: Tx, project_id: Id, *, after_seq: int = 0) -> list[AuditEvent]:
-        return [e for e in self._events.get(project_id, []) if e.seq > after_seq]
+    def _lock_head(self, tx: Tx, project_id: Id) -> AuditEvent | None:
+        chain = self._events.get(project_id)
+        return chain[-1] if chain else None
 
-    def verify(self, tx: Tx, project_id: Id) -> VerifyReport:
-        prev = GENESIS_HASH
-        chain = self._events.get(project_id, [])
-        for expected_seq, e in enumerate(chain, start=1):
-            recomputed = event_hash(
-                project_id=e.project_id,
-                seq=e.seq,
-                event_id=e.event_id,
-                type=e.type,
-                schema_version=e.schema_version,
-                actor_id=e.actor_id,
-                recorded_at=e.recorded_at,
-                payload_hash=e.payload_hash,
-                prev_hash=prev,
-            )
-            if (
-                e.seq != expected_seq
-                or e.prev_hash != prev
-                or e.payload_hash != payload_hash(e.payload)
-                or e.event_hash != recomputed
-            ):
-                return VerifyReport(
-                    project_id=project_id,
-                    checked_through_seq=expected_seq - 1,
-                    ok=False,
-                    first_bad_seq=e.seq,
-                    reason="chain mismatch",
-                )
-            prev = e.event_hash
-        return VerifyReport(project_id=project_id, checked_through_seq=len(chain), ok=True)
+    def _insert_event(self, tx: Tx, event: AuditEvent) -> None:
+        self._events.setdefault(event.project_id, []).append(event)
+
+    def _iter_events(
+        self, tx: Tx, project_id: Id, after_seq: int, through_seq: int | None
+    ) -> Iterator[AuditEvent]:
+        for e in list(self._events.get(project_id, [])):
+            if e.seq > after_seq and (through_seq is None or e.seq <= through_seq):
+                yield e
+
+    def _insert_checkpoint(self, tx: Tx, checkpoint: Checkpoint) -> None:
+        self._checkpoints.setdefault(checkpoint.project_id, []).append(checkpoint)
+
+    def checkpoints(self, tx: Tx, project_id: Id) -> list[Checkpoint]:
+        return sorted(self._checkpoints.get(project_id, []), key=lambda c: c.seq)
+
+
+def seed_project(tx: Tx, *, name: str = "test project") -> tuple[Id, Id]:
+    """Insert a project and a system actor; return their IDs."""
+    project_id, actor_id = new_id(), new_id()
+    tx.execute(
+        "insert into project (id, name, policy_version) values (%s, %s, 'test')",
+        (project_id, name),
+    )
+    tx.execute(
+        "insert into actor (id, identity_ref, kind) values (%s, %s, 'system')",
+        (actor_id, f"test:{actor_id}"),
+    )
+    return project_id, actor_id
