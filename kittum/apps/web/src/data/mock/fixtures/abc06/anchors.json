@@ -1,0 +1,984 @@
+{
+ "mentions": {
+  "C_POP_ADV_BTC": [
+   {
+    "id": "2776bac9-18ca-543e-9726-fdbcaba8ad94",
+    "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+    "quote": {
+     "exact": "histologically or cytologically\nverified locally advanced",
+     "prefix": "tients (aged ≥18 years) who had ",
+     "suffix": " or metastatic biliary tract can"
+    },
+    "start": 2623,
+    "end": 2680,
+    "boxes": [
+     {
+      "page": 1,
+      "x0": 447.78,
+      "y0": 314.17,
+      "x1": 558.48,
+      "y1": 324.91
+     },
+     {
+      "page": 1,
+      "x0": 119.06,
+      "y0": 325.17,
+      "x1": 216.78,
+      "y1": 335.91
+     }
+    ]
+   },
+   {
+    "id": "109885dc-1396-5f1a-a243-f6ae4a7d97a3",
+    "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+    "quote": {
+     "exact": "locally advanced or metastatic biliary tract cancer",
+     "prefix": "cally or cytologically\nverified ",
+     "suffix": " (including cholangiocarcinoma a"
+    },
+    "start": 2664,
+    "end": 2715,
+    "boxes": [
+     {
+      "page": 1,
+      "x0": 152.27,
+      "y0": 325.17,
+      "x1": 352.9,
+      "y1": 335.91
+     }
+    ]
+   },
+   {
+    "id": "46435efe-3246-5a65-8c05-c9c482d5a6a3",
+    "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+    "quote": {
+     "exact": "aged 18 years or older",
+     "prefix": "ents were eligible if they were ",
+     "suffix": "\nand had histologically or cytol"
+    },
+    "start": 13893,
+    "end": 13915,
+    "boxes": [
+     {
+      "page": 3,
+      "x0": 252.8,
+      "y0": 424.17,
+      "x1": 333.03,
+      "y1": 434.91
+     }
+    ]
+   },
+   {
+    "id": "a1008486-4089-5420-aaed-023868c3d01a",
+    "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+    "quote": {
+     "exact": "histologically or cytologically verified locally\nadvanced",
+     "prefix": " aged 18 years or older\nand had ",
+     "suffix": " or metastatic biliary tract can"
+    },
+    "start": 13924,
+    "end": 13981,
+    "boxes": [
+     {
+      "page": 3,
+      "x0": 158.11,
+      "y0": 435.17,
+      "x1": 333.08,
+      "y1": 445.91
+     },
+     {
+      "page": 3,
+      "x0": 119.06,
+      "y0": 446.17,
+      "x1": 153.58,
+      "y1": 456.91
+     }
+    ]
+   },
+   {
+    "id": "aaf24841-8b31-5e67-aed0-68f27e7ad7cd",
+    "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+    "quote": {
+     "exact": "locally\nadvanced or metastatic biliary tract cancer",
+     "prefix": "cally or cytologically verified ",
+     "suffix": " (including\ncholangiocarcinoma, "
+    },
+    "start": 13965,
+    "end": 14016,
+    "boxes": [
+     {
+      "page": 3,
+      "x0": 309.79,
+      "y0": 435.17,
+      "x1": 333.08,
+      "y1": 445.91
+     },
+     {
+      "page": 3,
+      "x0": 119.06,
+      "y0": 446.17,
+      "x1": 289.45,
+      "y1": 456.91
+     }
+    ]
+   },
+   {
+    "id": "31498c52-3ce7-5551-8a2d-ff0acfb3ca82",
+    "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+    "quote": {
+     "exact": "intrahepatic cholangiocarcinoma (in 72",
+     "prefix": ", the primary tumour sites\nwere ",
+     "suffix": " [44%] of\n162 patients), extrahe"
+    },
+    "start": 30196,
+    "end": 30234,
+    "boxes": [
+     {
+      "page": 6,
+      "x0": 59.63,
+      "y0": 270.18,
+      "x1": 213.72,
+      "y1": 280.92
+     }
+    ]
+   }
+  ],
+  "C_POP_PRETREATED": [
+   {
+    "id": "fce2e6ee-c774-55c2-b07c-08f09b65adbe",
+    "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+    "quote": {
+     "exact": "after progression on cisplatin and gemcitabine",
+     "prefix": "h advanced biliary\ntract cancer ",
+     "suffix": ", with a clinically meaningful i"
+    },
+    "start": 5086,
+    "end": 5132,
+    "boxes": [
+     {
+      "page": 1,
+      "x0": 166.75,
+      "y0": 600.16,
+      "x1": 349.15,
+      "y1": 610.9
+     }
+    ]
+   },
+   {
+    "id": "cb25650b-194d-5968-b2a6-6caddcfb7016",
+    "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+    "quote": {
+     "exact": "after progression\non cisplatin and gemcitabine",
+     "prefix": "ole of second-line chemotherapy ",
+     "suffix": " remains unclear, with no\nprospe"
+    },
+    "start": 7335,
+    "end": 7381,
+    "boxes": [
+     {
+      "page": 2,
+      "x0": 187.6,
+      "y0": 721.18,
+      "x1": 250.86,
+      "y1": 731.92
+     },
+     {
+      "page": 2,
+      "x0": 36.85,
+      "y0": 732.18,
+      "x1": 149.3,
+      "y1": 742.92
+     }
+    ]
+   },
+   {
+    "id": "8de25418-c527-53ef-8c52-839a83f6c442",
+    "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+    "quote": {
+     "exact": "progression\non first-line chemotherapy",
+     "prefix": "in performance status following ",
+     "suffix": ", and only 15–25% receive\nsecond"
+    },
+    "start": 7567,
+    "end": 7605,
+    "boxes": [
+     {
+      "page": 2,
+      "x0": 432.17,
+      "y0": 490.18,
+      "x1": 476.22,
+      "y1": 500.92
+     },
+     {
+      "page": 2,
+      "x0": 262.2,
+      "y0": 501.18,
+      "x1": 369.07,
+      "y1": 511.92
+     }
+    ]
+   },
+   {
+    "id": "eea66d72-4627-520c-9e04-5796554bab40",
+    "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+    "quote": {
+     "exact": "progression to previous first-line cisplatin and gemcitabine",
+     "prefix": "ocumented radio­logical disease\n",
+     "suffix": "\nchemotherapy. Any other form of"
+    },
+    "start": 14136,
+    "end": 14196,
+    "boxes": [
+     {
+      "page": 3,
+      "x0": 119.06,
+      "y0": 479.18,
+      "x1": 333.07,
+      "y1": 489.92
+     }
+    ]
+   },
+   {
+    "id": "94dbadf1-dc5a-5ac6-90ed-1c84d4f23280",
+    "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+    "quote": {
+     "exact": "A maximum of 6 weeks was allowed between disease\nprogression",
+     "prefix": "of gemcitabine)\nwere eligible.\n\n",
+     "suffix": " to first-line treatment and the"
+    },
+    "start": 14553,
+    "end": 14613,
+    "boxes": [
+     {
+      "page": 3,
+      "x0": 126.14,
+      "y0": 567.18,
+      "x1": 333.04,
+      "y1": 577.91
+     },
+     {
+      "page": 3,
+      "x0": 119.06,
+      "y0": 578.18,
+      "x1": 163.83,
+      "y1": 588.92
+     }
+    ]
+   }
+  ],
+  "C_INT_ARMS": [
+   {
+    "id": "e75279e2-30b0-5977-9680-8a65fa286cde",
+    "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+    "quote": {
+     "exact": "centrally to active symptom control (ASC) and FOLFOX or ASC alone",
+     "prefix": "–1 were randomly assigned (1:1)\n",
+     "suffix": ". FOLFOX chemotherapy was admini"
+    },
+    "start": 2985,
+    "end": 3050,
+    "boxes": [
+     {
+      "page": 1,
+      "x0": 119.06,
+      "y0": 358.16,
+      "x1": 392.17,
+      "y1": 368.9
+     }
+    ]
+   },
+   {
+    "id": "f2036143-a832-5953-8025-5a87a4a480df",
+    "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+    "quote": {
+     "exact": "FOLFOX chemotherapy was administered",
+     "prefix": " (ASC) and FOLFOX or ASC alone. ",
+     "suffix": "\nintravenously every 2 weeks for"
+    },
+    "start": 3052,
+    "end": 3088,
+    "boxes": [
+     {
+      "page": 1,
+      "x0": 394.78,
+      "y0": 358.16,
+      "x1": 558.39,
+      "y1": 368.9
+     }
+    ]
+   },
+   {
+    "id": "3ecffd2a-2ade-549c-a35b-40bd08f0a862",
+    "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+    "quote": {
+     "exact": "were randomly assigned (1:1) to ASC plus FOLFOX",
+     "prefix": "tudy, with no masking. Patients\n",
+     "suffix": " or\nASC alone. Researchers conta"
+    },
+    "start": 15824,
+    "end": 15871,
+    "boxes": [
+     {
+      "page": 3,
+      "x0": 344.41,
+      "y0": 215.18,
+      "x1": 546.89,
+      "y1": 225.92
+     }
+    ]
+   },
+   {
+    "id": "d6880ad2-689b-5f0e-919f-2592ea3aef31",
+    "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+    "quote": {
+     "exact": "75 (93%) of 81 patients in the ASC plus FOLFOX group",
+     "prefix": "hown in the appendix (pp 5–9).\n\n",
+     "suffix": "\nreceived at least one cycle of "
+    },
+    "start": 35211,
+    "end": 35263,
+    "boxes": [
+     {
+      "page": 7,
+      "x0": 351.62,
+      "y0": 171.18,
+      "x1": 558.52,
+      "y1": 181.92
+     }
+    ]
+   }
+  ],
+  "C_DES_RCT": [
+   {
+    "id": "098cc1c4-f63e-59d8-a587-e158a7c9e16e",
+    "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+    "quote": {
+     "exact": "phase 3, open-label, randomised trial",
+     "prefix": "The ABC-06 clinical trial was a ",
+     "suffix": " done in 20 sites with expertise"
+    },
+    "start": 2465,
+    "end": 2502,
+    "boxes": [
+     {
+      "page": 1,
+      "x0": 279.04,
+      "y0": 303.17,
+      "x1": 424.55,
+      "y1": 313.91
+     }
+    ]
+   },
+   {
+    "id": "72e13059-f899-5ed1-aa91-f229d94a1369",
+    "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+    "quote": {
+     "exact": "minimisation algorithm",
+     "prefix": "domisation was done following a ",
+     "suffix": " using platinum sensitivity, ser"
+    },
+    "start": 3354,
+    "end": 3376,
+    "boxes": [
+     {
+      "page": 1,
+      "x0": 319.78,
+      "y0": 391.16,
+      "x1": 415.74,
+      "y1": 401.89
+     }
+    ]
+   },
+   {
+    "id": "714aace9-df96-591e-bc0e-f6e6666d9a89",
+    "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+    "quote": {
+     "exact": "phase 3, open-label,\nrandomised controlled study",
+     "prefix": "The ABC-06 clinical trial was a ",
+     "suffix": " conducted under the\nauspices of"
+    },
+    "start": 13571,
+    "end": 13619,
+    "boxes": [
+     {
+      "page": 3,
+      "x0": 253.13,
+      "y0": 358.18,
+      "x1": 333.08,
+      "y1": 368.92
+     },
+     {
+      "page": 3,
+      "x0": 119.06,
+      "y0": 369.18,
+      "x1": 237.39,
+      "y1": 379.92
+     }
+    ]
+   },
+   {
+    "id": "8e4d8faf-888c-5841-8eb6-b6d9e17252e1",
+    "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+    "quote": {
+     "exact": "This was an open-label study, with no masking",
+     "prefix": "ace.\n\nRandomisation and masking\n",
+     "suffix": ". Patients\nwere randomly assigne"
+    },
+    "start": 15768,
+    "end": 15813,
+    "boxes": [
+     {
+      "page": 3,
+      "x0": 344.41,
+      "y0": 204.18,
+      "x1": 525.48,
+      "y1": 214.92
+     }
+    ]
+   },
+   {
+    "id": "b26cef04-4be9-534d-92b0-c0d15db05dbb",
+    "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+    "quote": {
+     "exact": "minimisation algorithm",
+     "prefix": "d a computer system\nemploying a ",
+     "suffix": " over the margins of\nthree facto"
+    },
+    "start": 15990,
+    "end": 16012,
+    "boxes": [
+     {
+      "page": 3,
+      "x0": 392.65,
+      "y0": 248.18,
+      "x1": 483.56,
+      "y1": 258.91
+     }
+    ]
+   }
+  ],
+  "C_PUB_PRIMARY": [
+   {
+    "id": "45d56a46-cd6d-50ef-9b67-1ee31793d674",
+    "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+    "quote": {
+     "exact": "The study is\ncomplete and the final results are reported",
+     "prefix": " intention-to-treat population. ",
+     "suffix": ". This trial is registered with "
+    },
+    "start": 3624,
+    "end": 3680,
+    "boxes": [
+     {
+      "page": 1,
+      "x0": 507.28,
+      "y0": 413.15,
+      "x1": 558.45,
+      "y1": 423.89
+     },
+     {
+      "page": 1,
+      "x0": 119.06,
+      "y0": 424.15,
+      "x1": 302.05,
+      "y1": 434.89
+     }
+    ]
+   },
+   {
+    "id": "1249c7fc-356b-55e4-bbee-a830752efc5b",
+    "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+    "quote": {
+     "exact": "registered with ClinicalTrials.gov, NCT01926236",
+     "prefix": "lts are reported. This trial is ",
+     "suffix": ",\nand EudraCT, 2013-001812-30.\n\n"
+    },
+    "start": 3696,
+    "end": 3743,
+    "boxes": [
+     {
+      "page": 1,
+      "x0": 361.85,
+      "y0": 424.15,
+      "x1": 558.37,
+      "y1": 434.89
+     }
+    ]
+   }
+  ],
+  "C_OUT_RELEVANT": [
+   {
+    "id": "6a1f3432-480f-562b-a67b-28c75edb65e7",
+    "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+    "quote": {
+     "exact": "The primary endpoint was overall survival",
+     "prefix": "tage as stratification factors. ",
+     "suffix": ", assessed in\nthe intention-to-t"
+    },
+    "start": 3471,
+    "end": 3512,
+    "boxes": [
+     {
+      "page": 1,
+      "x0": 345.5,
+      "y0": 402.15,
+      "x1": 512.0,
+      "y1": 412.89
+     }
+    ]
+   },
+   {
+    "id": "dd62e0f1-2f67-5b70-96c5-7652fa61efeb",
+    "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+    "quote": {
+     "exact": "quality-of-life analyses, the results of which will be\nreported separately",
+     "prefix": "6,27 and EQ-5D28) were used for\n",
+     "suffix": ".\n\nArchival tissue and prospecti"
+    },
+    "start": 23045,
+    "end": 23119,
+    "boxes": [
+     {
+      "page": 4,
+      "x0": 262.21,
+      "y0": 413.18,
+      "x1": 476.23,
+      "y1": 423.92
+     },
+     {
+      "page": 4,
+      "x0": 262.21,
+      "y0": 424.18,
+      "x1": 334.88,
+      "y1": 434.92
+     }
+    ]
+   },
+   {
+    "id": "97a8538d-d98a-5072-9eca-36d405405a6e",
+    "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+    "quote": {
+     "exact": "The primary endpoint was overall survival",
+     "prefix": "ology Vol 22 May 2021\n\nOutcomes\n",
+     "suffix": ", defined as the\ntime from rando"
+    },
+    "start": 24614,
+    "end": 24655,
+    "boxes": [
+     {
+      "page": 5,
+      "x0": 119.06,
+      "y0": 490.18,
+      "x1": 278.83,
+      "y1": 500.92
+     }
+    ]
+   },
+   {
+    "id": "133fe883-bd7e-5a99-94e8-2506aae6f089",
+    "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+    "quote": {
+     "exact": "data on quality of life and health economics",
+     "prefix": "s are provided\nin this Article; ",
+     "suffix": "\nwill be reported separately.\n\nS"
+    },
+    "start": 25123,
+    "end": 25167,
+    "boxes": [
+     {
+      "page": 5,
+      "x0": 173.13,
+      "y0": 589.17,
+      "x1": 333.08,
+      "y1": 599.91
+     }
+    ]
+   },
+   {
+    "id": "a112b720-dcc6-56ea-b416-98b047c64eb9",
+    "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+    "quote": {
+     "exact": "Grade 3–5 adverse events were reported in 56",
+     "prefix": "ified reason (three patients).\n\n",
+     "suffix": " (69%)\nof 81 patients in the ASC"
+    },
+    "start": 36069,
+    "end": 36113,
+    "boxes": [
+     {
+      "page": 7,
+      "x0": 351.62,
+      "y0": 336.17,
+      "x1": 532.72,
+      "y1": 346.91
+     }
+    ]
+   }
+  ]
+ },
+ "values": {
+  "n_total": {
+   "id": "ba7bc013-fc6c-529d-92de-3858c86336ca",
+   "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+   "quote": {
+    "exact": "162 patients from\n20 sites in the UK were randomly assigned",
+    "prefix": "sessed for eligibility, of whom ",
+    "suffix": " to ASC alone\n(n=81) or ASC plus"
+   },
+   "start": 29837,
+   "end": 29896,
+   "boxes": [
+    {
+     "page": 6,
+     "x0": 183.72,
+     "y0": 193.18,
+     "x1": 250.86,
+     "y1": 203.92
+    },
+    {
+     "page": 6,
+     "x0": 36.85,
+     "y0": 204.18,
+     "x1": 198.91,
+     "y1": 214.92
+    }
+   ]
+  },
+  "n_asc": {
+   "id": "f9654186-0fd4-5567-a8e5-5d965e5a5219",
+   "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+   "quote": {
+    "exact": "randomly assigned to ASC alone\n(n=81)",
+    "prefix": "ts from\n20 sites in the UK were ",
+    "suffix": " or ASC plus FOLFOX (n=81; figur"
+   },
+   "start": 29879,
+   "end": 29916,
+   "boxes": [
+    {
+     "page": 6,
+     "x0": 127.99,
+     "y0": 204.18,
+     "x1": 250.89,
+     "y1": 214.92
+    },
+    {
+     "page": 6,
+     "x0": 36.85,
+     "y0": 215.18,
+     "x1": 60.39,
+     "y1": 225.91
+    }
+   ]
+  },
+  "n_folfox": {
+   "id": "4b407179-889f-5b8c-b7c9-582b293bf459",
+   "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+   "quote": {
+    "exact": "ASC plus FOLFOX (n=81; figure 1)",
+    "prefix": "assigned to ASC alone\n(n=81) or ",
+    "suffix": ". The end of\nthe follow-up of th"
+   },
+   "start": 29920,
+   "end": 29952,
+   "boxes": [
+    {
+     "page": 6,
+     "x0": 73.45,
+     "y0": 215.18,
+     "x1": 207.12,
+     "y1": 225.91
+    }
+   ]
+  },
+  "follow_up": {
+   "id": "ebb18d81-f862-5b84-a51e-c0f186cabb6a",
+   "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+   "quote": {
+    "exact": "the median follow-up was 21·7 months (IQR 17·2–30·8)",
+    "prefix": "on Jan 4, 2019. At data cutoff,\n",
+    "suffix": ".\n\nIn all enrolled patients, the"
+   },
+   "start": 30085,
+   "end": 30137,
+   "boxes": [
+    {
+     "page": 6,
+     "x0": 36.85,
+     "y0": 248.18,
+     "x1": 247.41,
+     "y1": 258.92
+    }
+   ]
+  },
+  "os_median_folfox": {
+   "id": "8c6776b1-0aed-5f1f-b501-d3b76a5b13f9",
+   "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+   "quote": {
+    "exact": "overall survival was 6·2 months (95% CI 5·4–7·6) in the\nASC plus FOLFOX group",
+    "prefix": "e ASC plus FOLFOX group. Median\n",
+    "suffix": " versus 5·3 months (4·1–5·8) in\n"
+   },
+   "start": 30555,
+   "end": 30632,
+   "boxes": [
+    {
+     "page": 6,
+     "x0": 36.86,
+     "y0": 347.16,
+     "x1": 250.88,
+     "y1": 357.9
+    },
+    {
+     "page": 6,
+     "x0": 36.86,
+     "y0": 358.16,
+     "x1": 132.18,
+     "y1": 368.9
+    }
+   ]
+  },
+  "os_median_asc": {
+   "id": "1c911e8b-cf43-530c-b7ba-2aa41f7199b6",
+   "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+   "quote": {
+    "exact": "versus 5·3 months (4·1–5·8) in\nthe ASC alone group",
+    "prefix": "6) in the\nASC plus FOLFOX group ",
+    "suffix": " (adjusted HR 0·69 [95% CI\n0·50–"
+   },
+   "start": 30633,
+   "end": 30683,
+   "boxes": [
+    {
+     "page": 6,
+     "x0": 134.25,
+     "y0": 358.16,
+     "x1": 250.87,
+     "y1": 368.9
+    },
+    {
+     "page": 6,
+     "x0": 36.86,
+     "y0": 369.16,
+     "x1": 126.68,
+     "y1": 379.9
+    }
+   ]
+  },
+  "os_hr": {
+   "id": "2353e6d8-c15a-57ef-85cf-16ed5aebcc79",
+   "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+   "quote": {
+    "exact": "adjusted HR 0·69 [95% CI\n0·50–0·97], p=0·031",
+    "prefix": "·1–5·8) in\nthe ASC alone group (",
+    "suffix": "; figure 2). The overall surviva"
+   },
+   "start": 30685,
+   "end": 30729,
+   "boxes": [
+    {
+     "page": 6,
+     "x0": 132.92,
+     "y0": 369.16,
+     "x1": 250.87,
+     "y1": 379.9
+    },
+    {
+     "page": 6,
+     "x0": 36.86,
+     "y0": 380.16,
+     "x1": 115.05,
+     "y1": 390.9
+    }
+   ]
+  },
+  "os_hr_sensitivity": {
+   "id": "c9e11624-b9f4-5024-a819-e474e4b04036",
+   "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+   "quote": {
+    "exact": "adjusted HR 0·68, 95% CI 0·49–0·95",
+    "prefix": " ASC alone\non overall survival (",
+    "suffix": ";\np=0·022; appendix p 3).\n\n78 (9"
+   },
+   "start": 31757,
+   "end": 31791,
+   "boxes": [
+    {
+     "page": 6,
+     "x0": 106.17,
+     "y0": 600.18,
+     "x1": 250.87,
+     "y1": 610.91
+    }
+   ]
+  },
+  "os6_asc": {
+   "id": "97675545-a28f-5b5e-be61-2e02cd08a9d1",
+   "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+   "quote": {
+    "exact": "35·5% (95% CI 25·2–46·0) at\n6 months",
+    "prefix": "rate in\nthe ASC alone group was ",
+    "suffix": " and 11·4% (5·6–19·5) at 12 mont"
+   },
+   "start": 30795,
+   "end": 30831,
+   "boxes": [
+    {
+     "page": 6,
+     "x0": 136.93,
+     "y0": 391.16,
+     "x1": 250.86,
+     "y1": 401.89
+    },
+    {
+     "page": 6,
+     "x0": 36.86,
+     "y0": 402.15,
+     "x1": 72.93,
+     "y1": 412.89
+    }
+   ]
+  },
+  "os12_asc": {
+   "id": "7c14ec8c-195e-5d14-a88c-6b06ab375827",
+   "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+   "quote": {
+    "exact": "11·4% (5·6–19·5) at 12 months",
+    "prefix": "% CI 25·2–46·0) at\n6 months and ",
+    "suffix": ", compared\nwith 50·6% (39·3–60·9"
+   },
+   "start": 30836,
+   "end": 30865,
+   "boxes": [
+    {
+     "page": 6,
+     "x0": 92.15,
+     "y0": 402.15,
+     "x1": 211.13,
+     "y1": 412.89
+    }
+   ]
+  },
+  "os6_folfox": {
+   "id": "c5e47162-f875-59f9-b13f-83405d370fe9",
+   "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+   "quote": {
+    "exact": "50·6% (39·3–60·9) at 6 months",
+    "prefix": "·5) at 12 months, compared\nwith ",
+    "suffix": " and 25·9%\n(17·0–35·8) at 12 mon"
+   },
+   "start": 30881,
+   "end": 30910,
+   "boxes": [
+    {
+     "page": 6,
+     "x0": 60.23,
+     "y0": 413.15,
+     "x1": 198.0,
+     "y1": 423.89
+    }
+   ]
+  },
+  "os12_folfox": {
+   "id": "88d665b0-d139-5f1d-a8dc-77cd705b5f34",
+   "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+   "quote": {
+    "exact": "25·9%\n(17·0–35·8) at 12 months",
+    "prefix": "·6% (39·3–60·9) at 6 months and ",
+    "suffix": " in the ASC plus FOLFOX group.\nN"
+   },
+   "start": 30915,
+   "end": 30945,
+   "boxes": [
+    {
+     "page": 6,
+     "x0": 225.77,
+     "y0": 413.15,
+     "x1": 250.9,
+     "y1": 423.89
+    },
+    {
+     "page": 6,
+     "x0": 36.86,
+     "y0": 424.15,
+     "x1": 129.37,
+     "y1": 434.89
+    }
+   ]
+  },
+  "ae35_folfox": {
+   "id": "051993ca-069f-53d0-a938-031b357d3de3",
+   "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+   "quote": {
+    "exact": "Grade 3–5 adverse events were reported in 56 (69%)\nof 81 patients in the ASC plus FOLFOX group",
+    "prefix": "ified reason (three patients).\n\n",
+    "suffix": " and\n42 (52%) of 81 patients in "
+   },
+   "start": 36069,
+   "end": 36163,
+   "boxes": [
+    {
+     "page": 7,
+     "x0": 351.62,
+     "y0": 336.17,
+     "x1": 558.57,
+     "y1": 346.91
+    },
+    {
+     "page": 7,
+     "x0": 344.53,
+     "y0": 347.17,
+     "x1": 539.62,
+     "y1": 357.9
+    }
+   ]
+  },
+  "ae35_asc": {
+   "id": "0b6fce20-0e95-5e9a-bb2e-4a4e787346c2",
+   "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+   "quote": {
+    "exact": "42 (52%) of 81 patients in the ASC alone group",
+    "prefix": "n the ASC plus FOLFOX group and\n",
+    "suffix": ". Three\nchemo­therapy-related de"
+   },
+   "start": 36168,
+   "end": 36214,
+   "boxes": [
+    {
+     "page": 7,
+     "x0": 344.53,
+     "y0": 358.16,
+     "x1": 532.91,
+     "y1": 368.9
+    }
+   ]
+  },
+  "qol_missing": {
+   "id": "5a7e9680-1ea7-5923-8249-2a6ba3a198e5",
+   "layer_id": "1d5c1f7f-49c6-517a-b097-d2cb503b2480",
+   "quote": {
+    "exact": "data on quality of life and health economics\nwill be reported separately",
+    "prefix": "s are provided\nin this Article; ",
+    "suffix": ".\n\nStatistical analysis\nThe stud"
+   },
+   "start": 25123,
+   "end": 25195,
+   "boxes": [
+    {
+     "page": 5,
+     "x0": 173.13,
+     "y0": 589.17,
+     "x1": 333.08,
+     "y1": 599.91
+    },
+    {
+     "page": 5,
+     "x0": 119.06,
+     "y0": 600.17,
+     "x1": 219.5,
+     "y1": 610.91
+    }
+   ]
+  }
+ }
+}
