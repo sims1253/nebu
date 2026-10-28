@@ -72,7 +72,7 @@ retention, and set and lift a legal hold.
 
 | Dependency | Licence | Releases | Commits | Notes | Verdict |
 | --- | --- | --- | --- | --- | --- |
-| Python 3.13 | PSF | | | `uuid.uuid7()` arrives only in 3.14, so IDs come from Postgres | **Use** |
+| Python 3.14 | PSF | | | Has `uuid.uuid7()`, matching Postgres 18's `uuidv7()` | **Use** |
 | uv | Apache-2.0 or MIT | 100 | about 1,300 | | **Use** |
 | FastAPI | MIT | 100 | about 350 | Same as Janus | **Use** |
 | Pydantic 2.14 | MIT | 18 | about 230 | Contracts and model output schemas | **Use** |
@@ -87,7 +87,7 @@ retention, and set and lift a legal hold.
 | stamina | MIT | | | Retries with jitter and instrumentation, on tenacity | **Use** |
 | httpx | BSD-3-Clause | 0 (0.28.1, December 2024) | | One maintainer; issues reportedly closed in February 2026 | **Use with care**. aiohttp or niquests if it decays further. |
 | ruff | MIT | 49 | | | **Use** |
-| ty | MIT | Pre-1.0 | | Janus uses it | Optional. Gate on pyright until 1.0. |
+| ty | MIT | Pre-1.0 | | Janus uses it | **Use**, as Janus does |
 
 ### Workbench
 

@@ -1,0 +1,47 @@
+# Local services for development and integration tests.
+#   docker compose -f infra/compose.yaml up -d postgres
+#   docker compose -f infra/compose.yaml run --rm migrate
+# Optional services sit behind profiles: `--profile documents` for GROBID.
+
+name: kittum
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: kittum
+      POSTGRES_PASSWORD: kittum
+      POSTGRES_DB: kittum
+    ports:
+      - "127.0.0.1:${KITTUM_PG_PORT:-55432}:5432"
+    volumes:
+      - postgres:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kittum"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    image: ghcr.io/amacneil/dbmate:2
+    profiles: [tools]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://kittum:kittum@postgres:5432/kittum?sslmode=disable
+      DBMATE_MIGRATIONS_DIR: /db/migrations
+      DBMATE_SCHEMA_FILE: /db/schema.sql
+      DBMATE_NO_DUMP_SCHEMA: "true"
+    volumes:
+      - ../apps/server/db:/db
+    command: ["--wait", "up"]
+
+  grobid:
+    image: grobid/grobid:0.9.1-crf
+    profiles: [documents]
+    ports:
+      - "127.0.0.1:8070:8070"
+
+volumes:
+  postgres:

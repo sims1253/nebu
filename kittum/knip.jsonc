@@ -1,0 +1,10 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    "apps/web": { "entry": ["src/routes/**/*.tsx"] },
+    "packages/contracts": {},
+  },
+  "ignore": ["**/*.gen.ts"],
+  // uv runs the Python server to dump its OpenAPI document.
+  "ignoreBinaries": ["uv"],
+}
