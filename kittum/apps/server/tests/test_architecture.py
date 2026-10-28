@@ -12,22 +12,26 @@ SRC = Path(__file__).resolve().parents[1] / "src" / "kittum"
 
 ALLOWED: dict[str, set[str]] = {
     "core": set(),
-    "ledger": {"core"},
-    "runs": {"core", "ledger"},
-    "protocol": {"core"},
-    "gateway": {"core"},
-    "models": {"core"},
+    "db": set(),
+    "storage": {"core"},
+    "ledger": {"core", "db", "storage"},
+    "runs": {"core", "db", "ledger"},
+    "protocol": {"core", "db", "ledger"},
+    "gateway": {"core", "db", "storage"},
+    "models": {"core", "gateway"},
     "stats": {"core"},
-    "search": {"core", "ledger", "protocol", "gateway"},
-    "enrich": {"core", "gateway", "search", "models"},
-    "corpus": {"core", "ledger", "search", "enrich"},
-    "judge": {"core", "protocol", "models"},
-    "screening": {"core", "ledger", "runs", "protocol", "corpus", "judge", "stats"},
-    "documents": {"core", "ledger", "gateway"},
-    "extraction": {"core", "ledger", "protocol", "documents", "models"},
-    "appraisal": {"core", "ledger", "protocol", "documents", "extraction", "models"},
+    "search": {"core", "db", "storage", "ledger", "protocol", "gateway"},
+    "enrich": {"core", "db", "storage", "gateway", "search", "models"},
+    "corpus": {"core", "db", "ledger", "search", "enrich"},
+    "judge": {"core", "db", "storage", "ledger", "protocol", "models"},
+    "screening": {"core", "db", "ledger", "runs", "protocol", "corpus", "judge", "stats"},
+    "documents": {"core", "db", "storage", "ledger", "gateway"},
+    "extraction": {"core", "db", "storage", "ledger", "protocol", "documents", "models"},
+    "appraisal": {"core", "db", "ledger", "protocol", "documents", "extraction", "models"},
     "report": {
         "core",
+        "db",
+        "storage",
         "ledger",
         "protocol",
         "search",
@@ -41,6 +45,7 @@ ALLOWED: dict[str, set[str]] = {
     # Entry points may use every module's public surface.
     "api": {"*"},
     "cli": {"*"},
+    "settings": set(),
 }
 
 

@@ -9,10 +9,13 @@ Owner: WP-01. Shipped now: the event types, the hash definition, and an in-memor
 """
 
 from datetime import datetime
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from kittum.core import Id, Record, Sha256
 from kittum.ledger.chain import GENESIS_HASH, event_hash, payload_hash
+
+if TYPE_CHECKING:
+    from kittum.db import Tx
 
 
 class EventDraft(Record):
@@ -48,11 +51,13 @@ class VerifyReport(Record):
 
 
 class Ledger(Protocol):
-    def append(self, draft: EventDraft) -> AuditEvent: ...
+    """Appends run inside the caller's transaction (see `kittum.db`)."""
 
-    def events(self, project_id: Id, *, after_seq: int = 0) -> list[AuditEvent]: ...
+    def append(self, tx: Tx, draft: EventDraft) -> AuditEvent: ...
 
-    def verify(self, project_id: Id) -> VerifyReport: ...
+    def events(self, tx: Tx, project_id: Id, *, after_seq: int = 0) -> list[AuditEvent]: ...
+
+    def verify(self, tx: Tx, project_id: Id) -> VerifyReport: ...
 
 
 __all__ = [

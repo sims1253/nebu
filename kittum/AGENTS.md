@@ -47,7 +47,8 @@ server.
 
 Several agents work at once, one work package each. The rules keep them out of each other's way.
 
-- **One work package per branch**, named `kittum/wp-NN-short-name`, branched from `main`.
+- **One work package per branch**, named `kittum/wp-NN-short-name`. Commit to it; the
+  integrator merges branches. Do not push or open pull requests unless your task says so.
 - **Stay inside your module.** Change `src/kittum/<module>/`, `tests/<module>/`, your own
   migrations, and your module's section in `docs/work-packages.md`. Nothing else.
 - **Import other modules only through their package**: `from kittum.judge import Verdict`, never
@@ -59,10 +60,19 @@ Several agents work at once, one work package each. The rules keep them out of e
 - **Build against fakes.** Every module with a seam ships a fake in `<module>/testing.py`
   (`InMemoryLedger`, `RecordedBackend`, `FakeTransport` exist already). If your module has a seam,
   ship its fake with your first pull request so others can use it.
+- **HTTP routes** for your module go in `src/kittum/api/routes/<module>.py` as a `router`,
+  registered with one line in `api/routes/__init__.py`. Routes take `Context` and stay thin. If you
+  need a new field on `AppContext`, add it in the same change and say so.
 - **Migrations** are new files named `<UTC timestamp>_<module>_<what>.sql` with `migrate:up` and
   `migrate:down`. Create only your module's tables; never alter another module's.
 
 ## Conventions
+
+- **Transactions:** a function that changes state takes `tx: kittum.db.Tx` from its caller and
+  writes its rows and its ledger event through it. Modules never open transactions; entry points
+  do (`with ctx.db.transaction() as tx:`). Rows come back as dicts.
+- **Artifacts** (PDFs, raw responses, model outputs, reports) go to `kittum.storage.ArtifactStore`
+  by SHA-256 before any row references them.
 
 - Values that cross modules are `kittum.core.Record`s: frozen, unknown fields rejected.
 - IDs come from `kittum.core.new_id()` (UUIDv7). Time comes from a `Clock`, never `datetime.now()`.
@@ -71,6 +81,11 @@ Several agents work at once, one work package each. The rules keep them out of e
   side effects run as jobs (see `kittum.runs`).
 - All HTTP goes through `kittum.gateway`. All model calls go through `kittum.models.LlmBackend`.
 - A quote counts only if `kittum.core.find_quote` finds it in the source.
+- **Tests prove behaviour end to end.** Prefer a few tests that drive a realistic flow through
+  your public interface against real Postgres and recorded real-world fixtures (a real PubMed
+  response, a real trial PDF) over many tests of trivial pieces. No tests that only check a
+  constructor, a getter, or that a function exists. Every test should be able to catch a bug a
+  user would notice.
 - Tests never touch the network. Use the fakes, recorded responses, or fixtures in the repo.
 - Unimplemented interface functions raise `NotImplementedError("WP-NN")`. Replace, don't wrap.
 - Python and TypeScript match the surrounding code: comment density, naming, idiom.

@@ -12,10 +12,28 @@ dependencies = [
     "pydantic>=2.14.0",
     "rfc8785>=0.1.4",
     "psycopg[binary]>=3.3",
+    "psycopg-pool>=3.3",
+    "scipy>=1.18",
+    "cryptography>=50",
+    "pyrate-limiter>=4.5",
+    "stamina>=26.1",
+    "httpx2>=2.16",
+    "pymupdf>=2.0",
+    "pypdfium2>=5.14",
+    "pyyaml>=6.0",
+    "rispy>=0.10",
+    "rapidfuzz>=3.14",
+    "pydantic-ai-slim[openai]>=2.62",
+    "janus-server",
 ]
 
 [project.scripts]
 kittum = "kittum.cli:main"
+
+[project.optional-dependencies]
+docling = [
+    "docling>=2.143",
+]
 
 [dependency-groups]
 dev = [
@@ -59,6 +77,10 @@ ignore = [
     "B008",   # function call in default argument (FastAPI pattern)
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# Fakes implement interfaces whose arguments they do not need.
+"**/testing.py" = ["ARG002"]
+
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
 
@@ -80,3 +102,6 @@ testpaths = ["tests"]
 markers = [
     "postgres: needs a running Postgres at KITTUM_DATABASE_URL",
 ]
+
+[tool.uv.sources]
+janus-server = { path = "../../../janus/apps/server", editable = true }

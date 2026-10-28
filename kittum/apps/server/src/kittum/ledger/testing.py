@@ -1,8 +1,16 @@
-"""An in-memory ledger for tests in any module. It follows the real chain rules."""
+"""An in-memory ledger for tests in any module. It follows the real chain rules.
+
+It ignores the transaction; pass `kittum.db.testing.NullTx()`.
+"""
+
+from typing import TYPE_CHECKING
 
 from kittum.core import Clock, Id, SystemClock, new_id
 from kittum.ledger import AuditEvent, EventDraft, VerifyReport
 from kittum.ledger.chain import GENESIS_HASH, event_hash, payload_hash
+
+if TYPE_CHECKING:
+    from kittum.db import Tx
 
 
 class InMemoryLedger:
@@ -10,7 +18,7 @@ class InMemoryLedger:
         self._clock = clock or SystemClock()
         self._events: dict[Id, list[AuditEvent]] = {}
 
-    def append(self, draft: EventDraft) -> AuditEvent:
+    def append(self, tx: Tx, draft: EventDraft) -> AuditEvent:
         chain = self._events.setdefault(draft.project_id, [])
         seq = len(chain) + 1
         prev = chain[-1].event_hash if chain else GENESIS_HASH
@@ -43,10 +51,10 @@ class InMemoryLedger:
         chain.append(event)
         return event
 
-    def events(self, project_id: Id, *, after_seq: int = 0) -> list[AuditEvent]:
+    def events(self, tx: Tx, project_id: Id, *, after_seq: int = 0) -> list[AuditEvent]:
         return [e for e in self._events.get(project_id, []) if e.seq > after_seq]
 
-    def verify(self, project_id: Id) -> VerifyReport:
+    def verify(self, tx: Tx, project_id: Id) -> VerifyReport:
         prev = GENESIS_HASH
         chain = self._events.get(project_id, [])
         for expected_seq, e in enumerate(chain, start=1):
