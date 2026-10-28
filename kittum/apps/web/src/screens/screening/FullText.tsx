@@ -2,7 +2,7 @@
 // the right with one active. Mentions of the active criterion come in document order and carry no
 // verdict colour; the reviewer adopts the ones that are evidence.
 import { useRouteContext } from "@tanstack/react-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import type {
   Anchor,
@@ -65,6 +65,9 @@ function Screen({ assignment }: { assignment: FullTextAssignment }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<{ outcome: Outcome; reason: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
+  // DESIGN.md "Metrics": when the report appeared and when the reviewer first acted on it.
+  const [shownAt] = useState(() => new Date().toISOString());
+  const firstKeyAt = useRef<string | null>(null);
 
   const criterion = criteria[active];
   const stateOf = useCallback(
@@ -197,7 +200,12 @@ function Screen({ assignment }: { assignment: FullTextAssignment }) {
           },
           phase: "provisional",
           expectedRevision: assignment.revision,
-          timing: { shown_at: now, first_key_at: now, decided_at: now, reveal_shown_at: null },
+          timing: {
+            shown_at: shownAt,
+            first_key_at: firstKeyAt.current ?? now,
+            decided_at: now,
+            reveal_shown_at: null,
+          },
         }),
       );
       setOutcome({ outcome: chosen, reason: chosen === "exclude" ? (reason?.id ?? null) : null });
@@ -211,9 +219,12 @@ function Screen({ assignment }: { assignment: FullTextAssignment }) {
     }
   };
 
-  useKeys((event) => {
+  function handleKey(event: KeyboardEvent): boolean {
     if (busy || !criterion) return false;
     const key = event.key;
+    // A held key repeats; adopting toggles and verdicts advance, so act on the first press only.
+    if (event.repeat && (key === "Enter" || key in VERDICT_KEYS || key in OUTCOME_KEYS))
+      return true;
     if (key === "ArrowDown" || key === "j") {
       setActive((a) => Math.min(a + 1, criteria.length - 1));
       return true;
@@ -244,6 +255,13 @@ function Screen({ assignment }: { assignment: FullTextAssignment }) {
       return true;
     }
     return false;
+  }
+
+  useKeys((event) => {
+    const at = new Date().toISOString();
+    const handled = handleKey(event);
+    if (handled) firstKeyAt.current ??= at;
+    return handled;
   });
 
   return (

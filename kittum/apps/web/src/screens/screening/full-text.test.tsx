@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "vite-plus/test";
 import { page } from "vite-plus/test/browser";
 
 import anchors from "../../data/mock/fixtures/abc06/anchors.json";
-import { mount, press } from "../../test/app.tsx";
+import { hold, mount, press } from "../../test/app.tsx";
 
 let unmount: (() => void) | undefined;
 afterEach(() => unmount?.());
@@ -64,4 +64,35 @@ describe("full-text screening", () => {
     expect(decision?.outcome).toBe("include");
     expect(decision?.evidence_anchor_ids).toEqual([pretreated[1]!.id]);
   });
+
+  test("a held key adopts or marks once, and the decision reports when the report was shown and first acted on", async () => {
+    const app = mount("/p/ivosidenib-cca/screening/full-text");
+    unmount = app.unmount;
+    const notice = page.getByTestId("fulltext-notice");
+    await expect.element(page.getByText("Page 1 of 12")).toBeVisible();
+    await pause(200);
+
+    await press("ArrowDown"); // first key
+    await press("]");
+    await hold("Enter", 3); // four keydowns: without the guard, adopt, drop, adopt, drop
+    await expect.element(page.getByText("1 evidence span")).toBeVisible();
+
+    await press("ArrowUp");
+    await hold("y", 3); // without the guard, four criteria would be marked met
+    await expect.element(notice).toMatchTextContent("5 of 6 criteria need a verdict");
+
+    for (let i = 0; i < 5; i++) await press("y");
+    await pause(300);
+    await press("i");
+    await expect.element(notice).toMatchTextContent("Included");
+
+    const timing = app.workbench.decisions.at(-1)!.timing;
+    const shown = Date.parse(timing.shown_at);
+    const first = Date.parse(timing.first_key_at!);
+    const decided = Date.parse(timing.decided_at);
+    expect(first - shown).toBeGreaterThanOrEqual(200);
+    expect(decided - first).toBeGreaterThanOrEqual(300);
+  });
 });
+
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
