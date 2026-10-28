@@ -1,0 +1,184 @@
+"""Anchors made on one layer, re-anchored onto a layer from another engine."""
+
+import pymupdf
+import pytest
+
+from kittum.core import find_quote
+from kittum.documents import (
+    RESOLVE_VERSION,
+    compare_layers,
+    derive,
+    get_anchor,
+    ingest,
+    make_anchor,
+    remap,
+    resolve,
+    save_anchor,
+)
+from kittum.storage import MemoryStore
+from tests.documents.conftest import LESOTHO, squash, text_under
+from tests.documents.test_parsing import COLUMN_BREAK_QUOTE
+
+QUOTES = [
+    COLUMN_BREAK_QUOTE,  # across a column break and a hyphenated line break
+    "a fourfold increase since 1990, with 80% residing in low",  # across a soft hyphen
+    "61.4 (11.7)",  # a table cell
+    "Primary analysis set",  # a header spanning three columns
+]
+
+
+def _layers(pg, *parsers, pdf=None):
+    artifacts = MemoryStore()
+    document = ingest(pg, artifacts, pdf or LESOTHO.read_bytes())
+    return [derive(pg, document, p, artifacts=artifacts) for p in parsers]
+
+
+def _anchors(pg, layer, quotes):
+    out = []
+    for quote in quotes:
+        for span in find_quote(quote, layer.text):
+            out.append(save_anchor(pg, make_anchor(layer, span)))
+    return out
+
+
+def test_anchors_survive_a_reparse_with_pdfium(pg, pymupdf_parser, pdfium_parser):
+    base, other = _layers(pg, pymupdf_parser, pdfium_parser)
+    # "1.0 (1.0, 2.0)" is printed three times in one row; only the place tells them apart.
+    anchors = _anchors(pg, base, [*QUOTES, "1.0 (1.0, 2.0)"])
+    assert len(anchors) >= len(QUOTES) + 3  # "Primary analysis set" recurs in the text too
+
+    for anchor in anchors:
+        resolution = remap(pg, anchor, other)
+        assert resolution.status == "exact", anchor.quote.exact
+        moved = resolution.anchor
+        assert moved is not None and moved.layer_id == other.id
+        assert squash(other.text[moved.start : moved.end]) == squash(anchor.quote.exact)
+        assert [b.page for b in moved.boxes] == [b.page for b in anchor.boxes]
+        for old, new in zip(anchor.boxes, moved.boxes, strict=True):
+            assert abs(old.x0 - new.x0) < 2 and abs(old.y0 - new.y0) < 2
+    repeated = [a for a in anchors if a.quote.exact == "1.0 (1.0, 2.0)"]
+    methods = {remap(pg, a, other).method for a in repeated}
+    assert methods == {"quote_in_region"}
+
+    rows = pg.execute(
+        "select status, new_anchor_id from anchor_mapping where layer_id = %s", (other.id,)
+    ).fetchall()
+    assert len(rows) == len(anchors)  # the second remap above reused the recorded mappings
+    assert {r["status"] for r in rows} == {"exact"}
+    assert get_anchor(pg, rows[0]["new_anchor_id"]).layer_id == other.id
+
+
+def test_moved_repeated_changed_and_respelled_quotes(pg, pymupdf_parser, pdfium_parser):
+    base, other = _layers(pg, pymupdf_parser, pdfium_parser)
+    (age,) = _anchors(pg, base, ["61.4 (11.7)"])
+    # As if the old layer had placed the value on page 3: the only match is elsewhere.
+    elsewhere = tuple(b.model_copy(update={"page": 3}) for b in age.boxes)
+    moved = resolve(age.model_copy(update={"boxes": elsewhere}), other)
+    assert (moved.status, moved.method) == ("candidate", "quote")
+
+    first, *_ = _anchors(pg, base, ["1.0 (1.0, 2.0)"])
+    lost = resolve(first.model_copy(update={"boxes": elsewhere}), other)
+    assert lost.status == "ambiguous" and lost.anchor is None
+    assert len(lost.alternatives) == 3
+
+    changed = age.model_copy(
+        update={"quote": age.quote.model_copy(update={"exact": "62.4 (11.7)"})}
+    )
+    assert resolve(changed, other).status == "unresolved"  # a changed number never matches
+
+    (fourfold,) = _anchors(pg, base, [QUOTES[1]])
+    respelled = fourfold.model_copy(
+        update={
+            "quote": fourfold.quote.model_copy(
+                update={"exact": "fourfold increase since 1990 with 80 % residing in low"}
+            )
+        }
+    )
+    fuzzy = resolve(respelled, other)
+    assert (fuzzy.status, fuzzy.method) == ("candidate", "fuzzy")
+    assert (
+        fuzzy.anchor is not None and "fourfold" in other.text[fuzzy.anchor.start : fuzzy.anchor.end]
+    )
+
+
+def test_pymupdf_and_pdfium_agree_on_every_page(pg, pymupdf_parser, pdfium_parser):
+    base, other = _layers(pg, pymupdf_parser, pdfium_parser)
+    agreement = compare_layers(base, other)
+    assert len(agreement) == 13
+    for page in agreement:
+        assert page.text_similarity > 0.9, page
+        assert page.box_iou > 0.9, page
+
+
+def test_turned_pages_read_in_order_with_boxes_in_the_unrotated_frame(
+    pg, pymupdf_parser, pdfium_parser
+):
+    plain = _layers(pg, pymupdf_parser)[0]
+    (span,) = find_quote("61.4 (11.7)", plain.text)
+    (expected,) = make_anchor(plain, span).boxes
+
+    # An upright page the viewer turns with /Rotate 90: boxes stay where they were drawn.
+    doc = pymupdf.open(LESOTHO)
+    doc[6].set_rotation(90)
+    flagged = doc.tobytes()
+    for layer in _layers(pg, pymupdf_parser, pdfium_parser, pdf=flagged):
+        page = layer.pages[6]
+        assert (page.rotation, page.width, page.height) == (
+            90,
+            plain.pages[6].width,
+            plain.pages[6].height,
+        )
+        (span,) = find_quote("61.4 (11.7)", layer.text)
+        (box,) = make_anchor(layer, span).boxes
+        for got, want in zip(
+            box.model_dump().values(), expected.model_dump().values(), strict=True
+        ):
+            assert abs(got - want) < 1.5, layer.recipe.engine
+
+    # A landscape page with the article drawn sideways and no /Rotate: the reader turns their
+    # head, and so does the reading order. Columns and table rows still read in order.
+    sideways = pymupdf.open()
+    source = pymupdf.open(LESOTHO)
+    landscape = sideways.new_page(width=source[6].rect.height, height=source[6].rect.width)
+    landscape.show_pdf_page(landscape.rect, source, 6, rotate=90)
+    turned = sideways.tobytes()
+    for layer in _layers(pg, pymupdf_parser, pdfium_parser, pdf=turned):
+        assert layer.pages[0].rotation == 0
+        (span,) = find_quote(COLUMN_BREAK_QUOTE, layer.text)
+        assert len(make_anchor(layer, span).boxes) == 3, layer.recipe.engine
+        assert find_quote("Age, years, mean (SD) 61.4 (11.7) 63.2 (14.0)", layer.text)
+        (span,) = find_quote("61.4 (11.7)", layer.text)
+        (box,) = make_anchor(layer, span).boxes
+        assert box.x1 - box.x0 < box.y1 - box.y0  # a sideways word is a tall box
+        assert text_under(turned, box) == "61.4 (11.7)", layer.recipe.engine
+
+
+def test_docling_reparse_keeps_table_and_text_anchors(pg, pymupdf_parser, docling_page7):
+    base, docling = _layers(pg, pymupdf_parser, docling_page7)
+    assert docling.recipe.engine == "docling" and len(docling.recipe.weights) == 2
+
+    table = next(t for t in docling.tables if t.page == 7)
+    header = next(c for c in docling.cells if c.table_id == table.id and c.row == 0 and c.col == 1)
+    assert squash(docling.text[header.start : header.end]) == "Primary analysis set"
+    assert header.col_span == 3  # TableFormer's span, text from PyMuPDF
+
+    for anchor in _anchors(pg, base, [COLUMN_BREAK_QUOTE, "61.4 (11.7)", "1.0 (1.0, 2.0)"]):
+        resolution = remap(pg, anchor, docling)
+        assert resolution.status == "exact", anchor.quote.exact
+        assert resolution.method_version == RESOLVE_VERSION
+        assert resolution.anchor is not None
+        old = [(c.row, c.col, c.header_path) for c in anchor.cells]
+        new = [(c.row, c.col, c.header_path) for c in resolution.anchor.cells]
+        assert new == old
+
+
+@pytest.mark.parametrize("quote", ["61.4 (11.7)", COLUMN_BREAK_QUOTE])
+def test_an_anchor_resolves_onto_its_own_layer(pg, pymupdf_parser, quote):
+    (layer,) = _layers(pg, pymupdf_parser)
+    (anchor,) = _anchors(pg, layer, [quote])
+    resolution = resolve(anchor, layer)
+    assert (resolution.status, resolution.method, resolution.anchor) == (
+        "exact",
+        "same_layer",
+        anchor,
+    )
