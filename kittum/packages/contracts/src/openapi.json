@@ -1463,6 +1463,43 @@
         "title": "Deviation",
         "type": "object"
       },
+      "DiffPreview": {
+        "additionalProperties": false,
+        "description": "What publishing a source would change against the version every decision reads now;\n`previous` and `diff` are None before the first version.",
+        "properties": {
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          },
+          "diff": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProtocolDiff"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProtocolVersionSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "content_hash",
+          "previous",
+          "diff"
+        ],
+        "title": "DiffPreview",
+        "type": "object"
+      },
       "Document": {
         "additionalProperties": false,
         "properties": {
@@ -1667,6 +1704,30 @@
           "quantities"
         ],
         "title": "Endpoint",
+        "type": "object"
+      },
+      "ExampleProtocol": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "text"
+        ],
+        "title": "ExampleProtocol",
         "type": "object"
       },
       "Extensions": {
@@ -1882,6 +1943,26 @@
           "invalid_output"
         ],
         "type": "string"
+      },
+      "FieldChange": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "title": "After"
+          },
+          "before": {
+            "title": "Before"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ],
+        "title": "FieldChange",
+        "type": "object"
       },
       "FieldLabels": {
         "additionalProperties": false,
@@ -2494,6 +2575,28 @@
         "title": "MergeRequest",
         "type": "object"
       },
+      "ModeChange": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "$ref": "#/components/schemas/ScreeningMode"
+          },
+          "before": {
+            "$ref": "#/components/schemas/ScreeningMode"
+          },
+          "topic_id": {
+            "title": "Topic Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic_id",
+          "before",
+          "after"
+        ],
+        "title": "ModeChange",
+        "type": "object"
+      },
       "Occurrence": {
         "additionalProperties": false,
         "properties": {
@@ -2787,6 +2890,35 @@
           "pabak"
         ],
         "title": "PairAgreement",
+        "type": "object"
+      },
+      "ParsedSource": {
+        "additionalProperties": false,
+        "description": "The source as data, or the syntax error as an issue with its line and column.",
+        "properties": {
+          "issues": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ProtocolIssue"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProtocolSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "title": "ParsedSource",
         "type": "object"
       },
       "Path": {
@@ -3131,6 +3263,71 @@
         ],
         "type": "string"
       },
+      "ProtocolDiff": {
+        "additionalProperties": false,
+        "properties": {
+          "added_criteria": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Added Criteria",
+            "type": "array"
+          },
+          "added_scopes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Added Scopes",
+            "type": "array"
+          },
+          "changed_criteria": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed Criteria",
+            "type": "array"
+          },
+          "changes": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FieldChange"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "mode_changes": {
+            "items": {
+              "$ref": "#/components/schemas/ModeChange"
+            },
+            "title": "Mode Changes",
+            "type": "array"
+          },
+          "removed_criteria": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Removed Criteria",
+            "type": "array"
+          },
+          "removed_scopes": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Removed Scopes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "added_criteria",
+          "removed_criteria",
+          "changed_criteria",
+          "mode_changes"
+        ],
+        "title": "ProtocolDiff",
+        "type": "object"
+      },
       "ProtocolIssue": {
         "additionalProperties": false,
         "properties": {
@@ -3183,6 +3380,10 @@
           "profile"
         ],
         "title": "ProtocolRef",
+        "type": "object"
+      },
+      "ProtocolSource": {
+        "additionalProperties": true,
         "type": "object"
       },
       "ProtocolVersion": {
@@ -3816,6 +4017,107 @@
           "adjudicated"
         ],
         "title": "RescreenGauge",
+        "type": "object"
+      },
+      "RetrievalItem": {
+        "additionalProperties": false,
+        "description": "A report of the corpus and its full text, for the methods lead's upload queue. `outcomes`\nholds the report's current outcome per screened scope and stage (`include`, `exclude`,\n`conflict`, or None while it is being screened).",
+        "properties": {
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "full_text": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FullText"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "item_ref": {
+            "title": "Item Ref",
+            "type": "string"
+          },
+          "journal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal"
+          },
+          "outcomes": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            "title": "Outcomes",
+            "type": "object"
+          },
+          "registry_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Registry Ids",
+            "type": "array"
+          },
+          "report_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "study_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          }
+        },
+        "required": [
+          "item_ref",
+          "report_id",
+          "study_id",
+          "title",
+          "year",
+          "journal",
+          "doi",
+          "registry_ids",
+          "outcomes",
+          "full_text"
+        ],
+        "title": "RetrievalItem",
         "type": "object"
       },
       "Reveal": {
@@ -4721,6 +5023,20 @@
         "title": "Sentinel",
         "type": "object"
       },
+      "SentinelFile": {
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "SentinelFile",
+        "type": "object"
+      },
       "Sha256": {
         "pattern": "^[0-9a-f]{64}$",
         "type": "string"
@@ -4926,6 +5242,20 @@
           "raw_hash"
         ],
         "title": "SourceRecord",
+        "type": "object"
+      },
+      "SourceText": {
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "SourceText",
         "type": "object"
       },
       "SplitLevel": {
@@ -7051,6 +7381,166 @@
         ]
       }
     },
+    "/api/projects/{project_id}/full-text-sentinels": {
+      "post": {
+        "description": "Upload a report with a known outcome; full-text stages seed it into every queue.",
+        "operationId": "attachFullTextSentinel",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actor_id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "title",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Title",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expected_outcome",
+            "required": true,
+            "schema": {
+              "enum": [
+                "include",
+                "exclude"
+              ],
+              "title": "Expected Outcome",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "licence",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Licence"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/pdf": {
+              "schema": {
+                "format": "binary",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FullText"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Attach Sentinel Route",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/full-texts": {
+      "get": {
+        "description": "Every report of the corpus with its screening outcomes and its full text, for the methods\nlead only (403 otherwise): the upload queue of the full-text waterfall.",
+        "operationId": "listFullTexts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RetrievalItem"
+                  },
+                  "title": "Response Listfulltexts",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Full Texts",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
     "/api/projects/{project_id}/full-texts/{item_ref}": {
       "post": {
         "description": "Upload a record's full text (the human end of the full-text waterfall).",
@@ -7544,6 +8034,106 @@
           }
         },
         "summary": "Publish Protocol Version",
+        "tags": [
+          "protocol"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/protocol/diff": {
+      "post": {
+        "description": "The changes publishing this source would make to the published version, without saving\nanything. 422 if it does not compile.",
+        "operationId": "previewProtocolDiff",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Source",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiffPreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Diff",
+        "tags": [
+          "protocol"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/protocol/source": {
+      "get": {
+        "description": "The published protocol as YAML, to edit into the next version.",
+        "operationId": "getPublishedProtocolSource",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceText"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Published Source",
         "tags": [
           "protocol"
         ]
@@ -8284,6 +8874,64 @@
         ]
       }
     },
+    "/api/projects/{project_id}/screening/sentinels/parse": {
+      "post": {
+        "description": "Read a sentinel file for `openScreeningStage`; 422 with the line or entry at fault.",
+        "operationId": "parseScreeningSentinels",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SentinelFile"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Sentinel"
+                  },
+                  "title": "Response Parsescreeningsentinels",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Parse Sentinels Route",
+        "tags": [
+          "screening"
+        ]
+      }
+    },
     "/api/projects/{project_id}/screening/stages": {
       "get": {
         "description": "Every open stage, with its mode, reveal setting, screeners, auditor, and adjudicators.",
@@ -8718,6 +9366,74 @@
         "summary": "Run Search",
         "tags": [
           "search"
+        ]
+      }
+    },
+    "/api/protocol/examples": {
+      "get": {
+        "description": "The example protocols in kittum/examples/protocols, to start a review from.",
+        "operationId": "listExampleProtocols",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ExampleProtocol"
+                  },
+                  "title": "Response Listexampleprotocols",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Examples",
+        "tags": [
+          "protocol"
+        ]
+      }
+    },
+    "/api/protocol/parse": {
+      "post": {
+        "description": "Read YAML or JSON text as `kittum project publish-protocol` reads its file. A syntax error\ncomes back as an issue; validate the source with `validateProtocol`.",
+        "operationId": "parseProtocol",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceText"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParsedSource"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Parse Protocol",
+        "tags": [
+          "protocol"
         ]
       }
     },

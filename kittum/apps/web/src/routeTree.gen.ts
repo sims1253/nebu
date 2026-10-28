@@ -17,8 +17,10 @@ import { Route as PProjectIdExtractionRouteImport } from './routes/p/$projectId/
 import { Route as PProjectIdProgressRouteImport } from './routes/p/$projectId/progress'
 import { Route as PProjectIdProtocolRouteImport } from './routes/p/$projectId/protocol'
 import { Route as PProjectIdReportsRouteImport } from './routes/p/$projectId/reports'
+import { Route as PProjectIdRetrievalRouteImport } from './routes/p/$projectId/retrieval'
 import { Route as PProjectIdRiskOfBiasRouteImport } from './routes/p/$projectId/risk-of-bias'
 import { Route as PProjectIdSearchRouteImport } from './routes/p/$projectId/search'
+import { Route as PProjectIdSetupRouteImport } from './routes/p/$projectId/setup'
 import { Route as PProjectIdStudiesRouteImport } from './routes/p/$projectId/studies'
 import { Route as PProjectIdScreeningFullTextRouteImport } from './routes/p/$projectId/screening/full-text'
 import { Route as PProjectIdScreeningTitleAbstractRouteImport } from './routes/p/$projectId/screening/title-abstract'
@@ -63,6 +65,11 @@ const PProjectIdReportsRoute = PProjectIdReportsRouteImport.update({
   path: '/reports',
   getParentRoute: () => PProjectIdRouteRoute,
 } as any)
+const PProjectIdRetrievalRoute = PProjectIdRetrievalRouteImport.update({
+  id: '/retrieval',
+  path: '/retrieval',
+  getParentRoute: () => PProjectIdRouteRoute,
+} as any)
 const PProjectIdRiskOfBiasRoute = PProjectIdRiskOfBiasRouteImport.update({
   id: '/risk-of-bias',
   path: '/risk-of-bias',
@@ -71,6 +78,11 @@ const PProjectIdRiskOfBiasRoute = PProjectIdRiskOfBiasRouteImport.update({
 const PProjectIdSearchRoute = PProjectIdSearchRouteImport.update({
   id: '/search',
   path: '/search',
+  getParentRoute: () => PProjectIdRouteRoute,
+} as any)
+const PProjectIdSetupRoute = PProjectIdSetupRouteImport.update({
+  id: '/setup',
+  path: '/setup',
   getParentRoute: () => PProjectIdRouteRoute,
 } as any)
 const PProjectIdStudiesRoute = PProjectIdStudiesRouteImport.update({
@@ -99,8 +111,10 @@ export interface FileRoutesByFullPath {
   '/p/$projectId/progress': typeof PProjectIdProgressRoute
   '/p/$projectId/protocol': typeof PProjectIdProtocolRoute
   '/p/$projectId/reports': typeof PProjectIdReportsRoute
+  '/p/$projectId/retrieval': typeof PProjectIdRetrievalRoute
   '/p/$projectId/risk-of-bias': typeof PProjectIdRiskOfBiasRoute
   '/p/$projectId/search': typeof PProjectIdSearchRoute
+  '/p/$projectId/setup': typeof PProjectIdSetupRoute
   '/p/$projectId/studies': typeof PProjectIdStudiesRoute
   '/p/$projectId/': typeof PProjectIdIndexRoute
   '/p/$projectId/screening/full-text': typeof PProjectIdScreeningFullTextRoute
@@ -113,8 +127,10 @@ export interface FileRoutesByTo {
   '/p/$projectId/progress': typeof PProjectIdProgressRoute
   '/p/$projectId/protocol': typeof PProjectIdProtocolRoute
   '/p/$projectId/reports': typeof PProjectIdReportsRoute
+  '/p/$projectId/retrieval': typeof PProjectIdRetrievalRoute
   '/p/$projectId/risk-of-bias': typeof PProjectIdRiskOfBiasRoute
   '/p/$projectId/search': typeof PProjectIdSearchRoute
+  '/p/$projectId/setup': typeof PProjectIdSetupRoute
   '/p/$projectId/studies': typeof PProjectIdStudiesRoute
   '/p/$projectId': typeof PProjectIdIndexRoute
   '/p/$projectId/screening/full-text': typeof PProjectIdScreeningFullTextRoute
@@ -129,8 +145,10 @@ export interface FileRoutesById {
   '/p/$projectId/progress': typeof PProjectIdProgressRoute
   '/p/$projectId/protocol': typeof PProjectIdProtocolRoute
   '/p/$projectId/reports': typeof PProjectIdReportsRoute
+  '/p/$projectId/retrieval': typeof PProjectIdRetrievalRoute
   '/p/$projectId/risk-of-bias': typeof PProjectIdRiskOfBiasRoute
   '/p/$projectId/search': typeof PProjectIdSearchRoute
+  '/p/$projectId/setup': typeof PProjectIdSetupRoute
   '/p/$projectId/studies': typeof PProjectIdStudiesRoute
   '/p/$projectId/': typeof PProjectIdIndexRoute
   '/p/$projectId/screening/full-text': typeof PProjectIdScreeningFullTextRoute
@@ -146,8 +164,10 @@ export interface FileRouteTypes {
     | '/p/$projectId/progress'
     | '/p/$projectId/protocol'
     | '/p/$projectId/reports'
+    | '/p/$projectId/retrieval'
     | '/p/$projectId/risk-of-bias'
     | '/p/$projectId/search'
+    | '/p/$projectId/setup'
     | '/p/$projectId/studies'
     | '/p/$projectId/'
     | '/p/$projectId/screening/full-text'
@@ -160,8 +180,10 @@ export interface FileRouteTypes {
     | '/p/$projectId/progress'
     | '/p/$projectId/protocol'
     | '/p/$projectId/reports'
+    | '/p/$projectId/retrieval'
     | '/p/$projectId/risk-of-bias'
     | '/p/$projectId/search'
+    | '/p/$projectId/setup'
     | '/p/$projectId/studies'
     | '/p/$projectId'
     | '/p/$projectId/screening/full-text'
@@ -175,8 +197,10 @@ export interface FileRouteTypes {
     | '/p/$projectId/progress'
     | '/p/$projectId/protocol'
     | '/p/$projectId/reports'
+    | '/p/$projectId/retrieval'
     | '/p/$projectId/risk-of-bias'
     | '/p/$projectId/search'
+    | '/p/$projectId/setup'
     | '/p/$projectId/studies'
     | '/p/$projectId/'
     | '/p/$projectId/screening/full-text'
@@ -246,6 +270,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PProjectIdReportsRouteImport
       parentRoute: typeof PProjectIdRouteRoute
     }
+    '/p/$projectId/retrieval': {
+      id: '/p/$projectId/retrieval'
+      path: '/retrieval'
+      fullPath: '/p/$projectId/retrieval'
+      preLoaderRoute: typeof PProjectIdRetrievalRouteImport
+      parentRoute: typeof PProjectIdRouteRoute
+    }
     '/p/$projectId/risk-of-bias': {
       id: '/p/$projectId/risk-of-bias'
       path: '/risk-of-bias'
@@ -258,6 +289,13 @@ declare module '@tanstack/react-router' {
       path: '/search'
       fullPath: '/p/$projectId/search'
       preLoaderRoute: typeof PProjectIdSearchRouteImport
+      parentRoute: typeof PProjectIdRouteRoute
+    }
+    '/p/$projectId/setup': {
+      id: '/p/$projectId/setup'
+      path: '/setup'
+      fullPath: '/p/$projectId/setup'
+      preLoaderRoute: typeof PProjectIdSetupRouteImport
       parentRoute: typeof PProjectIdRouteRoute
     }
     '/p/$projectId/studies': {
@@ -290,8 +328,10 @@ interface PProjectIdRouteRouteChildren {
   PProjectIdProgressRoute: typeof PProjectIdProgressRoute
   PProjectIdProtocolRoute: typeof PProjectIdProtocolRoute
   PProjectIdReportsRoute: typeof PProjectIdReportsRoute
+  PProjectIdRetrievalRoute: typeof PProjectIdRetrievalRoute
   PProjectIdRiskOfBiasRoute: typeof PProjectIdRiskOfBiasRoute
   PProjectIdSearchRoute: typeof PProjectIdSearchRoute
+  PProjectIdSetupRoute: typeof PProjectIdSetupRoute
   PProjectIdStudiesRoute: typeof PProjectIdStudiesRoute
   PProjectIdIndexRoute: typeof PProjectIdIndexRoute
   PProjectIdScreeningFullTextRoute: typeof PProjectIdScreeningFullTextRoute
@@ -304,8 +344,10 @@ const PProjectIdRouteRouteChildren: PProjectIdRouteRouteChildren = {
   PProjectIdProgressRoute: PProjectIdProgressRoute,
   PProjectIdProtocolRoute: PProjectIdProtocolRoute,
   PProjectIdReportsRoute: PProjectIdReportsRoute,
+  PProjectIdRetrievalRoute: PProjectIdRetrievalRoute,
   PProjectIdRiskOfBiasRoute: PProjectIdRiskOfBiasRoute,
   PProjectIdSearchRoute: PProjectIdSearchRoute,
+  PProjectIdSetupRoute: PProjectIdSetupRoute,
   PProjectIdStudiesRoute: PProjectIdStudiesRoute,
   PProjectIdIndexRoute: PProjectIdIndexRoute,
   PProjectIdScreeningFullTextRoute: PProjectIdScreeningFullTextRoute,

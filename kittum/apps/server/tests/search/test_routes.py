@@ -111,6 +111,15 @@ def test_search_routes_end_to_end(url: str, actor_id: str, context: AppContext) 
     assert context.ledger is not None
 
     with TestClient(create_app(context)) as client:
+        # 0. Only the project's lead adds searches: an execution comes back with every record.
+        for path, body in (
+            ("run", {"plan": PUBMED_PLAN, "actor_id": actor_id}),
+            ("import", {"plan": CENTRAL_PLAN, "data": "", "format": "ris", "actor_id": actor_id}),
+        ):
+            refused = client.post(f"/api/projects/{project_id}/search/{path}", json=body)
+            assert refused.status_code == 403, path
+        _lead(url, project_id, actor_id)
+
         # 1. Run a live PubMed search via the API
         run_resp = client.post(
             f"/api/projects/{project_id}/search/run",
@@ -150,9 +159,12 @@ def test_search_routes_end_to_end(url: str, actor_id: str, context: AppContext) 
         # 4. List executions: the records are the lead's alone, so a reviewer cannot tell the
         # sentinels in their queue by their absence from the catalogue.
         executions = f"/api/projects/{project_id}/search/executions"
+        stranger = _insert(
+            url,
+            f"insert into actor (identity_ref, kind) values ('api-{new_id()}', 'human') returning id",
+        )
+        assert client.get(executions, headers={"X-Kittum-Reviewer": stranger}).status_code == 403
         reviewer = {"X-Kittum-Reviewer": actor_id}
-        assert client.get(executions, headers=reviewer).status_code == 403
-        _lead(url, project_id, actor_id)
         list_resp = client.get(executions, headers=reviewer)
         assert list_resp.status_code == 200
         assert {e["id"] for e in list_resp.json()} == {exec_id, import_data["id"]}
@@ -185,6 +197,7 @@ def test_one_project_cannot_read_another_projects_execution(
     url: str, actor_id: str, context: AppContext
 ) -> None:
     owner, other = _project(url), _project(url)
+    _lead(url, owner, actor_id)
 
     with TestClient(create_app(context)) as client:
         resp = client.post(
@@ -199,8 +212,7 @@ def test_one_project_cannot_read_another_projects_execution(
         assert resp.status_code == 200, resp.text
         exec_id = resp.json()["id"]
 
-        for project in (owner, other):
-            _lead(url, project, actor_id)
+        _lead(url, other, actor_id)
         reviewer = {"X-Kittum-Reviewer": actor_id}
         path = f"search/executions/{exec_id}"
         assert client.get(f"/api/projects/{owner}/{path}", headers=reviewer).status_code == 200
@@ -213,6 +225,7 @@ def test_search_routes_refuse_to_write_without_a_ledger_or_gateway(
     url: str, actor_id: str, context: AppContext
 ) -> None:
     project_id = _project(url)
+    _lead(url, project_id, actor_id)
     import_body = {
         "plan": CENTRAL_PLAN,
         "data": (FIXTURES / "central_export.ris").read_text(),
@@ -239,7 +252,6 @@ def test_search_routes_refuse_to_write_without_a_ledger_or_gateway(
         )
         assert resp.status_code == 503
         assert "gateway" in resp.json()["detail"]
-        _lead(url, project_id, actor_id)
         listed = client.get(
             f"/api/projects/{project_id}/search/executions",
             headers={"X-Kittum-Reviewer": actor_id},

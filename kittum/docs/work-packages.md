@@ -27,7 +27,7 @@ The two-week spike in [DESIGN.md](../DESIGN.md#two-week-spike) picks from these 
 | 13 | `stats` | Done: intervals, stopping, capture-recapture, conformal threshold, agreement |
 | 14 | `report` | Done: PRISMA flow, RIS, search report, AI disclosure, bundle exporters and `seal_bundle`, `gba_amnog` targets, routes; open items listed |
 | 15 | `api`, `app` | Done: composition root, project lifecycle (service, routes, CLI), `serve` with the workbench, `worker`, `demo seed`; authentication open |
-| 16 | Workbench | Done: wired to the API with a reviewer picker; screening, full text, adjudication, progress, protocol, search, studies, report rendering and sealing; end-to-end journey in CI. Extraction review on the server waits on WP-11's screen wiring |
+| 16 | Workbench | Done: wired to the API with a reviewer picker; setup from an empty review (people, protocol editor, searches, corpus, stages, full texts); screening, full text, adjudication, progress, protocol, search, studies, report rendering and sealing; end-to-end journeys in CI. Extraction review on the server waits on WP-11's screen wiring |
 | 17 | Evaluation harness | Open |
 
 ## WP-01 Ledger
@@ -789,6 +789,10 @@ Modules `kittum.api`, `kittum.app`, and `kittum.people`. Needs: the modules it e
   `tests/app/test_worker.py` runs extraction jobs with no model server;
   `tests/app/test_cli.py` sets a review up from the command line; the
   end-to-end journey (WP-16) covers the rest on the real stack.
+- Every lead write is checked inside its transaction against the claimed actor: adding people and
+  publishing need a project lead; searches, the corpus and its links, opening a stage, and full
+  texts need a lead who screens nothing, as the catalogue reads do
+  (`tests/app/test_setup_routes.py` refuses a reviewer's own ID on each).
 
 Open:
 
@@ -862,6 +866,21 @@ Done (branch `kittum/wp-16-workbench-design`, then `kittum/wp-15-integration`):
   figures, and no screening or progress answer they received has an AI verdict field, another
   person's decision, or a reveal outside their own decision. The lead renders the PRISMA flow
   (the same counts as Progress) and seals a bundle that `kittum verify` accepts.
+- Setup from the browser (branch `kittum/workbench-setup`): the start page creates a review
+  and makes its creator the methods lead; Setup lists the steps in order with what is done from
+  the server's records (people, protocol, searches, corpus, title and abstract screening, full
+  texts, extraction), adds people with their roles, and opens a stage per scope with its reveal
+  setting and a sentinel file, showing the protocol's mode, audit plan, and who will screen.
+  Protocol has an editor for the lead: an example protocol, the published version as YAML, or a
+  file; `Ctrl+Enter` checks it (the server reads the YAML and lists each problem with its path),
+  and the diff against the published version shows before publishing with a reason. Search
+  imports export files (RIS, CENTRAL, Embase, PubMed XML, registry CSV) and runs PubMed or
+  ClinicalTrials.gov live; Studies builds the corpus with `b`; Retrieval (the lead's) lists every
+  report with its title and abstract outcome and uploads each PDF with its licence, and adds
+  full-text sentinels. `apps/web/e2e/setup.spec.ts` does all of it in the browser from an empty
+  review, runs the same steps through `kittum project`, and checks that both reviews open the same
+  stage (mode, reveal, protocol hash, judge, the people in each role) and fill the screeners'
+  queues with the same records and sentinel; the first reviewer then picks themselves and screens.
 - Browser unit tests in Vitest browser mode on the mock, and screenshots in `apps/web/screenshots/`.
 
 Left:
@@ -869,8 +888,8 @@ Left:
 - Extraction review on the server (WP-11), the other report targets on the Reports screen, and
   the Risk of bias and AI-exclusion audit screens; the full-text judge's per-criterion reading in adjudication; grounding exceptions.
 - Adjudication shows a full-text column's evidence as counts, not the quotes on the page.
-- Opening stages other than full text, adding people, and publishing a protocol happen in the CLI
-  or the API; the workbench has no forms for them yet.
+- Update searches: a second corpus ingest needs the corpus diff, so Search and Studies refuse it.
+- Removing a person or a role, and renaming a review, are not built in the server either.
 - A session break suggestion after a missed sentinel or a speed-up with an include-rate change.
 - Third-party licence notices for the web bundle (`licenses:sync`).
 - `scripts/screenshots.ts` still shoots the mock; point it at a seeded server.

@@ -1,11 +1,12 @@
-"""Project routes: projects and their people, full texts, and progress.
+"""Project routes: projects and their people, full texts (the lead's upload queue, record full
+texts, and full-text sentinels), and progress.
 
 Until the API has authentication, the caller of a read that depends on who asks names themselves
 in `X-Kittum-Reviewer`, as in the screening routes. It is a stand-in, not a security boundary.
 """
 
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Literal
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request, status
 from starlette.concurrency import run_in_threadpool
@@ -16,14 +17,20 @@ from kittum.app import (
     LifecycleError,
     Member,
     MemberRole,
+    NotLead,
     Progress,
     ProjectSummary,
+    RetrievalItem,
     add_member,
     attach_full_text,
+    attach_sentinel_full_text,
     create_project,
     list_projects,
     progress,
     project_summary,
+    require_lead,
+    require_project_lead,
+    retrieval,
 )
 from kittum.core import Id, NotFoundError, Record
 from kittum.documents import NotAPdf
@@ -67,6 +74,8 @@ def _errors() -> Generator[None]:
         yield
     except (NotFoundError, NotAssigned) as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from e
+    except NotLead as e:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(e)) from e
     except LifecycleError as e:
         raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from e
 
@@ -96,6 +105,7 @@ def get_project(project_id: Id, ctx: Context) -> ProjectSummary:
 @router.post("/{project_id}/members", operation_id="addProjectMember", status_code=201)
 def add_member_route(project_id: Id, body: AddMemberRequest, ctx: Context) -> Member:
     with _errors(), ctx.db.transaction() as tx:
+        require_project_lead(tx, project_id, body.added_by)
         return add_member(
             tx,
             project_id,
@@ -110,6 +120,8 @@ def _attach(
     ctx: AppContext, project_id: Id, item_ref: str, pdf: bytes, actor_id: Id, licence: str | None
 ) -> FullText:
     with ctx.db.transaction() as tx:
+        # The lead's upload queue names every record; whoever uploads works from it.
+        require_lead(tx, project_id, actor_id)
         return attach_full_text(
             tx,
             project_id,
@@ -142,6 +154,66 @@ async def attach_full_text_route(
         with _errors():
             return await run_in_threadpool(
                 _attach, ctx, project_id, item_ref, pdf, actor_id, licence
+            )
+    except NotAPdf as e:
+        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, f"not a PDF: {e}") from e
+
+
+@router.get("/{project_id}/full-texts", operation_id="listFullTexts")
+def list_full_texts(project_id: Id, viewer: Viewer, ctx: Context) -> list[RetrievalItem]:
+    """Every report of the corpus with its screening outcomes and its full text, for the methods
+    lead only (403 otherwise): the upload queue of the full-text waterfall."""
+    with _errors(), ctx.db.transaction() as tx:
+        require_lead(tx, project_id, viewer)
+        return retrieval(tx, project_id, ctx.screening())
+
+
+def _attach_sentinel(
+    ctx: AppContext,
+    project_id: Id,
+    title: str,
+    outcome: Literal["include", "exclude"],
+    pdf: bytes,
+    actor_id: Id,
+    licence: str | None,
+) -> FullText:
+    with ctx.db.transaction() as tx:
+        # Whoever knows the sentinels could tell them in a queue: only a lead who screens nothing.
+        require_lead(tx, project_id, actor_id)
+        return attach_sentinel_full_text(
+            tx,
+            project_id,
+            title,
+            pdf,
+            outcome,
+            actor_id=actor_id,
+            artifacts=ctx.artifacts,
+            ledger=ctx.require_ledger(),
+            licence=licence,
+        )
+
+
+@router.post(
+    "/{project_id}/full-text-sentinels",
+    operation_id="attachFullTextSentinel",
+    status_code=201,
+    openapi_extra=_PDF_BODY,
+)
+async def attach_sentinel_route(
+    project_id: Id,
+    request: Request,
+    ctx: Context,
+    actor_id: Annotated[Id, Query()],
+    title: Annotated[str, Query(min_length=1)],
+    expected_outcome: Annotated[Literal["include", "exclude"], Query()],
+    licence: Annotated[str | None, Query()] = None,
+) -> FullText:
+    """Upload a report with a known outcome; full-text stages seed it into every queue."""
+    pdf = await request.body()
+    try:
+        with _errors():
+            return await run_in_threadpool(
+                _attach_sentinel, ctx, project_id, title, expected_outcome, pdf, actor_id, licence
             )
     except NotAPdf as e:
         raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, f"not a PDF: {e}") from e

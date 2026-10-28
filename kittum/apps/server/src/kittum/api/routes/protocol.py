@@ -1,4 +1,6 @@
-"""Protocol routes: validate a source, save a draft, publish it, and read versions back."""
+"""Protocol routes: parse and validate a source, preview its diff against the published version,
+save a draft, publish it, and read versions back. The example protocols of a checkout are served
+as starting points."""
 
 from datetime import datetime
 from typing import Any, Literal
@@ -6,14 +8,25 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException, status
 
 from kittum.api import Context  # noqa: TC001 - FastAPI resolves it at runtime
+from kittum.app import (
+    ExampleProtocol,
+    LifecycleError,
+    NotLead,
+    example_protocols,
+    parse_source,
+    protocol_source,
+    require_project_lead,
+)
 from kittum.core import Id, NotFoundError, Record
 from kittum.protocol import (
+    ProtocolDiff,
     ProtocolError,
     ProtocolIssue,
     ProtocolStateError,
     ReviewProtocol,
     StoredProtocol,
     compile,
+    diff,
     get_profile,
     get_version,
     latest_published,
@@ -33,6 +46,18 @@ class ValidationReport(Record):
     issues: tuple[ProtocolIssue, ...] = ()
 
 
+class SourceText(Record):
+    text: str
+    """YAML or JSON."""
+
+
+class ParsedSource(Record):
+    """The source as data, or the syntax error as an issue with its line and column."""
+
+    source: ProtocolSource | None
+    issues: tuple[ProtocolIssue, ...] = ()
+
+
 class PublishRequest(Record):
     approved_by: Id
     reason: str | None = None
@@ -46,6 +71,15 @@ class ProtocolVersionSummary(Record):
     content_hash: str
     created_at: datetime
     published_at: datetime | None
+
+
+class DiffPreview(Record):
+    """What publishing a source would change against the version every decision reads now;
+    `previous` and `diff` are None before the first version."""
+
+    content_hash: str
+    previous: ProtocolVersionSummary | None
+    diff: ProtocolDiff | None
 
 
 class PublishedProtocol(Record):
@@ -92,6 +126,38 @@ def _invalid(e: ProtocolError) -> HTTPException:
     )
 
 
+def _summary(s: StoredProtocol) -> ProtocolVersionSummary:
+    return ProtocolVersionSummary(
+        id=s.id,
+        parent_id=s.parent_id,
+        status=s.status,
+        version_label=s.version.protocol.version_label,
+        content_hash=s.version.content_hash,
+        created_at=s.created_at,
+        published_at=s.published_at,
+    )
+
+
+@router.get("/protocol/examples", operation_id="listExampleProtocols")
+def list_examples() -> list[ExampleProtocol]:
+    """The example protocols in kittum/examples/protocols, to start a review from."""
+    return example_protocols()
+
+
+@router.post("/protocol/parse", operation_id="parseProtocol")
+def parse_protocol(body: SourceText) -> ParsedSource:
+    """Read YAML or JSON text as `kittum project publish-protocol` reads its file. A syntax error
+    comes back as an issue; validate the source with `validateProtocol`."""
+    try:
+        data = parse_source(body.text, "the protocol")
+    except LifecycleError as e:
+        return ParsedSource(source=None, issues=(ProtocolIssue(path="", message=str(e)),))
+    if not isinstance(data, dict):
+        issue = ProtocolIssue(path="", message="the protocol must be a mapping of fields")
+        return ParsedSource(source=None, issues=(issue,))
+    return ParsedSource(source=data)
+
+
 @router.post("/protocol/validate", operation_id="validateProtocol")
 def validate_protocol(source: ProtocolSource) -> ValidationReport:
     try:
@@ -126,6 +192,7 @@ def publish_protocol_version(
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "no ledger is configured")
     try:
         with ctx.db.transaction() as tx:
+            require_project_lead(tx, project_id, request.approved_by)
             return publish(
                 tx,
                 project_id,
@@ -136,6 +203,8 @@ def publish_protocol_version(
             )
     except NotFoundError as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from None
+    except NotLead as e:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(e)) from None
     except ProtocolStateError as e:
         raise HTTPException(status.HTTP_409_CONFLICT, str(e)) from None
 
@@ -149,22 +218,38 @@ def get_published_protocol(project_id: Id, ctx: Context) -> PublishedProtocol:
     return PublishedProtocol(stored=stored, labels=_labels(stored.version.protocol))
 
 
+@router.get("/projects/{project_id}/protocol/source", operation_id="getPublishedProtocolSource")
+def get_published_source(project_id: Id, ctx: Context) -> SourceText:
+    """The published protocol as YAML, to edit into the next version."""
+    try:
+        with ctx.db.transaction() as tx:
+            return SourceText(text=protocol_source(tx, project_id))
+    except LifecycleError as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(e)) from None
+
+
+@router.post("/projects/{project_id}/protocol/diff", operation_id="previewProtocolDiff")
+def preview_diff(project_id: Id, source: ProtocolSource, ctx: Context) -> DiffPreview:
+    """The changes publishing this source would make to the published version, without saving
+    anything. 422 if it does not compile."""
+    try:
+        version = compile(source)
+    except ProtocolError as e:
+        raise _invalid(e) from None
+    with ctx.db.transaction() as tx:
+        stored = latest_published(tx, project_id)
+    return DiffPreview(
+        content_hash=version.content_hash,
+        previous=_summary(stored) if stored else None,
+        diff=diff(stored.version, version) if stored else None,
+    )
+
+
 @router.get("/projects/{project_id}/protocol-versions", operation_id="listProtocolVersions")
 def list_protocol_versions(project_id: Id, ctx: Context) -> list[ProtocolVersionSummary]:
     with ctx.db.transaction() as tx:
         stored = list_versions(tx, project_id)
-    return [
-        ProtocolVersionSummary(
-            id=s.id,
-            parent_id=s.parent_id,
-            status=s.status,
-            version_label=s.version.protocol.version_label,
-            content_hash=s.version.content_hash,
-            created_at=s.created_at,
-            published_at=s.published_at,
-        )
-        for s in stored
-    ]
+    return [_summary(s) for s in stored]
 
 
 @router.get(

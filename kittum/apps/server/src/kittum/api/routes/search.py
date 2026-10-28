@@ -79,9 +79,11 @@ def run_search(
     ctx: Context,
 ) -> SearchExecution:
     ledger = _ledger(ctx)
-    source = _get_source(body.plan, ctx)
     try:
         with ctx.db.transaction() as tx:
+            # The execution comes back with every record it found: the lead's catalogue.
+            _require_lead(tx, project_id, body.actor_id)
+            source = _get_source(body.plan, ctx)
             return run(
                 tx,
                 project_id,
@@ -104,6 +106,7 @@ def import_search(
     ledger = _ledger(ctx)
     try:
         with ctx.db.transaction() as tx:
+            _require_lead(tx, project_id, body.actor_id)
             return import_file(
                 tx,
                 project_id,

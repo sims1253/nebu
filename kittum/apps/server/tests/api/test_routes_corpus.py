@@ -185,7 +185,7 @@ def test_corpus_api_endpoints_e2e(api_client: TestClient) -> None:
         "actor_id": str(actor_id),
     }
     resp = api_client.post(f"/api/projects/{other_proj}/corpus/merge", json=merge_payload)
-    assert resp.status_code == 404
+    assert resp.status_code == 403  # the lead of one project is no lead of another
     for occurrence_ids in ([], [str(rec1.occurrence_id)] * 2):
         resp = api_client.post(
             f"/api/projects/{proj_id}/corpus/merge",

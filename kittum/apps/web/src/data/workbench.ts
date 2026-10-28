@@ -10,28 +10,42 @@ import type {
   AdjudicationResult,
   Anchor,
   Box,
+  CorpusRevision,
   CorpusView,
   DecideResult,
   Decision,
   DecisionTiming,
+  DiffPreview,
+  ExampleProtocol,
   ExtractionReview,
+  FullText,
   FullTextAssignment,
   IdentityRevision,
   LayerSummary,
   LedgerSummary,
   LinkProposal,
+  Member,
   PageLayer,
+  ParsedSource,
   Phase,
   Progress,
   ProjectSummary,
+  ProtocolSource,
   RenderedReport,
+  RetrievalItem,
+  RevealSetting,
+  Role,
   SealedBundle,
+  SearchPlan,
+  Sentinel,
+  StoredProtocol,
   ProtocolVersion,
   QueueItem,
   ScopeStatus,
   SearchExecution,
   Stage,
   StageInfo,
+  ValidationReport,
 } from "./schema.ts";
 
 export class WorkbenchError extends Data.TaggedError("WorkbenchError")<{
@@ -68,6 +82,62 @@ export interface Workbench {
   readonly projects: () => Call<ReadonlyArray<ProjectSummary>>;
   /** The published protocol, or null before one is published. */
   readonly protocol: (projectId: string) => Call<ProtocolVersion | null>;
+
+  // Setting a review up. Each step is the methods lead's; the server records it in the ledger.
+
+  /** A new review and its methods lead, who adds everyone else. */
+  readonly createProject: (request: {
+    readonly name: string;
+    readonly leadName: string;
+  }) => Call<ProjectSummary>;
+  readonly addMember: (
+    request: Caller & { readonly displayName: string; readonly roles: ReadonlyArray<Role> },
+  ) => Call<Member>;
+  /** The example protocols the server ships, to start a review from. */
+  readonly protocolExamples: () => Call<ReadonlyArray<ExampleProtocol>>;
+  /** The published protocol as YAML, to edit into the next version. */
+  readonly protocolSource: (projectId: string) => Call<string>;
+  /** YAML or JSON text as data; a syntax error comes back as an issue. */
+  readonly parseProtocol: (text: string) => Call<ParsedSource>;
+  readonly validateProtocol: (source: ProtocolSource) => Call<ValidationReport>;
+  /** What publishing `source` would change against the published version; saves nothing. */
+  readonly previewProtocol: (
+    request: Caller & { readonly source: ProtocolSource },
+  ) => Call<DiffPreview>;
+  /** Saves `source` as a draft and publishes it with the caller's approval. */
+  readonly publishProtocol: (
+    request: Caller & { readonly source: ProtocolSource; readonly reason: string | null },
+  ) => Call<StoredProtocol>;
+  /** A live search (PubMed or ClinicalTrials.gov) through the server's gateway. */
+  readonly runSearch: (request: Caller & { readonly plan: SearchPlan }) => Call<SearchExecution>;
+  /** An export file: RIS, Cochrane, Embase, PubMed XML, or a registry's CSV. */
+  readonly importSearch: (
+    request: Caller & { readonly plan: SearchPlan; readonly data: string; readonly format: string },
+  ) => Call<SearchExecution>;
+  /** Deduplicates every search into the first identity revision. */
+  readonly ingestCorpus: (caller: Caller) => Call<CorpusRevision>;
+  /** A sentinel file as `kittum project open-stage --sentinels` reads it. */
+  readonly parseSentinels: (
+    request: Caller & { readonly text: string },
+  ) => Call<ReadonlyArray<Sentinel>>;
+  /** Every report of the corpus with its outcomes and full text: the lead's upload queue. */
+  readonly fullTexts: (caller: Caller) => Call<ReadonlyArray<RetrievalItem>>;
+  readonly attachFullText: (
+    request: Caller & {
+      readonly itemRef: string;
+      readonly pdf: Uint8Array;
+      readonly licence: string | null;
+    },
+  ) => Call<FullText>;
+  /** A report with a known outcome, which full-text stages seed into every queue. */
+  readonly attachSentinelFullText: (
+    request: Caller & {
+      readonly title: string;
+      readonly expectedOutcome: "include" | "exclude";
+      readonly pdf: Uint8Array;
+      readonly licence: string | null;
+    },
+  ) => Call<FullText>;
 
   /** The reviewer's next undecided assignments in queue order, after `after`. */
   readonly queue: (
@@ -123,7 +193,12 @@ export interface Workbench {
   readonly progress: (caller: Caller) => Call<Progress>;
   /** The methods lead opens a scope at a stage; the AI judge starts reading at once. */
   readonly openStage: (
-    request: Caller & { readonly scopeId: string; readonly stage: Stage },
+    request: Caller & {
+      readonly scopeId: string;
+      readonly stage: Stage;
+      readonly reveal?: RevealSetting;
+      readonly sentinels?: ReadonlyArray<Sentinel>;
+    },
   ) => Call<StageInfo>;
   readonly ledger: (projectId: string) => Call<LedgerSummary>;
 

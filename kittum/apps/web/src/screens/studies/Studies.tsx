@@ -9,6 +9,7 @@ import { run, WorkbenchError } from "../../data/workbench.ts";
 import { Key, KeyHint } from "../../ui/Key.tsx";
 import { useKeys } from "../../ui/keys.ts";
 import { LEAD_ONLY, plural, useProject } from "../project.tsx";
+import { BuildCorpus } from "../setup/BuildCorpus.tsx";
 
 const RELATIONS: Record<LinkProposal["relation"], string> = {
   same_record: "The same record, found twice",
@@ -54,6 +55,7 @@ export function StudiesScreen() {
   const lead = seesLeadData;
   const [corpus, setCorpus] = useState<CorpusView | null | undefined>(undefined);
   const [proposals, setProposals] = useState<ReadonlyArray<LinkProposal>>([]);
+  const [searches, setSearches] = useState<number | null>(null);
   const [selected, setSelected] = useState(0);
   const [marked, setMarked] = useState<ReadonlySet<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -80,6 +82,19 @@ export function StudiesScreen() {
   useEffect(() => {
     if (lead) void load();
   }, [load, lead]);
+
+  // Before the corpus, the lead builds it here from the searches.
+  useEffect(() => {
+    if (!lead || corpus !== null) return;
+    let live = true;
+    run(workbench.searches({ projectId: project.id, as: me.actor_id })).then(
+      (found) => live && setSearches(found.length),
+      () => live && setSearches(0),
+    );
+    return () => {
+      live = false;
+    };
+  }, [workbench, project.id, me.actor_id, lead, corpus]);
 
   const byOccurrence = useMemo(() => {
     const map = new Map<string, Located>();
@@ -261,11 +276,10 @@ export function StudiesScreen() {
           ) : corpus === undefined ? (
             <p className="mt-4 text-ink-3">Loading the corpus.</p>
           ) : corpus === null ? (
-            <p className="mt-4 max-w-[62ch] text-md text-ink-2">
-              The corpus is not built yet. Once the searches are in, the methods lead runs{" "}
-              <code>kittum project ingest</code> to deduplicate them into records and{" "}
-              {plural(labels.study).toLowerCase()}.
-            </p>
+            <>
+              <p className="mt-2 text-sm text-ink-2">The corpus is not built yet.</p>
+              <BuildCorpus searches={searches} onBuilt={() => void load()} />
+            </>
           ) : (
             <>
               <p className="mt-2 text-sm text-ink-2">

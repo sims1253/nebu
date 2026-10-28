@@ -13,7 +13,16 @@ from typing import TYPE_CHECKING, Annotated
 from fastapi import APIRouter, Header, HTTPException, Query, status
 
 from kittum.api import AppContext, Context  # noqa: TC001 - FastAPI resolves it at runtime
-from kittum.app import AssignmentFullText, LifecycleError, full_text, mentions, open_screening
+from kittum.app import (
+    AssignmentFullText,
+    LifecycleError,
+    NotLead,
+    full_text,
+    mentions,
+    open_screening,
+    parse_sentinels,
+    require_lead,
+)
 from kittum.core import Id, NotFoundError, Record
 from kittum.documents import get_layer
 from kittum.protocol import Stage
@@ -92,6 +101,11 @@ class OpenStageRequest(Record):
     the project's sentinel full texts."""
 
 
+class SentinelFile(Record):
+    text: str
+    """A YAML or JSON list of sentinels, as `kittum project open-stage --sentinels` reads."""
+
+
 def _screening(ctx: AppContext) -> Screening:
     if ctx.ledger is None:
         raise HTTPException(status_code=503, detail="no ledger is configured")
@@ -110,6 +124,8 @@ def _errors() -> Generator[None]:
         # FastAPI's validation-error shape, so clients read one 422 format.
         detail = [{"loc": [], "msg": str(e), "type": "invalid_decision"}]
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=detail) from e
+    except NotLead as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
     except LifecycleError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
 
@@ -127,6 +143,8 @@ def open_stage(project_id: Id, body: OpenStageRequest, ctx: Context) -> StageInf
     abstract screens every report of the corpus; full text every record included at title and
     abstract that has a full text."""
     with _errors(), ctx.db.transaction() as tx:
+        # Whoever opens a stage hands over its sentinels: only a lead who screens nothing.
+        require_lead(tx, project_id, body.actor_id)
         return open_screening(
             tx,
             ctx,
@@ -138,6 +156,16 @@ def open_stage(project_id: Id, body: OpenStageRequest, ctx: Context) -> StageInf
             topic_id=body.topic_id,
             sentinels=body.sentinels,
         )
+
+
+@router.post("/sentinels/parse", operation_id="parseScreeningSentinels")
+def parse_sentinels_route(project_id: Id, body: SentinelFile) -> list[Sentinel]:  # noqa: ARG001
+    """Read a sentinel file for `openScreeningStage`; 422 with the line or entry at fault."""
+    try:
+        return list(parse_sentinels(body.text))
+    except LifecycleError as e:
+        detail = [{"loc": ["body", "text"], "msg": str(e), "type": "invalid_file"}]
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail=detail) from e
 
 
 @router.get("/assignments/{assignment_id}/full-text", operation_id="getScreeningAssignmentFullText")

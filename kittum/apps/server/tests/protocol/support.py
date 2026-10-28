@@ -27,7 +27,7 @@ def example_source(name: str = "nicotine-replacement") -> dict[str, Any]:
 
 
 def seed_project(tx: Tx) -> tuple[Id, Id, Id]:
-    """A project, a human approver, and a system actor."""
+    """A project, a human approver who leads it, and a system actor."""
     project = tx.execute(
         "insert into project (name, policy_version) values ('example review', 'p1') returning id"
     ).fetchone()
@@ -40,4 +40,10 @@ def seed_project(tx: Tx) -> tuple[Id, Id, Id]:
         (f"system-{new_id()}",),
     ).fetchone()
     assert project and human and system
+    # The approver leads the project: only a lead publishes.
+    tx.execute(
+        "insert into project_member (project_id, actor_id, role, display_name, event_id)"
+        " values (%s, %s, 'lead', 'Approver', uuidv7())",
+        (project["id"], human["id"]),
+    )
     return project["id"], human["id"], system["id"]

@@ -30,10 +30,12 @@ export const Route = createFileRoute("/p/$projectId")({
 });
 
 type Section =
+  | "setup"
   | "adjudication"
   | "protocol"
   | "search"
   | "studies"
+  | "retrieval"
   | "screening/title-abstract"
   | "screening/full-text"
   | "extraction"
@@ -42,9 +44,11 @@ type Section =
   | "reports";
 
 const NAV: ReadonlyArray<{ section: Section; label: string; chord: string; group?: string }> = [
+  { section: "setup", label: "Setup", chord: "u" },
   { section: "protocol", label: "Protocol", chord: "p" },
   { section: "search", label: "Search", chord: "s" },
   { section: "studies", label: "Studies", chord: "d" },
+  { section: "retrieval", label: "Retrieval", chord: "v" },
   {
     section: "screening/title-abstract",
     label: "Title and abstract",
@@ -121,13 +125,14 @@ function Layout({ state, onSwitch }: { state: ProjectState; onSwitch: () => void
           >
             {NAV.map((item, index) => (
               <span key={item.section} className="flex items-center">
-                {item.group && NAV[index - 1]?.group !== item.group ? (
-                  <span className="mr-1 ml-2 text-xs text-ink-3">{item.group}</span>
+                {/* A rule on each side of a group, the screening stages. */}
+                {index > 0 && NAV[index - 1]?.group !== item.group ? (
+                  <span aria-hidden="true" className="mx-1.5 h-4 w-px self-center bg-rule-strong" />
                 ) : null}
                 <Link
                   to={path(item.section)}
                   params={{ projectId: state.project.id }}
-                  className="rounded-[3px] px-[7px] py-1 text-sm whitespace-nowrap text-ink-2 hover:text-ink data-[status=active]:bg-petrol-wash data-[status=active]:font-medium data-[status=active]:text-petrol"
+                  className="narrow rounded-[3px] px-[5px] py-1 text-sm whitespace-nowrap text-ink-2 hover:text-ink data-[status=active]:bg-petrol-wash data-[status=active]:font-medium data-[status=active]:text-petrol"
                   title={`g then ${item.chord}`}
                 >
                   {item.label}
@@ -164,7 +169,7 @@ function ProjectSwitcher({ state }: { state: ProjectState }) {
   return (
     <Menu.Root>
       <Menu.Trigger className="flex max-w-[360px] min-w-0 flex-none items-baseline gap-2 rounded-[3px] px-2 py-1 text-left hover:bg-sheet-2 data-[popup-open]:bg-sheet-2">
-        <span className="max-w-[220px] truncate text-sm font-semibold">{state.project.name}</span>
+        <span className="max-w-[150px] truncate text-sm font-semibold">{state.project.name}</span>
         <svg
           width="9"
           height="6"
@@ -212,8 +217,26 @@ const KEYS: ReadonlyArray<{
   {
     screen: "Everywhere",
     keys: [
-      [["g", "t"], "Go to a stage: p, s, d, t, f, a, x, b, o, r"],
+      [["g", "t"], "Go to a stage: u, p, s, d, v, t, f, a, x, b, o, r"],
       [["h"], "Show these keys"],
+    ],
+  },
+  {
+    screen: "Setup (the methods lead)",
+    keys: [
+      [["j", "k"], "Next and previous step"],
+      [["Enter"], "Go to the step's screen"],
+      [["a"], "Add a person"],
+      [["b"], "Build the corpus, once the searches are in"],
+    ],
+  },
+  {
+    screen: "Protocol, Search, Retrieval (the methods lead)",
+    keys: [
+      [["v"], "Write a new protocol version"],
+      [["Ctrl", "Enter"], "Check the protocol in the editor"],
+      [["i", "n"], "Import a search file, run a live search"],
+      [["u", "s"], "Upload a full text, add a full-text sentinel"],
     ],
   },
   {
@@ -306,11 +329,11 @@ function Identity({ member, onSwitch }: { member: Member; onSwitch: () => void }
       onClick={onSwitch}
       data-testid="identity"
       title={`${member.roles.map((r) => ROLE_LABELS[r]).join(", ")}. There is no sign-in yet: choose who you are. Anyone who can reach the server can act as anyone.`}
-      className="flex items-baseline gap-2 rounded-[3px] px-2 py-1 text-sm hover:bg-sheet-2"
+      aria-label={`Acting as ${member.display_name}, ${member.roles.map((r) => ROLE_LABELS[r]).join(", ")}. Switch person`}
+      className="flex items-baseline gap-2 rounded-[3px] px-2 py-1 text-sm whitespace-nowrap hover:bg-sheet-2"
     >
-      <span className="text-xs text-ink-3">Acting as</span>
       <span className="font-medium">{member.display_name}</span>
-      <span className="text-xs text-ink-3">
+      <span className="hidden text-xs text-ink-3 2xl:inline">
         {member.roles.map((r) => ROLE_LABELS[r]).join(", ")}
       </span>
     </button>
@@ -362,7 +385,7 @@ function IdentityPicker({
         </ol>
         {project.members.length === 0 ? (
           <p className="mt-4 text-ink-2">
-            This review has no people yet. Add them with <code>kittum project add-member</code>.
+            This review has no people yet. Its methods lead adds them under Setup.
           </p>
         ) : null}
       </div>

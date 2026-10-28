@@ -67,10 +67,15 @@ A walk through the demo:
 5. The reviewers screen the full texts: `]` jumps to a protocol term on the page, `Enter` adopts
    it as evidence, `y` `n` `?` give each criterion a verdict, `i` `e` `x` decide.
 
-`uv run kittum ledger verify <project ID>` checks the project's hash chain. `uv run kittum
-project --help` lists the lifecycle steps for a review of your own: create it, add people,
-publish a protocol, import or run searches, ingest the corpus, attach full texts, open stages
-(`--sentinels examples/sentinels/nicotine-replacement.yaml` for the example protocol).
+`uv run kittum ledger verify <project ID>` checks the project's hash chain.
+
+For a review of your own, press `c` on the start page and set it up in the browser as its methods
+lead: Setup walks through the steps in order. Add the people with their roles, write the protocol
+from an example in `examples/protocols/` or your own file and publish it, import each database's
+export (RIS, CENTRAL, Embase, PubMed XML, registry CSV) or run PubMed and ClinicalTrials.gov live,
+build the corpus, open title and abstract screening with its sentinels
+(`examples/sentinels/nicotine-replacement.yaml` for the example protocol), and upload the full
+texts on Retrieval. `uv run kittum project --help` lists the same steps for the command line.
 
 To judge with a hosted OpenAI-compatible API instead, add it as a recipe of your own in a file
 under `.kittum/` (git ignores it), point `KITTUM_RECIPES_FILE` at it, and name the environment

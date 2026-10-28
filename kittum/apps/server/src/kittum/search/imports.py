@@ -1,14 +1,17 @@
-"""File import adapters for RIS (generic, Cochrane CENTRAL, Embase) and CSV (CTIS, EU-CTR)."""
+"""File import adapters for RIS (generic, Cochrane CENTRAL, Embase), CSV (CTIS, EU-CTR), and PubMed
+XML (a PubMed or MEDLINE export saved as XML, as EFetch returns it)."""
 
 import csv
 import io
 import re
+import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING
 
 import rispy
 
 from kittum.core import Clock, Id, SystemClock, new_id
 from kittum.search.models import SearchExecution, SearchPlan, SourceRecord
+from kittum.search.pubmed import parse_pubmed_xml
 from kittum.search.service import record_execution
 
 if TYPE_CHECKING:
@@ -198,6 +201,15 @@ def parse_csv(text: str, raw_hash: str, format_name: str) -> list[SourceRecord]:
     return records
 
 
+def parse_pubmed_export(text: str, raw_hash: str, format_name: str) -> list[SourceRecord]:
+    """PubMed XML saved from PubMed (Send to, File, XML) or EFetch, under the plan's source."""
+    try:
+        records = parse_pubmed_xml(text.encode("utf-8"), raw_hash)
+    except ET.ParseError as exc:
+        raise ValueError(f"not PubMed XML: {exc}") from exc
+    return [r.model_copy(update={"source": format_name}) for r in records]
+
+
 _PARSERS: dict[str, Callable[[str, str, str], list[SourceRecord]]] = {
     "ris": parse_ris,
     "central": parse_ris,
@@ -207,6 +219,7 @@ _PARSERS: dict[str, Callable[[str, str, str], list[SourceRecord]]] = {
     "ctis": parse_csv,
     "euctr": parse_csv,
     "eu-ctr": parse_csv,
+    "pubmed-xml": parse_pubmed_export,
 }
 
 
@@ -222,7 +235,7 @@ def import_file(
     artifacts: ArtifactStore,
     clock: Clock | None = None,
 ) -> SearchExecution:
-    """Import records from an exported file (RIS, CENTRAL, Embase, CTIS, EU-CTR).
+    """Import records from an exported file (RIS, CENTRAL, Embase, CTIS, EU-CTR, PubMed XML).
 
     The file is stored as the execution's one raw artifact. Its record count is the reported count;
     an export carries no separate platform total.

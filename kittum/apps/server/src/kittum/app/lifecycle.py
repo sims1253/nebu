@@ -8,6 +8,10 @@
     attach_full_text(tx, project, item_ref, pdf, ...)       # for full-text screening
     open_screening(tx, ctx, project, scope_id, "title_abstract", actor_id=lead)
 
+The workbench drives the same steps over HTTP; `parse_source` and `parse_sentinels` read the
+YAML or JSON files the CLI reads from disk, and `retrieval` lists what the full-text upload
+queue shows the methods lead.
+
 Each function writes its rows and its ledger event through the caller's transaction. Screening
 records come from the corpus: one per report of the newest identity revision at title and
 abstract; at full text, one per record included at title and abstract that has a full text.
@@ -15,9 +19,11 @@ abstract; at full text, one per record included at title and abstract that has a
 
 from collections import Counter
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 import yaml
+from pydantic import ValidationError
 
 from kittum.core import Id, KittumError, NotFoundError, Record, new_id, sha256_hex
 from kittum.corpus import (
@@ -47,8 +53,6 @@ from kittum.screening import (
 from kittum.search import list_executions
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from kittum.app.context import AppContext
     from kittum.db import Tx
     from kittum.ledger import Ledger
@@ -59,6 +63,8 @@ if TYPE_CHECKING:
 PROJECT_CREATED = "project.created"
 MEMBER_ADDED = "project.member_added"
 FULL_TEXT_ATTACHED = "project.full_text_attached"
+EXAMPLES = Path(__file__).parents[5] / "examples"
+"""kittum/examples in a checkout: example protocols and sentinel files."""
 
 
 class LifecycleError(KittumError):
@@ -94,6 +100,30 @@ class FullText(Record):
     layer_id: Id
     page_count: int | None
     licence: str | None
+
+
+class ExampleProtocol(Record):
+    id: str
+    title: str
+    text: str
+    """The YAML source, as `kittum project publish-protocol` takes it."""
+
+
+class RetrievalItem(Record):
+    """A report of the corpus and its full text, for the methods lead's upload queue. `outcomes`
+    holds the report's current outcome per screened scope and stage (`include`, `exclude`,
+    `conflict`, or None while it is being screened)."""
+
+    item_ref: str
+    report_id: Id
+    study_id: Id
+    title: str
+    year: int | None
+    journal: str | None
+    doi: str | None
+    registry_ids: tuple[str, ...]
+    outcomes: dict[str, dict[str, str | None]]
+    full_text: FullText | None
 
 
 class StageProgress(Record):
@@ -238,6 +268,45 @@ def publish_protocol(
     data = yaml.safe_load(source) if isinstance(source, str) else source
     draft = save_draft(tx, project_id, compile(data))
     return publish(tx, project_id, draft.id, approved_by, ledger=ledger, reason=reason)
+
+
+def parse_source(text: str, what: str = "the file") -> Any:
+    """A YAML or JSON document (JSON is YAML) as data. Raises `LifecycleError` naming the line and
+    column of a syntax error."""
+    try:
+        return yaml.safe_load(text)
+    except yaml.MarkedYAMLError as e:
+        mark = e.problem_mark
+        where = f"line {mark.line + 1}, column {mark.column + 1}: " if mark else ""
+        raise LifecycleError(f"{what} is not valid YAML or JSON: {where}{e.problem}") from None
+    except yaml.YAMLError as e:
+        raise LifecycleError(f"{what} is not valid YAML or JSON: {e}") from None
+
+
+def example_protocols() -> list[ExampleProtocol]:
+    """The example protocols of a checkout, to start a review from; none in an installed
+    package without them."""
+    out = []
+    for path in sorted((EXAMPLES / "protocols").glob("*.yaml")):
+        text = path.read_text()
+        data = yaml.safe_load(text)
+        title = data.get("title", {}) if isinstance(data, dict) else {}
+        language = data.get("default_language", "en") if isinstance(data, dict) else "en"
+        label = title.get(language) if isinstance(title, dict) else None
+        out.append(ExampleProtocol(id=path.stem, title=str(label or path.stem), text=text))
+    return out
+
+
+def protocol_source(tx: Tx, project_id: Id) -> str:
+    """The published protocol as YAML, to edit into its next version. It compiles to the same
+    content hash."""
+    protocol = _published(tx, project_id).version.protocol
+    return yaml.safe_dump(
+        protocol.model_dump(mode="json", exclude_none=True),
+        sort_keys=False,
+        allow_unicode=True,
+        width=100,
+    )
 
 
 def _published(tx: Tx, project_id: Id) -> StoredProtocol:
@@ -429,16 +498,74 @@ def full_text_records(
     return out
 
 
+def retrieval(tx: Tx, project_id: Id, screening: Screening) -> list[RetrievalItem]:
+    """Every report of the newest identity revision, in search order, with its outcome in each
+    open stage and its full text. Full-text sentinels are not reports and are left out."""
+    revision = latest_revision(tx, project_id)
+    if revision is None:
+        raise LifecycleError("ingest the corpus first")
+    outcomes: dict[str, dict[str, dict[str, str | None]]] = {}
+    for info in screening.stages(tx, project_id):
+        found = screening.outcomes(
+            tx, project_id, info.scope_id, info.stage, topic_id=info.topic_id
+        )
+        for ref, outcome in found.items():
+            outcomes.setdefault(ref, {}).setdefault(info.scope_id, {})[info.stage] = outcome
+    texts = {
+        r["item_ref"]: r
+        for r in tx.execute(
+            "select item_ref from full_text where project_id = %s and sentinel_outcome is null",
+            (project_id,),
+        ).fetchall()
+    }
+    out = []
+    for report in reports(tx, project_id, revision.id):
+        ref = str(report.report_id)
+        best = max(report.records, key=lambda r: len(r.abstract or ""))
+        out.append(
+            RetrievalItem(
+                item_ref=ref,
+                report_id=report.report_id,
+                study_id=report.study_id,
+                title=best.title,
+                year=best.year,
+                journal=best.journal,
+                doi=next((r.doi for r in report.records if r.doi), None),
+                registry_ids=tuple(
+                    dict.fromkeys(i for r in report.records for i in r.registry_ids)
+                ),
+                outcomes=outcomes.get(ref, {}),
+                full_text=full_text(tx, project_id, ref) if ref in texts else None,
+            )
+        )
+    return out
+
+
 # Screening
+
+
+def parse_sentinels(text: str, what: str = "the sentinel file") -> tuple[Sentinel, ...]:
+    """Sentinels from YAML or JSON text: a list of `Sentinel` records (see examples/sentinels/)."""
+    data = parse_source(text, what)
+    if not isinstance(data, list):
+        raise LifecycleError(f"{what} must hold a list of sentinels")
+    out = []
+    for index, item in enumerate(data):
+        try:
+            out.append(Sentinel.model_validate(item))
+        except ValidationError as e:
+            problems = "; ".join(
+                f"{'.'.join(str(p) for p in err['loc']) or 'the entry'}: {err['msg']}"
+                for err in e.errors()
+            )
+            raise LifecycleError(f"sentinel {index + 1} in {what}: {problems}") from None
+    return tuple(out)
 
 
 def load_sentinels(path: Path) -> tuple[Sentinel, ...]:
     """Sentinels from a YAML or JSON file: a list of `Sentinel` records (see
     examples/sentinels/)."""
-    data = yaml.safe_load(path.read_text())
-    if not isinstance(data, list):
-        raise LifecycleError(f"{path} must hold a list of sentinels")
-    return tuple(Sentinel.model_validate(item) for item in data)
+    return parse_sentinels(path.read_text(), str(path))
 
 
 def open_screening(
@@ -512,6 +639,13 @@ def open_screening(
 # Progress
 
 
+def require_project_lead(tx: Tx, project_id: Id, actor_id: Id) -> None:
+    """Refuse a lead's write (adding people, publishing the protocol) to anyone who is not one of
+    the project's leads. Until the API has authentication the actor is the caller's claim."""
+    if not is_lead(tx, project_id, actor_id):
+        raise NotLead(f"only the project's methods lead may do this; {actor_id} is not one")
+
+
 def require_lead(tx: Tx, project_id: Id, actor_id: Id) -> None:
     """Refuse reads of the whole catalogue to anyone but a lead who screens nothing
     (`sees_lead_data`): whoever could list every record and has a queue could tell which records
@@ -556,9 +690,11 @@ def progress(tx: Tx, project_id: Id, viewer_id: Id, screening: Screening) -> Pro
 
 
 __all__ = [
+    "EXAMPLES",
     "FULL_TEXT_ATTACHED",
     "MEMBER_ADDED",
     "PROJECT_CREATED",
+    "ExampleProtocol",
     "FullText",
     "LifecycleError",
     "Member",
@@ -567,12 +703,14 @@ __all__ = [
     "Progress",
     "ProjectSummary",
     "ProtocolRef",
+    "RetrievalItem",
     "StageProgress",
     "add_member",
     "attach_full_text",
     "attach_sentinel_full_text",
     "corpus_records",
     "create_project",
+    "example_protocols",
     "full_text",
     "full_text_records",
     "full_text_sentinels",
@@ -582,8 +720,13 @@ __all__ = [
     "load_sentinels",
     "members",
     "open_screening",
+    "parse_sentinels",
+    "parse_source",
     "progress",
     "project_summary",
+    "protocol_source",
     "publish_protocol",
     "require_lead",
+    "require_project_lead",
+    "retrieval",
 ]
