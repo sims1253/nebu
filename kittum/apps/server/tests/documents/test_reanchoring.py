@@ -208,7 +208,9 @@ def _text_layers(pg, old: str, new: str):
         ("Baseline: N = 12.5 patients were randomized.", "unresolved"),  # 12 became 12.5
         ("Baseline: N = 412 patients were randomized.", "unresolved"),  # 12 became 412
         ("Baseline: N = 12 vials were randomized.", "candidate"),  # same number, new context
+        ("Baseline: N = -12 patients were randomized.", "candidate"),  # a sign before it
         ("Baseline: N = 12 patients were randomized.", "exact"),
+        ("Baseline: N =  12   patients were\nrandomized.", "exact"),  # spacing only
     ],
 )
 def test_a_changed_number_or_context_is_never_exact(pg, new_text, status):
@@ -218,6 +220,12 @@ def test_a_changed_number_or_context_is_never_exact(pg, new_text, status):
     assert resolution.status == status
     if resolution.anchor is not None:
         assert new.text[resolution.anchor.start : resolution.anchor.end] == "12"
+
+
+def test_a_changed_word_beside_the_quote_is_never_exact(pg):
+    old, new = _text_layers(pg, "There were 12 nonfatal events.", "There were 12 fatal events.")
+    (span,) = find_quote("12", old.text)
+    assert resolve(save_anchor(pg, make_anchor(old, span)), new).status == "candidate"
 
 
 def test_resolve_refuses_a_layer_of_another_document(pg):

@@ -30,7 +30,6 @@ _SAME_PLACE = 0.5  # share of the old boxes' area the new boxes must cover
 _FUZZY_MIN = 90.0
 _FUZZY_MIN_LENGTH = 20
 _CONTEXT_PROBE = 16  # non-space characters of context compared on each side
-_CONTEXT_MIN = 80.0
 
 
 class DifferentDocument(ValueError):
@@ -163,12 +162,14 @@ def _tight(text: str) -> str:
 
 
 def _context_agrees(anchor: Anchor, candidate: Anchor) -> bool:
-    """Whether the text right before and after the quote is still the same. Whitespace is
-    ignored, because engines separate words, lines, and cells differently."""
+    """Whether the text right before and after the quote is still exactly the same, up to
+    `_CONTEXT_PROBE` non-space characters on each side (fewer at the document's ends).
+    Whitespace is ignored, because engines separate words, lines, and cells differently. Any
+    other difference ("-12" for "12", "fatal" for "nonfatal") makes the match a candidate."""
     n = _CONTEXT_PROBE
-    prefix = fuzz.ratio(_tight(anchor.quote.prefix)[-n:], _tight(candidate.quote.prefix)[-n:])
-    suffix = fuzz.ratio(_tight(anchor.quote.suffix)[:n], _tight(candidate.quote.suffix)[:n])
-    return prefix >= _CONTEXT_MIN and suffix >= _CONTEXT_MIN
+    old_prefix, new_prefix = _tight(anchor.quote.prefix)[-n:], _tight(candidate.quote.prefix)[-n:]
+    old_suffix, new_suffix = _tight(anchor.quote.suffix)[:n], _tight(candidate.quote.suffix)[:n]
+    return old_prefix == new_prefix and old_suffix == new_suffix
 
 
 def _whole_tokens(text: str, span: Span) -> bool:
