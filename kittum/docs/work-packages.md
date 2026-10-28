@@ -515,13 +515,38 @@ Open:
 
 ## WP-11 Extraction
 
-Module `kittum.extraction`. Needs: `documents`, `protocol`, `models`.
+Module `kittum.extraction`. Needs: `documents`, `protocol`, `models`, `runs`.
 
-- The Janus adapter: layer to Janus `DocumentEvidence`, a specification per endpoint schema.
-- The PydanticAI agent with read-only tools and a call budget.
-- Validators (events at most N, arms sum, CI brackets the estimate, percentages recompute) and
-  reconciliation between paths.
-- Acceptance: fixture tables give the same values on both paths; validators catch planted errors.
+- The extraction schema lives in `kittum.extraction` (`load_schema`, YAML or JSON): arms,
+  comparisons, endpoints with timepoints and quantities (N randomized and analysed, events,
+  percentages, means, effect estimates, CI bounds, p-values, follow-up, descriptions), each with a
+  `critical`, `standard`, or `descriptive` policy and optional Janus locator hints.
+  `check_against_outcomes` ties outcome endpoints to the protocol's outcome IDs; the protocol
+  itself is unchanged. Done.
+- The Janus path: a layer as Janus `DocumentEvidence` (lines as text elements, tables with
+  folded header paths and group-row sections), one Janus specification per schema, Janus's
+  locators and statuses, Janus's typed parser after normalizing minus signs and inline estimator
+  labels, and every value anchored on its layer cell with `make_anchor`. Done.
+- The LLM path: a PydanticAI agent on any `LlmBackend` (`FunctionModel`, one JSON
+  Schema-constrained call per turn), read-only tools (search, read a page, open a table), a call
+  and a time budget, and a verifier that anchors each quote with `quote_spans` and checks the
+  value is printed in it. Document text is fenced as data. Done.
+- Validators on both paths: exact values with units, events at most N, arms sum to the total, the
+  CI brackets the estimate, percentages recompute, ratios are symmetric on the log scale. Done.
+- Reconciliation per semantic key (agree, disagree, one side only) with the policy's gate,
+  second-extractor flag, and the 10% re-check draw. Done.
+- Runs are jobs (`request_run`, `run_handler`), published with the job through
+  `Commands.execute`. `accept`, edit-and-accept with a source span, and `group_accept` write one
+  `extraction.value_accepted` event each; `assertions` is the accepted set. A bundle exporter adds
+  the tables and their anchors. HTTP routes in `api/routes/extraction.py`. Done.
+- Acceptance: the Lesotho and Vitamin C trial PDFs with a real schema; Janus anchors checked by
+  reading the PDF under the box; agent answers recorded from `qwen3.5:4b` on Ollama
+  (`tests/extraction/record_fixtures.py`); planted validator errors; a real disagreement (the
+  agent read 51 for the arm Table 1 prints as 52). Done.
+- Open: a `kittum worker` entry point that registers `run_handler` with configured backends;
+  grounding exceptions (a value read from a figure); the second, independent extraction a
+  critical disagreement requires; the re-check queue itself (only the draw is recorded);
+  re-anchoring accepted values when a project promotes a new parser.
 
 ## WP-12 Appraisal
 
