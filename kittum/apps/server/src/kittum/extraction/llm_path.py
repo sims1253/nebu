@@ -345,6 +345,9 @@ class LlmBackendModel:
                 "finish_reason": completion.finish_reason,
             }
         )
+        # A call that ends past the deadline does not count, final answer included.
+        if self._clock.now() >= self._deadline:
+            raise BudgetExhausted(f"used the time budget of {self._config.max_seconds:g} s")
         try:
             data = json.loads(completion.text)
             tool = data.pop("tool")

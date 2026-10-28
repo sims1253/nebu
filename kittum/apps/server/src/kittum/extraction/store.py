@@ -113,6 +113,8 @@ class AcceptRequest(Record):
     path: Path
     source_viewed_ms: int = Field(ge=0)
     edit: Edit | None = None
+    # The reviewer confirmed the value against the source although a validator failed on it.
+    override_failed_checks: bool = False
 
 
 class GroupAcceptRequest(Record):
@@ -658,6 +660,7 @@ class _Accepted(Record):
     unit: str | None
     anchor_id: Id
     new_anchor: Anchor | None = None  # an edit's span, saved with the acceptance
+    failed_checks: tuple[str, ...] = ()  # validators that failed on the accepted proposal
 
 
 def _event(command: Command, a: _Accepted, viewed_ms: int) -> EventDraft:
@@ -680,11 +683,12 @@ def _event(command: Command, a: _Accepted, viewed_ms: int) -> EventDraft:
             "anchor_id": str(a.anchor_id),
             "source_viewed_ms": viewed_ms,
             "recheck": a.field.recheck and a.group,
+            "failed_checks": list(a.failed_checks),
         },
     )
 
 
-def _accepted_proposal(field: _Field, path: Path) -> _Accepted:
+def _accepted_proposal(field: _Field, path: Path, *, override_failed_checks: bool) -> _Accepted:
     proposal = field.proposals.get(path)
     if proposal is None:
         raise CommandRejected(f"field {field.id} has no {path} proposal")
@@ -694,6 +698,12 @@ def _accepted_proposal(field: _Field, path: Path) -> _Accepted:
             + (f" ({proposal.message})" if proposal.message else "")
             + "; edit it with a source span instead"
         )
+    failed = tuple(dict.fromkeys(v.validator for v in proposal.validators if not v.passed))
+    if failed and not override_failed_checks:
+        raise CommandRejected(
+            f"the {path} proposal failed {', '.join(failed)}; confirm it against the source and"
+            " override, or edit it"
+        )
     return _Accepted(
         field=field,
         path=path,
@@ -702,6 +712,7 @@ def _accepted_proposal(field: _Field, path: Path) -> _Accepted:
         value=proposal.value,
         unit=proposal.unit,
         anchor_id=proposal.anchor_ids[0],
+        failed_checks=failed,
     )
 
 
@@ -748,7 +759,8 @@ def accept(
     """Accept one field after the reviewer viewed its source: a path's value as it stands, or with
     `edit`, the reviewer's own value and span. Raises `CommandRejected` with the reason if the
     value cannot be accepted (not extracted, no single anchor, already accepted, source not viewed,
-    or an edit whose span does not hold its value)."""
+    a failed validator the reviewer did not override, or an edit whose span does not hold its
+    value)."""
     command = Command(
         command_id=request.command_id,
         project_id=request.project_id,
@@ -785,7 +797,9 @@ def accept(
                 f"the source was on screen for {request.source_viewed_ms} ms; view it first"
             )
         if request.edit is None:
-            accepted = _accepted_proposal(field, request.path)
+            accepted = _accepted_proposal(
+                field, request.path, override_failed_checks=request.override_failed_checks
+            )
         else:
             if problem is not None or anchor is None:
                 raise CommandRejected(problem or "an edit needs a source span")
@@ -860,7 +874,11 @@ def group_accept(
             if field.accepted:
                 raise CommandRejected(f"field {field.id} is already accepted")
             # Both paths agree; the Janus anchor is the table cell.
-            accepted.append(_accepted_proposal(field, "janus").model_copy(update={"group": True}))
+            accepted.append(
+                _accepted_proposal(field, "janus", override_failed_checks=False).model_copy(
+                    update={"group": True}
+                )
+            )
         return Decision(
             events=tuple(_event(command, a, request.list_viewed_ms) for a in accepted),
             changes=accepted,

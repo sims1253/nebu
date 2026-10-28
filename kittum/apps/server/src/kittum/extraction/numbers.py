@@ -113,9 +113,11 @@ def printed_in(value: str, kind: Kind, quote: str) -> str | None:
         token = match.group(0).lstrip("+")
         if decimal(token) != target:
             continue
-        if comparator:
+        if kind == "p_value":
+            # "0.001" is not printed in "P < 0.001": the comparator must match too.
             before = text[: match.start()].rstrip().translate(_TO_ASCII_COMPARATOR)
-            if not before.endswith(comparator):
+            printed = before[-1:] if before[-1:] in ("<", ">") else ""
+            if printed != comparator:
                 continue
             return comparator + token
         return token

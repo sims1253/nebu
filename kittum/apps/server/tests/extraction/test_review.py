@@ -231,7 +231,9 @@ def test_a_run_reconciles_both_paths_and_humans_accept_each_value(env, tmp_path)
 
 def test_only_agreeing_validated_standard_fields_are_accepted_as_a_group(env):
     """Planted: the recorded answer, with the female-sex quotes as Table 1 prints them instead of
-    the elided ones the model gave, so both paths agree on a standard field."""
+    the elided ones the model gave, so both paths agree on a standard field. Also planted: the
+    agent reads the female count as the vitamin C arm's N, and the events from Table 3, so its
+    200 events exceed its N of 146."""
     answers = json.loads(recording_path("vitamin_c").read_text())["answers"]
     final = next(k for k, v in answers.items() if json.loads(v)["tool"] == "final_result")
     answer = json.loads(answers[final])
@@ -240,6 +242,10 @@ def test_only_agreeing_validated_standard_fields_are_accepted_as_a_group(env):
             value["quote"] = "Female sex, n (%) 146 (41.1)"
         if value["field"] == "f13":
             value["quote"] = "145 (40.8)"
+        if value["field"] == "f1":
+            value.update(quote="Female sex, n (%) 146 (41.1)", value="146")
+        if value["field"] == "f4":
+            value.update(quote="200 (56.3)", value="200")
     answers[final] = json.dumps(answer)
     base = f"/api/projects/{env.project_id}/extraction"
     with env.client:
@@ -288,6 +294,45 @@ def test_only_agreeing_validated_standard_fields_are_accepted_as_a_group(env):
         # The critical risk ratio is accepted on its own, after viewing its source.
         assert _accept(env, rr, "llm").json()["value"] == "1.124"
 
+        # Both paths read 200 events, but the agent's events exceed its own N: accepting its
+        # proposal needs the reviewer to override the failed check, and the ledger records that.
+        events_vc = fields[("any_hematoma", "vitamin_c", "events")]
+        assert (events_vc["agreement"], _proposal(events_vc, "llm")["value"]) == ("agree", "200")
+        failed = _accept(env, events_vc, "llm")
+        assert failed.status_code == 409 and "events_at_most_n" in failed.json()["detail"]
+        overridden = env.client.post(
+            f"{base}/fields/{events_vc['id']}/accept",
+            json={
+                "command_id": str(new_id()),
+                "reviewer_id": str(env.reviewer),
+                "path": "llm",
+                "source_viewed_ms": 2500,
+                "override_failed_checks": True,
+            },
+        )
+        assert overridden.status_code == 200, overridden.text
+        assert "events_at_most_n" in env.events(VALUE_ACCEPTED)[-1]["failed_checks"]
+
+        # "P < 0.001" does not print an exact p-value of 0.001.
+        p_value = fields[("any_hematoma", "vitamin_c_vs_control", "p_value")]
+        text = env.stored["vitamin_c"].layer.text
+        printed = "P\u2009<\u20090.001"  # thin spaces, as typeset
+        start = text.index(printed)
+        exact = env.client.post(
+            f"{base}/fields/{p_value['id']}/edit",
+            json={
+                "command_id": str(new_id()),
+                "reviewer_id": str(env.reviewer),
+                "path": "llm",
+                "source_viewed_ms": 2500,
+                "value": "0.001",
+                "start": start,
+                "end": start + len(printed),
+                "quote": printed,
+            },
+        )
+        assert exact.status_code == 409 and "does not contain the value" in exact.json()["detail"]
+
         view = env.client.get(f"{base}/runs/{run['id']}/review").json()
         assert view["report"] == {
             "id": str(REPORT),
@@ -301,7 +346,7 @@ def test_only_agreeing_validated_standard_fields_are_accepted_as_a_group(env):
             len(view["layer"]["pages"]) == 10
             and view["layer"]["text"] == env.stored["vitamin_c"].layer.text
         )
-        assert [f["accepted"] for f in view["fields"]].count(None) == len(view["fields"]) - 3
+        assert [f["accepted"] for f in view["fields"]].count(None) == len(view["fields"]) - 4
         anchors = {a["id"] for a in view["anchors"]}
         assert all(
             a in anchors for f in view["fields"] for p in f["proposals"] for a in p["anchor_ids"]

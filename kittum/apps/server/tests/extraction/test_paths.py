@@ -8,7 +8,7 @@ from kittum.documents import resolve
 from kittum.extraction import AgentConfig, extract, run_agent
 from kittum.models.testing import RecordedBackend
 from tests.documents.conftest import squash, text_under
-from tests.extraction.support import AGENT, RECIPE_ID, recorded, schema
+from tests.extraction.support import AGENT, RECIPE_ID, recorded, recording_path, schema
 
 
 def _by(proposals, path="janus"):
@@ -167,3 +167,21 @@ def test_agent_stops_at_its_call_and_time_budgets(env):
     result = slow.requests[1].messages[-1].content
     assert result.startswith("Result of search:\n<document>\n[page 1] ")
     assert result.endswith("\n</document>") and "perirenal hematoma" in result
+
+    # An answer that arrives after the deadline is discarded, even a final one.
+    answers = json.loads(recording_path("vitamin_c").read_text())["answers"]
+    final = next(v for v in answers.values() if json.loads(v)["tool"] == "final_result")
+
+    class Late(Slow):
+        def complete(self, request):
+            self.requests.append(request)
+            clock.advance(timedelta(minutes=20))
+            return RecordedBackend(default=final).complete(request)
+
+    late = Late()
+    config = AgentConfig(model_id=RECIPE_ID, max_calls=10, max_seconds=600)
+    proposals, anchors, transcript = run_agent(stored.layer, fields, late, config, clock)
+    assert len(late.requests) == 1 and not anchors
+    assert {(p.status, p.message) for p in proposals} == {
+        ("error", "used the time budget of 600 s")
+    }

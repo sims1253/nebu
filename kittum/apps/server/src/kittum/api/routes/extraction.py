@@ -59,6 +59,7 @@ class AcceptBody(Record):
     reviewer_id: Id
     path: Path
     source_viewed_ms: Annotated[int, Field(ge=0)]
+    override_failed_checks: bool = False
 
 
 class EditBody(Record):
