@@ -93,9 +93,18 @@ _FOLLOW_UP = (
 )
 _STUDY = re.compile(rf"\b(?:study|trial)\s*(?:no\.?|number|#)?\s*(?P<a>\d+){_RANGE_TAIL}\b", re.I)
 # A trial name is a word with two capitals right before a number (KEYNOTE 024, IMpower150).
-# Once either title writes it that way, the word counts as a trial name in any case.
+# Once either title writes it that way, the word counts as a trial name in any case. A word that
+# both titles put right before a number is a trial name too, if it has two letters (not the L of
+# PD-L1) and is not one of these.
 _TRIAL_NAME = re.compile(r"\b([A-Za-z]*[A-Z][A-Za-z]*[A-Z][A-Za-z]*)[\s_-]?\d")
 _NAMED_NUMBER = re.compile(r"\b(?P<w>[A-Za-z]+)[\s_-]?(?P<n>\d+)")
+_NOT_TRIAL_NAMES = frozenset(
+    {
+        "phase", "week", "weeks", "month", "months", "year", "years", "study", "trial", "part",
+        "cohort", "arm", "day", "days", "stage", "grade", "type", "version", "volume", "vol",
+        "no", "number",
+    }
+)  # fmt: skip
 _KINDS = ("trial", "phase", "follow_up", "study")
 
 
@@ -110,6 +119,12 @@ def _ends(m: re.Match[str]) -> list[str]:
 
 def _trial_names(title: str) -> set[str]:
     return {name.lower() for name in _TRIAL_NAME.findall(unicodedata.normalize("NFC", title))}
+
+
+def _words_before_numbers(title: str) -> set[str]:
+    text = unicodedata.normalize("NFC", title)
+    words = {m["w"].lower() for m in _NAMED_NUMBER.finditer(text) if len(m["w"]) > 1}
+    return words - _NOT_TRIAL_NAMES
 
 
 def extract_distinguishing_tokens(
@@ -140,7 +155,11 @@ def extract_distinguishing_tokens(
 
 def distinguishing_tokens_conflict(title_a: str, title_b: str) -> bool:
     """Whether both titles name a trial, phase, follow-up, or study number, and they differ."""
-    names = _trial_names(title_a) | _trial_names(title_b)
+    names = (
+        _trial_names(title_a)
+        | _trial_names(title_b)
+        | (_words_before_numbers(title_a) & _words_before_numbers(title_b))
+    )
     tokens_a = extract_distinguishing_tokens(title_a, names)
     tokens_b = extract_distinguishing_tokens(title_b, names)
     return any(

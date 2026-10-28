@@ -233,6 +233,10 @@ def test_trial_identifiers_drive_only_same_study_proposals() -> None:
             "Pembrolizumab versus chemotherapy in metastatic NSCLC: results at week 24",
             "Pembrolizumab versus chemotherapy in metastatic NSCLC: results at week 48",
         ),
+        (
+            "Pembrolizumab versus chemotherapy in PD-L1 positive NSCLC: keynote 024",
+            "Pembrolizumab versus chemotherapy in PD-L1 positive NSCLC: keynote 042",
+        ),
     ],
 )
 def test_titles_naming_different_trials_or_follow_ups_are_not_the_same_record(
@@ -258,6 +262,8 @@ def test_titles_naming_different_trials_or_follow_ups_are_not_the_same_record(
         "Pembrolizumab versus chemotherapy for PD-L1-positive NSCLC: KEYNOTE 024",
         "Pembrolizumab versus chemotherapy for PD-L1-positive metastatic NSCLC",
         "Nivolumab plus ipilimumab in advanced melanoma: CheckMate 067",
+        "Pembrolizumab versus chemotherapy for PD-L1-positive NSCLC: keynote 024",
+        "Adjuvant pembrolizumab versus placebo in resected stage 3 melanoma",
     ],
 )
 @pytest.mark.parametrize(
@@ -284,6 +290,13 @@ def test_trial_names_match_regardless_of_case() -> None:
     assert [set(p.occurrence_ids) for p in generate_link_proposals([lower, upper, other])] == [
         {lower.occurrence_id, upper.occurrence_id}
     ]
+
+    # A common word before a number in both titles is not a trial name, so it does not make a
+    # citation's acronym on one side count.
+    stage = "Adjuvant pembrolizumab versus placebo in resected stage 3 melanoma"
+    plain = make_record(title=stage, authors=("Eggermont AMM",), year=2018)
+    cited = make_record(title=f"{stage}. NEJM 378", authors=("Eggermont AMM",), year=2018)
+    assert check_same_record(plain, cited)[0]
 
 
 def test_a_record_without_identifiers_never_bridges_conflicting_dois_or_pmids() -> None:
