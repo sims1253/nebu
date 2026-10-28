@@ -4,6 +4,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 
 import type {
+  Box,
   Decision,
   DecideResult,
   DecisionTiming,
@@ -24,6 +25,15 @@ export class WorkbenchError extends Data.TaggedError("WorkbenchError")<{
 }> {}
 
 type Call<A> = Effect.Effect<A, WorkbenchError>;
+
+/** An edited extraction value with its source span: code-point offsets and per-line boxes. */
+interface AcceptedEdit {
+  readonly value: string;
+  readonly start: number;
+  readonly end: number;
+  readonly quote: string;
+  readonly boxes: ReadonlyArray<Box>;
+}
 
 export interface Workbench {
   readonly projects: () => Call<ReadonlyArray<ProjectSummary>>;
@@ -63,6 +73,8 @@ export interface Workbench {
   readonly accept: (request: {
     readonly fieldId: string;
     readonly path: "janus" | "llm";
+    /** The reviewer's own value and the span it came from, when they edited the path's value. */
+    readonly edit: AcceptedEdit | null;
     /** How long the source region was on screen before the reviewer accepted. */
     readonly sourceViewedMs: number;
   }) => Call<void>;

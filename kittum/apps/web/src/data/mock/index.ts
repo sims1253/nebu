@@ -51,6 +51,8 @@ export interface MockOptions {
   readonly latency?: Partial<Record<"queue" | "decide" | "page" | "other", number>>;
   /** Overrides the project's reveal setting. */
   readonly reveal?: ProjectSummary["reveal"];
+  /** Pages whose image URL is broken, to exercise the failed-image path. */
+  readonly brokenPages?: ReadonlyArray<number>;
   /** Receives every call, for tests. */
   readonly log?: (call: string, detail: unknown) => void;
 }
@@ -191,10 +193,13 @@ export const makeMockWorkbench = (
   options: MockOptions = {},
 ): Workbench & {
   readonly decisions: ReadonlyArray<DecisionRecord>;
+  /** Every acceptance, with the reviewer's edit and its span when there was one. */
+  readonly acceptances: ReadonlyArray<Parameters<Workbench["accept"]>[0]>;
 } => {
   const decisions: DecisionRecord[] = [];
   const state = new Map<string, { revision: number; revealed: boolean; final: Decision | null }>();
   const accepted = new Map<string, "janus" | "llm">();
+  const acceptances: Array<Parameters<Workbench["accept"]>[0]> = [];
 
   const wait = (kind: keyof NonNullable<MockOptions["latency"]>) => {
     const ms = options.latency?.[kind] ?? 0;
@@ -224,6 +229,7 @@ export const makeMockWorkbench = (
 
   return {
     decisions,
+    acceptances,
 
     projects: () => call("other", "projects", null, () => PROJECTS),
 
@@ -353,7 +359,7 @@ export const makeMockWorkbench = (
         const rows = yield* Effect.promise(load);
         return Schema.decodeUnknownSync(PageLayer)({
           ...size,
-          image_url: image,
+          image_url: options.brokenPages?.includes(page) ? `${image}.missing.png` : image,
           words: rows.map(([start, end, x0, y0, x1, y1]) => ({
             start,
             end,
@@ -379,9 +385,10 @@ export const makeMockWorkbench = (
         });
       }),
 
-    accept: ({ fieldId, path, sourceViewedMs }) =>
-      call("decide", "accept", { fieldId, path, sourceViewedMs }, () => {
-        accepted.set(fieldId, path);
+    accept: (request) =>
+      call("decide", "accept", request, () => {
+        accepted.set(request.fieldId, request.path);
+        acceptances.push(request);
       }),
   };
 };

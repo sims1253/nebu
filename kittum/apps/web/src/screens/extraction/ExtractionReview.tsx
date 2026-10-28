@@ -57,8 +57,10 @@ function Review({ review }: { review: ExtractionReview }) {
   );
   const [selection, setSelection] = useState<TextSelection | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // On-screen time per source identity (field, path, and anchor or edited span), so time spent on
+  // one source never counts for another.
   const viewed = useRef(new Map<string, number>());
-  const visibleSince = useRef<number | null>(null);
+  const visible = useRef<{ key: string; since: number } | null>(null);
   const [nudge, setNudge] = useState(0);
   const rows = useRef(new Map<string, HTMLElement>());
 
@@ -102,29 +104,32 @@ function Review({ review }: { review: ExtractionReview }) {
   const target =
     field && firstBox ? { key: `${field.id}-${shown?.path}-${nudge}`, box: firstBox } : null;
 
-  // Record how long the selected field's source is on screen.
+  const edited = state?.edited;
+  const sourceKey = field
+    ? `${field.id}|${shown?.path}|${edited ? `edit:${edited.start}-${edited.end}` : (source?.id ?? "none")}`
+    : "";
+
+  // Record how long the selected source is on screen. A new identity gets a new callback, so the
+  // viewer re-observes and reports afresh; reports for an old identity are ignored.
   const onCurrentVisible = useCallback(
-    (visible: boolean) => {
-      if (!field) return;
-      if (visible) {
-        visibleSince.current ??= performance.now();
-      } else if (visibleSince.current !== null) {
-        viewed.current.set(
-          field.id,
-          (viewed.current.get(field.id) ?? 0) + performance.now() - visibleSince.current,
-        );
-        visibleSince.current = null;
+    (isVisible: boolean) => {
+      const now = performance.now();
+      const open = visible.current;
+      if (isVisible) {
+        if (open?.key !== sourceKey) visible.current = { key: sourceKey, since: now };
+      } else if (open?.key === sourceKey) {
+        viewed.current.set(sourceKey, (viewed.current.get(sourceKey) ?? 0) + now - open.since);
+        visible.current = null;
       }
     },
-    [field],
+    [sourceKey],
   );
   useEffect(() => {
-    visibleSince.current = null;
     rows.current.get(field?.id ?? "")?.scrollIntoView({ block: "nearest" });
   }, [field?.id]);
   const viewedMs = () =>
-    (field ? (viewed.current.get(field.id) ?? 0) : 0) +
-    (visibleSince.current === null ? 0 : performance.now() - visibleSince.current);
+    (viewed.current.get(sourceKey) ?? 0) +
+    (visible.current?.key === sourceKey ? performance.now() - visible.current.since : 0);
 
   const move = (step: number) => {
     setSelected((s) => Math.max(0, Math.min(review.fields.length - 1, s + step)));
@@ -151,7 +156,20 @@ function Review({ review }: { review: ExtractionReview }) {
     }
     try {
       await run(
-        workbench.accept({ fieldId: field.id, path: shown.path, sourceViewedMs: Math.round(ms) }),
+        workbench.accept({
+          fieldId: field.id,
+          path: shown.path,
+          edit: edited
+            ? {
+                value: edited.quote.trim(),
+                start: edited.start,
+                end: edited.end,
+                quote: edited.quote,
+                boxes: edited.boxes,
+              }
+            : null,
+          sourceViewedMs: Math.round(ms),
+        }),
       );
       setFields((all) => ({ ...all, [field.id]: { ...all[field.id]!, accepted: shown.path } }));
       setNotice(null);
@@ -186,7 +204,6 @@ function Review({ review }: { review: ExtractionReview }) {
         ...all,
         [field.id]: { ...all[field.id]!, picked: path, accepted: null },
       }));
-      viewed.current.delete(field.id);
       setNotice(null);
       return true;
     }
@@ -199,7 +216,6 @@ function Review({ review }: { review: ExtractionReview }) {
         ...all,
         [field.id]: { ...all[field.id]!, edited: selection, accepted: null },
       }));
-      viewed.current.delete(field.id);
       setNotice(`Edited to “${selection.quote.trim()}”. Press Enter to accept.`);
       return true;
     }
