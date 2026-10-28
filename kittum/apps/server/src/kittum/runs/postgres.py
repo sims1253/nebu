@@ -114,6 +114,18 @@ class PostgresJobQueue:
     def heartbeat(self, tx: Tx, job: Job, lease: timedelta) -> Job:
         return self._leased(tx, job, "lease_until = %s", (self._clock.now() + lease,))
 
+    def fence(self, tx: Tx, job: Job) -> None:
+        row = tx.execute(
+            f"select id from job where {_LEASED} for update",
+            (
+                job.job_id,
+                job.lease_owner,
+                job.attempt,
+            ),
+        ).fetchone()
+        if row is None:
+            raise LeaseLost(f"job {job.job_id} attempt {job.attempt} is no longer leased")
+
     def complete(self, tx: Tx, job: Job, output_hash: str | None = None) -> Job:
         return self._leased(
             tx,

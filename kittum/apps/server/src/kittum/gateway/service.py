@@ -162,7 +162,9 @@ class SourceGateway:
 
     Limits live in pyrate-limiter buckets: Postgres tables in production, so every worker shares
     them, and in-memory buckets when `buckets="memory"` (tests). Daily budgets and every attempt
-    are rows in Postgres. Responses are cached content-addressed in the `ArtifactStore`.
+    are rows in Postgres. Responses are cached content-addressed in the `ArtifactStore`, indexed in
+    Postgres; with `cache="memory"` the index lives in this process only, so responses that are
+    not the sources' own (recordings, in offline mode) never reach the deployment's cache.
     """
 
     def __init__(
@@ -174,11 +176,14 @@ class SourceGateway:
         policies: Mapping[str, SourcePolicy] | None = None,
         clock: Clock | None = None,
         buckets: str = "postgres",
+        cache: str = "postgres",
         max_attempts: int = MAX_ATTEMPTS,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         if buckets not in {"postgres", "memory"}:
             raise ValueError("buckets must be 'postgres' or 'memory'")
+        if cache not in {"postgres", "memory"}:
+            raise ValueError("cache must be 'postgres' or 'memory'")
         if max_attempts < 1:
             raise ValueError("max_attempts must be at least 1")
         self._database = database
@@ -187,6 +192,7 @@ class SourceGateway:
         self._policies = dict(policies) if policies is not None else dict(_DEFAULT_POLICIES)
         self._clock = clock or SystemClock()
         self._bucket_backend = buckets
+        self._memory_cache: dict[str, HttpResponse] | None = {} if cache == "memory" else None
         self._sleep = sleep
 
         self._pool = _SharedPool(database)
@@ -423,6 +429,9 @@ class SourceGateway:
         return policy
 
     def _cached(self, key: str) -> HttpResponse | None:
+        if self._memory_cache is not None:
+            found = self._memory_cache.get(key)
+            return found.model_copy(update={"from_cache": True}) if found else None
         with self._database.transaction() as tx:
             row = tx.execute(
                 "select status, headers, body_hash from gateway_cache where request_hash = %s",
@@ -450,6 +459,9 @@ class SourceGateway:
         )
 
     def _remember(self, source: str, key: str, response: HttpResponse) -> None:
+        if self._memory_cache is not None:
+            self._memory_cache[key] = response
+            return
         body_hash = self._artifacts.put(response.body)
         headers = [[name, value] for name, value in response.headers]
         with self._database.transaction() as tx:

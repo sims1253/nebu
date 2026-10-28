@@ -24,13 +24,14 @@ from kittum.core import Clock, Id, NotFoundError, Record, new_id
 from kittum.corpus import latest_revision, reports
 from kittum.enrich import (
     SOURCES,
+    Enrichment,
     EnrichmentConfig,
     EntityTag,
     FieldSource,
     OaLocation,
     WorkUpdate,
-    enrich,
-    sources_asked,
+    lookup,
+    save_enrichment,
 )
 from kittum.ledger import EventDraft
 from kittum.runs import JobOutput, JobSpec, PermanentJobError
@@ -127,6 +128,11 @@ def _event(project_id: Id, type: str, actor_id: Id, payload: dict[str, Any]) -> 
     )
 
 
+def lock_project_runs(tx: Tx, project_id: Id, kind: str) -> None:
+    """Serialize the requests of one kind of run for one project until `tx` ends."""
+    tx.execute("select pg_advisory_xact_lock(hashtext(%s), hashtext(%s::text))", (kind, project_id))
+
+
 def _occurrences(tx: Tx, project_id: Id, revision_id: Id) -> list[SourceRecord]:
     """The revision's source occurrences in the order they were imported (their IDs are UUIDv7),
     so the batches a run sends, and so its requests, are the same however the corpus is listed."""
@@ -148,7 +154,9 @@ def request_enrichment(
     clock: Clock,
 ) -> EnrichmentRun:
     """Queue an enrichment of the newest identity revision; an unfinished run is returned as it
-    is instead of queueing a second one."""
+    is instead of queueing a second one. Requests for one project take turns (a transaction lock),
+    so two at once cannot both find no run and queue two."""
+    lock_project_runs(tx, project_id, ENRICHMENT_JOB)
     revision = latest_revision(tx, project_id)
     if revision is None:
         raise NotFoundError("the corpus is not built yet")
@@ -357,25 +365,35 @@ def enrichment_config(ctx: AppContext) -> EnrichmentConfig:
     )
 
 
-def _enrich_chunk(
+def _store_chunk(
     tx: Tx,
     run: dict[str, Any],
-    chunk: list[SourceRecord],
+    result: Enrichment,
     *,
-    gateway: Gateway,
-    config: EnrichmentConfig,
     ledger: Ledger,
 ) -> None:
-    result = enrich(tx, run["project_id"], tuple(chunk), gateway, config=config)
-    reasons = {f.source: f.reason for f in result.failures}
-    rows = []
-    for record in result.records:
-        asked = sources_asked(record, config)
-        answered = [s for s in SOURCES if s in record.sources_used]
-        failed = [
-            {"source": s, "reason": reasons[s]} for s in asked if s in reasons and s not in answered
-        ]
-        rows.append((record, asked, answered, failed))
+    """Write what one chunk's lookup found, for the records no other worker wrote first. The
+    caller holds the job's lease and the run's row lock."""
+    done = {
+        r["occurrence_id"]
+        for r in tx.execute(
+            "select occurrence_id from enrichment_run_record where run_id = %s"
+            " and occurrence_id = any(%s)",
+            (run["id"], [r.occurrence_id for r in result.records]),
+        ).fetchall()
+    }
+    records = [r for r in result.records if r.occurrence_id not in done]
+    if not records:
+        return
+    save_enrichment(tx, run["project_id"], tuple(records))
+    rows = [
+        (
+            record,
+            [s for s in SOURCES if s in record.sources_used],
+            [f.model_dump(mode="json") for f in record.failures],
+        )
+        for record in records
+    ]
     event = ledger.append(
         tx,
         _event(
@@ -394,20 +412,19 @@ def _enrich_chunk(
                         "retraction_notice_doi": record.retraction_notice_doi,
                         "failed": failed,
                     }
-                    for record, _, _, failed in rows
+                    for record, _, failed in rows
                 ],
-                "failures": [f.model_dump(mode="json") for f in result.failures],
             },
         ),
     )
-    for record, asked, answered, failed in rows:
+    for record, answered, failed in rows:
         tx.execute(
             "insert into enrichment_run_record (run_id, occurrence_id, asked, answered, failed,"
             " retracted, event_id) values (%s, %s, %s, %s, %s, %s, %s)",
             (
                 run["id"],
                 record.occurrence_id,
-                Jsonb(list(asked)),
+                Jsonb(list(record.sources_asked)),
                 Jsonb(answered),
                 Jsonb(failed),
                 record.retracted,
@@ -416,7 +433,9 @@ def _enrich_chunk(
         )
 
 
-def enrichment_handler(ctx: AppContext, gateway: Gateway, ledger: Ledger) -> Handler:
+def enrichment_handler(
+    ctx: AppContext, gateway: Gateway, ledger: Ledger, queue: JobQueue
+) -> Handler:
     config = enrichment_config(ctx)
 
     def handle(job: Job, job_ctx: JobContext) -> JobOutput:
@@ -438,16 +457,15 @@ def enrichment_handler(ctx: AppContext, gateway: Gateway, ledger: Ledger) -> Han
             ]
         for start in range(0, len(records), CHUNK):
             if job_ctx.lease_lost.is_set():
-                return JobOutput()  # another worker resumes after the last chunk committed
+                return JobOutput()  # the heartbeat saw another worker take over; stop asking
+            # The sources are asked outside any transaction; the answers are written only while
+            # this worker still holds the job (`fence`), so one whose lease went to another while
+            # it waited writes nothing.
+            result = lookup(tuple(records[start : start + CHUNK]), gateway, config=config)
             with ctx.db.transaction() as tx:
-                _enrich_chunk(
-                    tx,
-                    run,
-                    records[start : start + CHUNK],
-                    gateway=gateway,
-                    config=config,
-                    ledger=ledger,
-                )
+                queue.fence(tx, job)
+                tx.execute("select id from enrichment_run where id = %s for update", (run_id,))
+                _store_chunk(tx, run, result, ledger=ledger)
 
         def publish(tx: Tx) -> None:
             view = enrichment_run(tx, run["project_id"], run_id)
@@ -489,6 +507,7 @@ __all__ = [
     "enrichment_handler",
     "enrichment_run",
     "latest_enrichment_run",
+    "lock_project_runs",
     "record_enrichment",
     "record_flags",
     "request_enrichment",

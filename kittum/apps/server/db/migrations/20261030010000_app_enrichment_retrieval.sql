@@ -45,13 +45,17 @@ create table retrieval_run (
 
 create index retrieval_run_by_project on retrieval_run (project_id, requested_at);
 
--- The reports a run walks the waterfall for, fixed when it is requested. `outcome` stays null
--- until the job has tried the report; `attempts` are `documents.AcquisitionAttempt`s in order.
+-- The reports a run walks the waterfall for, fixed when it is requested. Each report's state is
+-- resumable: `locations` (`documents.FullTextLocation`s) are fixed when the job first takes the
+-- report, every attempt is appended to `attempts` in a transaction of its own with its ledger
+-- event, `acquisition_id` is set by the attempt that got a PDF, and `outcome` once the report is
+-- finished (after the PDF is attached, in another transaction).
 create table retrieval_run_report (
     run_id uuid not null references retrieval_run (id),
     report_id uuid not null,
     ordinal integer not null,
     outcome text check (outcome in ('acquired', 'not_acquired', 'no_location', 'had_full_text')),
+    locations jsonb,
     attempts jsonb not null default '[]'::jsonb,
     acquisition_id uuid references acquisition (id),
     event_id uuid,

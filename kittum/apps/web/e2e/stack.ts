@@ -35,6 +35,9 @@ export const stackEnv = () => ({
   KITTUM_JUDGE_BACKEND: "demo",
   KITTUM_WEB_DIST: DIST,
   KITTUM_GATEWAY_RECORDINGS: RECORDINGS,
+  // Recordings replace the sources only in offline mode, with a response cache of each process's
+  // own; the server refuses them otherwise.
+  KITTUM_OFFLINE: "1",
   // The address the recordings were made with; it is part of each Crossref and Unpaywall URL.
   KITTUM_CONTACT_EMAIL: "test@kittum.dev",
 });

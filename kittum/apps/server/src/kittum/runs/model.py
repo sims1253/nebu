@@ -119,6 +119,13 @@ class JobQueue(Protocol):
 
     def heartbeat(self, tx: Tx, job: Job, lease: timedelta) -> Job: ...
 
+    def fence(self, tx: Tx, job: Job) -> None:
+        """Hold the job's lease until `tx` commits, or raise `LeaseLost`. A handler that writes
+        in transactions of its own fences each one, so a worker whose lease went to another while
+        it waited on the network writes nothing; the job row stays locked against a takeover
+        until commit."""
+        ...
+
     def complete(self, tx: Tx, job: Job, output_hash: str | None = None) -> Job: ...
 
     def fail(self, tx: Tx, job: Job, error: str, *, retryable: bool = True) -> Job: ...

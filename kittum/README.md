@@ -124,8 +124,8 @@ For development, `pnpm dev:web` serves the workbench with hot reload on port 518
 `kittum serve`, and `VITE_KITTUM_WORKBENCH=mock pnpm dev:web` shows recorded example data without
 a server. `pnpm --dir apps/web e2e` runs the end-to-end journeys against a migrated database in
 `KITTUM_DATABASE_URL`, with the source gateway answering from the recorded responses in
-`apps/server/tests/enrich/fixtures/stack` (`KITTUM_GATEWAY_RECORDINGS`), so nothing touches the
-network. `uv run python -m tests.app.record_stack` in `apps/server` records them again.
+`apps/server/tests/enrich/fixtures/stack` (`KITTUM_OFFLINE=1` with `KITTUM_GATEWAY_RECORDINGS`),
+so nothing touches the network. `uv run python -m tests.app.record_stack` in `apps/server` records them again.
 
 ## Documents
 

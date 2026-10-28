@@ -13,6 +13,7 @@ API key is used, so none can end up in a recording.
 """
 
 import json
+from datetime import timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -37,7 +38,10 @@ from tests.documents.conftest import SavepointDatabase
 from tests.enrich.support import CONTACT_EMAIL, FIXTURES
 
 if TYPE_CHECKING:
+    from kittum.core import Clock, Id
     from kittum.db import Database, Tx
+    from kittum.ledger import Ledger
+    from kittum.storage import ArtifactStore
 
 STACK = FIXTURES / "stack"
 GUIDELINE_REFERENCES = FIXTURES / "guideline_references.ris"
@@ -105,13 +109,18 @@ class RecordingTransport:
         path.write_text(json.dumps(existing, indent=2, sort_keys=True) + "\n")
 
 
-def _scenario(
-    tx: Tx, name: str, searches: Searches, waterfall: bool, gateway: PassThroughGateway
-) -> None:
-    ledger = PostgresLedger()
-    clock = SystemClock()
-    artifacts = MemoryStore()
-    project_id, lead = create_project(tx, name=f"record {name}", lead_name="Rec", ledger=ledger)
+def build_corpus(
+    tx: Tx,
+    name: str,
+    searches: Searches,
+    *,
+    ledger: Ledger,
+    clock: Clock,
+    artifacts: ArtifactStore,
+) -> tuple[Id, Id]:
+    """A project with the example protocol, `searches` imported in order, and its corpus.
+    Returns the project and its lead."""
+    project_id, lead = create_project(tx, name=name, lead_name="Rec", ledger=ledger)
     publish_protocol(tx, project_id, PROTOCOL.read_text(), approved_by=lead, ledger=ledger)
     for path, format, source in searches:
         plan = SearchPlan(topic_id="TRIALS", source=source, platform=source, strategy="recorded")
@@ -127,6 +136,18 @@ def _scenario(
             clock=clock,
         )
     ingest_corpus(tx, project_id, actor_id=lead, ledger=ledger)
+    return project_id, lead
+
+
+def _scenario(
+    tx: Tx, name: str, searches: Searches, waterfall: bool, gateway: PassThroughGateway
+) -> None:
+    ledger = PostgresLedger()
+    clock = SystemClock()
+    artifacts = MemoryStore()
+    project_id, lead = build_corpus(
+        tx, f"record {name}", searches, ledger=ledger, clock=clock, artifacts=artifacts
+    )
     queue = PostgresJobQueue()
     run = request_enrichment(
         tx,
@@ -148,13 +169,14 @@ def _scenario(
         ledger=ledger,
         queue=queue,
     )
-    job = tx.execute(
-        "select id from job where kind = %s and payload->>'run_id' = %s",
-        (ENRICHMENT_JOB, str(run.id)),
-    ).fetchone()
-    assert job is not None
-    claimed = queue.get(tx, job["id"])
-    output = enrichment_handler(ctx, gateway, ledger)(claimed, JobContext(job=claimed))
+    row = tx.execute("select job_id from enrichment_run where id = %s", (run.id,)).fetchone()
+    assert row is not None
+    tx.execute(
+        "update job set run_after = now() + interval '1 day' where id <> %s", (row["job_id"],)
+    )
+    claimed = queue.claim(tx, (ENRICHMENT_JOB,), "recorder", timedelta(hours=1))
+    assert claimed is not None and claimed.job_id == row["job_id"]
+    output = enrichment_handler(ctx, gateway, ledger, queue)(claimed, JobContext(job=claimed))
     assert output.publish is not None
     output.publish(tx)
     revision = latest_revision(tx, project_id)
@@ -162,7 +184,7 @@ def _scenario(
     if not waterfall:
         return
     for report in reports(tx, project_id, revision.id):
-        found = locations(tx, project_id, report.report_id)
+        found = locations(tx, project_id, report.report_id, on=clock.now().date())
         if found:
             acquire(
                 tx,

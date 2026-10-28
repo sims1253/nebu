@@ -80,9 +80,11 @@ class Settings:
     judge_backend: Literal["endpoint", "demo"] = "endpoint"
     # The built workbench (`pnpm build` writes apps/web/dist). `kittum serve` serves it when set.
     web_dist: Path | None = None
-    # A directory of recorded source responses (`kittum.gateway.RecordedTransport`). When set, the
-    # gateway answers from it and never touches the network: the end-to-end stack and offline demos.
+    # A directory of recorded source responses (`kittum.gateway.RecordedTransport`), allowed only
+    # with `offline`. The gateway then answers from it, never touches the network, and caches in
+    # memory, not in the deployment's cache: the end-to-end stack and offline demos.
     gateway_recordings: Path | None = None
+    offline: bool = False
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -113,7 +115,16 @@ class Settings:
                 if env.get("KITTUM_GATEWAY_RECORDINGS")
                 else None
             ),
+            offline=_flag("KITTUM_OFFLINE", env.get("KITTUM_OFFLINE", "")),
         )
+
+
+def _flag(name: str, raw: str) -> bool:
+    if raw.strip().lower() in ("", "0", "false", "no"):
+        return False
+    if raw.strip().lower() in ("1", "true", "yes"):
+        return True
+    raise ValueError(f"{name} must be 1 or 0, not {raw!r}")
 
 
 def _judge_backend(raw: str) -> Literal["endpoint", "demo"]:

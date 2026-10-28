@@ -803,30 +803,50 @@ Enrichment and open-access retrieval (branch `kittum/enrichment-ui`):
 
 - `kittum.app.enrichment`: building the corpus (route and `kittum project ingest`) queues an
   `enrich.revision` job; `kittum project enrich` and `POST .../enrichment/runs` queue another (an
-  unfinished run comes back instead). The job enriches the revision's source occurrences in import
-  order, 50 per transaction, each chunk with its `record_enrichment` rows, an
-  `enrichment_run_record` row per record (sources asked, answering, and failed with the reason),
-  and an `enrichment.records_enriched` event naming every field's source; a retried job skips
-  done records. `enrichment.requested` and `enrichment.finished` frame the run.
+  unfinished run comes back instead; requests for one project take turns under a transaction
+  advisory lock, so two at once queue one run). The job asks the sources for 50 records at a time
+  with no transaction open (`enrich.lookup`), then, holding the job's lease (`JobQueue.fence`) and
+  the run's row lock, writes the chunk's `record_enrichment` rows for records no other worker
+  wrote, an `enrichment_run_record` row per record (the sources asked, answering, and failed for
+  that record with the reason, from `RecordEnrichment.failures`), and an
+  `enrichment.records_enriched` event naming every field's source. `enrichment.requested` and
+  `enrichment.finished` frame the run.
+- `kittum.enrich` refuses an answer that names another work (DOI case-folded, PMID, PMCID) as a
+  failure of that source for that record, and uses none of it. A Crossref PDF link needs a
+  Creative Commons licence for exactly its content version; the licence's start date travels with
+  the location, and `full_text_candidates(..., on=)` skips it until then.
 - `kittum.app.open_access`: `POST .../retrieval/open-access` (or `kittum project
   fetch-open-access`) fixes the reports included at title and abstract without a full text and
-  queues a `retrieval.open_access` job. Per report, in its own transaction, it ranks the PDF
-  locations enrichment found (`full_text_candidates`), lets `documents.acquire` walk them (a
-  source that gives no response is an `unavailable` attempt now, and every attempt carries its
-  licence), and attaches a PDF it gets with `attach_acquired_full_text` (parsed layer, licence,
-  the acquisition in the event). A report without a location gets
-  `retrieval.no_open_access_location`; one uploaded by hand meanwhile is left alone.
+  queues a `retrieval.open_access` job. Per report it fixes the PDF locations enrichment found
+  (`full_text_candidates` on the day), then tries them one at a time: the request goes out with
+  no transaction open (`documents.fetch_location`), and the attempt is committed with its ledger
+  event (`documents.record_location`: `document.acquisition_attempted`, or `document.acquired`
+  with the acquisition) before the next is tried, so a crash or a failed attach keeps the
+  evidence and a retried job resumes after the last recorded attempt. Attaching the PDF
+  (`attach_acquired_full_text`: parsed layer, licence, the acquisition in the event) is a
+  transaction of its own. Every step holds the job's lease and the report's row lock. A report
+  without a location gets `retrieval.no_open_access_location`; one uploaded by hand meanwhile
+  keeps its upload, and an acquisition made before it stays on record.
+- `GET .../ledger/verify` gives everyone whether the chain holds and how far it was checked; the
+  event counts by type and the full report only to a lead who screens nothing (`X-Kittum-Reviewer`),
+  since the counts of acquisition events say how many reports are sought while reviewers screen.
 - Routes (`api/routes/enrichment.py`), all 403 to anyone but a lead who screens nothing: the
   latest enrichment run with counts per source, flags per record, one record's enrichment (field
   sources, identifiers, notices, OA locations, entity tags, failures), the latest open-access run
   with each report's attempts, and a report's attempts over all runs. Migration
   `20261030010000_app_enrichment_retrieval.sql`.
 - `HttpxTransport` speaks HTTP/2: link.springer.com answers HTTP/1.1 clients with a bot challenge.
-  `KITTUM_GATEWAY_RECORDINGS` serves the gateway from `kittum.gateway.RecordedTransport`; the
-  end-to-end stack points it at `tests/enrich/fixtures/stack`, recorded by
+  `KITTUM_GATEWAY_RECORDINGS` serves the gateway from `kittum.gateway.RecordedTransport`, only
+  with `KITTUM_OFFLINE=1` (the process refuses to start otherwise), and then with in-memory rate
+  limits and response cache (`SourceGateway(cache="memory")`), so recordings never reach the
+  deployment's cache. The end-to-end stack points it at `tests/enrich/fixtures/stack`, recorded by
   `tests/app/record_stack.py` (no key; the CC BY PDFs are the repository's own fixtures).
 - Tests: `tests/app/test_enrichment.py` drives both jobs through the worker on recorded responses
-  with PubTator answering 503, then again with it back (the cache answers the rest);
+  with PubTator answering 503, then again with it back (the cache answers the rest), and an attach
+  that fails once and resumes; `tests/app/test_enrichment_jobs.py` has a worker lose its lease
+  mid-request in each job, two requests race on two connections, a source fail for one DOI, and
+  offline mode; `tests/enrich/test_answers_and_licences.py` covers answers for another work and
+  licence versions and dates;
   `apps/web/e2e/enrichment.spec.ts` covers the screens, and `setup.spec.ts` checks the enrichment
   of the corpus it builds.
 

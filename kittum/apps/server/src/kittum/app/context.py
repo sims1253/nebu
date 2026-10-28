@@ -124,6 +124,14 @@ def build_judge(
 def build_gateway(
     settings: Settings, db: Database, artifacts: ArtifactStore, clock: Clock
 ) -> SourceGateway:
+    """The source gateway: live over HTTP, or, in offline mode only, from recorded responses with
+    a cache and rate limits of its own process, so recordings never mix with what the sources
+    said. Recordings without offline mode, or offline mode without recordings, are refused."""
+    if bool(settings.gateway_recordings) != settings.offline:
+        raise ConfigurationError(
+            "KITTUM_GATEWAY_RECORDINGS and KITTUM_OFFLINE=1 go together: recordings replace the"
+            " real sources only in offline mode, and offline mode needs recordings"
+        )
     transport: Transport = (
         RecordedTransport(settings.gateway_recordings)
         if settings.gateway_recordings
@@ -132,6 +140,8 @@ def build_gateway(
     return SourceGateway(
         database=db,
         transport=transport,
+        buckets="memory" if settings.offline else "postgres",
+        cache="memory" if settings.offline else "postgres",
         artifacts=artifacts,
         policies=default_policies(
             contact_email=settings.contact_email, ncbi_api_key=settings.ncbi_api_key
@@ -247,15 +257,15 @@ register_job_handler(EXTRACTION_JOB, _extraction_jobs)
 
 
 def _source_jobs(
-    build: Callable[[AppContext, Gateway, Ledger], Handler], kind: str
+    build: Callable[[AppContext, Gateway, Ledger, JobQueue], Handler], kind: str
 ) -> HandlerFactory:
-    """Jobs that reach external sources: only a context with a gateway runs them."""
+    """Jobs that reach external sources: only a context with a gateway and a queue runs them."""
 
     def factory(ctx: AppContext) -> Handler | None:
-        if ctx.gateway is None:
-            log.warning("no source gateway is configured, so this worker runs no %s jobs", kind)
+        if ctx.gateway is None or ctx.queue is None:
+            log.warning("no source gateway or job queue, so this worker runs no %s jobs", kind)
             return None
-        return build(ctx, ctx.gateway, ctx.require_ledger())
+        return build(ctx, ctx.gateway, ctx.require_ledger(), ctx.queue)
 
     return factory
 

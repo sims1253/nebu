@@ -24,7 +24,7 @@ import yaml
 from fastapi.testclient import TestClient
 
 from kittum.api import AppContext, create_app
-from kittum.app import job_handlers
+from kittum.app import job_handlers, open_access
 from kittum.app.demo import DATA, PDFS, PROTOCOL, SENTINELS, demo_judge
 from kittum.core import new_id
 from kittum.gateway import RecordedTransport, SourceGateway
@@ -96,7 +96,9 @@ def _include_everything(client: TestClient, pid: str, reviewer: str) -> int:
     return decided
 
 
-def test_a_lead_enriches_the_corpus_and_fetches_open_access_full_texts(pg: Tx) -> None:
+def test_a_lead_enriches_the_corpus_and_fetches_open_access_full_texts(
+    pg: Tx, monkeypatch: pytest.MonkeyPatch
+) -> None:
     stack = Stack()
     db = savepoint_db(pg)
     artifacts = MemoryStore()
@@ -286,6 +288,13 @@ def test_a_lead_enriches_the_corpus_and_fetches_open_access_full_texts(pg: Tx) -
     for path in ("enrichment/runs", "retrieval/open-access"):
         refused = client.post(f"/api/projects/{pid}/{path}", json={"actor_id": people["Sam"]})
         assert refused.status_code == 403, path
+    # The ledger tells a reviewer that it holds, not how many events of which type it has.
+    theirs = ok(client.get(f"/api/projects/{pid}/ledger/verify", headers=as_sam))
+    assert theirs["ok"] and (theirs["by_type"], theirs["events"], theirs["verify"]) == (
+        None,
+        None,
+        None,
+    )
 
     # The lead uploads one trial by hand, then fetches the rest from open access.
     vitamin_c = report_of["10.1186/s12916-026-05037-x"]
@@ -303,7 +312,37 @@ def test_a_lead_enriches_the_corpus_and_fetches_open_access_full_texts(pg: Tx) -
     )
     assert fetch["status"] == "queued"
     assert len(fetch["reports"]) == 3 and {r["outcome"] for r in fetch["reports"]} == {None}
+
+    # The first attach fails (a full disk, say). The attempts before it stay on record, each
+    # committed with its ledger event, and the retried job goes on from there.
+    def full_disk(*_args: object, **_kwargs: object) -> None:
+        raise OSError("No space left on device")
+
+    real_attach = open_access.attach_acquired_full_text
+    monkeypatch.setattr(open_access, "attach_acquired_full_text", full_disk)
     assert work() == 1
+    stuck = ok(client.get(f"/api/projects/{pid}/retrieval/open-access/latest", headers=as_lead))
+    (first,) = [r for r in stuck["reports"] if r["report_id"] == report_of[LESOTHO_DOI]]
+    assert first["outcome"] is None
+    assert [a["outcome"] for a in first["attempts"]] == ["http_error", "acquired"]
+    with db.transaction() as tx:
+        kept = [
+            (e.type, (e.payload.get("attempt") or e.payload)["url"])
+            for e in ledger.events(tx, pid)
+            if e.type.startswith("document.")
+        ]
+    assert [k for k in kept if "PMC13374172" in k[1] or "04943-4" in k[1]] == [
+        ("document.acquisition_attempted", first["attempts"][0]["url"]),
+        ("document.acquired", first["attempts"][1]["url"]),
+    ]
+    monkeypatch.setattr(open_access, "attach_acquired_full_text", real_attach)
+    pg.execute(
+        "update job set run_after = now() where project_id = %s and status = 'queued'", (pid,)
+    )
+    before = len(stack.sent)
+    assert work() == 1
+    # Resumed after the last recorded attempt: nothing for the Lesotho trial is fetched again.
+    assert not [u for u in stack.sent[before:] if "04943-4" in u or "PMC13374172" in u]
     done = ok(client.get(f"/api/projects/{pid}/retrieval/open-access/latest", headers=as_lead))
     assert done["status"] == "done"
     by_report = {r["report_id"]: r for r in done["reports"]}
@@ -348,8 +387,15 @@ def test_a_lead_enriches_the_corpus_and_fetches_open_access_full_texts(pg: Tx) -
         events = ledger.events(tx, pid)
     attached = [e for e in events if e.type == "project.full_text_attached"]
     assert [e.payload.get("source") for e in attached] == [None, "crossref"]
+    # One event per attempt, each committed before the next was tried.
     (got,) = [e for e in events if e.type == "document.acquired"]
-    assert [a["outcome"] for a in got.payload["attempts"]] == ["http_error", "acquired"]
+    assert [a["outcome"] for a in got.payload["attempts"]] == ["acquired"]
+    refused = [
+        e.payload["attempt"]["url"] for e in events if e.type == "document.acquisition_attempted"
+    ]
+    assert sorted(refused) == sorted(
+        [a["url"] for a in acquired["attempts"][:1]] + [a["url"] for a in lancet["attempts"]]
+    )
     assert [e.type for e in events if e.type.startswith("retrieval.")] == [
         "retrieval.open_access_requested",
         "retrieval.no_open_access_location",
