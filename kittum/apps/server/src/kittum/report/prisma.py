@@ -14,6 +14,7 @@ The diagram is drawn to be read at the size a report page or a screen shows it: 
 980 px wide drawing, so text stays at 14 px or more down to 860 px of width.
 """
 
+import textwrap
 from collections import Counter
 from html import escape
 from typing import TYPE_CHECKING
@@ -323,14 +324,32 @@ _FAMILY = "font-family='IBM Plex Sans, Helvetica, Arial, sans-serif'"
 _FONT = f"{_FAMILY} font-size='16'"
 
 
-def _box(x: int, y: int, lines: list[str], *, bold_first: bool = True) -> tuple[str, int]:
+# Characters per line of a box. A viewer without IBM Plex Sans falls back to a wider font, up to
+# a monospaced one at 0.6 em a character, so lines wrap where even that still fits.
+_CHARS = int((_W - 2 * _PAD) / (16 * 0.6))
+
+
+def _wrap(line: str) -> list[str]:
+    """A line as it fits a box, continuation lines indented under it."""
+    indent = " " * (len(line) - len(line.lstrip()))
+    # A count ("n = 3") never breaks: its spaces are no-break spaces while wrapping.
+    kept = line.replace(" = ", "\u00a0=\u00a0")
+    wrapped = textwrap.wrap(
+        kept, _CHARS, subsequent_indent=indent + "    ", break_on_hyphens=False
+    ) or [kept]
+    return [part.replace("\u00a0", " ") for part in wrapped]
+
+
+def _box(x: int, y: int, given: list[str], *, bold_first: bool = True) -> tuple[str, int]:
+    lines = [part for line in given for part in _wrap(line)]
+    first = len(_wrap(given[0])) if given else 0  # the heading line, wrapped, stays bold
     height = _PAD * 2 + _LINE * len(lines)
     parts = [
         f"<rect x='{x}' y='{y}' width='{_W}' height='{height}' rx='4' fill='#ffffff' "
         "stroke='#1f2933' stroke-width='1.2'/>"
     ]
     for n, line in enumerate(lines):
-        weight = " font-weight='600'" if bold_first and n == 0 else ""
+        weight = " font-weight='600'" if bold_first and n < first else ""
         parts.append(
             f"<text x='{x + _PAD}' y='{y + _PAD + _LINE * (n + 1) - 4}' {_FONT}{weight}>"
             f"{escape(line)}</text>"

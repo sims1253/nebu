@@ -175,6 +175,10 @@ def test_prisma_flow_reconciles_by_hand_with_screening_and_the_corpus(
         float(t.get("font-size") or 0) for t in svg.iter("{http://www.w3.org/2000/svg}text")
     )
     assert smallest * 870 / width >= 14, (smallest, width)
+    # Every line fits its box, even in a monospaced fallback font (0.6 em a character).
+    _title, *lines = texts
+    boxes = [t for t in lines if t not in ("Identification", "Screening", "Included")]
+    assert max(len(t or "") * 16 * 0.6 for t in boxes) <= 420 - 2 * 12
 
     # The other scope was never screened, and its checks say so.
     failing = {c.name for c in prisma(review, "combination-vs-single").checks if not c.holds}

@@ -8,13 +8,14 @@ through a cutoff (`load_review`). The core targets are:
 - `ris`: one undeduplicated RIS file per search, the deduplicated corpus, and each scope's
   included and excluded lists;
 - `search_report`: every search with the fields PRISMA-S asks for;
-- `ai_disclosure`: the models, weights, licences, prompt hashes, modes, reveal settings,
-  agreement, audit results, and the judge filter's limits, as data and as one RAISE-aligned
-  rendering;
+- `ai_disclosure`: the models, weights, licences, modes, reveal settings, agreement with its
+  2x2 tables, audit results, the judge filter's limits, and each AI role's prompts, schema, and
+  request settings read from its stored requests, as data and as one RAISE-aligned rendering;
+- `extraction`: the accepted extraction values as CSV and JSON (`kittum.report.extracted`);
 - `bundle`: the handover bundle, sealed with `seal_bundle` rather than rendered.
 
 The audit trail answers an assessor from the same ledger: `trace` lists one record's events from
-search to extraction, `events` pages through the ledger, `milestones` names cutoffs, and `as_of`
+search to extraction, each with the model calls behind an AI step (`model_calls`), `events` pages through the ledger, `milestones` names cutoffs, and `as_of`
 computes the flows and the disclosure at a cutoff without storing a render.
 
 `render` stores a target's files by hash and returns an `Artifact`; `record_render` keeps the

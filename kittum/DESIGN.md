@@ -322,7 +322,8 @@ Kittum renders every report from the ledger. Nobody types counts. The core targe
 | --- | --- |
 | `prisma` | The PRISMA 2020 flow per scope with the update-search delta, the PRISMA-S table, the search strategies, the exclusion lists with criterion reasons, and the methods text, including the reason for the screening mode |
 | `ris` | RIS files for every search, undeduplicated, and for every reference list |
-| `ai_disclosure` | The AI-use disclosure |
+| `ai_disclosure` | The AI-use disclosure, with every AI role's prompts and model recipe as sent |
+| `extraction` | The accepted extraction values as CSV and JSON, one row per study and field, with path, source anchor, and acceptance |
 | `bundle` | The handover bundle, with a validation pack for client vendor audits |
 
 Profiles register further targets: an agency's dossier sections and annexes, a submission
@@ -576,7 +577,8 @@ The deliverable is "the result plus the database". Kittum seals a bundle at even
 - `registry/` with model versions, prompts, parser recipes, dependency lockfiles, and an SBOM.
 - `manifest.json` with every file hash and the signed checkpoint, plus its timestamp token.
 - `verify`, a small offline tool. It checks signatures, chain continuity, artifact hashes, count
-  reconciliation, and that every accepted value has an anchor.
+  reconciliation, that every accepted value has an anchor, and that the extracted values in
+  `reports/extraction/` match the acceptances in the ledger.
 
 The acceptance test for the bundle: pick any cell in an exported results table and trace it to the
 accepted value, its PDF regions, and the human approval.
@@ -652,7 +654,7 @@ the terms of their own templates.
 | AI-exclusion audit | Strata, sample sizes, misses found, estimated missed relevant records with a 95% upper bound, pass or fail against the protocol's threshold | A found miss creates a queue of the 20 nearest AI-excluded records for human rescreening. |
 | Risk of bias | Signalling questions on the left with assembled quotes, the PDF on the right; the rendering on each instrument the review needs (RoB 2, ROBINS-I V2, or a profile's form) | `1` to `5` for yes, probably yes, probably no, no, no information. `o` override with a reason. |
 | Progress | The live PRISMA flow per scope with the update-search delta, throughput, kappa and PABAK for human pairs and human-AI pairs, conflict rate, the audit gauge, and the disclosure summary | Read only |
-| Audit | For the methods lead: the chain on one strip; a PRISMA count opened to its records and a record to every ledger event that touched it, with hashes and artifacts; a full integrity check naming each failing event and check; the flow and the AI disclosure as of any event | `1` trace, `2` integrity, `3` as of an event, `v` verify again, `c` sign a checkpoint, `p` keep the reports at the event |
+| Audit | For the methods lead: the chain on one strip; a PRISMA count opened to its records and a record to every ledger event that touched it, each event in words first, then its hashes opened to the content they cover and rechecked, and an AI step's exact model requests and responses; a full integrity check naming each failing event and check; the flow and the AI disclosure as of any event | `1` trace, `2` integrity, `3` as of an event, `,` and `.` previous and next count, `v` verify again, `c` sign a checkpoint, `p` keep the reports at the event |
 
 Kittum renders PDF pages as images, as Janus does, and lays an invisible text layer from the
 reader's word boxes over them. Selecting text then yields code-point offsets and regions without
