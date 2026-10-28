@@ -341,10 +341,6 @@ function DownloadLink({ file, children }: { file: Download; children?: ReactNode
 }
 
 /**
- * One scope's PRISMA flow: the diagram at the full width of the page, so its labels read at the
- * default zoom; a click enlarges it, and it downloads as SVG. The counts follow as a list.
- */
-/**
  * The rendered SVG, inlined in the page so its text uses the workbench's font (an SVG shown as
  * an image cannot reach the page's web fonts and falls back to whatever the system has).
  */
