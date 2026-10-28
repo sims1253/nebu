@@ -28,6 +28,7 @@ from tests.extraction.test_review import _accept, _fields, _run
 from tests.report.support import EXAMPLES, OverHttp
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
     from kittum.report import Review
@@ -151,30 +152,67 @@ def test_accepted_values_download_as_csv_and_json_and_verify_against_the_ledger(
     assert main(["verify", str(sealed.path)]) == 0
     capsys.readouterr()
 
-    # A values file that says 53 where the ledger says 52 fails, though its hash is in the
-    # signed manifest.
+    # Every forged file below is sealed into a bundle whose hashes and signature all check out;
+    # `kittum verify` must still catch that the file disagrees with the ledger.
     honest = CORE_RENDERERS["extraction"]
+    forgeries = 0
 
-    def fudged(review: Review, scope_id: str | None) -> list[RenderedFile]:
-        return [
-            f.model_copy(update={"data": f.data.replace(b'"value": "52"', b'"value": "53"')})
-            for f in honest(review, scope_id)
-        ]
+    def verify_forged(forge: Callable[[str, bytes], bytes]) -> str:
+        nonlocal forgeries
+        forgeries += 1
 
-    monkeypatch.setitem(CORE_RENDERERS, "extraction", fudged)
-    forged = seal_bundle(
-        env.tx,
-        env.project_id,
-        env.artifacts,
-        tmp_path / "forged",
-        signer=key,
-        actor_id=env.requester,
-        ledger=env.ledger,
-        clock=env.clock,
-    )
-    assert main(["verify", str(forged.path)]) == 1
-    out = capsys.readouterr().out
+        def forged(review: Review, scope_id: str | None) -> list[RenderedFile]:
+            return [
+                f.model_copy(update={"data": forge(f.path, f.data)})
+                for f in honest(review, scope_id)
+            ]
+
+        monkeypatch.setitem(CORE_RENDERERS, "extraction", forged)
+        bundle = seal_bundle(
+            env.tx,
+            env.project_id,
+            env.artifacts,
+            tmp_path / f"forged-{forgeries}",
+            signer=key,
+            actor_id=env.requester,
+            ledger=env.ledger,
+            clock=env.clock,
+        )
+        assert main(["verify", str(bundle.path)]) == 1
+        return capsys.readouterr().out
+
+    # A value that says 53 where the ledger says 52.
+    out = verify_forged(lambda _, data: data.replace(b'"value": "52"', b'"value": "53"'))
     assert f"FAIL {VALUES}.json: " in out
     assert "has value '53', ledger event" in out and "has '52'" in out
-    assert f"{VALUES}.csv and {VALUES}.json list different values" not in out
     assert f"FAIL {VALUES}.csv: " in out
+
+    # An empty file that claims to show the ledger before anything was accepted.
+    out = verify_forged(
+        lambda path, data: (
+            b'{"cutoff_seq": 0, "values": []}\n'
+            if path.endswith(".json")
+            else data.split(b"\n")[0] + b"\n"
+        )
+    )
+    assert "says it shows the ledger at event 0, but the bundle's ledger ends at event" in out
+    assert out.count("leaves out the value") == 2
+
+    # The right value, unit, anchor, and reviewer, claimed for another study and quantity, the
+    # same in both files.
+    def other_study(_: str, data: bytes) -> bytes:
+        return data.replace(b"lesotho", b"vitamin_c").replace(b"n_analysed", b"n_randomized")
+
+    out = verify_forged(other_study)
+    assert "has study 'vitamin_c', ledger event" in out
+    assert "has quantity 'n_randomized', ledger event" in out
+    assert f"{VALUES}.csv: " not in out  # the CSV says what the JSON says
+
+    # A CSV that differs from the JSON in a column other than value and unit.
+    out = verify_forged(
+        lambda path, data: (
+            data.replace(b",Reviewer,", b",Somebody,") if path.endswith(".csv") else data
+        )
+    )
+    assert f"FAIL {VALUES}.csv: accepted_by of " in out
+    assert f"FAIL {VALUES}.json" not in out
