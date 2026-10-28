@@ -103,6 +103,8 @@ def test_a_waterfall_without_a_pdf_is_recorded_as_failed(pg):
     project = new_project(pg)
     ledger = InMemoryLedger(FixedClock(WHEN))
     truncated = LESOTHO.read_bytes()[:2000]  # starts like a PDF, does not open as one
+    # Other tests commit documents of their own, so count what this waterfall adds.
+    documents = pg.execute("select count(*) as n from document").fetchone()
     outcome = acquire(
         pg,
         gateway=PassThroughGateway(FakeTransport({UNPAYWALL: truncated})),
@@ -121,4 +123,4 @@ def test_a_waterfall_without_a_pdf_is_recorded_as_failed(pg):
     (event,) = ledger.events(pg, project)
     assert event.type == NOT_ACQUIRED
     assert len(event.payload["attempts"]) == 2
-    assert pg.execute("select count(*) as n from document").fetchone() == {"n": 0}
+    assert pg.execute("select count(*) as n from document").fetchone() == documents
