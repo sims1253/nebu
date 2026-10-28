@@ -44,6 +44,10 @@ def test_a_pubmed_strategy_may_use_every_field_tag_pubmed_lists() -> None:
         " AND (10.1000/xyz[aid] OR funding[cois] OR smith john[fir] OR e123[lid]"
         ' OR 0372354[jid] OR hughes j[ps] OR "randomized controlled trial"[Publication Type])'
         " AND english[la] AND medline[sb] AND humans[filter]"
+        # PubMed's own Clinical Queries use these unexpanded and subheading forms.
+        ' AND (review[pt:noexp] OR "clinical trial"[Publication Type:noexp]'
+        " OR diagnosis[Subheading:noexp] OR therapy[subheading] OR therapy[MeSH Subheading:noexp]"
+        ' OR "Smoking Cessation"[MeSH Major Topic:noexp] OR review[ptyp:noexp])'
     )
     report = client.post("/api/protocol/validate", json=source).json()
     assert (report["ok"], report["issues"], report["warnings"]) == (True, [], [])
