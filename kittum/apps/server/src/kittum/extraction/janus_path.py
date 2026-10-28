@@ -10,10 +10,10 @@ own reader, so its locations map back to layer cells and lines one to one. The c
   tell spanned groups apart;
 - each body row's `section` is the run of group rows (a label and no values) above it.
 
-Janus locates a cell and reports a not-reported mark ("NR", "n/a") as missing. Kittum parses the
-cell with Janus's typed parser, which reads typographic minus signs, an inline estimator label
-("RR:1.124 (0.978, 1.290)") and a count printed without its percentage, and anchors the value on
-the cell's span in the layer with `make_anchor`.
+Janus locates a cell and reports a not-reported mark ("NR", "n/a") as missing. Kittum strips a
+short inline label ("RR:1.124 (0.978, 1.290)", "aOR = 1.2") and parses the cell with Janus's
+typed parser, which reads typographic minus signs and a count printed without its percentage,
+and anchors the value on the cell's span in the layer with `make_anchor`.
 """
 
 from dataclasses import dataclass
@@ -30,6 +30,7 @@ from janus.comparison.content import (
 )
 from janus.comparison.models import CompoundShape, DocumentEvidence, ValueType
 from janus.extraction import (
+    DEFAULT_NOT_REPORTED,
     ExtractionSpecification,
     Scalar,
     extract_evidence,
@@ -210,6 +211,7 @@ def specification(name: str, fields: tuple[SchemaField, ...]) -> ExtractionSpeci
     """One Janus specification for every field that has a locator, nested by key.
 
     Each field is a text scalar: Janus locates the cell, and `_parse` reads the value from it.
+    Janus gives text no not-reported marks by default, so each field declares them.
     """
     root: dict[str, Any] = {}
     for f in fields:
@@ -224,15 +226,19 @@ def specification(name: str, fields: tuple[SchemaField, ...]) -> ExtractionSpeci
             locate["section_labels"] = list(f.locate.sections)
         if f.locate.columns and f.locate.strategy == "table_label":
             locate["column_labels"] = list(f.locate.columns)
-        node[k.quantity] = {"type": "text", "locate": locate}
+        node[k.quantity] = {
+            "type": "text",
+            "locate": locate,
+            "not_reported": list(DEFAULT_NOT_REPORTED),
+        }
     return ExtractionSpecification.model_validate({"name": name, "fields": root})
 
 
 def _parse(raw: str, field: SchemaField) -> tuple[str | None, str | None]:
     """The value in a cell, as an exact string, or the reason it cannot be read.
 
-    Janus reads numbers; a p-value printed with its comparator and a labelled text ("Smoker:
-    yes") are read here, because Janus's decimal and text types keep neither apart.
+    Kittum strips any short label ("aOR:", "Mean ="), wider than the estimator labels Janus
+    removes, and reads a p-value printed with its comparator, which Janus's decimal type rejects.
     """
     shape = component = None
     if field.locate is not None and field.locate.cell is not None:
@@ -247,7 +253,7 @@ def _parse(raw: str, field: SchemaField) -> tuple[str | None, str | None]:
             return (None, problem) if problem else (stripped, None)
     rule = Scalar(type=_TYPES[field.kind], source_shape=shape, component=component)
     try:
-        value = parse_value(labelled if field.kind == "text" else raw, rule)
+        value = parse_value(labelled, rule)
     except ValueError as e:
         return None, f"cannot read {raw!r}: {e}"
     value = str(value)
