@@ -13,6 +13,7 @@ Modules add their own rows by registering an `Exporter`; the ledger code does no
 """
 
 import json
+import os
 import re
 import sqlite3
 from dataclasses import dataclass, field
@@ -364,9 +365,10 @@ def verify_bundle(path: Path, *, trusted_key: VerifyKey | None = None) -> Bundle
         elif sha256_hex(target.read_bytes()) != expected:
             problems.append(f"{rel} does not match its hash")
     listed = {*files, MANIFEST_NAME}
-    for extra in sorted(p for p in path.rglob("*") if p.is_file()):
-        rel = extra.relative_to(path).as_posix()
-        if rel not in listed:
+    for rel, is_link in _entries(path):
+        if is_link:
+            problems.append(f"{rel} is a symlink; a bundle holds only regular files")
+        elif rel not in listed:
             problems.append(f"{rel} is not listed in the manifest")
     if SQLITE_NAME not in files:
         problems.append(f"{SQLITE_NAME} is not listed in the manifest")
@@ -384,6 +386,21 @@ def verify_bundle(path: Path, *, trusted_key: VerifyKey | None = None) -> Bundle
     finally:
         db.close()
     return report(**result)
+
+
+def _entries(root: Path) -> list[tuple[str, bool]]:
+    """Every file and symlink under `root`, as (relative path, is a symlink).
+
+    Symlinked directories are reported, not followed, and so are dangling links.
+    """
+    out: list[tuple[str, bool]] = []
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        here = Path(dirpath)
+        for name in dirnames + filenames:
+            entry = here / name
+            if entry.is_symlink() or name in filenames:
+                out.append((entry.relative_to(root).as_posix(), entry.is_symlink()))
+    return sorted(out)
 
 
 def _verify_database(

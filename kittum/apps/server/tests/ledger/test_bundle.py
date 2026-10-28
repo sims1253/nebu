@@ -176,6 +176,17 @@ def _smuggle(bundle: Path, _: ScreeningExporter) -> None:
     (bundle / "artifacts" / "notes.txt").write_text("not part of the handover")
 
 
+def _link_directory(bundle: Path, _: ScreeningExporter) -> None:
+    outside = bundle.parent / "outside"
+    outside.mkdir()
+    (outside / "evidence.pdf").write_bytes(b"%PDF-1.7\n% unlisted evidence\n")
+    (bundle / "extra").symlink_to(outside, target_is_directory=True)
+
+
+def _dangling_link(bundle: Path, _: ScreeningExporter) -> None:
+    (bundle / "artifacts" / "gone").symlink_to(bundle.parent / "does-not-exist")
+
+
 @pytest.mark.parametrize(
     ("tamper", "expected"),
     [
@@ -193,6 +204,8 @@ def _smuggle(bundle: Path, _: ScreeningExporter) -> None:
         pytest.param(
             _smuggle, "artifacts/notes.txt is not listed in the manifest", id="smuggled file"
         ),
+        pytest.param(_link_directory, "extra is a symlink", id="directory symlink"),
+        pytest.param(_dangling_link, "artifacts/gone is a symlink", id="dangling symlink"),
     ],
 )
 def test_tampered_bundle_fails_offline_verification(
