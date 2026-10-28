@@ -220,3 +220,10 @@ def test_records_found_twice_become_one_report_and_a_registry_entry_joins_its_st
     assert [(link["relation"], link["evidence"]) for link in by_hand] == [
         ("same_study", ["The paper reports this trial"])
     ]
+    # The split undid the confirmed link for good: joined again, the records show only the
+    # lead's reason, not the NCT ID the lead had taken back.
+    assert [
+        link["evidence"]
+        for link in view["links"]
+        if registry_record["occurrence_id"] in link["occurrence_ids"]
+    ] == [["The paper reports this trial"]]

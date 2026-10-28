@@ -522,11 +522,11 @@ def searches(tx: Tx, project_id: Id) -> list[CorpusSearch]:
 def links(tx: Tx, project_id: Id, revision_id: Id, *, ledger: Ledger) -> list[CorpusLink]:
     """Why the records of an identity revision that share a report or a study are together: each
     confirmation and merge by hand on the way to the revision whose records are still together.
-    A link a later split undid is left out; a link whose records were split in part keeps the
-    records still together, if they still make it: two records of a report, or records of two
-    reports of a study."""
+    A split undoes, for good, every earlier link it took records out of: a later merge of the same
+    records shows only its own reason. A link whose records were split in part keeps the records
+    still together, if they still make it: two records of a report, or records of two reports of
+    a study."""
     with tx.cursor() as cur:
-        current = {row["occurrence_id"]: row for row in _parent_links(cur, project_id, revision_id)}
         chain: list[dict[str, Any]] = []
         at: Id | None = revision_id
         while at is not None:
@@ -553,10 +553,14 @@ def links(tx: Tx, project_id: Id, revision_id: Id, *, ledger: Ledger) -> list[Co
             tx, project_id, after_seq=revision["event_seq"] - 1, through_seq=revision["event_seq"]
         )
         event = events[0] if events else None
-        if event is None or event.type not in ("corpus.confirmed", "corpus.merged"):
+        if event is None:
             continue
         payload = event.payload
-        relation: Relation = payload["relation"]
+        if event.type == "corpus.split":
+            found = _still_together(found, _links_by_occurrence(tx, project_id, revision["id"]))
+            continue
+        if event.type not in ("corpus.confirmed", "corpus.merged"):
+            continue
         linked_by: LinkedBy
         if event.type == "corpus.confirmed":
             linked_by = "confirmed"
@@ -564,25 +568,42 @@ def links(tx: Tx, project_id: Id, revision_id: Id, *, ledger: Ledger) -> list[Co
         else:
             linked_by = "merged_by_hand"
             reasons = (payload["reason"],) if payload.get("reason") else ()
-        level = "study_id" if relation == "same_study" else "report_id"
-        together: dict[Id, list[Id]] = {}
-        for oid in (UUID(o) for o in payload["occurrence_ids"]):
-            if oid in current:
-                together.setdefault(current[oid][level], []).append(oid)
-        found += [
+        found.append(
             CorpusLink(
-                relation=relation,
-                occurrence_ids=tuple(group),
+                relation=payload["relation"],
+                occurrence_ids=tuple(UUID(o) for o in payload["occurrence_ids"]),
                 evidence=reasons,
                 linked_by=linked_by,
                 revision_id=revision["id"],
             )
+        )
+    return _still_together(found, _links_by_occurrence(tx, project_id, revision_id))
+
+
+def _links_by_occurrence(tx: Tx, project_id: Id, revision_id: Id) -> dict[Id, dict[str, Any]]:
+    with tx.cursor() as cur:
+        return {row["occurrence_id"]: row for row in _parent_links(cur, project_id, revision_id)}
+
+
+def _still_together(
+    found: list[CorpusLink], placed: Mapping[Id, Mapping[str, Any]]
+) -> list[CorpusLink]:
+    """Each link cut down to its records that `placed` keeps together, as groups that still make
+    the link: two records of a report, or records of two reports of a study."""
+    kept: list[CorpusLink] = []
+    for link in found:
+        level = "study_id" if link.relation == "same_study" else "report_id"
+        together: dict[Id, list[Id]] = {}
+        for oid in link.occurrence_ids:
+            if oid in placed:
+                together.setdefault(placed[oid][level], []).append(oid)
+        kept += [
+            link.model_copy(update={"occurrence_ids": tuple(group)})
             for group in together.values()
-            # A study link explains records of two reports or more; a report link, two records.
-            if len({current[oid]["report_id"] for oid in group} if level == "study_id" else group)
+            if len({placed[oid]["report_id"] for oid in group} if level == "study_id" else group)
             >= 2
         ]
-    return found
+    return kept
 
 
 def link(
