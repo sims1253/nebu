@@ -85,6 +85,14 @@ class Settings:
     # memory, not in the deployment's cache: the end-to-end stack and offline demos.
     gateway_recordings: Path | None = None
     offline: bool = False
+    # Record a live run to replay it later (`kittum.gateway.RecordingTransport`): every response
+    # the gateway gets is written into this directory, in the format `gateway_recordings` reads,
+    # without credentials or the contact address. Not with `offline`.
+    gateway_record: Path | None = None
+    # Record every model completion into this directory (or `.json` file), or replay from one
+    # instead of calling the model servers (`kittum.models.RecordingBackend`, `ReplayBackend`).
+    llm_record: Path | None = None
+    llm_replay: Path | None = None
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -116,7 +124,14 @@ class Settings:
                 else None
             ),
             offline=_flag("KITTUM_OFFLINE", env.get("KITTUM_OFFLINE", "")),
+            gateway_record=_path(env.get("KITTUM_GATEWAY_RECORD")),
+            llm_record=_path(env.get("KITTUM_LLM_RECORD")),
+            llm_replay=_path(env.get("KITTUM_LLM_REPLAY")),
         )
+
+
+def _path(raw: str | None) -> Path | None:
+    return Path(raw) if raw else None
 
 
 def _flag(name: str, raw: str) -> bool:

@@ -848,6 +848,30 @@ Enrichment and open-access retrieval (branch `kittum/enrichment-ui`):
   limits and response cache (`SourceGateway(cache="memory")`), so recordings never reach the
   deployment's cache. The end-to-end stack points it at `tests/enrich/fixtures/stack`, recorded by
   `tests/app/record_stack.py` (no key; the CC BY PDFs are the repository's own fixtures).
+- Record and replay (README, "Record a live run, replay it"): `KITTUM_GATEWAY_RECORD` wraps the
+  live transport in `kittum.gateway.RecordingTransport`, which writes each response, every attempt
+  in order, in the `RecordedTransport` format under `recording_key` (URL and query, credential
+  parameters dropped, the contact address replaced by `CONTACT_PLACEHOLDER` only in its source's
+  `CONTACT_PARAMS` entry, on recording and lookup alike). It refuses (`RecordingRefused`) user info
+  or a configured secret or the address anywhere else before sending, and cleans a body that holds
+  one, for the live run too. Live only, with a process-local cache. `RecordedTransport` answers a
+  recorded list in order and a hand-made single entry every time. `KITTUM_LLM_RECORD` wraps every
+  backend in `kittum.models.RecordingBackend` (completion, request, and raw bytes under the request
+  hash, in order; refused with `LlmRecordingRefused`, naming the field, when one holds a secret or
+  the address), and `build_judge` notes the judge's recipe in the recording's meta.
+  `KITTUM_LLM_REPLAY` replaces the backends with `ReplayBackend`, which answers in order and fails
+  with `NotReplayed` naming the hash and occurrence, and judges with the noted recipe. A replayed
+  completion keeps the model identity and serving and reports its endpoint as
+  `replay of <endpoint>`, the one field every verdict, ledger event, and disclosure carries.
+  `tests/app/test_record_replay.py` records an enrichment and a hosted judge run and replays it
+  offline to the same rows and ledger payloads, and picks the live run's judge;
+  `tests/models/test_replay.py` replays a judge run in order, in a file and in a directory, and
+  refuses completions holding a key or the address; `tests/gateway/test_recording.py` covers the
+  refusals, the placeholder, and a failing-then-answering source replayed in order, a transport
+  failure included (recorded as `{"error": <kind>}` and raised again as that kind). Recording
+  refuses to start (`check_recording_secrets`) with a key or password under
+  `RECORDING_SECRET_LENGTH` characters, a common one, or one inside what Kittum sends (the dev
+  password `kittum` is PubMed's `tool`); the database password is compared decoded.
 - Tests: `tests/app/test_enrichment.py` drives both jobs through the worker on recorded responses
   with PubTator answering 503, then again with it back (the cache answers the rest), and an attach
   that fails once and resumes; `tests/app/test_enrichment_jobs.py` has a worker lose its lease
