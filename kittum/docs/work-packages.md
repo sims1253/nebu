@@ -342,17 +342,28 @@ Module `kittum.screening`. Needs: `protocol`, `corpus`, `judge`, `ledger`, `runs
 - Queues: M1 and M2 follow a seeded order per reviewer; M3 follows the AI's order (proposed
   exclusions last, then by criteria not met), shared by both screeners. `queue` returns batches
   after a cursor (`after`), as the workbench prefetches five.
+- Two readings of each verdict. `ai_excludes` is `Verdict.excludes` (verified by the filter); it
+  counts where an AI exclusion would remove or deprioritize a record: the M2 disagreement when the
+  human includes, the M3 order, and the audit strata. The model's own reading includes a record
+  when no criterion's model-reported status (`downgraded_from` if set, else `status`) is
+  `not_met`; it counts where the AI argues for keeping a record that humans excluded: the M1
+  AI-include rule and the M2 disagreement when the human excludes. A `not_met` that only the
+  filter downgraded is therefore agreement with a human exclusion, and no exclusion the filter
+  could not verify is ever revealed against an inclusion. A record that tried to instruct the
+  model has no trustworthy own reading and counts as included. (Integrator's decision, after the
+  first review: the filter stops wrongful exclusions; it must not send nearly every record both
+  humans exclude to adjudication.)
 - `decide`: a provisional decision, then a reveal if the stage's `reveal` setting and the AI say
-  so (on disagreement: the AI's verified reason to exclude, or its reading of the human's
+  so (on disagreement as above: the AI's verified reason to exclude, or its reading of the human's
   criterion), then a final decision. Both are stored with the client's timing (shown, first key,
   decided, reveal shown) and the revision; `expected_revision` is checked (`StaleRevision`); a
   replayed command returns the stored result. Exclusions need a criterion ID. `undo` returns the
   item to the queue with a new revision, keeps the old decisions, and withdraws an open conflict;
   an adjudicated item cannot be undone.
 - Conflicts once every screener has decided: human disagreements (and full-text exclusions on
-  different criteria) in every mode, AI-include against two human exclusions in M1, every
-  provisional or final AI disagreement in M2 (the census), and audit samples the auditor
-  includes. `adjudication_queue` shows each human's final decision under a pseudonym (A, B), never
+  different criteria) in every mode, two human exclusions in M1 while the model saw no failing
+  criterion, every provisional or final AI disagreement in M2 (the census), and audit samples the
+  auditor includes. `adjudication_queue` shows each human's final decision under a pseudonym (A, B), never
   to someone who screened the record; `adjudicate` adopts a column or takes an own decision and
   returns the AI column only then.
 - Blinding below the service: reviewer reads go through the SQL functions
@@ -361,7 +372,7 @@ Module `kittum.screening`. Needs: `protocol`, `corpus`, `judge`, `ledger`, `runs
   sentinel or audit flags. Screeners see their own counts in `status`; anyone else sees the stage
   with kappa and PABAK (human pairs and human-AI, on blind provisional decisions), reveals shown
   and followed, the audit gauge (sentinel accuracy, `stats.elusion_estimate` over the records
-  excluded without adjudication), and the M3 stop test (`stats.stop_test` over the fully screened
+  excluded without adjudication, in two strata by `ai_excludes`), and the M3 stop test (`stats.stop_test` over the fully screened
   prefix of the AI order, with the minimum screened share).
 - Full text: per-criterion readings (met, not met, unclear) with evidence anchor IDs (opaque UUIDs
   until WP-10); include, exclude, or insufficient information; an exclusion cites a not-met
@@ -370,6 +381,10 @@ Module `kittum.screening`. Needs: `protocol`, `corpus`, `judge`, `ledger`, `runs
   `POST .../assignments/{id}/undo`, `GET .../adjudications`, `POST .../adjudications/{id}/decide`,
   `GET .../status`. The caller's actor ID comes from the `X-Kittum-Reviewer` header until WP-15
   adds authentication; it is a stand-in, not a security boundary.
+- `tests/screening/test_escalation.py` covers the two readings: a downgraded `not_met` with both
+  M1 humans excluding is not adjudicated (and stays in the audit frame); a model that saw every
+  criterion met is adjudicated; the same in M2, with a downgraded `not_met` agreeing with either
+  human outcome.
 - Tests (`tests/screening/`) run the nicotine replacement example, the recorded PubMed search and
   a CENTRAL export, the corpus, and the judge on `RecordedBackend`, against Postgres, through the
   worker and the API.
@@ -397,9 +412,11 @@ Left open:
   disagreement rate per criterion, and break suggestions after a missed sentinel are not computed;
   the timings they need are stored.
 - The judge's filter confirms few exclusions on the example protocols (wordings with "without", or
-  keywords without a negation, fail the polarity check), so on real data the AI mostly includes and
-  M1 sends many records to adjudication. That is the judge's accepted trade-off; it is visible in
-  the tests.
+  keywords without a negation, fail the polarity check), so the verified reading mostly includes.
+  Escalation uses the model's own reading, so this no longer floods M1 adjudication, but M3 order
+  and the audit strata see few verified exclusions.
+- Human-AI kappa and PABAK compare the blind provisional decisions with the verified reading. A
+  second pair against the model's own reading may be worth reporting.
 
 ## WP-10 Documents
 
