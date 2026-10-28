@@ -1,12 +1,13 @@
 """The full-text waterfall order from docs/sources.md.
 
 Europe PMC full-text XML and PDF first, then Unpaywall's best OA location, then OpenAlex OA
-locations. Only file URLs count; landing pages are not download candidates.
+locations, then the publisher's own PDF links that Crossref lists under an open licence. Only file
+URLs count; landing pages are not download candidates.
 """
 
 from kittum.enrich.types import FullTextCandidate, RecordEnrichment
 
-_SOURCE_ORDER = {"europepmc": 0, "unpaywall": 1, "openalex": 2}
+_SOURCE_ORDER = {"europepmc": 0, "unpaywall": 1, "openalex": 2, "crossref": 3}
 _FORMAT_ORDER = {"xml": 0, "pdf": 1}
 
 

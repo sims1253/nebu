@@ -109,6 +109,25 @@ class _State:
         )
 
 
+SOURCES = (openalex.SOURCE, europepmc.SOURCE, crossref.SOURCE, unpaywall.SOURCE, pubtator.SOURCE)
+"""Every source `enrich` asks, in the order it asks them."""
+
+
+def sources_asked(record: RecordEnrichment, config: EnrichmentConfig) -> tuple[str, ...]:
+    """The sources `enrich` asks about an enriched record: OpenAlex and Europe PMC by DOI or PMID,
+    Crossref by DOI, Unpaywall by DOI when a contact address is configured, PubTator by PMID."""
+    asked = []
+    if record.doi or record.pmid:
+        asked += [openalex.SOURCE, europepmc.SOURCE]
+    if record.doi:
+        asked.append(crossref.SOURCE)
+        if config.contact_email:
+            asked.append(unpaywall.SOURCE)
+    if record.pmid:
+        asked.append(pubtator.SOURCE)
+    return tuple(asked)
+
+
 class _Failures:
     def __init__(self) -> None:
         self.items: list[SourceFailure] = []
@@ -236,6 +255,7 @@ def _from_crossref(
             state.note("abstract", crossref.SOURCE)
         if work.updates:
             state.updates.extend(work.updates)
+        state.add_locations(work.pdf_links, crossref.SOURCE)
         if work.clinical_trial_numbers:
             state.clinical_trial_numbers.extend(work.clinical_trial_numbers)
             state.note("clinical_trial_numbers", crossref.SOURCE)

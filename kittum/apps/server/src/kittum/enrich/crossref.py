@@ -1,16 +1,22 @@
-"""Crossref: DOI resolution, retraction and correction notices, and trial-number links.
+"""Crossref: DOI resolution, retraction and correction notices, trial-number links, and the
+publisher's full-text links.
 
 Crossref has no OR filter for DOIs, so lookups are one request per DOI. The polite pool comes from
 the `mailto` parameter. See docs/sources.md.
+
+A publisher deposits text-mining links (`link`) and licences (`license`) per content version. A
+PDF link counts as a full-text location only under a Creative Commons licence for its version (or
+for text and data mining), so the waterfall's publisher step never fetches a closed article.
 """
 
+import re
 from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import quote, urlencode
 
 from kittum.core import Record
 from kittum.enrich._http import SourceUnavailable, fetch_json
 from kittum.enrich._text import strip_markup
-from kittum.enrich.types import WorkUpdate
+from kittum.enrich.types import OaLocation, OaVersion, WorkUpdate
 
 if TYPE_CHECKING:
     from kittum.gateway import Gateway
@@ -43,6 +49,7 @@ class Work(Record):
     abstract: str | None = None
     updates: tuple[WorkUpdate, ...] = ()
     clinical_trial_numbers: tuple[str, ...] = ()
+    pdf_links: tuple[OaLocation, ...] = ()
 
 
 def _url(doi: str, email: str | None) -> str:
@@ -101,6 +108,50 @@ def _trial_numbers(message: dict[str, Any]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(numbers))
 
 
+_VERSIONS: dict[str, OaVersion] = {"vor": "published", "am": "accepted"}
+
+
+def _open_licence(url: Any) -> str | None:
+    """`cc-by-4.0` for a Creative Commons licence URL; None for any other licence."""
+    if not isinstance(url, str):
+        return None
+    found = re.search(
+        r"creativecommons\.org/(?:licenses/([a-z-]+)/([\d.]+)|publicdomain/zero)", url
+    )
+    if found is None:
+        return None
+    if found.group(1) is None:
+        return "cc0"
+    return f"cc-{found.group(1)}-{found.group(2)}"
+
+
+def _pdf_links(message: dict[str, Any]) -> tuple[OaLocation, ...]:
+    licences: dict[str, str] = {}
+    for entry in message.get("license") or []:
+        if isinstance(entry, dict) and (licence := _open_licence(entry.get("URL"))):
+            licences.setdefault(str(entry.get("content-version") or "unspecified"), licence)
+    found: dict[str, OaLocation] = {}
+    for entry in message.get("link") or []:
+        if not isinstance(entry, dict) or entry.get("content-type") != "application/pdf":
+            continue
+        url = entry.get("URL")
+        version = str(entry.get("content-version") or "unspecified")
+        licence = licences.get(version) or licences.get("tdm") or licences.get("unspecified")
+        if not isinstance(url, str) or not url or licence is None:
+            continue
+        found.setdefault(
+            url,
+            OaLocation(
+                url=url,
+                licence=licence,
+                version=_VERSIONS.get(version),
+                source=SOURCE,
+                format="pdf",
+            ),
+        )
+    return tuple(found.values())
+
+
 def work(gateway: Gateway, doi: str, *, email: str | None = None) -> Work | None:
     body = fetch_json(gateway, SOURCE, _url(doi, email))
     if body is None:
@@ -115,6 +166,7 @@ def work(gateway: Gateway, doi: str, *, email: str | None = None) -> Work | None
         abstract=strip_markup(message.get("abstract")),
         updates=_updates(message),
         clinical_trial_numbers=_trial_numbers(message),
+        pdf_links=_pdf_links(message),
     )
 
 

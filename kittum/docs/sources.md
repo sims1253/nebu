@@ -107,7 +107,8 @@ For each record that passes title and abstract screening, Kittum tries in order:
 1. The local content store, by SHA-256, DOI, or PMID.
 2. Europe PMC full-text XML and PDF.
 3. Unpaywall and OpenAlex OA locations.
-4. Licensed publisher TDM interfaces.
+4. Publisher PDFs: the links a publisher deposits with Crossref where Crossref also lists a
+   Creative Commons licence for that version, then licensed publisher TDM interfaces.
 5. The human upload queue, for closed-access articles and client CSRs.
 
 Kittum records the source, the licence, and the acquisition time for every file.
