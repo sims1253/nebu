@@ -15,8 +15,10 @@ from kittum.documents import (
     ingest,
     make_anchor,
     ocr_available,
+    store,
     triage,
 )
+from kittum.documents.testing import TextParser
 from kittum.storage import MemoryStore
 from tests.documents.conftest import LESOTHO, VITAMIN_C, CachedParser, squash, text_under
 
@@ -190,3 +192,12 @@ def test_derive_is_idempotent_per_recipe_and_layers_are_immutable(
 
     with pytest.raises(psycopg.errors.RaiseException, match="immutable"), pg.transaction():
         pg.execute("update layer set text_hash = %s where id = %s", ("0" * 64, first.id))
+
+
+def test_the_layer_cache_never_grows_past_its_limit(pg):
+    artifacts = MemoryStore()
+    document = ingest(pg, artifacts, LESOTHO.read_bytes())
+    for i in range(store._LAYER_CACHE_SIZE + 4):
+        layer = derive(pg, document, TextParser([f"Layer {i}."], name=f"v{i}"), artifacts=artifacts)
+        assert len(store._LAYER_CACHE) <= store._LAYER_CACHE_SIZE
+        assert next(reversed(store._LAYER_CACHE)) == layer.output_hash  # newest kept

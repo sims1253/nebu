@@ -92,12 +92,15 @@ def _raw_layer(artifacts: ArtifactStore, output_hash: str) -> RawLayer:
     raw = _LAYER_CACHE.get(output_hash)
     if raw is None:
         raw = RawLayer.model_validate_json(artifacts.get(output_hash))
-        _LAYER_CACHE[output_hash] = raw
-        while len(_LAYER_CACHE) > _LAYER_CACHE_SIZE:
-            _LAYER_CACHE.popitem(last=False)
-    else:
-        _LAYER_CACHE.move_to_end(output_hash)
+    _remember(output_hash, raw)
     return raw
+
+
+def _remember(output_hash: str, raw: RawLayer) -> None:
+    _LAYER_CACHE[output_hash] = raw
+    _LAYER_CACHE.move_to_end(output_hash)
+    while len(_LAYER_CACHE) > _LAYER_CACHE_SIZE:
+        _LAYER_CACHE.popitem(last=False)
 
 
 def _layer(row: dict[str, Any], raw: RawLayer) -> Layer:
@@ -123,7 +126,7 @@ def derive(tx: Tx, document: Document, parser: Parser, *, artifacts: ArtifactSto
     raw = parser.parse(artifacts.get(document.artifact_hash))
     body = canonical_json(raw)
     output_hash = artifacts.put(body)
-    _LAYER_CACHE[output_hash] = raw
+    _remember(output_hash, raw)
     tx.execute(
         """insert into layer (id, document_id, recipe_hash, recipe, output_hash, text_hash, page_count)
            values (%s, %s, %s, %s, %s, %s, %s)
