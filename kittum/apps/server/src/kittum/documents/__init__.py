@@ -3,124 +3,125 @@
 A document is content-addressed. A layer is one parser recipe's immutable reading of it: NFC
 text, page geometry in unrotated PDF points, and tables. An anchor points into a layer with a
 text quote, a position, boxes, and table cells. Re-parsing never edits a layer; `resolve` maps an
-old anchor onto a new layer and says how sure it is.
+old anchor onto a new layer and says how sure it is, and `remap` records that mapping.
 
-Owner: WP-10. Shipped now: the types and the `Parser` seam. Still to build: page triage with
-pdf-inspector, parsers for PyMuPDF, pypdfium2, and Docling, OCRmyPDF for scans, layer storage,
-`resolve`, and acquisition through the full-text waterfall.
+    with ctx.db.transaction() as tx:
+        document = documents.ingest(tx, artifacts, pdf)
+        layer = documents.derive(tx, document, documents.PyMuPDFParser(), artifacts=artifacts)
+        span, = find_quote(quote, layer.text)
+        anchor = documents.save_anchor(tx, documents.make_anchor(layer, span))
+
+Parsers: `PyMuPDFParser` is the base layer. `PdfiumParser` reads the same PDF with PDFium for
+differential checks (`compare_layers`). `DoclingParser` (the `docling` extra) adds layout and
+TableFormer grids over PyMuPDF's characters. `OcrMyPdfParser` OCRs pages triage marks as scans or
+broken encodings, when `ocrmypdf` and `tesseract` are installed.
+
+Owner: WP-10.
 """
 
-from typing import Literal, Protocol
-
-from kittum.core import Id, Record, Sha256
-
-
-class Document(Record):
-    id: Id
-    artifact_hash: Sha256
-    media_type: str
-    page_count: int | None = None
-
-
-class ParserRecipe(Record):
-    engine: str  # "pymupdf", "pypdfium2", "docling", ...
-    engine_version: str
-    container_digest: str | None = None
-    weights: tuple[tuple[str, Sha256], ...] = ()
-    settings: tuple[tuple[str, str], ...] = ()
-
-
-class Box(Record):
-    page: int  # 1-based
-    x0: float
-    y0: float
-    x1: float
-    y1: float
-
-
-class Word(Record):
-    start: int
-    end: int
-    box: Box
-
-
-class TableCell(Record):
-    table_id: str
-    row: int
-    col: int
-    row_span: int = 1
-    col_span: int = 1
-    start: int
-    end: int
-    box: Box
-
-
-class RawLayer(Record):
-    """What a parser returns. `documents.derive` turns it into a stored `Layer`."""
-
-    text: str
-    words: tuple[Word, ...]
-    cells: tuple[TableCell, ...] = ()
-
-
-class Layer(Record):
-    id: Id
-    document_id: Id
-    recipe_hash: Sha256
-    output_hash: Sha256
-    text: str
-    words: tuple[Word, ...]
-    cells: tuple[TableCell, ...] = ()
-
-
-class TextQuote(Record):
-    exact: str
-    prefix: str = ""
-    suffix: str = ""
-
-
-class Anchor(Record):
-    id: Id
-    layer_id: Id
-    quote: TextQuote
-    start: int
-    end: int
-    boxes: tuple[Box, ...]
-    cells: tuple[tuple[str, int, int], ...] = ()  # (table_id, row, col)
-
-
-class Resolution(Record):
-    status: Literal["exact", "candidate", "ambiguous", "unresolved"]
-    anchor: Anchor | None
-    method_version: str
-
-
-class Parser(Protocol):
-    recipe: ParserRecipe
-
-    def parse(self, pdf: bytes) -> RawLayer: ...
-
-
-def derive(document: Document, parser: Parser) -> Layer:
-    raise NotImplementedError("WP-10")
-
-
-def resolve(anchor: Anchor, layer: Layer) -> Resolution:
-    raise NotImplementedError("WP-10")
-
+from kittum.documents.acquisition import ACQUIRED, NOT_ACQUIRED, acquire, acquisitions
+from kittum.documents.anchors import (
+    RESOLVE_VERSION,
+    compare_layers,
+    make_anchor,
+    page_words,
+    resolve,
+)
+from kittum.documents.docling_engine import DoclingParser, DoclingUnavailable, docling_available
+from kittum.documents.engines import PdfiumParser, PyMuPDFParser
+from kittum.documents.model import (
+    Acquisition,
+    AcquisitionAttempt,
+    AcquisitionOutcome,
+    Anchor,
+    Box,
+    CellRef,
+    Document,
+    FullTextLocation,
+    Layer,
+    Line,
+    Page,
+    PageAgreement,
+    PageKind,
+    PageTriage,
+    Parser,
+    ParserRecipe,
+    RawLayer,
+    Resolution,
+    Table,
+    TableCell,
+    TextQuote,
+    Word,
+)
+from kittum.documents.ocr import OcrMyPdfParser, OcrUnavailable, ocr_available
+from kittum.documents.render import MAX_SCALE, MIN_SCALE, RENDERER, render_page
+from kittum.documents.store import (
+    NotAPdf,
+    derive,
+    get_anchor,
+    get_document,
+    get_layer,
+    ingest,
+    list_layers,
+    recipe_hash,
+    remap,
+    save_anchor,
+)
+from kittum.documents.triage import triage
 
 __all__ = [
+    "ACQUIRED",
+    "MAX_SCALE",
+    "MIN_SCALE",
+    "NOT_ACQUIRED",
+    "RENDERER",
+    "RESOLVE_VERSION",
+    "Acquisition",
+    "AcquisitionAttempt",
+    "AcquisitionOutcome",
     "Anchor",
     "Box",
+    "CellRef",
+    "DoclingParser",
+    "DoclingUnavailable",
     "Document",
+    "FullTextLocation",
     "Layer",
+    "Line",
+    "NotAPdf",
+    "OcrMyPdfParser",
+    "OcrUnavailable",
+    "Page",
+    "PageAgreement",
+    "PageKind",
+    "PageTriage",
     "Parser",
     "ParserRecipe",
+    "PdfiumParser",
+    "PyMuPDFParser",
     "RawLayer",
     "Resolution",
+    "Table",
     "TableCell",
     "TextQuote",
     "Word",
+    "acquire",
+    "acquisitions",
+    "compare_layers",
     "derive",
+    "docling_available",
+    "get_anchor",
+    "get_document",
+    "get_layer",
+    "ingest",
+    "list_layers",
+    "make_anchor",
+    "ocr_available",
+    "page_words",
+    "recipe_hash",
+    "remap",
+    "render_page",
     "resolve",
+    "save_anchor",
+    "triage",
 ]
