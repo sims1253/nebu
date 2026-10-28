@@ -11,7 +11,10 @@
     "test": "vp test run --passWithNoTests"
   },
   "dependencies": {
+    "@base-ui/react": "catalog:",
+    "@fontsource-variable/ibm-plex-sans": "catalog:",
     "@kittum/contracts": "workspace:*",
+    "@legendapp/list": "catalog:",
     "@tanstack/react-router": "catalog:",
     "effect": "catalog:",
     "react": "catalog:",
@@ -23,6 +26,8 @@
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
+    "@vitest/browser-playwright": "catalog:",
+    "playwright": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
