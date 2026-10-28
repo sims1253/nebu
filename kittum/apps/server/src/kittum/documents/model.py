@@ -186,6 +186,7 @@ class AcquisitionAttempt(Record):
     licence: str | None = None  # the location's, as its source states it
     error: str | None = None  # why an unavailable source gave no response
     check: str | None = None  # what the check against the record found, when it ran
+    message: str | None = None  # what the source said about a failure, when it said anything
 
 
 class Acquisition(Record):

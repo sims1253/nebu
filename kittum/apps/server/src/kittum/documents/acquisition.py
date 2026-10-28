@@ -29,7 +29,7 @@ from kittum.documents.model import (
     FullTextLocation,
 )
 from kittum.documents.store import NotAPdf, get_document, ingest
-from kittum.gateway import Gateway, HttpRequest, SourceUnavailable
+from kittum.gateway import Gateway, HttpRequest, SourceUnavailable, source_message
 from kittum.ledger import EventDraft, Ledger
 
 if TYPE_CHECKING:
@@ -54,6 +54,8 @@ class FetchedLocation:
     error: str | None = None
     status: int | None = None
     """The last status of a source that kept failing, when it answered at all."""
+    message: str | None = None
+    """What that source said about it (`kittum.gateway.source_message`)."""
 
 
 def fetch_location(gateway: Gateway, location: FullTextLocation) -> FetchedLocation:
@@ -69,6 +71,7 @@ def fetch_location(gateway: Gateway, location: FullTextLocation) -> FetchedLocat
             response=None,
             error=f"{type(e).__name__}: {e}",
             status=e.status if isinstance(e, SourceUnavailable) else None,
+            message=source_message(e.body) if isinstance(e, SourceUnavailable) else None,
         )
     return FetchedLocation(location=location, response=response)
 
@@ -92,6 +95,11 @@ def _attempt(
             licence=location.licence,
             error=fetched.error,
             check=check,
+            message=(
+                source_message(response.body)
+                if response is not None and response.status != 200
+                else fetched.message
+            ),
         )
 
     if response is None:

@@ -1,7 +1,8 @@
 """Fetching full text through the gateway's waterfall and recording where it came from."""
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
 import pymupdf
 
@@ -16,12 +17,15 @@ from kittum.documents import (
     check_report,
 )
 from kittum.enrich import EnrichmentConfig, WorkIds, lookup_full_text
-from kittum.gateway import RecordedTransport
-from kittum.gateway.testing import FakeTransport, PassThroughGateway
+from kittum.gateway import RecordedTransport, SourceGateway
+from kittum.gateway.testing import FakeTransport, PassThroughGateway, response
 from kittum.ledger.testing import InMemoryLedger
 from kittum.storage import MemoryStore
-from tests.documents.conftest import FIXTURES, LESOTHO, new_project
+from tests.documents.conftest import FIXTURES, LESOTHO, new_project, savepoint_db
 from tests.enrich.support import CONTACT_EMAIL
+
+if TYPE_CHECKING:
+    from kittum.gateway import HttpRequest, HttpResponse
 
 EUROPE_PMC = "https://europepmc.org/articles/PMC13374172?pdf=render"
 UNPAYWALL = "https://bmcmedicine.biomedcentral.com/counter/pdf/10.1186/s12916-026-04943-4"
@@ -226,3 +230,61 @@ def test_a_pdf_is_the_records_report_only_by_its_whole_doi_or_its_whole_title():
     wrapped = _pdf("https://doi.org/10.1234/long-", "identifier")
     assert check_report(wrapped, doi="10.1234/longidentifier", title=None).by == "doi"
     assert check_report(wrapped, doi="10.1234/long-identifier", title=None).by == "doi"
+
+
+class _Failing:
+    """A source host that keeps answering 503, one that refuses with a reason, then the PDF."""
+
+    def __init__(self) -> None:
+        self.sent: list[str] = []
+
+    def send(self, request: HttpRequest) -> HttpResponse:
+        self.sent.append(request.url)
+        if "down" in request.url:
+            return response(
+                503, b'{"errCode":503,"errMsg":"Search service is down.\\nRetry later."}'
+            )
+        if "refused" in request.url:
+            return response(403, b"Automated downloads are not allowed from this address.")
+        return response(200, LESOTHO.read_bytes())
+
+
+def test_a_failed_download_keeps_what_the_source_said(pg):
+    project = new_project(pg)
+    clock = FixedClock(WHEN)
+    transport = _Failing()
+    gateway = SourceGateway(
+        database=savepoint_db(pg),
+        transport=transport,
+        artifacts=MemoryStore(),
+        buckets="memory",
+        cache="memory",
+        max_attempts=2,
+        clock=clock,
+        sleep=lambda seconds: clock.advance(timedelta(seconds=seconds)),
+    )
+    ledger = InMemoryLedger(clock)
+    outcome = acquire(
+        pg,
+        gateway=gateway,
+        artifacts=MemoryStore(),
+        ledger=ledger,
+        clock=clock,
+        project_id=project,
+        actor_id=new_id(),
+        locations=[
+            FullTextLocation(source="europepmc", url="https://down.example/a.pdf"),
+            FullTextLocation(source="unpaywall", url="https://refused.example/b.pdf"),
+            FullTextLocation(source="openalex", url="https://ok.example/c.pdf"),
+        ],
+    )
+    assert [(a.outcome, a.status, a.message) for a in outcome.attempts] == [
+        ("unavailable", 503, "Search service is down. Retry later."),
+        ("http_error", 403, "Automated downloads are not allowed from this address."),
+        ("acquired", 200, None),
+    ]
+    (event,) = ledger.events(pg, project)
+    assert [a["message"] for a in event.payload["attempts"]][:2] == [
+        "Search service is down. Retry later.",
+        "Automated downloads are not allowed from this address.",
+    ]

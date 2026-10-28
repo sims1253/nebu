@@ -3,14 +3,11 @@
 import json
 from typing import TYPE_CHECKING
 
-from kittum.gateway import Gateway, HttpRequest, SourceBudgetExhausted
+from kittum.gateway import Gateway, HttpRequest, SourceBudgetExhausted, source_message
 from kittum.gateway import SourceUnavailable as GatewayUnavailable
 
 if TYPE_CHECKING:
     from kittum.enrich.types import FailureKind
-
-_MESSAGE_KEYS = ("errMsg", "message", "error", "detail", "msg")
-_MESSAGE_LENGTH = 300
 
 
 class SourceUnavailable(Exception):
@@ -36,28 +33,6 @@ class SourceUnavailable(Exception):
         self.message = message
         self.kind = kind
         self.url = url
-
-
-def source_message(body: bytes | None) -> str | None:
-    """What a source wrote about its failure: a JSON error field, or a short plain-text body."""
-    if not body:
-        return None
-    text = body.decode("utf-8", "replace").strip()
-    try:
-        data = json.loads(text)
-    except ValueError:
-        data = None
-    if isinstance(data, dict):
-        for key in _MESSAGE_KEYS:
-            value = data.get(key)
-            if isinstance(value, dict):
-                value = value.get("message")
-            if isinstance(value, str) and value.strip():
-                return value.strip()[:_MESSAGE_LENGTH]
-        return None
-    if data is None and text and not text.startswith("<") and len(text) <= _MESSAGE_LENGTH:
-        return text
-    return None
 
 
 def unavailable(source: str, error: Exception) -> SourceUnavailable:

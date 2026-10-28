@@ -10,8 +10,8 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import urlencode
 
 from kittum.core import Record
-from kittum.enrich._http import SourceUnavailable, chunks, source_message, unavailable
-from kittum.gateway import HttpRequest
+from kittum.enrich._http import SourceUnavailable, chunks, unavailable
+from kittum.gateway import HttpRequest, source_message
 
 if TYPE_CHECKING:
     from kittum.gateway import Gateway

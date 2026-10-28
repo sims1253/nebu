@@ -311,6 +311,7 @@ def _attempt(raw: dict[str, Any]) -> AttemptView:
         licence=attempt.licence,
         error=attempt.error,
         check=attempt.check,
+        message=attempt.message,
     )
 
 
@@ -1077,7 +1078,8 @@ def attempt_line(attempt: AttemptView) -> str:
         case "http_error" if not (
             attempt.status and (attempt.status >= 500 or attempt.status == 429)
         ):
-            return f"{where} refused the download (HTTP {attempt.status})."
+            said = f' It said: "{attempt.message}"' if attempt.message else ""
+            return f"{where} refused the download (HTTP {attempt.status}).{said}"
         case "not_pdf":
             return f"{where} gave a web page, not a PDF."
         case "unreadable_pdf":
