@@ -1,0 +1,51 @@
+# Gerber et al. 2026 (BMC Medicine 24:400): CHW-led versus facility-based diabetes care in
+# Lesotho, a cluster-randomized trial. Table 1 (page 7) gives participants per arm; the primary
+# endpoint is reported only in the text; Table 2 (page 10) gives deaths per analysis set.
+schema_version: 1
+name: CHW-led diabetes care in Lesotho
+analysis_set: primary_analysis_set
+total_columns: [Primary analysis set Total]
+arms:
+  - id: intervention
+    label: CHW-led care
+    columns: [Primary analysis set Intervention]
+  - id: control
+    label: Facility-based care
+    columns: [Primary analysis set Control]
+comparisons:
+  - id: intervention_vs_control
+    label: CHW-led versus facility-based care
+    intervention: intervention
+    comparator: control
+endpoints:
+  - id: participants
+    label: Participants
+    role: baseline
+    timepoints: [{id: baseline, label: Baseline}]
+    locate: {rows: ["Individual-level, participants"]}
+    quantities:
+      - quantity: n_analysed
+        arms: [intervention, control, total]
+        locate: {}
+  - id: hba1c
+    label: HbA1c
+    unit: "%"
+    timepoints: [{id: m12, label: 12 months}]
+    quantities:
+      - quantity: mean
+        arms: [intervention, control]
+      - quantity: mean_difference
+        comparisons: [intervention_vs_control]
+        description: Adjusted mean difference
+      - quantity: ci_lower
+        comparisons: [intervention_vs_control]
+      - quantity: ci_upper
+        comparisons: [intervention_vs_control]
+  - id: deaths
+    label: Deaths
+    timepoints: [{id: m12, label: 12 months}]
+    locate: {rows: ["Deaths, n (%)"]}
+    quantities:
+      - quantity: events
+        arms: [intervention, control]
+        locate: {columns: [], cell: count_percentage.count}
