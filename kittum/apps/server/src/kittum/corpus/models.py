@@ -1,5 +1,6 @@
 """Data models for corpus module."""
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import Field
@@ -24,8 +25,11 @@ class LinkProposal(Record):
     id: Id = Field(default_factory=new_id)
     occurrence_ids: tuple[Id, ...]
     relation: Relation
-    evidence: tuple[str, ...]  # e.g. "shared NCT01234567", "title similarity 0.97"
+    evidence: tuple[str, ...]  # e.g. "Same NCT ID NCT01234567", "Titles 97% alike"
     status: ProposalStatus = "pending"
+    exact: bool = False
+    """A duplicate on a report identifier only (DOI, PMID, PMCID), which the lead may confirm
+    with every other such duplicate at once."""
 
 
 class IdentityRevision(Record):
@@ -66,10 +70,38 @@ class CorpusReport(Record):
     """One report of an identity revision with the source records that make it up.
 
     `records` are in source order; a report found by several searches has one record per
-    occurrence. `relation` is the strongest link label among them.
+    occurrence. `search_ids` names the search each record came from, in the same order.
+    `relation` is the strongest link label among them.
     """
 
     report_id: Id
     study_id: Id
     relation: LinkRelation
     records: tuple[SourceRecord, ...]
+    search_ids: tuple[Id, ...] = ()
+
+
+class CorpusSearch(Record):
+    """A search whose records are in the corpus, as the corpus view names it."""
+
+    id: Id
+    source: str
+    platform: str
+    kind: Literal["live_api", "file_import"]
+    started_at: datetime
+    retrieved_count: int
+
+
+type LinkedBy = Literal["confirmed", "merged_by_hand"]
+
+
+class CorpusLink(Record):
+    """Why records of an identity revision share a report or a study: a proposal the lead
+    confirmed, with its evidence, or the lead's own merge, with the reason they gave.
+    `occurrence_ids` are the link's records that are still together in the revision."""
+
+    relation: Relation
+    occurrence_ids: tuple[Id, ...]
+    evidence: tuple[str, ...]
+    linked_by: LinkedBy
+    revision_id: Id

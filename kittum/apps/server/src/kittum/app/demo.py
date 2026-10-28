@@ -180,8 +180,7 @@ def seed_demo(ctx: AppContext, *, name: str = "Nicotine replacement review (demo
         # for the Studies screen.
         revision = corpus.identity_revision_id
         for proposal in corpus.proposals:
-            exact = any(e.startswith("exact ") for e in proposal.evidence)
-            if proposal.relation == "same_record" and exact and revision is not None:
+            if proposal.relation == "same_record" and proposal.exact and revision is not None:
                 revision = confirm(tx, project_id, revision, proposal.id, lead, ledger=ledger).id
         records = corpus_records(tx, project_id)
         for record in records:

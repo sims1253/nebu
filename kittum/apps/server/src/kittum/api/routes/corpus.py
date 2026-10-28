@@ -10,8 +10,10 @@ from kittum.api.routes.projects import Viewer  # noqa: TC001 - FastAPI resolves 
 from kittum.app import LifecycleError, NotLead, ingest_corpus, request_enrichment, require_lead
 from kittum.core import Id, NotFoundError, Record
 from kittum.corpus import (
+    CorpusLink,
     CorpusReport,
     CorpusRevision,
+    CorpusSearch,
     IdentityRevision,
     LinkProposal,
     PrismaCounts,
@@ -19,11 +21,14 @@ from kittum.corpus import (
     Relation,
     SplitLevel,
     confirm,
+    confirm_exact,
     get_counts,
     latest_revision,
+    links,
     list_proposals,
     merge,
     reports,
+    searches,
     split,
 )
 from kittum.ledger import Ledger  # noqa: TC001
@@ -39,15 +44,23 @@ class IngestRequest(Record):
 
 
 class CorpusView(Record):
-    """The newest identity revision: every report with its records and study."""
+    """The newest identity revision: every report with its records and study, the searches the
+    records came from, and why linked records are together."""
 
     revision: IdentityRevision
     reports: tuple[CorpusReport, ...]
+    searches: tuple[CorpusSearch, ...] = ()
+    links: tuple[CorpusLink, ...] = ()
 
 
 class ConfirmRequest(Record):
     revision_id: Id
     proposal_id: Id
+    actor_id: Id
+
+
+class ConfirmExactRequest(Record):
+    revision_id: Id
     actor_id: Id
 
 
@@ -96,7 +109,12 @@ def latest_route(project_id: Id, viewer: Viewer, ctx: Context) -> CorpusView:
         revision = latest_revision(tx, project_id)
         if revision is None:
             raise NotFoundError("the corpus is not ingested yet")
-        return CorpusView(revision=revision, reports=tuple(reports(tx, project_id, revision.id)))
+        return CorpusView(
+            revision=revision,
+            reports=tuple(reports(tx, project_id, revision.id)),
+            searches=tuple(searches(tx, project_id)),
+            links=tuple(links(tx, project_id, revision.id, ledger=_ledger(ctx))),
+        )
 
 
 @router.get("/proposals", operation_id="listCorpusProposals")
@@ -134,6 +152,18 @@ def confirm_route(
             body.actor_id,
             ledger=_ledger(ctx),
         )
+
+
+@router.post("/confirm-exact", operation_id="confirmExactDuplicates")
+def confirm_exact_route(
+    project_id: Id,
+    body: ConfirmExactRequest,
+    ctx: Context,
+) -> IdentityRevision:
+    """Confirm every open duplicate that shares a DOI, PMID, or PMCID; 400 when there is none."""
+    with _errors(), ctx.db.transaction() as tx:
+        require_lead(tx, project_id, body.actor_id)
+        return confirm_exact(tx, project_id, body.revision_id, body.actor_id, ledger=_ledger(ctx))
 
 
 @router.post("/merge", operation_id="mergeCorpusOccurrences")

@@ -6,16 +6,25 @@ study; a human confirms the links. PRISMA counts come from a frozen identity rev
 Owner: WP-07.
 """
 
+from collections import defaultdict
 from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
 from kittum.core import Id, NotFoundError, new_id
-from kittum.corpus.dedupe import generate_link_proposals
+from kittum.corpus.dedupe import (
+    generate_link_proposals,
+    normalize_registry_id,
+    registry_evidence,
+)
 from kittum.corpus.identity import merge_links, split_links
 from kittum.corpus.models import (
+    CorpusLink,
     CorpusReport,
     CorpusRevision,
+    CorpusSearch,
     IdentityLink,
     IdentityRevision,
+    LinkedBy,
     LinkProposal,
     LinkRelation,
     Occurrence,
@@ -28,6 +37,8 @@ from kittum.ledger import EventDraft, Ledger
 from kittum.search import list_executions
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable, Mapping
+
     from psycopg import Cursor
 
     from kittum.db import Tx
@@ -90,8 +101,9 @@ def ingest(
             cur.execute(
                 """
                 insert into proposal (
-                    id, project_id, corpus_revision_id, relation, occurrence_ids, evidence, status
-                ) values (%s, %s, %s, %s, %s, %s, %s)
+                    id, project_id, corpus_revision_id, relation, occurrence_ids, evidence, status,
+                    exact
+                ) values (%s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     prop.id,
@@ -101,6 +113,7 @@ def ingest(
                     list(prop.occurrence_ids),
                     list(prop.evidence),
                     prop.status,
+                    prop.exact,
                 ),
             )
         links = [
@@ -175,6 +188,125 @@ def confirm(
             "update proposal set status = 'confirmed' where id = %s",
             (proposal_id,),
         )
+    return revision
+
+
+def propose_study_links(
+    tx: Tx,
+    project_id: Id,
+    registry_ids: Mapping[Id, Iterable[str]],
+    *,
+    found_by: str,
+    actor_id: Id,
+    ledger: Ledger,
+) -> list[LinkProposal]:
+    """Study-link proposals from registry IDs found after the corpus was built, such as the
+    `clinical-trial-number` Crossref holds for a paper (`found_by` names the source). A record
+    gets a proposal with every record of the newest identity revision that names the same ID,
+    from its search or from here, unless they are one study already or an earlier proposal, of
+    any status, joins their studies.
+    Writes a `corpus.proposed` event when there is a proposal."""
+    revision = latest_revision(tx, project_id)
+    corpus_revision = tx.execute(
+        "select id from corpus_revision where project_id = %s order by created_at desc limit 1",
+        (project_id,),
+    ).fetchone()
+    if revision is None or corpus_revision is None:
+        return []
+    by_id: dict[str, set[Id]] = defaultdict(set)
+    from_here: dict[str, set[Id]] = defaultdict(set)
+    study: dict[Id, Id] = {}
+    for report in reports(tx, project_id, revision.id):
+        for record in report.records:
+            study[record.occurrence_id] = report.study_id
+            for reg in record.registry_ids:
+                by_id[normalize_registry_id(reg)].add(record.occurrence_id)
+    for oid, ids in registry_ids.items():
+        if oid in study:
+            for reg in ids:
+                if norm := normalize_registry_id(reg):
+                    by_id[norm].add(oid)
+                    from_here[norm].add(oid)
+    # The studies each earlier proposal would join, as of now; a proposal that joins no study
+    # beyond one of those adds nothing for the lead.
+    known = [
+        {study[o] for o in p.occurrence_ids if o in study}
+        for p in list_proposals(tx, project_id)
+        if p.relation == "same_study"
+    ]
+    proposals = [
+        LinkProposal(
+            occurrence_ids=tuple(sorted(oids)),
+            relation="same_study",
+            evidence=(f"{registry_evidence(reg)} (from {found_by})",),
+        )
+        for reg, oids in sorted(by_id.items())
+        if from_here[reg]
+        and len(studies := {study[o] for o in oids}) >= 2
+        and not any(studies <= k for k in known)
+    ]
+    if not proposals:
+        return []
+    ledger.append(
+        tx,
+        EventDraft(
+            project_id=project_id,
+            type="corpus.proposed",
+            schema_version=1,
+            actor_id=actor_id,
+            payload={
+                "found_by": found_by,
+                "proposals": [
+                    {"id": str(p.id), "occurrence_ids": [str(o) for o in p.occurrence_ids]}
+                    for p in proposals
+                ],
+            },
+        ),
+    )
+    for prop in proposals:
+        tx.execute(
+            """
+            insert into proposal (
+                id, project_id, corpus_revision_id, relation, occurrence_ids, evidence, status
+            ) values (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                prop.id,
+                project_id,
+                corpus_revision["id"],
+                prop.relation,
+                list(prop.occurrence_ids),
+                list(prop.evidence),
+                prop.status,
+            ),
+        )
+    return proposals
+
+
+def confirm_exact(
+    tx: Tx,
+    project_id: Id,
+    parent_revision_id: Id,
+    confirmed_by: Id,
+    *,
+    ledger: Ledger,
+) -> IdentityRevision:
+    """Confirm every open proposal of a duplicate on a report identifier (same DOI, PMID, or
+    PMCID), one `corpus.confirmed` event and identity revision each, as `confirm` does. Returns
+    the newest revision. Raises `ValueError` when there is none to confirm."""
+    pending = [
+        p
+        for p in list_proposals(tx, project_id, status="pending")
+        if p.exact and p.relation == "same_record"
+    ]
+    if not pending:
+        raise ValueError("no open duplicate shares a DOI, PMID, or PMCID")
+    revision_id = parent_revision_id
+    revision: IdentityRevision | None = None
+    for proposal in pending:
+        revision = confirm(tx, project_id, revision_id, proposal.id, confirmed_by, ledger=ledger)
+        revision_id = revision.id
+    assert revision is not None
     return revision
 
 
@@ -313,7 +445,10 @@ def list_proposals(
 ) -> list[LinkProposal]:
     """List proposals for a project."""
     with tx.cursor() as cur:
-        sql = "select id, occurrence_ids, relation, evidence, status from proposal where project_id = %s"
+        sql = (
+            "select id, occurrence_ids, relation, evidence, status, exact from proposal"
+            " where project_id = %s"
+        )
         params: list[object] = [project_id]
         if corpus_revision_id is not None:
             sql += " and corpus_revision_id = %s"
@@ -331,6 +466,7 @@ def list_proposals(
                 relation=row["relation"],
                 evidence=tuple(row["evidence"]),
                 status=row["status"],
+                exact=row["exact"],
             )
             for row in rows
         ]
@@ -351,11 +487,12 @@ _STRONGEST = {"standalone": 0, "same_study": 1, "same_report": 2, "same_record":
 
 def reports(tx: Tx, project_id: Id, revision_id: Id) -> list[CorpusReport]:
     """Every report of an identity revision with its source records, in the order of the first
-    occurrence (search order, then the record's place in its search)."""
+    occurrence (search order, then the record's place in its search), and the search of each."""
     with tx.cursor() as cur:
         links = _parent_links(cur, project_id, revision_id)
-    executions = reversed(list_executions(tx, project_id))  # newest first, so oldest first
+    executions = list(reversed(list_executions(tx, project_id)))  # newest first, so oldest first
     records = {r.occurrence_id: r for e in executions for r in e.records}
+    found_in = {r.occurrence_id: e.id for e in executions for r in e.records}
     order = {oid: i for i, oid in enumerate(records)}
     grouped: dict[Id, list[dict[str, Any]]] = {}
     for link_row in sorted(links, key=lambda row: order.get(row["occurrence_id"], len(order))):
@@ -366,9 +503,86 @@ def reports(tx: Tx, project_id: Id, revision_id: Id) -> list[CorpusReport]:
             study_id=rows[0]["study_id"],
             relation=max((r["relation"] for r in rows), key=_STRONGEST.__getitem__),
             records=tuple(records[r["occurrence_id"]] for r in rows),
+            search_ids=tuple(found_in[r["occurrence_id"]] for r in rows),
         )
         for report_id, rows in grouped.items()
     ]
+
+
+def searches(tx: Tx, project_id: Id) -> list[CorpusSearch]:
+    """The project's searches, oldest first, as the corpus view names them."""
+    rows = tx.execute(
+        "select id, source, platform, kind, started_at, retrieved_count from search_execution"
+        " where project_id = %s order by created_at, started_at",
+        (project_id,),
+    ).fetchall()
+    return [CorpusSearch.model_validate(row) for row in rows]
+
+
+def links(tx: Tx, project_id: Id, revision_id: Id, *, ledger: Ledger) -> list[CorpusLink]:
+    """Why the records of an identity revision that share a report or a study are together: each
+    confirmation and merge by hand on the way to the revision whose records are still together.
+    A link a later split undid is left out; a link whose records were split in part keeps the
+    records still together, if they still make it: two records of a report, or records of two
+    reports of a study."""
+    with tx.cursor() as cur:
+        current = {row["occurrence_id"]: row for row in _parent_links(cur, project_id, revision_id)}
+        chain: list[dict[str, Any]] = []
+        at: Id | None = revision_id
+        while at is not None:
+            cur.execute(
+                "select id, parent_id, event_seq from identity_revision"
+                " where id = %s and project_id = %s",
+                (at, project_id),
+            )
+            row = cur.fetchone()
+            if row is None:
+                break
+            chain.append(row)
+            at = row["parent_id"]
+        evidence = {
+            row["id"]: tuple(row["evidence"])
+            for row in cur.execute(
+                "select id, evidence from proposal where project_id = %s and status = 'confirmed'",
+                (project_id,),
+            ).fetchall()
+        }
+    found: list[CorpusLink] = []
+    for revision in reversed(chain):
+        events = ledger.events(
+            tx, project_id, after_seq=revision["event_seq"] - 1, through_seq=revision["event_seq"]
+        )
+        event = events[0] if events else None
+        if event is None or event.type not in ("corpus.confirmed", "corpus.merged"):
+            continue
+        payload = event.payload
+        relation: Relation = payload["relation"]
+        linked_by: LinkedBy
+        if event.type == "corpus.confirmed":
+            linked_by = "confirmed"
+            reasons = evidence.get(UUID(payload["proposal_id"]), ())
+        else:
+            linked_by = "merged_by_hand"
+            reasons = (payload["reason"],) if payload.get("reason") else ()
+        level = "study_id" if relation == "same_study" else "report_id"
+        together: dict[Id, list[Id]] = {}
+        for oid in (UUID(o) for o in payload["occurrence_ids"]):
+            if oid in current:
+                together.setdefault(current[oid][level], []).append(oid)
+        found += [
+            CorpusLink(
+                relation=relation,
+                occurrence_ids=tuple(group),
+                evidence=reasons,
+                linked_by=linked_by,
+                revision_id=revision["id"],
+            )
+            for group in together.values()
+            # A study link explains records of two reports or more; a report link, two records.
+            if len({current[oid]["report_id"] for oid in group} if level == "study_id" else group)
+            >= 2
+        ]
+    return found
 
 
 def link(
@@ -475,24 +689,31 @@ def _write_revision(
 
 
 __all__ = [
+    "CorpusLink",
     "CorpusReport",
     "CorpusRevision",
+    "CorpusSearch",
     "IdentityLink",
     "IdentityRevision",
     "LinkProposal",
     "LinkRelation",
+    "LinkedBy",
     "Occurrence",
     "PrismaCounts",
     "ProposalStatus",
     "Relation",
     "SplitLevel",
     "confirm",
+    "confirm_exact",
     "get_counts",
     "ingest",
     "latest_revision",
     "link",
+    "links",
     "list_proposals",
     "merge",
+    "propose_study_links",
     "reports",
+    "searches",
     "split",
 ]

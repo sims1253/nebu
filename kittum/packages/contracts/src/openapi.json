@@ -1654,6 +1654,23 @@
         "pattern": "^[0-9]{1,3}(\\.[0-9]+)?$",
         "type": "string"
       },
+      "ConfirmExactRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "revision_id": {
+            "$ref": "#/components/schemas/Id"
+          }
+        },
+        "required": [
+          "revision_id",
+          "actor_id"
+        ],
+        "title": "ConfirmExactRequest",
+        "type": "object"
+      },
       "ConfirmRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1733,9 +1750,47 @@
         "title": "ConflictFullText",
         "type": "object"
       },
+      "CorpusLink": {
+        "additionalProperties": false,
+        "description": "Why records of an identity revision share a report or a study: a proposal the lead\nconfirmed, with its evidence, or the lead's own merge, with the reason they gave.\n`occurrence_ids` are the link's records that are still together in the revision.",
+        "properties": {
+          "evidence": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "linked_by": {
+            "$ref": "#/components/schemas/LinkedBy"
+          },
+          "occurrence_ids": {
+            "items": {
+              "$ref": "#/components/schemas/Id"
+            },
+            "title": "Occurrence Ids",
+            "type": "array"
+          },
+          "relation": {
+            "$ref": "#/components/schemas/Relation"
+          },
+          "revision_id": {
+            "$ref": "#/components/schemas/Id"
+          }
+        },
+        "required": [
+          "relation",
+          "occurrence_ids",
+          "evidence",
+          "linked_by",
+          "revision_id"
+        ],
+        "title": "CorpusLink",
+        "type": "object"
+      },
       "CorpusReport": {
         "additionalProperties": false,
-        "description": "One report of an identity revision with the source records that make it up.\n\n`records` are in source order; a report found by several searches has one record per\noccurrence. `relation` is the strongest link label among them.",
+        "description": "One report of an identity revision with the source records that make it up.\n\n`records` are in source order; a report found by several searches has one record per\noccurrence. `search_ids` names the search each record came from, in the same order.\n`relation` is the strongest link label among them.",
         "properties": {
           "records": {
             "items": {
@@ -1749,6 +1804,14 @@
           },
           "report_id": {
             "$ref": "#/components/schemas/Id"
+          },
+          "search_ids": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/Id"
+            },
+            "title": "Search Ids",
+            "type": "array"
           },
           "study_id": {
             "$ref": "#/components/schemas/Id"
@@ -1806,10 +1869,62 @@
         "title": "CorpusRevision",
         "type": "object"
       },
+      "CorpusSearch": {
+        "additionalProperties": false,
+        "description": "A search whose records are in the corpus, as the corpus view names it.",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "kind": {
+            "enum": [
+              "live_api",
+              "file_import"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "platform": {
+            "title": "Platform",
+            "type": "string"
+          },
+          "retrieved_count": {
+            "title": "Retrieved Count",
+            "type": "integer"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "platform",
+          "kind",
+          "started_at",
+          "retrieved_count"
+        ],
+        "title": "CorpusSearch",
+        "type": "object"
+      },
       "CorpusView": {
         "additionalProperties": false,
-        "description": "The newest identity revision: every report with its records and study.",
+        "description": "The newest identity revision: every report with its records and study, the searches the\nrecords came from, and why linked records are together.",
         "properties": {
+          "links": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CorpusLink"
+            },
+            "title": "Links",
+            "type": "array"
+          },
           "reports": {
             "items": {
               "$ref": "#/components/schemas/CorpusReport"
@@ -1819,6 +1934,14 @@
           },
           "revision": {
             "$ref": "#/components/schemas/IdentityRevision"
+          },
+          "searches": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CorpusSearch"
+            },
+            "title": "Searches",
+            "type": "array"
           }
         },
         "required": [
@@ -3579,6 +3702,11 @@
             "title": "Evidence",
             "type": "array"
           },
+          "exact": {
+            "default": false,
+            "title": "Exact",
+            "type": "boolean"
+          },
           "id": {
             "$ref": "#/components/schemas/Id"
           },
@@ -3611,6 +3739,13 @@
           "same_report",
           "same_study",
           "standalone"
+        ],
+        "type": "string"
+      },
+      "LinkedBy": {
+        "enum": [
+          "confirmed",
+          "merged_by_hand"
         ],
         "type": "string"
       },
@@ -7821,6 +7956,17 @@
             "title": "Ordinal",
             "type": "integer"
           },
+          "pmcid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pmcid"
+          },
           "pmid": {
             "anyOf": [
               {
@@ -10931,6 +11077,60 @@
           }
         },
         "summary": "Confirm Route",
+        "tags": [
+          "corpus"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/corpus/confirm-exact": {
+      "post": {
+        "description": "Confirm every open duplicate that shares a DOI, PMID, or PMCID; 400 when there is none.",
+        "operationId": "confirmExactDuplicates",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmExactRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityRevision"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Exact Route",
         "tags": [
           "corpus"
         ]
