@@ -190,6 +190,14 @@ export function StudiesScreen() {
           setNotice("Mark at least two records with x, then merge them into one study with m.");
           return true;
         }
+        // Records of one study are linked already, perhaps closer (one report found twice):
+        // a study merge would add nothing but a revision that says it merged them.
+        if (new Set([...marked].map((id) => byOccurrence.get(id)?.report.study_id)).size === 1) {
+          setNotice(
+            `These records are one ${labels.study.toLowerCase()} already. Split one out with s to unlink it.`,
+          );
+          return true;
+        }
         void act(
           { action: "merge", occurrenceIds: [...marked], relation: "same_study" },
           `Merged ${marked.size} records into one ${labels.study.toLowerCase()}.`,
