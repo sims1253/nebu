@@ -541,12 +541,13 @@ def test_concurrent_requests_to_one_source_wait_their_turn(database: Database) -
         except BaseException as error:
             failures.append(error)
 
-    threads = [threading.Thread(target=count, args=(n,)) for n in range(6)]
+    threads = [threading.Thread(target=count, args=(n,), daemon=True) for n in range(6)]
     for thread in threads:
         thread.start()
     for thread in threads:
-        thread.join()
-
+        thread.join(timeout=30)
+    # A deadlock fails here rather than hanging the run.
+    assert not any(thread.is_alive() for thread in threads)
     assert failures == []
     assert len(transport.sent) == 24
     assert [a["status"] for a in _attempts(database)] == [200] * 24
