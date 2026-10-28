@@ -85,8 +85,8 @@ for the mode, from the ledger.
 
 | Mode | Human work | AI role | Use when |
 | --- | --- | --- | --- |
-| M1 dual human, AI as third reader (default) | Two humans screen every record. | Independent third screener. A record that the AI includes and both humans exclude goes to adjudication. | Every critical topic. |
-| M2 single human, AI as second reader | One human screens every record. | Replaces the second human. Disagreements go to adjudication. | Large topics, after a validation pack shows the AI's performance on pooled gold data. |
+| M1 dual human, AI as third reader (default) | Two humans screen every record. | Independent third screener. A record that the AI includes and both humans exclude goes to an independent blind screen; a resulting human disagreement goes to adjudication. | Every critical topic. |
+| M2 single human, AI as second reader | One human screens every record. | Replaces the second human. A record on which the AI and the human disagree goes to an independent blind screen; a resulting human disagreement goes to adjudication. | Large topics, after a validation pack shows the AI's performance on pooled gold data. |
 | M3 prioritized dual screening with a certified stop | Humans screen in AI order and stop when a pre-specified statistical test passes. | Ranking only. | Topics with roughly 10,000 records and 100 expected relevant records. Rare in small reviews. |
 
 No mode lets the AI exclude a record that no human saw. Changing the mode mid-topic creates a new

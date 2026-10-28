@@ -431,6 +431,7 @@ search_topics:
       - b2
     audit:
       sentinel_percent: "1"
+      random_audit_percent: "10"
       census_of_disagreements: true
     freshness:
       max_age_months: 3

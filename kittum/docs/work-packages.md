@@ -20,7 +20,7 @@ The two-week spike in [DESIGN.md](../DESIGN.md#two-week-spike) picks from these 
 | 06 | `enrich` | Clients, stored enrichment, and full-text waterfall done; local tagging open |
 | 07 | `corpus` | Dedupe, link proposals, immutable identity revisions, PRISMA counts done |
 | 08 | `judge` and `models` | Done; ledger store and job wiring wait for WP-01 and WP-02 |
-| 09 | `screening` | Types done; open |
+| 09 | `screening` | Done: M1 to M3, blinding, reveal, sentinels, audits, adjudication, judge jobs, metrics, routes; open items listed |
 | 10 | `documents` | Parsers, layers, anchors, re-anchoring, viewer routes, and acquisition done; source resolvers for the waterfall open |
 | 11 | `extraction` | Types done; open |
 | 12 | `appraisal` | Types done; open |
@@ -323,6 +323,130 @@ Module `kittum.screening`. Needs: `protocol`, `corpus`, `judge`, `ledger`, `runs
   adjudication.
 - Acceptance: a reviewer can never read the other reviewer's decision or the AI verdict before
   committing; tests prove it at the service boundary.
+
+**Done.** `Screening` (migration `20261029010000_screening_tables.sql`); every write is a
+`Commands.execute` command with a pure decider, a receipt, and ledger events.
+
+- `open_stage(spec)` opens one scope at one stage of a published protocol version. The topic's
+  mode fixes the screeners (two in M1 and M3, one in M2). Every stage names an auditor, who is not
+  a screener, and its adjudicators. `sentinel_percent` of the record count (rounded up) is drawn
+  from the given sentinels and given to every reviewer; `random_audit_percent` of the records also
+  go to the auditor. Both draws are seeded and named in `screening.stage_opened`. M1 and M2 stages
+  need a nonzero audit percentage (see the extra screens below). Criteria that apply to the
+  whole topic apply to each of its scopes (`criteria_for`).
+- `request_judging` enqueues `screening.judge` jobs in batches (stage keys per stage, judge
+  config, and batch, so asking again adds nothing); `judge_handler(db, screening, runner)` runs
+  them in a `Worker`. The runner is `functools.partial(judge.judge_many, ...)`, built by the entry
+  point because screening may not import `models` or `storage`; verdicts become the stage's AI
+  readings through a command whose ID derives from the job (`screening.ai_read`). An item enters
+  queues once the AI has read it.
+- Queues: M1 and M2 follow a seeded order per reviewer; M3 follows the AI's order (proposed
+  exclusions last, then by criteria not met), shared by both screeners. `queue` returns batches
+  after a cursor (`after`), as the workbench prefetches five.
+- Two readings of each verdict. `ai_excludes` is `Verdict.excludes` (verified by the filter); it
+  counts where an AI exclusion would remove or deprioritize a record: the M2 disagreement when the
+  human includes, the M3 order, and the audit strata. The model's own reading includes a record
+  when no criterion's model-reported status (`downgraded_from` if set, else `status`) is
+  `not_met`; it counts where the AI argues for keeping a record that humans excluded: the M1
+  AI-include rule and the M2 disagreement when the human excludes. A `not_met` that only the
+  filter downgraded is therefore agreement with a human exclusion, and no exclusion the filter
+  could not verify is ever revealed against an inclusion. A record that tried to instruct the
+  model has no trustworthy own reading and counts as included. (Integrator's decision, after the
+  first review: the filter stops wrongful exclusions; it must not send nearly every record both
+  humans exclude to adjudication.)
+- `decide`: a provisional decision, then a reveal if the stage's `reveal` setting and the AI say
+  so (on disagreement as above: the AI's verified reason to exclude, or its reading of the human's
+  criterion), then a final decision. Both are stored with the client's timing (shown, first key,
+  decided, reveal shown). Clients see an opaque `etag` per item and conflict, random per state,
+  never a revision count; they send it back as `expected_etag` (`StaleRevision` if it is old).
+  Revisions stay internal and in the ledger. A replayed command returns the stored result.
+  Exclusions need a criterion ID. `undo` returns the item to the queue under a new token, keeps
+  the old decisions, and withdraws an open conflict; an adjudicated item cannot be undone.
+- AI-only disagreements never go to adjudication; they become blind extra screens (integrator's
+  decision after the third review, replacing an earlier design with decoys in the adjudication
+  queue, which could not be made tight). When M1's screeners both exclude while the model saw no
+  failing criterion, or M2's lone human and the AI disagree (provisionally or finally, the
+  protocol's census), the record goes to the stage's auditor: a new auditor assignment, seeded into
+  the auditor's queue among the random audit samples and sentinels and alike in every field, or
+  the auditor's existing one if the record is an audit sample. The ledger records each routing as
+  `screening.ai_disagreement_rescreen` (item, reason, auditor) for the AI disclosure. The auditor
+  screens it like any record, with the normal reveal rules for their own decision. If they agree
+  with the screeners, the human decision stands; if they disagree, that human disagreement goes to
+  adjudication.
+- Conflicts are human disagreements only: the screeners disagree on inclusion (or at full text
+  exclude on different criteria), or the auditor's screen disagrees with them. Membership in the
+  adjudication queue therefore says nothing about the AI, and the AI column that opens after the
+  adjudicator commits leaks nothing about other items. `adjudication_queue` shows each human's
+  final decision under a pseudonym (A, B, C), never to someone who reviewed the record, in an order
+  hashed from random conflict IDs; only the stage's adjudicators may adjudicate. `adjudicate`
+  adopts a column or takes an own decision. `outcomes` gives each record's current outcome
+  (include, exclude, conflict, or not yet screened, which includes waiting for an extra screen)
+  for the lead and later stages.
+- `status`: screeners and the auditor see only their own counts; adjudicators the screening
+  progress and their pending adjudications; anyone else (the methods lead) the stage: conflicts,
+  the extra screens and their outcomes (`rescreens`: triggered, pending, upheld, adjudicated),
+  and the metrics below.
+- Blinding below the service: reviewer reads go through the SQL functions
+  `screening_reviewer_queue` and `screening_reviewer_progress`, which return only the reviewer's
+  own assignments in one stage, no AI output (except their own reveal while it awaits the final
+  decision), no sentinel or audit flags. Two topics that screen the same scope keep separate
+  queues and counts; a scope in several topics needs `topic_id`. The lead's view has kappa and
+  PABAK (human pairs; human-AI against the
+  model's own reading as `human_ai` and against the verified reading as `human_ai_verified`; all
+  on blind provisional decisions), reveals shown and followed, the audit gauge (sentinel accuracy,
+  `stats.elusion_estimate` over the records excluded without adjudication, in two strata by
+  `ai_excludes`), and the M3 stop test (`stats.stop_test` over the fully screened
+  prefix of the AI order, with the minimum screened share). An open conflict in the tested prefix
+  counts as relevant in the p-value but withholds certification: the verdict is
+  `pending_conflicts`, with their number, until they are adjudicated.
+- Full text: per-criterion readings (met, not met, unclear) with evidence anchor IDs (opaque UUIDs
+  until WP-10); include, exclude, or insufficient information. Every outcome cites at least one
+  evidence anchor, and an exclusion cites a not-met criterion with evidence.
+- Routes in `api/routes/screening.py`: `GET .../screening/queue`, `POST .../assignments/{id}/decide`,
+  `POST .../assignments/{id}/undo`, `GET .../adjudications`, `POST .../adjudications/{id}/decide`,
+  `GET .../status`. The caller's actor ID comes from the `X-Kittum-Reviewer` header until WP-15
+  adds authentication; it is a stand-in, not a security boundary.
+- `tests/screening/test_rescreen.py` covers the extra screens in M1 and M2, upheld and disputed;
+  `test_escalation.py` the two readings (a downgraded `not_met` with both M1 humans excluding is
+  not escalated and stays in the audit frame; a model that saw every criterion met gets an extra
+  screen; the same in M2); `test_topics.py` and
+  `test_m3_stop_waits_for_conflicts_in_the_tested_prefix` the first review's findings.
+- Tests (`tests/screening/`) run the nicotine replacement example, the recorded PubMed search and
+  a CENTRAL export, the corpus, and the judge on `RecordedBackend`, against Postgres, through the
+  worker and the API.
+
+Left open:
+
+- The protocol has no `reveal` field; it is set per stage when the stage opens and recorded in the
+  ledger. If it belongs in the protocol (WP-03), read it from there.
+- Screening records come in as `ScreeningRecord`s: `corpus` exposes no read of an identity
+  revision's reports, and screening may not import `search`. An entry point (CLI or route) that
+  builds them from the corpus, and one that opens stages and runs a judge worker, are left to
+  WP-15 and the `kittum worker` entry point of WP-02.
+- `judge_many` holds the job's transaction across model calls (WP-08's open item). The handler
+  records verdicts in a transaction of its own, so a rerun calls no model, but long batches hold a
+  connection.
+- The audit sample is drawn up front from every record, so the share of the excluded population
+  it covers is close to, not exactly, `random_audit_percent`. A found miss goes to adjudication;
+  the queue of the 20 nearest AI-excluded records (DESIGN.md) is not built.
+- M3 reports the stop test but does not stop the queues; stopping is the methods lead's decision.
+- One judge per stage. A second model family as an independent judge, and capture-recapture over
+  the provisional decisions, are not wired.
+- Changing the mode or the reveal setting of an open stage, and new scopes on a screened corpus,
+  need a new stage; screening does not carry decisions across protocol versions yet.
+- Reviewer metrics for themselves after a session, the time-to-first-key summaries, the
+  disagreement rate per criterion, and break suggestions after a missed sentinel are not computed;
+  the timings they need are stored.
+- The example protocols' M1 topics sample no records for audit, so their stages are refused
+  until the protocol sets `random_audit_percent` (the tests set 10%). The examples belong to
+  WP-03.
+- The auditor's queue grows when an extra screen arrives, and the share of extra screens among
+  the audit samples sets how much an item there hints that the AI disagreed. A larger audit
+  percentage dilutes it; the rate is not tuned against the expected number of disagreements.
+- The judge's filter confirms few exclusions on the example protocols (wordings with "without", or
+  keywords without a negation, fail the polarity check), so the verified reading mostly includes.
+  Escalation uses the model's own reading, so this no longer floods M1 adjudication, but M3 order
+  and the audit strata see few verified exclusions.
 
 ## WP-10 Documents
 
