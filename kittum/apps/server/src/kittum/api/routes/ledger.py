@@ -1,8 +1,9 @@
 """Ledger routes: verify a project's hash chain.
 
 Events themselves are not served here: their payloads hold every reviewer's decisions, so the
-audit routes (`routes/audit.py`) serve them to the methods lead only. Anyone may learn whether the chain holds and
-how far it was checked. The event counts by type, and where a broken chain breaks, are the methods
+audit routes (`routes/audit.py`) serve them to the methods lead only. Anyone may learn whether the
+chain holds, and how far it was checked when it does. Where a broken chain breaks (which the
+checked-through seq would give away), the full report, and the event counts by type are the methods
 lead's alone (`require_lead`): the counts of acquisition or retrieval events say how many reports
 were sought for retrieval while reviewers still screen.
 """
@@ -22,7 +23,9 @@ router = APIRouter(prefix="/api/projects/{project_id}/ledger", tags=["ledger"])
 
 class LedgerSummary(Record):
     ok: bool
-    checked_through_seq: int
+    checked_through_seq: int | None = None
+    """Always for the methods lead; for anyone else only while the chain holds, since on a broken
+    chain it points at the event that broke it."""
     verify: VerifyReport | None = None
     """The full report, for the methods lead only."""
     events: int | None = None
@@ -49,13 +52,14 @@ def verify_ledger(
         report = ledger.verify(tx, project_id)
         lead = viewer is not None and sees_lead_data(tx, project_id, viewer)
         events = ledger.events(tx, project_id) if lead else []
-    summary = LedgerSummary(ok=report.ok, checked_through_seq=report.checked_through_seq)
     if not lead:
-        return summary
-    return summary.model_copy(
-        update={
-            "verify": report,
-            "events": len(events),
-            "by_type": dict(sorted(Counter(e.type for e in events).items())),
-        }
+        return LedgerSummary(
+            ok=report.ok, checked_through_seq=report.checked_through_seq if report.ok else None
+        )
+    return LedgerSummary(
+        ok=report.ok,
+        checked_through_seq=report.checked_through_seq,
+        verify=report,
+        events=len(events),
+        by_type=dict(sorted(Counter(e.type for e in events).items())),
     )

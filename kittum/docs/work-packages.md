@@ -830,9 +830,13 @@ Enrichment and open-access retrieval (branch `kittum/enrichment-ui`):
   transaction of its own. Every step holds the job's lease and the report's row lock. A report
   without a location gets `retrieval.no_open_access_location`; one uploaded by hand meanwhile
   keeps its upload, and an acquisition made before it stays on record.
-- `GET .../ledger/verify` gives everyone whether the chain holds and how far it was checked; the
-  event counts by type and the full report only to a lead who screens nothing (`X-Kittum-Reviewer`),
-  since the counts of acquisition events say how many reports are sought while reviewers screen.
+- `GET .../ledger/verify` gives everyone whether the chain holds, and how far it was checked only
+  while it does (on a broken chain that seq names where it breaks); the full report and the event
+  counts by type only to a lead who screens nothing (`X-Kittum-Reviewer`), since the counts of
+  acquisition events say how many reports are sought while reviewers screen.
+- Each acquisition attempt's event (`document.acquisition_attempted`, `document.acquired`) names
+  the report it was for (`report_id`), and the audit trace matches a retrieval run's `report_ids`,
+  so a record's audit trail shows its whole retrieval: the request, every attempt, the attach.
 - Routes (`api/routes/enrichment.py`), all 403 to anyone but a lead who screens nothing: the
   latest enrichment run with counts per source, flags per record, one record's enrichment (field
   sources, identifiers, notices, OA locations, entity tags, failures), the latest open-access run

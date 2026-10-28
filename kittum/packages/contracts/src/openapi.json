@@ -3072,8 +3072,15 @@
             "title": "By Type"
           },
           "checked_through_seq": {
-            "title": "Checked Through Seq",
-            "type": "integer"
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked Through Seq"
           },
           "events": {
             "anyOf": [
@@ -3102,8 +3109,7 @@
           }
         },
         "required": [
-          "ok",
-          "checked_through_seq"
+          "ok"
         ],
         "title": "LedgerSummary",
         "type": "object"

@@ -387,7 +387,7 @@ function LedgerLine({ ledger }: { ledger: LedgerSummary }) {
   return (
     <p className="mt-2 border-t border-rule pt-3 text-sm" data-testid="ledger">
       {ledger.ok
-        ? `Ledger verified: ${ledger.events ?? "?"} events, the hash chain holds through event ${ledger.checked_through_seq}.`
+        ? `Ledger verified: ${ledger.events ?? "?"} events, the hash chain holds through event ${ledger.checked_through_seq ?? "?"}.`
         : `Ledger FAILED at event ${ledger.verify?.first_bad_seq ?? "?"}: ${ledger.verify?.reason ?? ledger.verify?.problem ?? "the chain does not verify"}.`}
     </p>
   );
