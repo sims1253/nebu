@@ -16,7 +16,6 @@ from kittum import assist
 from kittum.app.lifecycle import require_project_lead
 from kittum.core import KittumError, canonical_json
 from kittum.models import BackendError, Completion, CompletionRequest, request_key
-from kittum.protocol import register_attribution
 from kittum.search import QueryCount, QueryDialect, count_hits
 
 if TYPE_CHECKING:
@@ -29,9 +28,6 @@ if TYPE_CHECKING:
     from kittum.storage import ArtifactStore
 
 RECORDINGS = Path(__file__).parent / "demo_data" / "assist"
-
-# Every publication, from any entry point, names the fields a model wrote.
-register_attribution("assist", assist.ai_parts_for)
 
 
 class AssistUnavailable(KittumError):

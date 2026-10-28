@@ -151,10 +151,15 @@ answers in a JSON Schema derived from the protocol's own models in strict form, 
 goes through the same compiler as a hand-written file; an answer with problems goes back to the
 model with them, at most twice. Nothing the model writes is published by it. Every draft,
 suggestion, accepted selection of changes, edit, and restore is an append-only revision, and the
-lead steps between them and publishes one. The fields a model wrote keep a mark (which field,
-which revision, which model) until a person changes them. The publication's ledger event records
-the marks, and every request to the assistant is a ledger event with each attempt's raw request
-and response, so the AI disclosure lists both.
+lead steps between them and publishes one. What a model wrote is attributed by value: a field is
+the model's while its value is one a model wrote for that kind of field (a criterion's text, a
+strategy, wherever the object moved or whatever it is now called) in any draft, suggestion, or
+accepted selection of the project, however the document was saved since; a person who changes
+the value takes the field over. This errs towards naming the model. A publication of a project
+with assistant revisions that nothing can attribute is refused. Every publication, from the workbench, an assistant revision, or
+the command line, records these fields (which field, which revision, which model) in its ledger
+event, and every request to the assistant is a ledger event with each attempt's raw request and
+response, failed ones included, so the AI disclosure lists both.
 
 A profile extends this schema. It can, for example, wrap scopes in a hierarchy of indications and
 subpopulations with an assigned comparator, and fix the freshness limit.

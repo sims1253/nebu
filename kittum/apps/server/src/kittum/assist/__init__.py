@@ -14,6 +14,9 @@ suggestion, accepted selection, edit, and restore is an append-only revision, an
 publishes one. The fields a model wrote carry marks (which field, which revision, which model)
 into the `protocol.published` event and from there into the AI disclosure. Every request is a
 `protocol.assist` ledger event with each attempt's raw request and response by hash.
+
+Importing this package registers `ai_parts_for` with `kittum.protocol.register_attribution`, so
+every publication names the fields a model wrote.
 """
 
 from kittum.assist.answers import REPAIRS, StrategyAnswer, apply, draft, improve, part_kind
@@ -46,6 +49,7 @@ from kittum.assist.store import (
     restore,
     save_edit,
 )
+from kittum.protocol import register_attribution
 
 __all__ = [
     "ASSIST_EVENT",
@@ -81,3 +85,6 @@ __all__ = [
     "strict_schema",
     "value_at",
 ]
+
+# Every publication, from whichever entry point, names the fields a model wrote.
+register_attribution("assist", ai_parts_for)

@@ -64,6 +64,10 @@ test("a lead drafts, improves, counts, steps back, and publishes a protocol with
   await test.step("the PubMed strategy is counted, improved, and counted again", async () => {
     await medline.getByRole("button", { name: "Count" }).click();
     await expect(medline.getByTestId("hit-count")).toHaveText("5,846 in PubMed today");
+    // The registry's strategy is counted too, through the gateway's ClinicalTrials.gov policy.
+    const registry = view.locator('[data-testid="source"][data-source="clinicaltrials_gov"]');
+    await registry.getByRole("button", { name: "Count" }).click();
+    await expect(registry.getByTestId("hit-count")).toHaveText("2,310 in ClinicalTrials.gov today");
     await shoot(page, "02-draft");
     await medline.getByRole("button", { name: "Improve MEDLINE strategy" }).click();
     await expect(rail).toHaveCount(2);

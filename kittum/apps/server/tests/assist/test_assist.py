@@ -11,6 +11,10 @@ disclosure name the field the model wrote. A reviewer may do none of it.
 """
 
 import json
+import os
+import re
+import subprocess
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -200,6 +204,19 @@ def test_a_lead_drafts_improves_and_publishes_a_protocol_with_the_assistant(pg: 
     # The model's text saved as the lead's own, without a base, is still the model's.
     copied = save(draft["document"])
     assert {m["path"] for m in copied["ai_parts"]} == set(marks)
+    # So is a criterion the lead renames and moves to the end, its words unchanged.
+    topic = draft["document"]["search_topics"][0]
+    first, *rest = topic["criteria"]
+    moved = save(
+        {
+            **draft["document"],
+            "search_topics": [{**topic, "criteria": [*rest, {**first, "id": "renumbered"}]}],
+        },
+        copied,
+    )
+    renamed = mark(moved, f"search_topics[{topic['id']}].criteria[renumbered].text.en")
+    assert renamed and renamed["revision_id"] == draft["id"]
+    assert mark(moved, f"search_topics[{topic['id']}].criteria[renumbered].id") is None
 
     # A model that never fixes its answer: three attempts, the problems and the raw answer come
     # back, and no revision is stored; the ledger keeps the attempts.
@@ -253,14 +270,25 @@ def test_a_lead_drafts_improves_and_publishes_a_protocol_with_the_assistant(pg: 
     ]
     ctx.assistant = Assistant(recipe_id=recipe_id, backend=backend)
 
-    # The lead brings in the example protocol as their own text. Only what says word for word
-    # what the model wrote at the same place is the model's.
+    # The lead brings in the example protocol as their own text. What says, word for word, what
+    # the model wrote for that kind of field is the model's (a criterion's polarity, the
+    # platform), and nothing else: none of the example's own criteria texts.
     example = yaml.safe_load(EXAMPLE.read_text())
     mine = save(example)
-    assert (mine["kind"], mine["parent_id"]) == ("edit", copied["id"])
-    drafted_values = written(draft["document"])
-    shared = {p for p, v in written(mine["document"]).items() if drafted_values.get(p) == v}
+    assert (mine["kind"], mine["parent_id"]) == ("edit", moved["id"])
+
+    def kind(path: str) -> str:
+        return re.sub(r"\[[^\]]*\]", "[*]", path)
+
+    drafted_values = {(kind(p), json.dumps(v)) for p, v in written(draft["document"]).items()}
+    shared = {
+        p
+        for p, v in written(mine["document"]).items()
+        if (kind(p), json.dumps(v)) in drafted_values
+    }
     assert {m["path"] for m in mine["ai_parts"]} == shared
+    assert "search_topics[TRIALS].source_plan.sources[medline].platform" in shared
+    assert not any(p.endswith(".text.en") for p in shared)
     broken = {**example, "questions": []}
     refused = client.post(f"{url}/revisions", json={"source": broken}, headers=lead)
     assert (
@@ -359,7 +387,7 @@ def test_a_lead_drafts_improves_and_publishes_a_protocol_with_the_assistant(pg: 
     again = ok(client.post(f"{url}/revisions/{accepted['id']}/restore", headers=lead), 201)
     assert again["document"] == accepted["document"] and again["ai_parts"] == accepted["ai_parts"]
     seqs = [r["seq"] for r in ok(client.get(f"{url}/revisions", headers=lead))]
-    assert seqs == list(range(1, 10))
+    assert seqs == list(range(1, 11))
 
     # Publish: the lead's approval, with the model's fields in the ledger event.
     assert (
@@ -491,3 +519,67 @@ def test_a_drafted_protocol_published_from_the_command_line_names_what_the_model
         m["path"] for m in drafted["ai_parts"]
     }
     assert {p["revision_id"] for p in published.payload["ai_parts"]} == {drafted["id"]}
+
+
+PUBLISH_ALONE = """
+import json, sys
+from kittum.db import Database
+from kittum.ledger import PostgresLedger
+from kittum.protocol import ProtocolStateError, compile, publish, save_draft
+{imports}
+url, project, lead, path = sys.argv[1:5]
+assert "kittum.app" not in sys.modules
+try:
+    with Database(url).transaction() as tx:
+        draft = save_draft(tx, project, compile(json.loads(open(path).read())))
+        publish(tx, project, draft.id, lead, ledger=PostgresLedger())
+except ProtocolStateError as e:
+    print(e)
+    sys.exit(3)
+"""
+
+
+def test_a_publisher_without_the_assistant_refuses_rather_than_hide_what_a_model_wrote(
+    database: Database, tmp_path: Path
+) -> None:
+    artifacts = FilesystemStore(tmp_path)
+    recipe_id, backend = recorded_backend(artifacts)
+    ctx = AppContext(
+        settings=Settings(database_url="postgresql://unused", artifact_dir=tmp_path),
+        db=database,
+        artifacts=artifacts,
+        ledger=PostgresLedger(),
+        assistant=Assistant(recipe_id=recipe_id, backend=backend),
+    )
+    client = TestClient(create_app(ctx))
+    project = client.post("/api/projects", json={"name": "NRT", "lead_name": "Morgan Lee"}).json()
+    pid, lead = project["id"], project["members"][0]["actor_id"]
+    drafted = client.post(
+        f"/api/projects/{pid}/assist/draft",
+        json={"description": DESCRIPTION},
+        headers={"X-Kittum-Reviewer": lead},
+    ).json()["revision"]
+    exported = tmp_path / "protocol.json"
+    exported.write_text(json.dumps(drafted["document"]))
+
+    def publish_alone(imports: str) -> subprocess.CompletedProcess[str]:
+        script = PUBLISH_ALONE.format(imports=imports)
+        args = [sys.executable, "-c", script, os.environ["KITTUM_DATABASE_URL"], pid, lead]
+        return subprocess.run([*args, str(exported)], capture_output=True, text=True, check=False)
+
+    def published() -> list[dict[str, Any]]:
+        with database.transaction() as tx:
+            events = PostgresLedger().events(tx, pid)
+        return [e.payload for e in events if e.type == PUBLISHED_EVENT]
+
+    # Only the protocol's own API: nothing could name the model's fields, so nothing is published.
+    alone = publish_alone("")
+    assert alone.returncode == 3, alone.stderr
+    assert "a model helped write this project's protocol" in alone.stdout
+    assert published() == []
+
+    # With the assistant imported, the publication names every field the model wrote.
+    with_assist = publish_alone("import kittum.assist")
+    assert with_assist.returncode == 0, with_assist.stderr
+    (event,) = published()
+    assert {p["path"] for p in event["ai_parts"]} == {m["path"] for m in drafted["ai_parts"]}

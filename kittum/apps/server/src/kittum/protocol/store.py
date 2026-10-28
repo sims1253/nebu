@@ -4,9 +4,10 @@ Publishing freezes the version (a trigger rejects later changes) and appends a
 `protocol.published` event in the caller's transaction. A version that changes a topic's screening
 mode relative to the last published version needs a reason, which the event records. So does every
 field of the version a model wrote (`ai_parts`): which field, from which revision, by which model.
-Publishing asks every registered attribution (`register_attribution`; the protocol assistant
-registers one at the entry points) whatever saved the version: the workbench, an assistant
-revision, or the CLI.
+Publishing asks every registered attribution (`register_attribution`; `kittum.assist` registers
+its own when imported) whatever saved the version: the workbench, an assistant revision, or the
+CLI. With none registered, a project with assistant revisions is refused, never published as if
+no model had written any of it.
 """
 
 from datetime import datetime
@@ -40,7 +41,26 @@ def register_attribution(name: str, attribution: Attribution) -> None:
 
 
 def attributed(tx: Tx, project_id: Id, version: ProtocolVersion) -> list[dict[str, Any]]:
+    """What every registered attribution finds. Fails closed: a project whose protocol was
+    written with the assistant is never published as if no model had written any of it."""
+    if not _ATTRIBUTIONS and _assisted(tx, project_id):
+        raise ProtocolStateError(
+            "a model helped write this project's protocol, and nothing is registered to name"
+            " what it wrote; publish through kittum.app, or import kittum.assist first"
+        )
     return [dict(p) for f in _ATTRIBUTIONS.values() for p in f(tx, project_id, version)]
+
+
+def _assisted(tx: Tx, project_id: Id) -> bool:
+    """Whether the protocol assistant has revisions in the project (its table, read only here)."""
+    row = tx.execute("select to_regclass('assist_revision') is not null as present").fetchone()
+    if row is None or not row["present"]:
+        return False
+    found = tx.execute(
+        "select exists (select 1 from assist_revision where project_id = %s) as found",
+        (project_id,),
+    ).fetchone()
+    return bool(found and found["found"])
 
 
 class ProtocolStateError(KittumError):

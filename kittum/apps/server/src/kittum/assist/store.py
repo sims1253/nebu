@@ -1,15 +1,17 @@
 """Assistant revisions in Postgres, the marks on what a model wrote, and publishing a revision.
 
 Every revision compiles. What a model wrote is attributed by value, from the project's whole
-assistant history: a field is the model's when its value is one a model wrote at that path, in a
-draft or a suggestion, whichever way the document was saved since (an accepted change, the lead's
-own text with or without a base, a restore, the plain editor, the CLI). A person who changes the
-value takes the field over; changing it back gives it back to the model. Marks are computed when
-revisions are read, from the history up to each one, and at every publication from all of it
-(`ai_parts_for`, registered with `kittum.protocol.register_attribution` at the entry points).
+assistant history: a field is the model's when its value is one a model wrote for that kind of
+field (the path without object IDs) in a draft, a suggestion, or an accepted selection, however
+the document was saved since (an accepted change, the lead's own text with or without a base, a
+restore, the plain editor, the CLI). A person who changes the value takes the field over;
+changing it back gives it back to the model. Marks are computed when revisions are read, from the
+history up to each one, and at every publication from all of it (`ai_parts_for`, registered with
+`kittum.protocol.register_attribution` when `kittum.assist` is imported).
 """
 
 import json
+import re
 from typing import TYPE_CHECKING, Any
 
 from psycopg.types.json import Json, Jsonb
@@ -71,7 +73,14 @@ def _from_row(row: dict[str, Any]) -> ProtocolRevision:
 
 
 class _History:
-    """What models wrote, by (path, value), in revision order, and where a person first kept it.
+    """What models wrote, by the kind of field and its value, in revision order, and where a
+    person first kept it.
+
+    The kind of a field is its path without the IDs of the objects on the way
+    (`search_topics[*].criteria[*].text.en`), so a value stays the model's when its criterion is
+    renamed, moved to another topic, or its question reordered: a value a model wrote for that
+    kind of field anywhere in the project's history is the model's wherever it appears. This
+    errs on the side of naming the model, the safe side for a disclosure.
 
     A draft wrote every field; a suggestion the fields it changes. Accepting some of a suggestion's
     changes writes, in the model's name, the values that selection makes (a strategy with two of
@@ -122,9 +131,13 @@ class _History:
         return tuple(found)
 
 
+_IDS = re.compile(r"\[[^\]]*\]")
+
+
 def _key(item: tuple[str, Any]) -> tuple[str, str]:
+    """The kind of field at a path, and its value."""
     path, value = item
-    return path, json.dumps(value, sort_keys=True, ensure_ascii=False)
+    return _IDS.sub("[*]", path), json.dumps(value, sort_keys=True, ensure_ascii=False)
 
 
 def _history(tx: Tx, project_id: Id) -> tuple[_History, list[ProtocolRevision]]:

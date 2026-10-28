@@ -168,10 +168,18 @@ Done:
   `protocol.assist` ledger event with every attempt, also for an answer that never compiled.
   `accept` (some changes), `restore`, and `save_edit` add revisions; `assist_revision` is
   append-only.
-- AI marks per field, carried while unchanged, dropped when a person changes the field; the
-  `protocol.published` event records them (`ai_parts`), also for a version published from the
-  plain editor, and the `ai_disclosure` report lists them with every assistant request.
-- `kittum.search.count_hits`: ESearch count or ClinicalTrials.gov `totalCount` through the gateway.
+- AI marks by value: a field is the model's while its value is one a model wrote for that kind
+  of field (its path without object IDs, so renamed and moved objects keep theirs) in the
+  project's assistant history (draft, suggestion, or accepted selection), whichever way the
+  document was saved. `kittum.protocol.publish` asks every registered `Attribution`; importing
+  `kittum.assist` registers the assistant's, so publications from the workbench, an assistant
+  revision, and the CLI all record `ai_parts`. With none registered, publishing a project that has
+  assistant revisions raises `ProtocolStateError`. The `ai_disclosure` report lists them with every assistant request.
+- Improving a question or criterion keeps every nested profile extension (by ID); a language given
+  twice in an answer goes back to the model; a model server that is down or fails is a recorded
+  attempt with the bytes that exist.
+- `kittum.search.count_hits`: ESearch count or ClinicalTrials.gov `totalCount` through the gateway
+  (source `clinicaltrials`, the gateway policy's name, which the CT.gov search now uses too).
 - Settings: `KITTUM_ASSIST_MODEL`, `KITTUM_ASSIST_BACKEND` (`demo` replays recorded answers).
 - Tests: `tests/assist/test_assist.py` on GLM-5.3-Flash's recorded answers and PubMed's recorded
   counts; `e2e/assist.spec.ts` in the browser.
