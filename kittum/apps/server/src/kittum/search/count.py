@@ -8,6 +8,7 @@ the raw reply still goes to the artifact store, so a count shown to someone can 
 """
 
 import json
+import re
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal
@@ -160,7 +161,9 @@ def failure_message(error: GatewayError | SourceError) -> str:
     if isinstance(error, SourceUnavailable):
         name = SOURCE_NAMES.get(error.source, error.source)
         if error.reason:
-            return f"Kittum could not reach {name}. {error.reason[:1].upper()}{error.reason[1:]}."
+            # A URL's query can hold the contact address or an API key: name the endpoint only.
+            reason = re.sub(r"(https?://[^\s?]+)\?\S*", r"\1", error.reason)
+            return f"Kittum could not reach {name}. {reason[:1].upper()}{reason[1:]}."
         return (
             f"Kittum could not reach {name}. It answered HTTP {error.status}"
             f" to {error.attempts} tries in a row."

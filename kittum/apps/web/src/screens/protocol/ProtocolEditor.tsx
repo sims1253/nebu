@@ -1,7 +1,8 @@
-// Writing a protocol version (DESIGN.md, "Protocol" and "Reviewer workbench"): YAML or JSON as
-// `kittum project publish-protocol` takes it, from an example, the published version, or a file.
-// The server reads and checks it; the problems sit beside the text, and before publishing the lead
-// sees what the version changes against the one every decision reads now.
+// The protocol as YAML (DESIGN.md, "Protocol" and "Reviewer workbench"), for a lead who knows the
+// format: YAML or JSON as `kittum project publish-protocol` takes it, from the form, an example,
+// the published version, or a file. The server reads and checks it and lists the problems beside
+// the text. Before publishing, the lead sees what the version changes against the one every
+// decision reads now. Saved as a revision, it joins the form's history.
 import { useRouteContext, useRouter } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 
@@ -47,14 +48,17 @@ export function ProtocolEditor({
   initialText = null,
   base = null,
   onRevisionSaved,
+  onText,
 }: {
   onPublished: (message: string) => void;
   onCancel: (() => void) | null;
-  /** The text to start from, such as an assistant revision's. */
+  /** The text to start from, such as the form's protocol. */
   initialText?: string | null;
-  /** The assistant revision the text comes from; the edit can be saved as the next revision. */
+  /** The revision the text comes from; a saved edit names it as its base. */
   base?: ProtocolRevision | null;
   onRevisionSaved?: (revision: ProtocolRevision) => void;
+  /** The text as it is now, and whether the lead changed it here. */
+  onText?: (text: string, changed: boolean) => void;
 }) {
   const { workbench } = useRouteContext({ from: "/p/$projectId" });
   const router = useRouter();
@@ -62,6 +66,7 @@ export function ProtocolEditor({
   const [examples, setExamples] = useState<ReadonlyArray<ExampleProtocol>>([]);
   const [example, setExample] = useState("");
   const [text, setText] = useState(initialText ?? "");
+  const [touched, setTouched] = useState(false);
   const [check, setCheck] = useState<Check>({ state: "unchecked" });
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -90,8 +95,11 @@ export function ProtocolEditor({
     };
   }, [workbench, project.id, protocol, initialText]);
 
+  useEffect(() => onText?.(text, touched), [onText, text, touched]);
+
   const load = (source: string) => {
     setText(source);
+    setTouched(true);
     setCheck({ state: "unchecked" });
     setError(null);
     editor.current?.focus();
@@ -128,7 +136,7 @@ export function ProtocolEditor({
       });
     } catch (e) {
       setCheck({ state: "unchecked" });
-      setError(failure(e, "The protocol could not be checked."));
+      setError(failure(e, "Kittum could not check the protocol."));
     }
   };
 
@@ -138,7 +146,7 @@ export function ProtocolEditor({
   const modeChanged = fresh && (check.preview.diff?.mode_changes.length ?? 0) > 0;
 
   const saveRevision = async () => {
-    if (check.state !== "valid" || !fresh || !base) return;
+    if (check.state !== "valid" || !fresh) return;
     setBusy(true);
     setError(null);
     try {
@@ -147,12 +155,12 @@ export function ProtocolEditor({
           projectId: project.id,
           as: me.actor_id,
           source: check.source,
-          baseId: base.id,
+          baseId: base?.id ?? null,
         }),
       );
       onRevisionSaved?.(saved);
     } catch (e) {
-      setError(failure(e, "The revision was not saved."));
+      setError(failure(e, "Kittum could not save the revision."));
     } finally {
       setBusy(false);
     }
@@ -161,7 +169,9 @@ export function ProtocolEditor({
   const publish = async () => {
     if (check.state !== "valid" || !fresh) return;
     if (modeChanged && !reason.trim()) {
-      setError("A change of screening mode needs a reason; the methods text reports it.");
+      setError(
+        "A changed screening mode needs a reason. The methods section of the report gives it.",
+      );
       return;
     }
     setBusy(true);
@@ -177,10 +187,10 @@ export function ProtocolEditor({
       );
       await router.invalidate();
       onPublished(
-        `Published version ${stored.version.protocol.version_label}. Your approval is in the ledger.`,
+        `Published version ${stored.version.protocol.version_label}. The ledger records your approval.`,
       );
     } catch (e) {
-      setError(failure(e, "The protocol was not published."));
+      setError(failure(e, "Kittum could not publish the protocol."));
     } finally {
       setBusy(false);
     }
@@ -196,7 +206,7 @@ export function ProtocolEditor({
           <div className="mr-auto">
             <h1 className="text-lg font-semibold">
               {protocol
-                ? `A new version after ${protocol.protocol.version_label}`
+                ? `A new version after version ${protocol.protocol.version_label}`
                 : "Write the protocol"}
             </h1>
             <p className="text-xs text-ink-2">
@@ -224,7 +234,7 @@ export function ProtocolEditor({
             </div>
           ) : null}
           <div className="w-[220px]">
-            <Field label="Or open a file">
+            <Field label="Open a file">
               <FileInput
                 label="Protocol file"
                 accept=".yaml,.yml,.json"
@@ -238,7 +248,10 @@ export function ProtocolEditor({
           aria-label="Protocol"
           spellCheck={false}
           value={text}
-          onChange={(e) => setText(e.currentTarget.value)}
+          onChange={(e) => {
+            setText(e.currentTarget.value);
+            setTouched(true);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
               e.preventDefault();
@@ -281,8 +294,8 @@ export function ProtocolEditor({
             }}
           >
             <Field
-              label={modeChanged ? "Reason (needed: a screening mode changes)" : "Reason"}
-              hint="Why this version, in a sentence. The ledger keeps it with your approval."
+              label={modeChanged ? "Reason, needed because a screening mode changes" : "Reason"}
+              hint="Why this version, in one sentence. The ledger keeps it with your approval."
             >
               <TextInput value={reason} onChange={(e) => setReason(e.currentTarget.value)} />
             </Field>
@@ -290,9 +303,9 @@ export function ProtocolEditor({
               <Button primary type="submit" disabled={busy}>
                 {busy ? "Publishing" : "Publish this version"}
               </Button>
-              {base ? (
+              {onRevisionSaved ? (
                 <Button onClick={() => void saveRevision()} disabled={busy}>
-                  Save as a revision after {base.seq}
+                  Save as a revision
                 </Button>
               ) : null}
             </div>
@@ -312,8 +325,8 @@ function Result({ check, stale }: { check: Check; stale: boolean }) {
   if (check.state === "unchecked" || check.state === "checking") {
     return (
       <p className="max-w-[46ch] text-sm text-ink-2">
-        Check the protocol before you publish it. Kittum compiles every criterion into the question
-        reviewers and the AI answer, and lists every problem it finds.
+        Check the protocol before you save or publish it. Kittum lists every problem it finds. A
+        saved revision also shows in the form.
       </p>
     );
   }
@@ -371,12 +384,12 @@ function Changes({ preview }: { preview: DiffPreview }) {
   const { diff, previous } = preview;
   return (
     <>
-      <h2 className="text-md font-semibold text-include">It compiles</h2>
+      <h2 className="text-md font-semibold text-include">No problems found</h2>
       <p className="mt-1 text-xs text-ink-3" title={preview.content_hash}>
         Content hash {preview.content_hash.slice(0, 16)}
       </p>
       <h3 className="mt-5 text-sm font-semibold">
-        {previous ? `Against version ${previous.version_label}` : "The first version"}
+        {previous ? `Changes against version ${previous.version_label}` : "The first version"}
       </h3>
       {!diff || !previous ? (
         <p className="mt-1 text-sm text-ink-2">
@@ -384,7 +397,7 @@ function Changes({ preview }: { preview: DiffPreview }) {
         </p>
       ) : (diff.changes?.length ?? 0) === 0 ? (
         <p className="mt-1 text-sm text-ink-2" data-testid="protocol-diff">
-          Nothing changes: this is the published version. Edit it first.
+          This is the published version without changes. Edit it first.
         </p>
       ) : (
         <div className="mt-2 grid gap-3 text-sm" data-testid="protocol-diff">

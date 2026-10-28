@@ -92,7 +92,7 @@ export function SetupScreen() {
       done: protocol !== null,
       summary: protocol
         ? `Version ${protocol.protocol.version_label}, published ${date(protocol.published_at)}`
-        : "Write it, check it, and publish it: every decision reads it",
+        : "Write it and publish it. Every decision reads the published version.",
       screen: {
         to: "/p/$projectId/protocol",
         label: protocol ? "Open the protocol" : "Write the protocol",
@@ -140,7 +140,7 @@ export function SetupScreen() {
       id: "extraction",
       title: "Extraction",
       done: false,
-      summary: "Request runs on included reports; reviewers accept each value",
+      summary: "Request runs on the included reports. Reviewers accept each value.",
       screen: { to: "/p/$projectId/extraction", label: "Go to extraction" },
     },
   ];
@@ -192,8 +192,8 @@ export function SetupScreen() {
       </header>
       {!seesLeadData ? (
         <p className="mt-2 max-w-[70ch] text-sm text-ink-2">
-          You screen, audit, or adjudicate a stage yourself, so the counts that only the methods
-          lead sees stay hidden from you here.
+          You screen, audit, or adjudicate a stage yourself, so Kittum hides the counts that only
+          the methods lead sees.
         </p>
       ) : null}
       <div className="mt-8 grid grid-cols-[minmax(0,330px)_minmax(0,1fr)] gap-x-12">
@@ -345,16 +345,17 @@ function Panel({
       return (
         <Guide>
           {protocol
-            ? "Every screening decision reads the published version. A change is a new version: the editor shows what it changes before you publish it, and a change of screening mode needs a reason."
-            : "Start from an example protocol or your own YAML file. Kittum checks it, shows any problem beside the field at fault, and publishes it with your approval in the ledger."}
+            ? "Every screening decision reads the published version. To change it, write a new version. Kittum shows what the new version changes before you publish it. A changed screening mode needs a reason."
+            : "Fill in the form, ask a model for a draft, or write YAML. Kittum checks the protocol and marks each problem at its field. When you publish, the ledger records your approval."}
         </Guide>
       );
     case "searches":
       return (
         <>
           <Guide>
-            One search per database and strategy, as PRISMA-S asks. Import the export file of every
-            database without a free interface, with the strategy as you ran it.
+            Add one search per database and query, as PRISMA-S asks. Run PubMed and
+            ClinicalTrials.gov live. For every other database, import its export file with the query
+            as you ran it.
           </Guide>
           {protocol ? (
             <dl className="mt-4 grid grid-cols-[9rem_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
@@ -374,7 +375,7 @@ function Panel({
           searches={searches}
           onBuilt={() =>
             onChanged(
-              "The corpus is built. Confirm duplicates and study links before you open screening; links confirmed later count from the next stage.",
+              "Kittum built the corpus. Confirm duplicates and study links before you open screening. Links you confirm later count from the next stage on.",
             )
           }
         />
@@ -384,18 +385,18 @@ function Panel({
     case "retrieval":
       return (
         <Guide>
-          Upload the PDF of each record that passes title and abstract, with its licence. Add
-          full-text sentinels there too: reports with a known outcome that every full-text queue
-          gets unmarked. Full-text screening opens once the {plural(labels.report).toLowerCase()}{" "}
-          are in.
+          Upload the PDF of each record that passes title and abstract, with its licence. Add the
+          full-text sentinels there too. A sentinel is a report with a known outcome that goes into
+          every full-text queue without a mark. Full-text screening opens once the{" "}
+          {plural(labels.report).toLowerCase()} are in.
         </Guide>
       );
     case "extraction":
       return (
         <Guide>
           Request a run on a {labels.report.toLowerCase()} with its full text and an extraction
-          schema. The Janus path needs no model; the LLM path runs where a model server is set up.
-          Reviewers then accept each value against its source.
+          schema. The Janus path needs no model. The LLM path needs a model server. Reviewers then
+          accept each value against its source.
         </Guide>
       );
   }
@@ -405,7 +406,7 @@ function BuildOrDone({ searches, onBuilt }: { searches: number | null; onBuilt: 
   const { project } = useProject();
   const [built, setBuilt] = useState(false);
   if (built || project.stages.length > 0) {
-    return <Guide>The corpus is built; screening opens on its newest revision.</Guide>;
+    return <Guide>Kittum built the corpus. Screening opens on its newest revision.</Guide>;
   }
   return (
     <BuildCorpus
@@ -466,7 +467,7 @@ function People({
       onChanged(`Added ${member.display_name}.`);
       input.current?.focus();
     } catch (e) {
-      setError(failure(e, "The person was not added."));
+      setError(failure(e, "Kittum could not add the person."));
     } finally {
       setBusy(false);
     }
@@ -538,8 +539,8 @@ function People({
             ))}
           </fieldset>
           <p className="text-xs text-ink-3">
-            <Key k="a" /> jumps to the name, <Key k="Escape" /> leaves it. There is no sign-in yet:
-            each person picks themselves when they open the review, or follows a link with{" "}
+            <Key k="a" /> jumps to the name, <Key k="Escape" /> leaves it. There is no sign-in yet.
+            Each person picks their name when they open the review, or follows a link with{" "}
             <code>?as=</code> and their ID.
           </p>
           {error ? (

@@ -75,6 +75,7 @@ export type AssistOutcome = KittumApi.AssistOutcome;
 export type SuggestedChange = KittumApi.SuggestedChange;
 export type AiMark = KittumApi.AiMark;
 export type QueryCount = KittumApi.QueryCount;
+export type AssistModel = KittumApi.AssistModel;
 export type QueryDialect = KittumApi.QueryDialect;
 export type SearchPlan = KittumApi.SearchPlan;
 export type CorpusRevision = KittumApi.CorpusRevision;

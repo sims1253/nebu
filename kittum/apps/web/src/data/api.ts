@@ -236,6 +236,9 @@ export const makeApiWorkbench = (): Workbench => ({
 
   parseProtocol: (text) => call((api) => api.parseProtocol({ payload: { text } })),
 
+  protocolYaml: (source) =>
+    call((api) => api.protocolAsYaml({ payload: source })).pipe(Effect.map((s) => s.text)),
+
   validateProtocol: (source) => call((api) => api.validateProtocol({ payload: source })),
 
   previewProtocol: ({ projectId, source }) =>
@@ -250,6 +253,9 @@ export const makeApiWorkbench = (): Workbench => ({
         });
       }),
     ),
+
+  assistModel: ({ projectId, as }) =>
+    call((api) => api.getAssistModel(projectId, { params: reviewer(as) })),
 
   assistRevisions: ({ projectId, as }) =>
     call((api) => api.listAssistRevisions(projectId, { params: reviewer(as) })),

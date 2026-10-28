@@ -415,7 +415,7 @@ def test_a_lead_drafts_improves_and_publishes_a_protocol_with_the_assistant(pg: 
     assert unrecorded.status_code == 502, unrecorded.text
     assert re.fullmatch(
         r"Kittum could not reach PubMed\. No recorded response for"
-        r" https://eutils\.ncbi\.nlm\.nih\.gov/\S+\.",
+        r" https://eutils\.ncbi\.nlm\.nih\.gov/entrez/eutils/esearch\.fcgi\.",
         unrecorded.json()["detail"],
     )
 

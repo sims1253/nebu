@@ -1,22 +1,27 @@
 // The published protocol (DESIGN.md, "Protocol"): the questions, the outcomes, and per search
 // topic its screening mode, audit plan, sources, and criteria. Every heading uses the profile's
-// words for core concepts. The methods lead writes and publishes versions in the editor.
+// words for core concepts. The methods lead writes versions in the form or as YAML, and publishes
+// them.
 import { useRouteContext } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import type { Criterion, ProfileLabels, ProtocolRevision, SearchTopic } from "../../data/schema.ts";
 import { run } from "../../data/workbench.ts";
+import { failure } from "../../ui/Form.tsx";
 import { KeyHint } from "../../ui/Key.tsx";
 import { useKeys } from "../../ui/keys.ts";
 import { useProject } from "../project.tsx";
 import { Assistant } from "./Assistant.tsx";
+import type { Working } from "./Assistant.tsx";
+import { forSaving } from "./document.ts";
+import type { Doc } from "./document.ts";
 import { ProtocolEditor } from "./ProtocolEditor.tsx";
 
 export const MODES: Record<SearchTopic["mode"], string> = {
-  M1: "Two people screen every record; the AI reads beside them as a third screener.",
-  M2: "One person screens every record; the AI is the second screener, and every disagreement gets a blind extra screen.",
-  M3: "Two people screen in the AI's order and stop when a pre-specified statistical test passes.",
+  M1: "Two people screen every record. The AI screens it too, as a third screener.",
+  M2: "One person screens every record and the AI is the second screener. Every disagreement gets a blind extra screen.",
+  M3: "Two people screen in the AI's order and stop when a statistical test set in advance passes.",
 };
 
 const STAGES: Record<string, string> = {
@@ -30,28 +35,23 @@ const date = (iso: string | null) =>
     : "Not published";
 
 type Writing =
-  | { readonly mode: "text"; readonly base: ProtocolRevision | null; readonly text: string | null }
-  | { readonly mode: "assistant" };
+  | { readonly mode: "form"; readonly handover: Working | null }
+  | { readonly mode: "yaml"; readonly base: ProtocolRevision | null; readonly text: string | null };
 
 export function ProtocolScreen() {
   const { workbench } = useRouteContext({ from: "/p/$projectId" });
-  const { protocol, has, project, me } = useProject();
+  const { protocol, has } = useProject();
   const [editing, setEditing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [writing, setWriting] = useState<Writing | null>(null);
+  const [writing, setWriting] = useState<Writing>({ mode: "form", handover: null });
+  const [switching, setSwitching] = useState<string | null>(null);
+  // What each view holds now, so the other one opens the same protocol.
+  const form = useRef<Working | null>(null);
+  const yaml = useRef<{ readonly text: string; readonly changed: boolean } | null>(null);
+  const onCurrent = useCallback((current: Working | null) => {
+    form.current = current;
+  }, []);
   const lead = has("lead");
-  // A project that has used the assistant opens on its revisions.
-  useEffect(() => {
-    if (!lead) return;
-    let live = true;
-    run(workbench.assistRevisions({ projectId: project.id, as: me.actor_id })).then(
-      (found) => live && setWriting((w) => w ?? (found.length ? { mode: "assistant" } : null)),
-      () => undefined,
-    );
-    return () => {
-      live = false;
-    };
-  }, [workbench, lead, project.id, me.actor_id]);
   useKeys((event) => {
     if (event.key !== "v" || !lead || editing || !protocol) return false;
     setEditing(true);
@@ -61,10 +61,42 @@ export function ProtocolScreen() {
   if (lead && (editing || !protocol)) {
     const published = (message: string) => {
       setEditing(false);
-      setWriting(null);
+      setWriting({ mode: "form", handover: null });
       setNotice(message);
     };
-    const current = writing ?? { mode: "text", base: null, text: null };
+    const toYaml = async () => {
+      setSwitching(null);
+      const current = form.current;
+      if (!current) return setWriting({ mode: "yaml", base: null, text: null });
+      try {
+        const text = await run(workbench.protocolYaml(forSaving(current.doc)));
+        setWriting({ mode: "yaml", base: current.base, text });
+      } catch (e) {
+        setSwitching(failure(e, "Kittum could not turn the form into YAML."));
+      }
+    };
+    const toForm = async () => {
+      setSwitching(null);
+      const text = yaml.current;
+      if (writing.mode !== "yaml" || !text?.changed || !text.text.trim()) {
+        return setWriting({ mode: "form", handover: null });
+      }
+      try {
+        const parsed = await run(workbench.parseProtocol(text.text));
+        if (!parsed.source) {
+          setSwitching(
+            `The form cannot show this YAML. ${parsed.issues?.[0]?.message ?? ""} Fix it, or reload the page to drop it.`,
+          );
+          return;
+        }
+        setWriting({
+          mode: "form",
+          handover: { doc: parsed.source as unknown as Doc, base: writing.base },
+        });
+      } catch (e) {
+        setSwitching(failure(e, "Kittum could not read the YAML."));
+      }
+    };
     return (
       <div className="flex h-full min-h-0 flex-col">
         <div
@@ -74,23 +106,33 @@ export function ProtocolScreen() {
         >
           {(
             [
-              ["text", "Text"],
-              ["assistant", "With the assistant"],
+              ["form", "Form"],
+              ["yaml", "YAML"],
             ] as const
           ).map(([mode, label]) => (
             <button
               key={mode}
               type="button"
               role="tab"
-              aria-selected={current.mode === mode}
+              aria-selected={writing.mode === mode}
               onClick={() =>
-                setWriting(mode === "assistant" ? { mode } : { mode, base: null, text: null })
+                writing.mode === mode ? undefined : void (mode === "yaml" ? toYaml() : toForm())
               }
-              className={`rounded-[3px] px-2.5 py-1 ${current.mode === mode ? "bg-sheet font-semibold text-ink shadow-[inset_0_-2px_0_var(--petrol)]" : "text-ink-2 hover:text-ink"}`}
+              className={`rounded-[3px] px-2.5 py-1 ${writing.mode === mode ? "bg-sheet font-semibold text-ink shadow-[inset_0_-2px_0_var(--petrol)]" : "text-ink-2 hover:text-ink"}`}
             >
               {label}
             </button>
           ))}
+          <span className="ml-3 text-xs text-ink-3">
+            {writing.mode === "form"
+              ? "YAML shows the same protocol as text, for people who know the format."
+              : "The form shows the same protocol as fields."}
+          </span>
+          {switching ? (
+            <span role="alert" className="ml-3 text-xs text-exclude">
+              {switching}
+            </span>
+          ) : null}
           {protocol ? (
             <button
               type="button"
@@ -102,17 +144,26 @@ export function ProtocolScreen() {
           ) : null}
         </div>
         <div className="min-h-0 flex-1">
-          {current.mode === "assistant" ? (
+          {writing.mode === "form" ? (
             <Assistant
+              key={writing.handover ? "handover" : "form"}
+              handover={writing.handover}
+              onCurrent={onCurrent}
               onPublished={published}
-              onEditText={(text, base) => setWriting({ mode: "text", base, text })}
+              onYaml={() => void toYaml()}
             />
           ) : (
             <ProtocolEditor
-              key={current.base?.id ?? "text"}
-              initialText={current.text}
-              base={current.base}
-              onRevisionSaved={() => setWriting({ mode: "assistant" })}
+              key={writing.base?.id ?? "text"}
+              initialText={writing.text}
+              base={writing.base}
+              onText={(text, changed) => {
+                yaml.current = { text, changed };
+              }}
+              onRevisionSaved={() => {
+                yaml.current = null;
+                setWriting({ mode: "form", handover: null });
+              }}
               onCancel={null}
               onPublished={published}
             />
@@ -128,7 +179,7 @@ export function ProtocolScreen() {
           <h1 className="text-xl font-semibold">No protocol is published yet</h1>
           <p className="mt-2 max-w-[62ch] text-md text-ink-2">
             Every decision reads the published protocol, so screening waits for it. The methods lead
-            writes and publishes it here, which records their approval in the ledger.
+            writes and publishes it here, and the ledger records their approval.
           </p>
         </div>
       </section>
@@ -173,7 +224,7 @@ function Published({ notice, lead }: { notice: string | null; lead: boolean }) {
             {protocol.content_hash.slice(0, 16)}
           </dd>
           <dt className="text-ink-3">Profile</dt>
-          <dd>{profile.id ?? "No profile: the core's words and rules"}</dd>
+          <dd>{profile.id ?? "None. Kittum uses its own words and rules."}</dd>
         </dl>
 
         <Section title={`${labels.scope}s`}>
@@ -268,8 +319,8 @@ function Topic({ topic, labels }: { topic: SearchTopic; labels: ProfileLabels })
       </dl>
       <h3 className="mt-6 text-md font-semibold">Criteria</h3>
       <p className="mt-1 max-w-[70ch] text-sm text-ink-2">
-        Exclusion reasons are these criteria. At title and abstract a reviewer excludes on one with{" "}
-        <span className="font-medium">e</span> and its number in the queue&rsquo;s order.
+        A reviewer who excludes a record names one of these criteria. At title and abstract, the
+        reviewer presses <span className="font-medium">e</span> and the criterion&rsquo;s number.
       </p>
       <table className="narrow mt-3 w-full border-collapse text-sm">
         <thead>
