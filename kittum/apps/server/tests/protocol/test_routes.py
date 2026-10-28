@@ -111,6 +111,21 @@ def test_a_europe_pmc_strategy_is_checked_like_a_pubmed_one() -> None:
     report = client.post("/api/protocol/validate", json=source).json()
     assert report["ok"] is False
     assert report["issues"] == [{"path": at, "message": "1 opening parenthesis is not closed"}]
+    # A range written back to front has as many brackets of each kind, in the wrong order.
+    sources[-1]["strategy"] = 'TITLE_ABS:"nicotine" AND FIRST_PDATE:]2020 TO 2024['
+    report = client.post("/api/protocol/validate", json=source).json()
+    assert report["ok"] is False
+    assert [i["message"] for i in report["issues"]] == [
+        "a closing square bracket has no opening one",
+        "a square bracket is not closed",
+    ]
+    for broken, problem in (
+        ("FIRST_PDATE:[2020 TO [2024]]", "square brackets are nested"),
+        ("FIRST_PDATE:[2020 TO (2024]", "a parenthesis is inside square brackets"),
+    ):
+        sources[-1]["strategy"] = broken
+        report = client.post("/api/protocol/validate", json=source).json()
+        assert problem in [i["message"] for i in report["issues"]], broken
 
 
 def test_validate_reports_the_hash_or_the_issues() -> None:

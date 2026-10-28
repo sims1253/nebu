@@ -672,7 +672,8 @@ def _unquoted(strategy: str) -> list[str]:
 
 def strategy_problems(strategy: str) -> list[str]:
     """What is wrong with a strategy's syntax, as far as a check without running it can tell:
-    quotes, parentheses, and square brackets must balance. Whether the query finds what it should
+    quotes and parentheses must balance, and square brackets must open, close, and hold no
+    parenthesis, in that order, without nesting. Whether the query finds what it should
     is for a hit count and the reference set to show."""
     problems: list[str] = []
     if strategy.count('"') % 2:
@@ -688,10 +689,24 @@ def strategy_problems(strategy: str) -> list[str]:
         problems.append(
             f"{depth} opening parenthes{'is is' if depth == 1 else 'es are'} not closed"
         )
-    text = " ".join(_unquoted(strategy))
-    if text.count("[") != text.count("]"):
-        problems.append("square brackets do not balance")
-    return problems
+    # A field tag or a range opens with [ and closes with ] before the next one opens, outside
+    # quoted phrases, and holds no parenthesis.
+    bracket = False
+    found: list[str] = []
+    for char in " ".join(_unquoted(strategy)):
+        if char == "[":
+            if bracket:
+                found.append("square brackets are nested")
+            bracket = True
+        elif char == "]":
+            if not bracket:
+                found.append("a closing square bracket has no opening one")
+            bracket = False
+        elif char in "()" and bracket:
+            found.append("a parenthesis is inside square brackets")
+    if bracket:
+        found.append("a square bracket is not closed")
+    return problems + list(dict.fromkeys(found))
 
 
 def strategy_warnings(strategy: str, dialect: StrategyDialect | None) -> list[str]:
