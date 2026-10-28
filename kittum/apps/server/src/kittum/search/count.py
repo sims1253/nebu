@@ -157,13 +157,16 @@ def unreachable(source: str, error: BaseException) -> SourceUnavailable:
 
 
 def failure_message(error: GatewayError | SourceError) -> str:
-    """What a person reads when a live source did not answer or refused a query."""
+    """What a person reads when a live source did not answer or refused a query. A URL in it
+    names its endpoint only: its query can hold the contact address or an API key."""
+    return re.sub(r"(https?://[^\s?]+)\?\S*?(?=[.,]?(?:\s|$))", r"\1", _failure(error))
+
+
+def _failure(error: GatewayError | SourceError) -> str:
     if isinstance(error, SourceUnavailable):
         name = SOURCE_NAMES.get(error.source, error.source)
         if error.reason:
-            # A URL's query can hold the contact address or an API key: name the endpoint only.
-            reason = re.sub(r"(https?://[^\s?]+)\?\S*", r"\1", error.reason)
-            return f"Kittum could not reach {name}. {reason[:1].upper()}{reason[1:]}."
+            return f"Kittum could not reach {name}. {error.reason[:1].upper()}{error.reason[1:]}."
         return (
             f"Kittum could not reach {name}. It answered HTTP {error.status}"
             f" to {error.attempts} tries in a row."
