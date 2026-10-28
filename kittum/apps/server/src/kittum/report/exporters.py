@@ -537,11 +537,15 @@ class ReportExporter:
             ["id", "name", "policy_version", "created_at"],
         )
         named = {e["actor_id"] for e in events}
+        ids = {e["event_id"] for e in events}
+        # The people of the stages opened by the cutoff, and no later stage's.
         for s in tx.execute(
-            "select screeners, auditor_id, adjudicators from screening_stage where project_id = %s",
+            "select screeners, auditor_id, adjudicators, opened_event_id from screening_stage"
+            " where project_id = %s",
             (project_id,),
         ).fetchall():
-            named |= set(s["screeners"]) | set(s["adjudicators"]) | ({s["auditor_id"]} - {None})
+            if s["opened_event_id"] in ids:
+                named |= set(s["screeners"]) | set(s["adjudicators"]) | {s["auditor_id"]}
         _write(
             bundle,
             "actor",
@@ -550,7 +554,6 @@ class ReportExporter:
             ).fetchall(),
             ["id", "identity_ref", "kind", "organization"],
         )
-        ids = {e["event_id"] for e in events}
         rendered = [
             r
             for r in tx.execute(

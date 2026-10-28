@@ -10,9 +10,12 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from kittum.cli import main
+from kittum.core import new_id
 from kittum.ledger import SigningKey
 from kittum.report import RightsProfile, load_review, render_files, seal_bundle
+from kittum.screening import StageSpec
 from tests.report.support import NRT_SCOPE
+from tests.screening.support import SENTINELS
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -276,3 +279,59 @@ def test_every_count_traces_to_decisions_events_and_people(sealed: Bundle) -> No
     for e in events.values():
         if e["type"] == "search.executed":
             assert human(e["event_id"])["identity_ref"].startswith("lead@example.org")
+
+
+def test_a_bundle_at_an_old_cutoff_names_no_one_from_a_later_stage(
+    nrt: tuple[ReviewWorld, NrtSeqs], tmp_path: Path
+) -> None:
+    """Runs last: it opens a stage on the shared review."""
+    world, seqs = nrt
+
+    def actors(name: str) -> set[str]:
+        with world.db.transaction() as tx:
+            bundle = seal_bundle(
+                tx,
+                world.project_id,
+                world.artifacts,
+                tmp_path / name,
+                signer=KEY,
+                actor_id=world.people.lead,
+                cutoff_seq=seqs.full_text,
+                ledger=world.ledger,
+            )
+        return {r["identity_ref"] for r in _db(bundle).execute("select identity_ref from actor")}
+
+    before = actors("before")
+    # Later, the second question's screening opens with people who had no part before.
+    with world.db.transaction() as tx:
+        newcomers = [
+            tx.execute(
+                "insert into actor (identity_ref, kind) values (%s, 'human') returning id",
+                (f"{role}@example.org:{new_id()}",),
+            ).fetchone()["id"]  # type: ignore[index]
+            for role in ("screener-c", "screener-d", "auditor-2", "adjudicator-2")
+        ]
+        world.screening.open_stage(
+            tx,
+            command_id=new_id(),
+            project_id=world.project_id,
+            actor_id=world.people.lead,
+            spec=StageSpec(
+                protocol_version_id=world.protocol.id,
+                scope_id="combination-vs-single",
+                topic_id="TRIALS",
+                stage="title_abstract",
+                records=tuple(world.records),
+                screeners=(newcomers[0], newcomers[1]),
+                auditor_id=newcomers[2],
+                adjudicators=(newcomers[3],),
+                sentinels=SENTINELS,
+                judge_config_id=world.config.id,
+            ),
+        )
+    after = actors("after")
+    assert after == before
+    assert not any(
+        ref.split(":")[0].endswith(("-c@example.org", "-d@example.org")) for ref in after
+    )
+    assert not any(ref.startswith(("auditor-2", "adjudicator-2")) for ref in after)
