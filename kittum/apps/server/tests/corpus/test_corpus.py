@@ -237,16 +237,36 @@ def test_titles_naming_different_trials_or_follow_ups_are_not_the_same_record(
 
 
 @pytest.mark.parametrize(
+    "title",
+    [
+        "Pembrolizumab versus chemotherapy for PD-L1-positive NSCLC: KEYNOTE 024",
+        "Pembrolizumab versus chemotherapy for PD-L1-positive metastatic NSCLC",
+    ],
+)
+@pytest.mark.parametrize(
     "citation_suffix",
     [" (2016)", " [2016]", " 1540-1550", " 375(19)"],
 )
-def test_citation_numbers_in_a_title_do_not_hide_a_true_duplicate(citation_suffix: str) -> None:
-    title = "Pembrolizumab versus chemotherapy for PD-L1-positive NSCLC: KEYNOTE 024"
+def test_citation_numbers_in_a_title_do_not_hide_a_true_duplicate(
+    title: str, citation_suffix: str
+) -> None:
     pubmed = make_record(title=title, authors=("Reck M",), year=2016)
     embase = make_record(title=title + citation_suffix, authors=("Reck, Martin",), year=2016)
     assert check_same_record(pubmed, embase)[0]
     proposals = generate_link_proposals([pubmed, embase])
     assert [p.relation for p in proposals] == ["same_record"]
+
+
+def test_trial_names_match_regardless_of_case() -> None:
+    title = "Pembrolizumab versus chemotherapy for PD-L1-positive metastatic NSCLC ({})"
+    lower = make_record(title=title.format("keynote 024"), authors=("Reck M",), year=2016)
+    upper = make_record(title=title.format("KEYNOTE 024"), authors=("Reck M",), year=2016)
+    other = make_record(title=title.format("KEYNOTE 042"), authors=("Reck M",), year=2016)
+    assert check_same_record(lower, upper)[0]
+    assert check_same_record(lower, other) == (False, None)
+    assert [set(p.occurrence_ids) for p in generate_link_proposals([lower, upper, other])] == [
+        {lower.occurrence_id, upper.occurrence_id}
+    ]
 
 
 def test_a_record_without_identifiers_never_bridges_conflicting_dois_or_pmids() -> None:

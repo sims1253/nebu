@@ -18,6 +18,8 @@ from kittum.core import Id, new_id
 from kittum.corpus.models import LinkProposal
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from kittum.search import SourceRecord
 
 _ROMAN_TO_NUM = {"i": "1", "ii": "2", "iii": "3", "iv": "4", "v": "5"}
@@ -78,21 +80,25 @@ def normalize_title(title: str) -> str:
     return t
 
 
-# Numbers that tell trials or reports apart: trial names and numbers, phases, follow-up lengths.
+# Numbers a citation adds to a title: bracketed years, volume(issue), volume:page, page ranges.
+# They are written without inner spaces, so "KEYNOTE-024: 5-year" or "phase 1-2" stay intact.
+_CITATION = re.compile(
+    r"[(\[]\s*(?:19|20)\d{2}[a-z]?\s*[)\]]"
+    r"|\b\d+\(\d+(?:[-\u2013]\d+)?\)"
+    r"|\b\d+:\d+(?:[-\u2013]\d+)?\b"
+    r"|\b\d{2,}[-\u2013\u2014]\d{2,}\b"
+)
+# Numbers that tell trials or reports apart: phases, follow-up lengths, numbered studies.
 _MEANINGFUL = (
     ("phase", re.compile(r"\bphase\s*(?P<n>iv|v|i{1,3}|\d+)\b", re.I)),
     ("follow-up", re.compile(r"\b(?P<n>\d+)[\s-]*(?P<w>year|yr|month|week|day)s?\b", re.I)),
     ("follow-up", re.compile(r"\b(?P<w>year|month|week|day)s?\s+(?P<n>\d+)\b", re.I)),
     ("trial", re.compile(r"\b(?P<w>trial|study|id)\s*(?:no\.?|number|#)?\s*(?P<n>\d+)\b", re.I)),
-    ("trial", re.compile(r"\b(?P<w>[A-Za-z]*[A-Z][A-Za-z]*[A-Z][A-Za-z]*)[\s_-]?(?P<n>\d+)\b")),
 )
-# Numbers a citation adds to a title: bracketed years, volume(issue), vol:page, page ranges.
-_CITATION = re.compile(
-    r"[(\[]\s*(?:19|20)\d{2}[a-z]?\s*[)\]]"
-    r"|\b\d+\s*\(\s*\d+(?:\s*[-\u2013]\s*\d+)?\s*\)"
-    r"|\b\d+\s*:\s*\d+"
-    r"|\b\d+\s*[-\u2013\u2014]\s*\d+\b"
-)
+# A trial name is a word with two capitals before a number (KEYNOTE 024, IMpower150). Once
+# either title writes it that way, the word counts as a trial name in any case.
+_TRIAL_NAME = re.compile(r"\b(?P<w>[A-Za-z]*[A-Z][A-Za-z]*[A-Z][A-Za-z]*)[\s_-]?(?P<n>\d+)\b")
+_NAMED_NUMBER = re.compile(r"\b(?P<w>[A-Za-z]+)[\s_-]?(?P<n>\d+)\b")
 _YEAR_LIKE = re.compile(r"(?:19|20)\d{2}")
 
 
@@ -101,24 +107,36 @@ def _number(token: str) -> str:
     return _ROMAN_TO_NUM.get(token) or str(int(token))
 
 
-def extract_distinguishing_tokens(title: str, year: int | None = None) -> tuple[set[str], set[str]]:
+def _without_citations(title: str) -> str:
+    return _CITATION.sub(" ", unicodedata.normalize("NFC", title))
+
+
+def _trial_names(title: str) -> set[str]:
+    return {m["w"].lower() for m in _TRIAL_NAME.finditer(_without_citations(title))}
+
+
+def extract_distinguishing_tokens(
+    title: str, year: int | None = None, trial_names: Iterable[str] = ()
+) -> tuple[set[str], set[str]]:
     """Meaningful numbered tokens of a title, and its other numbers minus citation numbers.
 
-    Meaningful tokens are trial names and numbers (KEYNOTE 024, study 302), phases, and
-    follow-up lengths (5-year, week 24). Bracketed years, the record's own year, page ranges, and
-    volume or issue numbers are incidental and dropped.
+    Citation numbers (bracketed years, page ranges, volume and issue) go first. Meaningful tokens
+    are phases, follow-up lengths (5-year, week 24), and trial numbers (study 302, or a trial
+    name from `trial_names` or written in capitals, such as KEYNOTE 024). The record's own year
+    is dropped from the other numbers.
     """
-    text = unicodedata.normalize("NFC", title)
+    text = _without_citations(title)
+    names = set(trial_names) | _trial_names(text)
     meaningful: set[str] = set()
+
+    def take(m: re.Match[str], kind: str) -> str:
+        word = (m.groupdict().get("w") or "").lower()
+        meaningful.add(f"{kind}:{'year' if word == 'yr' else word} {_number(m['n'])}")
+        return " "
+
     for kind, pattern in _MEANINGFUL:
-
-        def take(m: re.Match[str], kind: str = kind) -> str:
-            word = (m.groupdict().get("w") or "").lower()
-            meaningful.add(f"{kind}:{'year' if word == 'yr' else word} {_number(m['n'])}")
-            return " "
-
-        text = pattern.sub(take, text)
-    text = _CITATION.sub(" ", text)
+        text = pattern.sub(lambda m, kind=kind: take(m, kind), text)
+    text = _NAMED_NUMBER.sub(lambda m: take(m, "trial") if m["w"].lower() in names else m[0], text)
     others = {str(int(n)) for n in re.findall(r"\d+", text)}
     others.discard(str(year))
     return meaningful, others
@@ -132,8 +150,9 @@ def distinguishing_tokens_conflict(
     Meaningful tokens must match exactly. Other numbers must match too, except a year-like
     number only one side has.
     """
-    meaningful_a, others_a = extract_distinguishing_tokens(title_a, year_a)
-    meaningful_b, others_b = extract_distinguishing_tokens(title_b, year_b)
+    names = _trial_names(title_a) | _trial_names(title_b)
+    meaningful_a, others_a = extract_distinguishing_tokens(title_a, year_a, names)
+    meaningful_b, others_b = extract_distinguishing_tokens(title_b, year_b, names)
     if meaningful_a != meaningful_b:
         return True
     one_sided = {n for n in others_a ^ others_b if not _YEAR_LIKE.fullmatch(n)}
