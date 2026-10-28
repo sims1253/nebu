@@ -887,7 +887,7 @@ Done (branch `kittum/wp-16-workbench-design`, then `kittum/wp-15-integration`):
   grouped by their labels: `Enter` accepts once the source was on screen, `1`/`2` pick a path,
   `e` turns a selection on the page into an edit (the first number in it, to confirm in a field,
   then `Enter`), `o` accepts despite a failed check, `a` accepts the agreeing standard fields
-  together. The accepted values, the latest
+  together, each only once its row was on screen for the floor. The accepted values, the latest
   per semantic key, are listed under the runs. A run, its fields, and its accepted values reach
   only a lead who screens nothing or a member with no undecided screening assignment for the
   report (`kittum.app.visible_reports`); anyone else gets no run and a 404.

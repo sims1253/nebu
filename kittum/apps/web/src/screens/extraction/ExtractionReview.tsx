@@ -81,7 +81,10 @@ export function ExtractionScreen({ review }: { review: ExtractionReview }) {
   // one source never counts for another.
   const viewed = useRef(new Map<string, number>());
   const visible = useRef<{ key: string; since: number } | null>(null);
-  const listShownAt = useRef(performance.now());
+  // On-screen time of each row that may be accepted as a group: only rows the reviewer has had
+  // in view for the floor go into a group, with the time they were seen.
+  const rowsSeen = useRef(new Map<string, { ms: number; since: number | null }>());
+  const list = useRef<HTMLDivElement>(null);
   const [nudge, setNudge] = useState(0);
   const rows = useRef(new Map<string, HTMLElement>());
 
@@ -227,17 +230,51 @@ export function ExtractionScreen({ review }: { review: ExtractionReview }) {
     }
   };
 
-  // Agreeing, validated standard fields may be accepted together once the list was on screen.
+  // Agreeing, validated standard fields may be accepted together, each once it was on screen.
   const groupable = review.fields.filter(
     (f) => f.gate === "group_accept" && !fields[f.id]?.accepted,
   );
+  const groupKey = groupable.map((f) => f.id).join(",");
+  useEffect(() => {
+    const root = list.current;
+    if (!root || !groupKey) return;
+    const seen = rowsSeen.current;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const now = performance.now();
+        for (const entry of entries) {
+          const id = (entry.target as HTMLElement).dataset["fieldId"] ?? "";
+          const row = seen.get(id) ?? { ms: 0, since: null };
+          const whole = entry.isIntersecting && entry.intersectionRatio >= 0.99;
+          if (whole && row.since === null) seen.set(id, { ...row, since: now });
+          else if (!whole && row.since !== null)
+            seen.set(id, { ms: row.ms + now - row.since, since: null });
+        }
+      },
+      { root, threshold: [0, 0.99, 1] },
+    );
+    for (const id of groupKey.split(",")) {
+      const el = rows.current.get(id);
+      if (el) observer.observe(el);
+    }
+    return () => observer.disconnect();
+  }, [groupKey]);
+  const rowViewedMs = (id: string) => {
+    const row = rowsSeen.current.get(id);
+    if (!row) return 0;
+    return row.ms + (row.since !== null ? performance.now() - row.since : 0);
+  };
   const acceptGroup = async () => {
     if (!groupable.length || busy) return;
-    const ms = Math.round(performance.now() - listShownAt.current);
-    if (ms < VIEW_MS) {
-      setNotice("Look over the list before accepting it as a group.");
+    const seen = groupable.filter((f) => rowViewedMs(f.id) >= VIEW_MS);
+    if (!seen.length) {
+      setNotice(
+        "None of the agreeing standard fields has been on screen long enough. Scroll to them and look them over first.",
+      );
       return;
     }
+    const ms = Math.round(Math.min(...seen.map((f) => rowViewedMs(f.id))));
+    const unseen = groupable.length - seen.length;
     setBusy(true);
     try {
       const accepted = await run(
@@ -245,7 +282,7 @@ export function ExtractionScreen({ review }: { review: ExtractionReview }) {
           projectId: project.id,
           as: me.actor_id,
           runId: review.run.id,
-          fieldIds: groupable.map((f) => f.id),
+          fieldIds: seen.map((f) => f.id),
           listViewedMs: ms,
         }),
       );
@@ -255,7 +292,9 @@ export function ExtractionScreen({ review }: { review: ExtractionReview }) {
         return next;
       });
       setNotice(
-        `Accepted ${accepted.length} agreeing standard ${accepted.length === 1 ? "field" : "fields"} as a group. A random tenth of them go to a re-check.`,
+        `Accepted ${accepted.length} agreeing standard ${accepted.length === 1 ? "field" : "fields"} as a group. A random tenth of them go to a re-check.${
+          unseen ? ` ${unseen} more ${unseen === 1 ? "has" : "have"} not been on screen yet.` : ""
+        }`,
       );
     } catch (e) {
       setNotice(e instanceof WorkbenchError ? e.message : "The group was not accepted.");
@@ -362,7 +401,7 @@ export function ExtractionScreen({ review }: { review: ExtractionReview }) {
             {done} of {review.fields.length} accepted
           </span>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto" data-testid="fields">
+        <div ref={list} className="min-h-0 flex-1 overflow-y-auto" data-testid="fields">
           <div className="narrow sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_7.5rem_8.5rem_5.5rem] gap-3 border-b border-rule bg-sheet px-5 py-1.5 text-2xs text-ink-3">
             <span>Field</span>
             <span className="text-right">Value</span>
@@ -509,6 +548,7 @@ function FieldRow({
       role="row"
       aria-selected={selected}
       data-testid="field-row"
+      data-field-id={field.id}
       onClick={onSelect}
       className={`grid grid-cols-[minmax(0,1fr)_7.5rem_8.5rem_5.5rem] items-center gap-3 px-5 py-[5px] text-sm ${selected ? "evidence-item" : ""}`}
     >

@@ -248,6 +248,29 @@ const DEFS: ReadonlyArray<FieldDef> = [
     llm: [null, null, "qol_missing"],
     status: { janus: "missing", llm: "missing" },
   },
+  // Standard fields both paths agree on, last in the list: a group accept takes them once seen.
+  {
+    endpoint: "Adverse events, any grade",
+    arm: FOLFOX,
+    timepoint: FINAL,
+    quantity: "events",
+    unit: "patients",
+    policy: "standard",
+    description: "Patients with any adverse event",
+    janus: ["79", "patients", "ae35_folfox"],
+    llm: ["79", "patients", "ae35_folfox"],
+  },
+  {
+    endpoint: "Adverse events, any grade",
+    arm: ASC,
+    timepoint: FINAL,
+    quantity: "events",
+    unit: "patients",
+    policy: "standard",
+    description: "Patients with any adverse event",
+    janus: ["78", "patients", "ae35_asc"],
+    llm: ["78", "patients", "ae35_asc"],
+  },
 ];
 
 const VALIDATORS: Record<string, ReadonlyArray<string>> = {

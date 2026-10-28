@@ -229,11 +229,13 @@ export const makeMockWorkbench = (
   readonly decisions: ReadonlyArray<DecisionRecord>;
   /** Every acceptance, with the reviewer's edit and its span when there was one. */
   readonly acceptances: ReadonlyArray<Parameters<Workbench["accept"]>[0]>;
+  readonly groupAccepts: ReadonlyArray<Parameters<Workbench["groupAccept"]>[0]>;
 } => {
   const decisions: DecisionRecord[] = [];
   const state = new Map<string, Item>();
   const accepted = new Map<string, "janus" | "llm">();
   const acceptances: Array<Parameters<Workbench["accept"]>[0]> = [];
+  const groupAccepts: Array<Parameters<Workbench["groupAccept"]>[0]> = [];
   let tokens = 0;
   const etag = () => `e${++tokens}`;
   const itemOf = (id: string): Item =>
@@ -271,6 +273,7 @@ export const makeMockWorkbench = (
     live: false,
     decisions,
     acceptances,
+    groupAccepts,
 
     projects: () => call("other", "projects", null, () => PROJECTS),
 
@@ -555,7 +558,33 @@ export const makeMockWorkbench = (
           event_seq: acceptances.length,
         };
       }),
-    groupAccept: unavailable,
+    groupAccept: (request) =>
+      call("decide", "groupAccept", request, () => {
+        groupAccepts.push(request);
+        return request.fieldIds.map((fieldId, i) => {
+          const field = extractionFields(anchorId).find((f) => f.id === fieldId);
+          if (field?.gate !== "group_accept") throw new Error(`${fieldId} is no group field`);
+          accepted.set(fieldId, "janus");
+          const [janus] = field.proposals;
+          return {
+            id: `group-${groupAccepts.length}-${i}`,
+            field_id: fieldId,
+            run_id: extractionRun.id,
+            key: field.key,
+            path: "janus" as const,
+            edited: false,
+            group: true,
+            value: janus?.value ?? null,
+            unit: janus?.unit ?? null,
+            anchor_id: janus?.anchor_ids[0] ?? "",
+            reviewer_id: request.as,
+            source_viewed_ms: request.listViewedMs,
+            accepted_at: new Date().toISOString(),
+            recheck: false,
+            event_seq: 0,
+          };
+        });
+      }),
     assertions: () => call("other", "assertions", null, () => []),
   };
 };

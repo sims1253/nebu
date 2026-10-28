@@ -24,7 +24,7 @@ describe("extraction review", () => {
       },
     });
     unmount = app.unmount;
-    await expect.element(page.getByText("1 of 19 accepted")).toBeVisible();
+    await expect.element(page.getByText("1 of 21 accepted")).toBeVisible();
 
     await press("Tab"); // patients randomised to ASC alone
     expect(selected()).toContain("Patients randomised");
@@ -35,7 +35,7 @@ describe("extraction review", () => {
     await expect.element(page.getByTestId("source-highlight").first()).toBeVisible();
     await pause(VIEW_MS + 200);
     await press("Enter");
-    await expect.element(page.getByText("2 of 19 accepted")).toBeVisible();
+    await expect.element(page.getByText("2 of 21 accepted")).toBeVisible();
     expect(accepted).toHaveLength(1);
     expect(accepted[0]?.sourceViewedMs).toBeGreaterThanOrEqual(VIEW_MS);
 
@@ -48,14 +48,43 @@ describe("extraction review", () => {
     await press("1");
     await pause(VIEW_MS + 200);
     await press("Enter");
-    await expect.element(page.getByText("3 of 19 accepted")).toBeVisible();
+    await expect.element(page.getByText("3 of 21 accepted")).toBeVisible();
     expect(accepted.at(-1)).toEqual(expect.objectContaining({ path: "janus" }));
+  });
+
+  test("accepts as a group only the agreeing standard fields that were on screen, for as long as they were", async () => {
+    const app = mount(RUN);
+    unmount = app.unmount;
+    await expect.element(page.getByText("1 of 21 accepted")).toBeVisible();
+    // The two agreeing standard fields are last in the list, below the fold: a group accept
+    // now would take values the reviewer never saw, however long the screen has been open.
+    await pause(VIEW_MS + 300);
+    await press("a");
+    await expect.element(notice()).toMatchTextContent("has been on screen long enough");
+    expect(app.workbench.groupAccepts).toHaveLength(0);
+
+    const list = document.querySelector<HTMLElement>("[data-testid=fields]")!;
+    list.scrollTop = list.scrollHeight;
+    const rows = () =>
+      [...document.querySelectorAll<HTMLElement>("[data-testid=field-row]")].filter((r) =>
+        r.textContent?.includes("Patients with any adverse event"),
+      );
+    await expect.poll(() => rows().length).toBe(2);
+    const shownAt = performance.now();
+    await pause(VIEW_MS + 300);
+    await press("a");
+    await expect.element(page.getByText("3 of 21 accepted")).toBeVisible();
+    const [group] = app.workbench.groupAccepts;
+    expect(group?.fieldIds).toEqual(rows().map((r) => r.dataset["fieldId"]));
+    // The time they were on screen, not the time since the screen opened.
+    expect(group?.listViewedMs).toBeGreaterThanOrEqual(VIEW_MS);
+    expect(group?.listViewedMs).toBeLessThanOrEqual(performance.now() - shownAt + 50);
   });
 
   test("does not count time before the page image has drawn", async () => {
     const app = mount(RUN, { latency: { page: 2500 } });
     unmount = app.unmount;
-    await expect.element(page.getByText("1 of 19 accepted")).toBeVisible();
+    await expect.element(page.getByText("1 of 21 accepted")).toBeVisible();
     await press("Tab"); // patients randomised to ASC alone, on page 6
     await pause(VIEW_MS + 300);
     expect(document.querySelector("[data-page='6'] img")).toBeNull();
@@ -69,13 +98,13 @@ describe("extraction review", () => {
       .toBe(true);
     await pause(VIEW_MS + 200);
     await press("Enter");
-    await expect.element(page.getByText("2 of 19 accepted")).toBeVisible();
+    await expect.element(page.getByText("2 of 21 accepted")).toBeVisible();
   });
 
   test("never accepts a value whose page image failed to load", async () => {
     const app = mount(RUN, { brokenPages: [6] });
     unmount = app.unmount;
-    await expect.element(page.getByText("1 of 19 accepted")).toBeVisible();
+    await expect.element(page.getByText("1 of 21 accepted")).toBeVisible();
     await press("Tab");
     await expect.element(page.getByText("Page 6 could not load.")).toBeVisible();
     await pause(VIEW_MS + 300);
@@ -87,7 +116,7 @@ describe("extraction review", () => {
   test("time on one path's source does not count for the other path's", async () => {
     const app = mount(RUN);
     unmount = app.unmount;
-    await expect.element(page.getByText("1 of 19 accepted")).toBeVisible();
+    await expect.element(page.getByText("1 of 21 accepted")).toBeVisible();
     for (let i = 0; i < 8; i++) await press("Tab");
     expect(selected()).toContain("Adjusted hazard ratio");
     await press("1"); // Janus: 0.69 from the primary analysis
@@ -99,7 +128,7 @@ describe("extraction review", () => {
 
     await pause(VIEW_MS + 300);
     await press("Enter");
-    await expect.element(page.getByText("2 of 19 accepted")).toBeVisible();
+    await expect.element(page.getByText("2 of 21 accepted")).toBeVisible();
     expect(app.workbench.acceptances.at(-1)).toEqual(
       expect.objectContaining({ fieldId: "field-09", path: "llm", edit: null }),
     );
@@ -108,7 +137,7 @@ describe("extraction review", () => {
   test("accepting an edited value keeps the edit and the span it came from", async () => {
     const app = mount(RUN);
     unmount = app.unmount;
-    await expect.element(page.getByText("1 of 19 accepted")).toBeVisible();
+    await expect.element(page.getByText("1 of 21 accepted")).toBeVisible();
     for (let i = 0; i < 3; i++) await press("Tab");
     expect(selected()).toContain("Median follow-up");
 
@@ -125,7 +154,7 @@ describe("extraction review", () => {
     await expect.element(notice()).toMatchTextContent("Edited to “21·7”");
     await pause(VIEW_MS + 300);
     await press("Enter");
-    await expect.element(page.getByText("2 of 19 accepted")).toBeVisible();
+    await expect.element(page.getByText("2 of 21 accepted")).toBeVisible();
     const accepted = app.workbench.acceptances.at(-1);
     expect(accepted?.edit).toEqual({
       value: "21·7",
@@ -142,7 +171,7 @@ describe("extraction review", () => {
     // `expect.poll` and `expect.element` give up after 1 s by default; under a full
     // `pnpm check` the page images and the scroll can take longer than that, so the waits get room.
     const settle = { timeout: 15_000 };
-    await expect.element(page.getByText("1 of 19 accepted"), settle).toBeVisible();
+    await expect.element(page.getByText("1 of 21 accepted"), settle).toBeVisible();
     await press("Tab"); // "randomly assigned to ASC alone (n=81)" breaks over two lines
     await expect
       .poll(
@@ -187,7 +216,7 @@ describe("extraction review", () => {
     first!.scrollIntoView({ block: "center" });
     await pause(VIEW_MS + 300);
     await press("Enter");
-    await expect.element(page.getByText("2 of 19 accepted"), settle).toBeVisible();
+    await expect.element(page.getByText("2 of 21 accepted"), settle).toBeVisible();
   });
 });
 
