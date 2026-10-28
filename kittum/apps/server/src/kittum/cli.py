@@ -19,6 +19,8 @@ def _verify(bundle: Path, public_key: Path | None) -> int:
     report = verify_bundle(bundle, trusted_key=trusted)
     for problem in report.problems:
         print(f"FAIL {problem}")
+    for note in report.notes:
+        print(f"NOTE {note}")
     if report.key_id:
         pinned = "trusted" if report.key_pinned else "NOT PINNED, compare it with the sender's"
         print(f"key {report.key_id} ({pinned})")

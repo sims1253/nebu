@@ -203,9 +203,10 @@ def register_exporter(exporter: Exporter) -> Exporter:
     return EXPORTERS.register(exporter)
 
 
-type BundleCheck = Callable[[Path, list[AuditEvent], Mapping[str, str], list[str]], None]
+type BundleCheck = Callable[[Path, list[AuditEvent], Mapping[str, str], list[str], list[str]], None]
 """An offline check of files a module adds: (bundle root, the verified ledger events, the
-manifest's files, problems to append to). It runs only once the chain verifies."""
+manifest's files, problems to append to, notes to append to). A note names what the check could
+not check, without failing the bundle. It runs only once the chain verifies."""
 
 _CHECKS: list[BundleCheck] = []
 
@@ -352,6 +353,8 @@ class BundleReport(Record):
     """False when the bundle was checked only against the key it carries itself."""
     cutoff_seq: int | None = None
     problems: tuple[str, ...] = ()
+    notes: tuple[str, ...] = ()
+    """What a check could not check, such as a column no ledger event carries."""
 
 
 def verify_bundle(path: Path, *, trusted_key: VerifyKey | None = None) -> BundleReport:
@@ -362,9 +365,12 @@ def verify_bundle(path: Path, *, trusted_key: VerifyKey | None = None) -> Bundle
     not pinned. Compare `key_id` with the fingerprint the sender published.
     """
     problems: list[str] = []
+    notes: list[str] = []
 
     def report(**extra: Any) -> BundleReport:
-        return BundleReport(path=path, ok=not problems, problems=tuple(problems), **extra)
+        return BundleReport(
+            path=path, ok=not problems, problems=tuple(problems), notes=tuple(notes), **extra
+        )
 
     try:
         manifest = json.loads((path / MANIFEST_NAME).read_text())
@@ -426,7 +432,7 @@ def verify_bundle(path: Path, *, trusted_key: VerifyKey | None = None) -> Bundle
         problems.append(f"cannot open {SQLITE_NAME}: {e}")
         return report(**result)
     try:
-        _verify_database(path, db, project_id, cutoff_seq, checkpoint, key, files, problems)
+        _verify_database(path, db, project_id, cutoff_seq, checkpoint, key, files, problems, notes)
     except (sqlite3.Error, ValueError) as e:
         problems.append(f"{SQLITE_NAME} is malformed: {e}")
     finally:
@@ -458,6 +464,7 @@ def _verify_database(
     key: VerifyKey,
     files: Mapping[str, str],
     problems: list[str],
+    notes: list[str],
 ) -> None:
     others = [p for p in db.project_ids() if p != project_id]
     if others:
@@ -472,7 +479,7 @@ def _verify_database(
         )
     else:
         for check in _CHECKS:
-            check(root, list(events), files, problems)
+            check(root, list(events), files, problems, notes)
     stored = db.checkpoints(NO_TX, project_id)
     if checkpoint not in stored:
         problems.append("the manifest's checkpoint is not in the ledger file")

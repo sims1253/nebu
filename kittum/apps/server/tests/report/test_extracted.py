@@ -13,7 +13,7 @@ file says something the ledger does not fails, even with every hash and the sign
 import csv
 import io
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 import yaml
@@ -151,21 +151,27 @@ def test_accepted_values_download_as_csv_and_json_and_verify_against_the_ledger(
         for part in (c["request"], c["response"]):
             assert (sealed.path / "artifacts" / part["sha256"]).is_file()
     assert main(["verify", str(sealed.path)]) == 0
-    capsys.readouterr()
+    # The reviewer joined this project without a ledger event naming them, so their name is the
+    # one column verify cannot check; it says so without failing the bundle.
+    assert (
+        f"NOTE {VALUES}.json: accepted_by of actor {env.reviewer} cannot be checked"
+        in capsys.readouterr().out
+    )
 
     # Every forged file below is sealed into a bundle whose hashes and signature all check out;
     # `kittum verify` must still catch that the file disagrees with the ledger.
     honest = CORE_RENDERERS["extraction"]
     forgeries = 0
 
-    def verify_forged(forge: Callable[[str, bytes], bytes]) -> str:
+    def verify_forged(forge: Callable[[str, bytes], bytes | None]) -> str:
         nonlocal forgeries
         forgeries += 1
 
         def forged(review: Review, scope_id: str | None) -> list[RenderedFile]:
             return [
-                f.model_copy(update={"data": forge(f.path, f.data)})
+                f.model_copy(update={"data": data})
                 for f in honest(review, scope_id)
+                if (data := forge(f.path, f.data)) is not None
             ]
 
         monkeypatch.setitem(CORE_RENDERERS, "extraction", forged)
@@ -217,3 +223,47 @@ def test_accepted_values_download_as_csv_and_json_and_verify_against_the_ledger(
     )
     assert f"FAIL {VALUES}.csv: accepted_by of " in out
     assert f"FAIL {VALUES}.json" not in out
+
+    def json_rows(change: Callable[[list[dict[str, Any]]], None]) -> Callable[[str, bytes], bytes]:
+        """A forgery of the JSON's rows, leaving the CSV as rendered."""
+
+        def forge(path: str, data: bytes) -> bytes:
+            if not path.endswith(".json"):
+                return data
+            document = json.loads(data)
+            change(document["values"])
+            return json.dumps(document).encode()
+
+        return forge
+
+    # A forged row placed before the honest one with the same acceptance ID.
+    def duplicate(rows: list[dict[str, Any]]) -> None:
+        rows.insert(0, {**rows[0], "value": "53" if rows[0]["value"] == "52" else "52"})
+
+    out = verify_forged(json_rows(duplicate))
+    assert "more than once" in out and "has value " in out
+
+    # Either file left out of a bundle whose ledger accepted values.
+    for left_out in ("json", "csv"):
+        out = verify_forged(
+            lambda path, data, left_out=left_out: None if path.endswith(left_out) else data
+        )
+        assert f"FAIL {VALUES}.{left_out} is missing, though the ledger accepted" in out
+
+    # A row with a column no value has, another policy, a moved time, and no time at all.
+    def tampered(rows: list[dict[str, Any]]) -> None:
+        rows[0]["confidence"] = "high"
+        rows[0]["policy"] = "descriptive"
+        rows[1]["accepted_at"] = "2026-10-29T09:00:01Z"
+
+    out = verify_forged(json_rows(tampered))
+    assert "has columns no value has: confidence" in out
+    assert "has policy 'descriptive', ledger event" in out
+    assert "has accepted_at '2026-10-29T09:00:01Z', ledger event" in out
+
+    def timeless(rows: list[dict[str, Any]]) -> None:
+        for row in rows:
+            row["accepted_at"] = "yesterday"
+
+    out = verify_forged(json_rows(timeless))
+    assert out.count("has accepted_at 'yesterday', ledger event") == 2
