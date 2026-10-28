@@ -158,3 +158,29 @@ def test_targets_render_download_and_seal_over_http(
     assert db.execute("select index_hash from report_artifact").fetchall() == [
         (rendered["sha256"],)
     ]
+
+    # A fault of the server is not the caller's mistake: an artifact that comes back corrupt from
+    # the store fails the seal with a 500, not a 400 that blames the request.
+    raw = world.executions[0].raw_artifact_hashes[0]
+    store = world.artifacts
+
+    class Corrupting:
+        def put(self, data: bytes) -> str:
+            return store.put(data)
+
+        def get(self, sha256: str) -> bytes:
+            return b"bit rot" if sha256 == raw else store.get(sha256)
+
+        def exists(self, sha256: str) -> bool:
+            return store.exists(sha256)
+
+    context = client.app.state.context  # type: ignore[attr-defined]
+    faulty = AppContext(
+        settings=context.settings, db=world.db, artifacts=Corrupting(), ledger=world.ledger
+    )
+    with TestClient(create_app(faulty), raise_server_exceptions=False) as broken:
+        failed = broken.post(f"{base}/bundle", json={"actor_id": lead})
+        assert failed.status_code == 500, failed.text
+        # The caller's mistakes are still 400s.
+        unknown = broken.post(f"{base}/targets/nothing/render", json={"actor_id": lead})
+        assert unknown.status_code == 400 and "unknown report target" in unknown.json()["detail"]

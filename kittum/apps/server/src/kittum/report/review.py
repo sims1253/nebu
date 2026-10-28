@@ -20,7 +20,7 @@ from datetime import datetime
 from itertools import combinations
 from typing import TYPE_CHECKING, Any, Literal, cast
 
-from kittum.core import Id, NotFoundError, Record
+from kittum.core import Id, KittumError, NotFoundError, Record
 from kittum.ledger import PostgresLedger
 from kittum.protocol import (
     ReviewProtocol,
@@ -332,6 +332,12 @@ class Review(Record):
         return {r.occurrence_id: (run, r) for run in self.searches for r in run.execution.records}
 
 
+class ReportRequestError(KittumError, ValueError):
+    """The request cannot be answered as asked: an unknown target, the bundle asked to render, a
+    profile target for a review without that profile, or a cutoff outside the ledger. The
+    caller's mistake, unlike a fault of the server."""
+
+
 def head_seq(tx: Tx, project_id: Id) -> int:
     row = tx.execute(
         "select coalesce(max(seq), 0) as seq from audit_event where project_id = %s", (project_id,)
@@ -358,7 +364,7 @@ def load_review(
     head = head_seq(tx, project_id)
     cutoff = head if cutoff_seq is None else cutoff_seq
     if not 0 <= cutoff <= head:
-        raise ValueError(f"cutoff {cutoff} is outside the ledger (head {head})")
+        raise ReportRequestError(f"cutoff {cutoff} is outside the ledger (head {head})")
     events = ledger.events(tx, project_id, through_seq=cutoff)
     seq_of = {e.event_id: e.seq for e in events}
 

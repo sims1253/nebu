@@ -25,6 +25,7 @@ from kittum.report import (
     CORE_TARGETS,
     Artifact,
     NotTheLead,
+    ReportRequestError,
     RightsProfile,
     head_seq,
     record_render,
@@ -103,7 +104,7 @@ def _errors() -> Generator[None]:
         raise HTTPException(status_code=403, detail=str(e)) from e
     except NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-    except ValueError as e:
+    except ReportRequestError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 

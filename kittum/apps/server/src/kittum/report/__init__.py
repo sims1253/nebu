@@ -67,6 +67,7 @@ from kittum.report.review import (
     ItemResult,
     JudgeInfo,
     Link,
+    ReportRequestError,
     Review,
     SearchRun,
     StageResult,
@@ -132,8 +133,8 @@ def _renderer(target: Target) -> Renderer:
     if target in CORE_RENDERERS:
         return CORE_RENDERERS[target]
     if target == "bundle":
-        raise ValueError("the bundle is sealed with seal_bundle, not rendered")
-    raise ValueError(f"unknown report target {target!r}")
+        raise ReportRequestError("the bundle is sealed with seal_bundle, not rendered")
+    raise ReportRequestError(f"unknown report target {target!r}")
 
 
 def render_files(review: Review, target: Target, scope_id: str | None = None) -> list[RenderedFile]:
@@ -141,7 +142,7 @@ def render_files(review: Review, target: Target, scope_id: str | None = None) ->
     renderer = _renderer(target)
     profile = target.partition(".")[0] if target in _profile_targets else None
     if profile is not None and review.document.profile != profile:
-        raise ValueError(f"target {target!r} needs a protocol with profile {profile!r}")
+        raise ReportRequestError(f"target {target!r} needs a protocol with profile {profile!r}")
     return list(renderer(review, scope_id))
 
 
@@ -418,6 +419,7 @@ __all__ = [
     "ReasonCount",
     "RenderedFile",
     "Renderer",
+    "ReportRequestError",
     "Review",
     "RightsProfile",
     "SearchRun",
