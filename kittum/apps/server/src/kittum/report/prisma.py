@@ -367,7 +367,11 @@ def _arrow(x1: int, y1: int, x2: int, y2: int) -> str:
 def svg(f: PrismaFlow, title: str) -> str:
     """The flow as a standalone SVG."""
     left, right = _BAND + 20, _BAND + 20 + _W + _GAP
-    source_lines = [f"  {s.name}: n = {s.records}" for s in f.identified_by_source]
+
+    def sources(*kinds: str) -> list[str]:
+        """The sources of a PRISMA 2020 category, each under it with its own count."""
+        return [f"  {s.name}: n = {s.records}" for s in f.identified_by_source if s.kind in kinds]
+
     reasons = [f"  {r.criterion_id}: n = {r.reports}" for r in f.exclusion_reasons]
     rows: list[tuple[str, list[str], list[str]]] = [
         (
@@ -375,9 +379,11 @@ def svg(f: PrismaFlow, title: str) -> str:
             [
                 "Records identified from:",
                 f"Databases: n = {f.identified_from_databases}",
+                *sources("bibliographic"),
                 f"Registers: n = {f.identified_from_registers}",
+                *sources("registry"),
                 f"Other sources: n = {f.identified_from_other_sources}",
-                *source_lines,
+                *sources("website", "other"),
             ],
             [
                 "Records removed before screening:",

@@ -166,6 +166,10 @@ def test_prisma_flow_reconciles_by_hand_with_screening_and_the_corpus(
         "Duplicate records removed: n = 2",
     ):
         assert line in texts, line
+    # Each source sits under its PRISMA 2020 category: all three are databases here.
+    at = texts.index
+    assert at("Databases: n = 35") < at("  MEDLINE: n = 24") < at("Registers: n = 0")
+    assert at("Databases: n = 35") < at("  Embase: n = 5") < at("Other sources: n = 0")
     # No box claims what cannot happen: the AI never marks a record ineligible on its own.
     assert not any("automation" in (t or "") for t in texts)
     # Legible at the width a report page or the Reports screen gives it: shown 870 px wide, the
