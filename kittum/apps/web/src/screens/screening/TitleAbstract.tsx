@@ -246,7 +246,9 @@ function RecordView({
           ))}
         </div>
       )}
-      <p className="mt-8 ml-[calc(8.5rem+1.5rem)] flex gap-5 text-2xs text-ink-3">
+      <p
+        className={`mt-8 flex gap-5 text-2xs text-ink-3 ${item.text ? "ml-[calc(8.5rem+1.5rem)]" : ""}`}
+      >
         <span>
           <span className="term">Underlined</span>: protocol term
         </span>

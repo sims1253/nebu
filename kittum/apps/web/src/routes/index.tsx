@@ -57,7 +57,11 @@ function ServerStatus() {
   const [status, setStatus] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
-    runApi((api) => api.getHealth(undefined)).then(
+    // A proxy to a server that is not running can hang; give up after three seconds.
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("timeout")), 3000),
+    );
+    Promise.race([runApi((api) => api.getHealth(undefined)), timeout]).then(
       (health) => live && setStatus(`Server ${health.status}, version ${health.version}.`),
       () => live && setStatus("Server not reachable. The screens show recorded example data."),
     );

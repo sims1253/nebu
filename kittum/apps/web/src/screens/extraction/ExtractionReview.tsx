@@ -227,7 +227,7 @@ function Review({ review }: { review: ExtractionReview }) {
   const done = review.fields.filter((f) => fields[f.id]?.accepted).length;
 
   return (
-    <div className="grid h-full grid-cols-[minmax(560px,46%)_minmax(0,1fr)]">
+    <div className="grid h-full grid-cols-[minmax(600px,47%)_minmax(0,1fr)]">
       <section
         className="flex min-h-0 flex-col border-r border-rule-strong bg-sheet"
         aria-label="Extracted fields"
@@ -246,10 +246,9 @@ function Review({ review }: { review: ExtractionReview }) {
           </span>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto" data-testid="fields">
-          <div className="narrow sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_6.5rem_5.5rem_8.5rem_5.5rem] gap-3 border-b border-rule bg-sheet px-5 py-1.5 text-2xs text-ink-3">
+          <div className="narrow sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_7.5rem_8.5rem_5.5rem] gap-3 border-b border-rule bg-sheet px-5 py-1.5 text-2xs text-ink-3">
             <span>Field</span>
             <span className="text-right">Value</span>
-            <span>Status</span>
             <span>Paths</span>
             <span>Review</span>
           </div>
@@ -354,7 +353,7 @@ function FieldRow({
       aria-selected={selected}
       data-testid="field-row"
       onClick={onSelect}
-      className={`grid grid-cols-[minmax(0,1fr)_6.5rem_5.5rem_8.5rem_5.5rem] items-center gap-3 px-5 py-[5px] text-sm ${selected ? "evidence-item" : ""}`}
+      className={`grid grid-cols-[minmax(0,1fr)_7.5rem_8.5rem_5.5rem] items-center gap-3 px-5 py-[5px] text-sm ${selected ? "evidence-item" : ""}`}
     >
       <span className="truncate">
         {field.spec.description}
@@ -363,12 +362,21 @@ function FieldRow({
         ) : null}
       </span>
       <span className="text-right whitespace-nowrap">
-        {value ?? <span className="text-ink-3">empty</span>}
+        {shown && shown.status !== "extracted" && value ? (
+          <span className="mr-1.5 inline-flex align-middle">
+            <Mark term={PROPOSAL_STATUS[shown.status]} />
+          </span>
+        ) : null}
+        {value ??
+          (shown ? (
+            <Status term={PROPOSAL_STATUS[shown.status]} />
+          ) : (
+            <span className="text-ink-3">Empty</span>
+          ))}
         {value && unit && unit !== "patients" ? (
           <span className="ml-1 text-ink-3">{unit}</span>
         ) : null}
       </span>
-      <span>{shown ? <Status term={PROPOSAL_STATUS[shown.status]} /> : null}</span>
       <span className="narrow flex items-center gap-1.5 text-xs whitespace-nowrap">
         {status === "agree" ? (
           <span className="text-ink-2">Both agree</span>
@@ -382,6 +390,8 @@ function FieldRow({
             >
               <Key k={String(i + 1)} />
               {p.value}
+              {/* Same number, different unit: the unit is the disagreement. */}
+              {field.proposals.some((q) => q.unit !== p.unit) && p.unit ? ` ${p.unit}` : ""}
             </span>
           ))
         )}

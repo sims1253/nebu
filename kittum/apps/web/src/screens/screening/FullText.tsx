@@ -417,11 +417,14 @@ function Mentions({
   );
 }
 
+// Context around a mention, cut at a word boundary.
 const tail = (text: string) => {
   const flat = text.replace(/\s+/g, " ");
-  return flat.length > 28 ? `…${flat.slice(-28)}` : flat;
+  if (flat.length <= 28) return flat;
+  return `…${flat.slice(-28).replace(/^\S*\s/, "")}`;
 };
 const head = (text: string) => {
   const flat = text.replace(/\s+/g, " ");
-  return flat.length > 28 ? `${flat.slice(0, 28)}…` : flat;
+  if (flat.length <= 28) return flat;
+  return `${flat.slice(0, 28).replace(/\s\S*$/, "")}…`;
 };
