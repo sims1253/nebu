@@ -51,9 +51,10 @@ Numbers use `.` as the decimal separator and no grouping by default. Set
 grouping. `strip_prefix` and `strip_suffix` require and remove literal affixes such as `$` or
 `kg`. Percentage values remove an optional `%` and retain percentage units: `12.5%` becomes
 `"12.5"`, not `"0.125"`. Decimal and percentage outputs are strings to preserve precision.
-Numbers read the typeset minus signs U+2212, U+FE63, and U+FF0D as `-`. A short label in front of
-a number, such as `RR:` in `RR:1.124 (0.978, 1.290)` or `N =` in `N = 355`, is not part of the
-value. Text values keep these as printed.
+Numbers read the typeset minus signs U+2212, U+FE63, and U+FF0D as `-`. An estimator or count
+label in front of a number (`RR`, `OR`, `HR`, `MD`, `SMD`, `RD`, `IRR`, `N`, `n`, `P`, or `p`,
+followed by `:` or `=`, as in `RR:1.124 (0.978, 1.290)` or `N = 355`) is not part of the value.
+Any other prefix, such as a unit, needs `strip_prefix`. Text values keep all of these as printed.
 Integers are JSON numbers within the exact JavaScript integer range. Dates become ISO dates;
 the input must be accepted by Python's ISO date parser. Booleans accept true/false, yes/no, or 1/0.
 Text trims surrounding whitespace. Compound cells can declare `source_shape` and `component`
@@ -62,10 +63,11 @@ A declared affix around the whole compound cell is removed before the shape is m
 `count_percentage` cell that prints only a count (`0`) yields the count; its percentage is
 `missing`, not invented.
 
-A value printed as `-`, an en or em dash, `NA`, `N/A`, `NR`, `NE`, or `not reported` (any case)
-marks a value that was not reported: the field is `missing` with a message naming the mark, not
-`invalid`. Set `not_reported` on a field to replace that list, or to `[]` to read every value as
-printed.
+In a number or compound cell, a value printed as `-`, an en or em dash, `NA`, `N/A`, `NR`, `NE`,
+or `not reported` (any case) marks a value that was not reported: the field is `missing` with a
+message naming the mark, not `invalid`. Text fields have no such marks unless they declare them,
+because `NA` can be a code. Set `not_reported` on a field to replace the list, or to `[]` to read
+every value as printed.
 
 ## Records
 

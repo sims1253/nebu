@@ -11,7 +11,10 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import pymupdf
+import pytest
 
+from janus.comparison.content import PageContent, TableCell, TableStructure
+from janus.comparison.models import DocumentEvidence
 from janus.comparison.reader import TextLayerDocumentReader
 from janus.extraction import (
     ExtractionSpecification,
@@ -307,3 +310,107 @@ def test_the_same_document_and_specification_give_byte_identical_results(tmp_pat
         specification_hash(first)
         == hashlib.sha256(canonical_json(first.model_dump(mode="json"))).hexdigest()
     )
+
+
+def evidence_with(rows: list[list[str]], sections: list[str | None] | None = None):
+    """One table as a reader hands it over: row 0 is the header row, "" a cell without text,
+    `sections` the group the reader stamped on each row."""
+    cells = [
+        TableCell(text=text, row=r, column=c, section=sections[r] if sections else None)
+        for r, row in enumerate(rows)
+        for c, text in enumerate(row)
+    ]
+    table = TableStructure(rows=len(rows), columns=len(rows[0]), cells=cells, header_row=True)
+    return DocumentEvidence(
+        document_id="table",
+        document_hash="hash",
+        reader_name="test",
+        pages=[PageContent(page_number=0, tables=[table])],
+    )
+
+
+# Tables that only look like trial tables keep the reading they had before trial layouts were
+# understood: a text code is not a not-reported mark, a currency row is not a header, a reader's
+# section is not merged with an inferred one, a year under a spanning header names its column,
+# and a unit is not an estimator label.
+@pytest.mark.parametrize(
+    ("rows", "sections", "field", "expected"),
+    [
+        pytest.param(
+            [["Region", "NA"], ["Code", "NE"]],
+            None,
+            {"type": "text", "locate": {"strategy": "table_label", "labels": ["Region"]}},
+            ("extracted", "NA"),
+            id="text-field-keeps-NA",
+        ),
+        pytest.param(
+            [
+                ["Item", "Description", "Amount"],
+                ["", "Amount due", "$10.00"],
+                ["Total", "20", "30"],
+            ],
+            None,
+            table(["Total"], column_labels=["Amount"]),
+            ("extracted", 30),
+            id="currency-row-is-not-a-header",
+        ),
+        pytest.param(
+            [
+                ["Outcome", "Value"],
+                ["Primary", "N = 51"],
+                ["Deaths", "1"],
+                ["Secondary", ""],
+                ["Deaths", "2"],
+            ],
+            [None, None, "Primary", None, "Secondary"],
+            table(["Deaths"], section_labels=["Primary"]),
+            ("extracted", 1),
+            id="reader-section-ends-inferred-group",
+        ),
+        pytest.param(
+            [["Outcome", "Value"], ["Primary", "N = 51"], ["Deaths", "1"], ["Deaths", "2"]],
+            [None, None, "Primary", "Secondary"],
+            table(["Deaths"], section_labels=["Primary"]),
+            ("extracted", 1),
+            id="reader-section-is-never-merged-with-inferred-group",
+        ),
+        pytest.param(
+            [
+                ["Outcome", "Value"],
+                ["Primary", "N = 51"],
+                ["Deaths", "1"],
+                ["Adverse events", ""],
+                ["Deaths", "2"],
+            ],
+            None,
+            table(["Deaths"], section_labels=["Primary"]),
+            ("extracted", 1),
+            id="label-only-row-ends-inferred-group",
+        ),
+        pytest.param(
+            [
+                ["Metric", "Revenue", "", "Costs", ""],
+                ["", "2023", "2024", "2023", "2024"],
+                ["Total", "10", "20", "30", "40"],
+            ],
+            None,
+            table(["Total"], column_labels=["Revenue 2024"]),
+            ("extracted", 20),
+            id="years-under-spans-name-columns",
+        ),
+        pytest.param(
+            [["Weight", "kg:12 (34%)"]],
+            None,
+            table(["Weight"], source_shape="count_percentage", component="count"),
+            ("invalid", None),
+            id="unit-is-not-an-estimator-label",
+        ),
+    ],
+)
+def test_tables_that_only_look_like_trial_tables_keep_their_reading(
+    rows, sections, field, expected
+):
+    spec = ExtractionSpecification.model_validate({"name": "Table", "fields": {"value": field}})
+    result = extract_evidence(evidence_with(rows, sections), spec)
+    (only,) = result.fields
+    assert (only.status, result.data["value"]) == expected, only.message

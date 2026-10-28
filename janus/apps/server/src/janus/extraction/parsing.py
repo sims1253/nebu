@@ -8,9 +8,10 @@ from janus.comparison.models import ValueType
 from janus.extraction.models import DEFAULT_NOT_REPORTED, Scalar
 
 _NUMERIC = frozenset({ValueType.INTEGER, ValueType.DECIMAL, ValueType.PERCENTAGE})
-# A short estimator or count label printed in front of a number: "RR:1.124 (0.978, 1.290)",
-# "N = 355", "MD=-0.4". Only a label followed by a number is removed.
-_VALUE_LABEL = re.compile(r"^[A-Za-z][A-Za-z0-9]{0,5}\s*[:=]\s*(?=[-+]?\.?\d)")
+# An estimator or count label printed in front of a number: "RR:1.124 (0.978, 1.290)",
+# "N = 355", "MD=-0.4". Only these labels, followed by a number, are removed; any other prefix
+# (a unit, "kg:12") needs strip_prefix.
+_VALUE_LABEL = re.compile(r"^(?:RR|OR|HR|MD|SMD|RD|IRR|N|n|P|p)\s*[:=]\s*(?=[-+]?\.?\d)")
 
 
 class NotReported(ValueError):
@@ -27,10 +28,12 @@ def parse_value(raw: str, rule: Scalar) -> str | int | bool:
     from janus.comparison.extractor import MINUS_SIGNS, match_component
 
     text = raw.strip()
-    marks = DEFAULT_NOT_REPORTED if rule.not_reported is None else rule.not_reported
+    numeric = rule.type in _NUMERIC or rule.source_shape is not None
+    # By default only numbers have not-reported marks: "NA" or "NE" can be a text value.
+    default_marks = DEFAULT_NOT_REPORTED if numeric else ()
+    marks = default_marks if rule.not_reported is None else rule.not_reported
     if text and _fold(text) in {_fold(mark) for mark in marks}:
         raise NotReported(f"The document prints {text!r}, which marks the value as not reported.")
-    numeric = rule.type in _NUMERIC or rule.source_shape is not None
     if numeric:
         text = text.translate(MINUS_SIGNS)
     prefix, suffix = rule.strip_prefix, rule.strip_suffix

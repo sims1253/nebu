@@ -19,8 +19,9 @@ class Scalar(ValueRule):
     group_separator: Literal[".", ",", " "] | None = None
     strip_prefix: str = ""
     strip_suffix: str = ""
-    # Values that mean "not reported" and yield a missing field; None uses the defaults above,
-    # an empty list reads every value as printed.
+    # Values that mean "not reported" and yield a missing field. None uses the defaults above
+    # for numbers and compound cells and none for other types; an empty list reads every
+    # value as printed.
     not_reported: list[str] | None = None
 
     @model_validator(mode="after")

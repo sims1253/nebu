@@ -58,8 +58,29 @@ def _bbox(value: Any) -> dict[str, float] | None:
 
 # A per-group N printed in a header or group row: "N = 355", "n=51".
 _GROUP_N = re.compile(r"^[Nn]\s*=\s*\d[\d,]*$")
-# A data value opens with a number ("12", "-0.4", "1 (2.0)"); header text does not.
-_VALUE_START = re.compile(r"^[-+\u2212\ufe63\uff0d]?[.,]?\d")
+# A year or another short number that labels a column ("2023", "12") rather than a value.
+_COLUMN_NUMBER = re.compile(r"^\d{1,4}$")
+
+
+def _spanned_columns(
+    cells: dict[tuple[int, int], TableCell], row: int, columns: list[int]
+) -> set[int]:
+    """The columns a spanning header cell covers in `row`: the cell itself and the empty,
+    boxless positions to its right."""
+    covered: set[int] = set()
+    start: int | None = None
+    for column in columns:
+        cell = cells.get((row, column))
+        text = cell.text.strip() if cell is not None else ""
+        if not column:
+            start = None
+        elif text:
+            start = column
+        elif start is not None and (cell is None or cell.bbox is None):
+            covered.update({start, column})
+        else:
+            start = None
+    return covered
 
 
 def _header_rows(
@@ -67,20 +88,31 @@ def _header_rows(
 ) -> list[int]:
     """Row 0 and the rows that continue the header below it.
 
-    A continuation row has an empty first cell and only header text or group sizes in its
-    other cells: the leaf headers under a spanning one ("Control | Intervention" under
-    "Primary analysis set"), or the per-arm "N = 355" printed under "Vitamin C group"."""
+    A continuation row has an empty first cell, and its other cells hold header text without
+    digits or group sizes: the leaf headers under a spanning one ("Control | Intervention"
+    under "Primary analysis set"), or the per-arm "N = 355" printed under "Vitamin C group".
+    Directly under a spanning header row, years and short numbers in the spanned columns are
+    column labels too ("2023 | 2024" under "Revenue"). Any other number, an amount or a
+    percentage, makes the row a data row."""
     header = [rows[0]]
     for row in rows[1:]:
         label = cells.get((row, 0))
-        texts = [
-            cell.text.strip()
+        texts = {
+            column: cell.text.strip()
             for column in columns
             if column and (cell := cells.get((row, column))) is not None and cell.text.strip()
-        ]
+        }
         if (label is not None and label.text.strip()) or not texts:
             break
-        if any(_VALUE_START.match(text) for text in texts):
+        numbered = {
+            column
+            for column, text in texts.items()
+            if any(c.isdigit() for c in text) and not _GROUP_N.match(text)
+        }
+        if numbered and not (
+            all(_COLUMN_NUMBER.match(texts[column]) for column in numbered)
+            and numbered <= _spanned_columns(cells, header[-1], columns)
+        ):
             break
         header.append(row)
     return header
@@ -193,7 +225,12 @@ def _table_candidates(evidence: DocumentEvidence) -> list[_Candidate]:
                     and (value_cell := cells.get((row, column))) is not None
                     and value_cell.text.strip()
                 ]
-                context = " / ".join(part for part in (group, label_cell.section) if part) or None
+                # A section the reader stamped is a boundary of its own: it ends a different
+                # inferred group, and the two are never merged.
+                section = label_cell.section
+                if section and group and _folded(section) != _folded(group):
+                    group = None
+                context = section or group
                 for value_cell in values:
                     candidates.append(
                         candidate(
@@ -205,6 +242,9 @@ def _table_candidates(evidence: DocumentEvidence) -> list[_Candidate]:
                     )
                 if row and values and all(_GROUP_N.match(c.text.strip()) for c in values):
                     group = label_cell.text.strip()
+                elif not values:
+                    # A row with a label and no values heads rows of its own.
+                    group = None
     return candidates
 
 
