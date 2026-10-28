@@ -43,6 +43,78 @@ const rationaleOf = (titlePrefix: string, criterion: string) => {
   );
 };
 
+// Keys that only the AI's verdict or another person's decision carries.
+const AI_FIELDS = ["quote_verified", "downgraded_from", "failed_check", "excludes", "ai"];
+const DECISION_FIELDS = ["columns", "outcome", "reason_criterion_id", "evidence_anchor_ids"];
+
+/** Every object in a JSON value, with the path that leads to it. */
+const objects = (value: unknown, path = "$"): Array<[string, Record<string, unknown>]> => {
+  if (Array.isArray(value)) return value.flatMap((v, i) => objects(v, `${path}[${i}]`));
+  if (value === null || typeof value !== "object") return [];
+  const object = value as Record<string, unknown>;
+  return [
+    [path, object],
+    ...Object.entries(object).flatMap(([k, v]) => objects(v, `${path}.${k}`)),
+  ];
+};
+
+/**
+ * A screener or auditor saw nothing they may not: the catalogue and the lead's figures are
+ * refused or empty, and no answer they received has the shape of an AI verdict or another
+ * person's decision. Their own reveal comes only in the answer to their own decision, or with
+ * an item that waits for their final decision.
+ */
+const expectBlind = async (
+  page: Page,
+  responses: ReadonlyArray<{ url: string; body: string }>,
+  person: string,
+) => {
+  const { project_id, people } = stack();
+  const as = { "X-Kittum-Reviewer": people[person] ?? "" };
+  for (const path of ["corpus/revisions/latest", "corpus/proposals", "search/executions"]) {
+    const refused = await page.request.get(`/api/projects/${project_id}/${path}`, { headers: as });
+    expect(refused.status(), path).toBe(403);
+  }
+  const progress = (await (
+    await page.request.get(`/api/projects/${project_id}/progress`, { headers: as })
+  ).json()) as {
+    identification: unknown;
+    stages: Array<{ outcomes: unknown; status: { view: string; metrics: unknown } }>;
+  };
+  expect(progress.identification).toBeNull();
+  expect(progress.stages.length).toBeGreaterThan(0);
+  for (const stage of progress.stages) {
+    expect(stage.status.view).toBe("reviewer");
+    expect([stage.outcomes, stage.status.metrics]).toEqual([null, null]);
+  }
+
+  // Decisions and verdicts travel only in screening and progress answers; the protocol's own
+  // words (its "outcome" label, say) are not anyone's decision.
+  let checked = 0;
+  for (const { url, body } of responses) {
+    if (!/\/(screening|progress)/.test(url)) continue;
+    let json: unknown;
+    try {
+      json = JSON.parse(body);
+    } catch {
+      continue; // page images and the workbench's own files
+    }
+    checked++;
+    for (const [path, object] of objects(json)) {
+      for (const key of [...AI_FIELDS, ...DECISION_FIELDS]) {
+        expect(key in object, `${url} ${path} has ${key}`).toBe(false);
+      }
+      if ("metrics" in object) expect(object["metrics"], `${url} ${path}`).toBeNull();
+      // An AI reading, not a stage's reveal setting ("on_disagreement").
+      if (typeof object["reveal"] === "object" && object["reveal"] !== null) {
+        const own = url.endsWith("/decide") || object["phase"] === "final";
+        expect(own, `${url} ${path} reveals the AI outside the person's own decision`).toBe(true);
+      }
+    }
+  }
+  expect(checked).toBeGreaterThan(20);
+};
+
 const POP = ["e", "1"];
 const INT = ["e", "2"];
 const DESIGN = ["e", "3"];
@@ -254,15 +326,19 @@ test("a review from search to full text, blind, audited, adjudicated, and verifi
     await page.goto(`/p/${project_id}/progress?as=${people["Jun Park"]}`);
     await expect(page.getByText("Your own work")).toBeVisible();
     await expect(page.getByTestId("kappa")).toHaveCount(0);
+    await expectBlind(page, responses, "Jun Park");
     await page.context().close();
   });
 
   await test.step("the auditor screens the audit sample and the AI-only disagreements, blind", async () => {
-    const { page } = await open(browser, "Rita Nunes", "screening/title-abstract");
+    const { page, responses } = await open(browser, "Rita Nunes", "screening/title-abstract");
     const seen = await screenQueue(page, { overrides: { [CONFLICT]: INT } });
     // Both screeners excluded this one while the model saw no failing criterion, so the auditor
     // got a blind extra screen of it, alike in every way to the rest of the audit queue.
     expect(seen.some((t) => t.startsWith(RESCREENED))).toBe(true);
+    await page.goto(`/p/${project_id}/progress?as=${people["Rita Nunes"]}`);
+    await expect(page.getByText("Your own work")).toBeVisible();
+    await expectBlind(page, responses, "Rita Nunes");
     await page.context().close();
   });
 
