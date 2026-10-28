@@ -1,0 +1,24 @@
+# Sentinels for the nicotine replacement example: records whose outcome is known, seeded invisibly
+# into every screener's title and abstract queue (the protocol's `sentinel_percent`). Missing one
+# is the drift alarm. Illustrative records, written for Kittum.
+#
+#   kittum project open-stage <project> nrt-vs-control title_abstract --by <lead> \
+#     --sentinels examples/sentinels/nicotine-replacement.yaml
+
+- expected_outcome: include
+  record:
+    item_ref: "sentinel:nrt-lozenge"
+    title: "Nicotine lozenge for smoking cessation: a randomised placebo-controlled trial"
+    text: >-
+      METHODS: 1,818 adult smokers were randomised to 2 mg or 4 mg nicotine lozenges or matching
+      placebo for 12 weeks. RESULTS: Abstinence at 6 months was 17.9% with active lozenges and
+      8.6% with placebo.
+    facts: { year: 2002, journal: Archives of Internal Medicine }
+- expected_outcome: include
+  record:
+    item_ref: "sentinel:nrt-spray"
+    title: "Nicotine mouth spray for smoking cessation: a randomized trial"
+    text: >-
+      METHODS: We randomized 479 adults who smoked to nicotine mouth spray or placebo spray.
+      RESULTS: Sustained abstinence at 24 weeks was 15.9% versus 6.9%.
+    facts: { year: 2012, journal: European Respiratory Journal }

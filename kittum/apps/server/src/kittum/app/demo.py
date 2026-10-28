@@ -23,6 +23,7 @@ from kittum.app.lifecycle import (
     corpus_records,
     create_project,
     ingest_corpus,
+    load_sentinels,
     open_screening,
     publish_protocol,
 )
@@ -31,7 +32,7 @@ from kittum.corpus import confirm
 from kittum.gateway import HttpRequest, HttpResponse
 from kittum.models import Completion, CompletionRequest, request_key
 from kittum.runs import PostgresJobQueue, Worker
-from kittum.screening import JUDGE_JOB, RecordFacts, ScreeningRecord, Sentinel, judge_handler
+from kittum.screening import JUDGE_JOB, judge_handler
 from kittum.search import PubMedSource, SearchPlan, import_file, run
 
 if TYPE_CHECKING:
@@ -72,27 +73,7 @@ FULL_TEXT_SENTINEL = (
     "li2026-vitamin-c-kidney-biopsy-rct.pdf",
 )
 
-SENTINELS = (
-    Sentinel(
-        record=ScreeningRecord(
-            item_ref="sentinel:nrt-lozenge",
-            title="Nicotine lozenge for smoking cessation: a randomised placebo-controlled trial",
-            text="METHODS: 1,818 adult smokers were randomised to 2 mg or 4 mg nicotine lozenges or "
-            "matching placebo for 12 weeks. RESULTS: Abstinence at 6 months was 17.9% with active "
-            "lozenges and 8.6% with placebo.",
-            facts=RecordFacts(year=2002, journal="Archives of Internal Medicine"),
-        )
-    ),
-    Sentinel(
-        record=ScreeningRecord(
-            item_ref="sentinel:nrt-spray",
-            title="Nicotine mouth spray for smoking cessation: a randomized trial",
-            text="METHODS: We randomized 479 adults who smoked to nicotine mouth spray or placebo "
-            "spray. RESULTS: Sustained abstinence at 24 weeks was 15.9% versus 6.9%.",
-            facts=RecordFacts(year=2012, journal="European Respiratory Journal"),
-        )
-    ),
-)
+SENTINELS = load_sentinels(PROTOCOL.parents[1] / "sentinels" / "nicotine-replacement.yaml")
 
 
 class ReplayGateway:

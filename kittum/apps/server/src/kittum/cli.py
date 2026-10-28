@@ -112,6 +112,17 @@ def _demo_seed(args: argparse.Namespace) -> int:
 
 
 def _project(args: argparse.Namespace) -> int:
+    from kittum.core import KittumError
+
+    try:
+        return _project_step(args)
+    except (KittumError, ValueError) as e:
+        # A refused step (a rule of the protocol, the project's state): say why, without a trace.
+        print(f"kittum project {args.action}: {e}", file=sys.stderr)
+        return 1
+
+
+def _project_step(args: argparse.Namespace) -> int:
     from uuid import UUID
 
     from kittum import app
@@ -233,6 +244,7 @@ def _project(args: argparse.Namespace) -> int:
                         args.stage,
                         actor_id=UUID(args.by),
                         reveal=args.reveal,
+                        sentinels=app.load_sentinels(args.sentinels) if args.sentinels else (),
                     )
                 )
     return 0
@@ -316,6 +328,12 @@ def main(argv: list[str] | None = None) -> int:
     attach.add_argument("--licence")
     stage = step("open-stage", "scope", "stage")
     stage.add_argument("--reveal", default="on_disagreement")
+    stage.add_argument(
+        "--sentinels",
+        type=Path,
+        help="a YAML or JSON list of sentinels (records with known outcomes), as in "
+        "examples/sentinels/; needed when the protocol's sentinel_percent is above zero",
+    )
     ledger = commands.add_parser("ledger", help="the audit ledger")
     ledger_commands = ledger.add_subparsers(dest="ledger_command", required=True)
     ledger_verify = ledger_commands.add_parser("verify", help="verify a project's hash chain")
