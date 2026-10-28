@@ -1,12 +1,16 @@
-// The published protocol, read only (DESIGN.md, "Protocol"): the questions, the outcomes, and per
-// search topic its screening mode, audit plan, sources, and criteria. Every heading uses the
-// profile's words for core concepts.
+// The published protocol (DESIGN.md, "Protocol"): the questions, the outcomes, and per search
+// topic its screening mode, audit plan, sources, and criteria. Every heading uses the profile's
+// words for core concepts. The methods lead writes and publishes versions in the editor.
+import { useState } from "react";
 import type { ReactNode } from "react";
 
 import type { Criterion, ProfileLabels, SearchTopic } from "../../data/schema.ts";
+import { KeyHint } from "../../ui/Key.tsx";
+import { useKeys } from "../../ui/keys.ts";
 import { useProject } from "../project.tsx";
+import { ProtocolEditor } from "./ProtocolEditor.tsx";
 
-const MODES: Record<SearchTopic["mode"], string> = {
+export const MODES: Record<SearchTopic["mode"], string> = {
   M1: "Two people screen every record; the AI reads beside them as a third screener.",
   M2: "One person screens every record; the AI is the second screener, and every disagreement gets a blind extra screen.",
   M3: "Two people screen in the AI's order and stop when a pre-specified statistical test passes.",
@@ -23,7 +27,27 @@ const date = (iso: string | null) =>
     : "Not published";
 
 export function ProtocolScreen() {
-  const { protocol, labels } = useProject();
+  const { protocol, has } = useProject();
+  const [editing, setEditing] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const lead = has("lead");
+  useKeys((event) => {
+    if (event.key !== "v" || !lead || editing || !protocol) return false;
+    setEditing(true);
+    setNotice(null);
+    return true;
+  });
+  if (lead && (editing || !protocol)) {
+    return (
+      <ProtocolEditor
+        onCancel={protocol ? () => setEditing(false) : null}
+        onPublished={(message) => {
+          setEditing(false);
+          setNotice(message);
+        }}
+      />
+    );
+  }
   if (!protocol) {
     return (
       <section className="h-full overflow-y-auto bg-paper">
@@ -31,20 +55,41 @@ export function ProtocolScreen() {
           <h1 className="text-xl font-semibold">No protocol is published yet</h1>
           <p className="mt-2 max-w-[62ch] text-md text-ink-2">
             Every decision reads the published protocol, so screening waits for it. The methods lead
-            publishes one with <code>kittum project publish-protocol</code>, which records their
-            approval in the ledger.
+            writes and publishes it here, which records their approval in the ledger.
           </p>
         </div>
       </section>
     );
   }
+  return <Published notice={notice} lead={lead} />;
+}
+
+function Published({ notice, lead }: { notice: string | null; lead: boolean }) {
+  const { protocol, labels } = useProject();
+  if (!protocol) return null;
   const { protocol: review, profile } = protocol;
   return (
     <section className="h-full overflow-y-auto bg-paper">
       <article className="mx-auto max-w-[980px] px-10 pt-10 pb-16" aria-label="Protocol">
-        <h1 className="max-w-[60ch] text-xl font-semibold tracking-[-0.01em] text-balance">
-          {review.title}
-        </h1>
+        {notice ? (
+          <p
+            role="status"
+            className="mb-5 border-l-2 border-petrol pl-3 text-sm"
+            data-testid="protocol-notice"
+          >
+            {notice}
+          </p>
+        ) : null}
+        <div className="flex items-baseline gap-6">
+          <h1 className="max-w-[60ch] text-xl font-semibold tracking-[-0.01em] text-balance">
+            {review.title}
+          </h1>
+          {lead ? (
+            <span className="ml-auto shrink-0 text-sm">
+              <KeyHint keys={["v"]}>Write a new version</KeyHint>
+            </span>
+          ) : null}
+        </div>
         <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
           <dt className="text-ink-3">Version</dt>
           <dd>{review.version_label}</dd>

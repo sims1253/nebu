@@ -247,6 +247,23 @@ export const makeMockWorkbench = (
 
     projects: () => call("other", "projects", null, () => PROJECTS),
 
+    // Setting a review up needs the server: it reads the files and records each step.
+    createProject: unavailable,
+    addMember: unavailable,
+    protocolExamples: () => call("other", "protocolExamples", null, () => []),
+    protocolSource: unavailable,
+    parseProtocol: unavailable,
+    validateProtocol: unavailable,
+    previewProtocol: unavailable,
+    publishProtocol: unavailable,
+    runSearch: unavailable,
+    importSearch: unavailable,
+    ingestCorpus: unavailable,
+    parseSentinels: unavailable,
+    fullTexts: () => call("other", "fullTexts", null, () => []),
+    attachFullText: unavailable,
+    attachSentinelFullText: unavailable,
+
     protocol: (projectId) => {
       if (!PROJECTS.some((p) => p.id === projectId)) {
         return fail("not_found", `No project ${projectId}`);

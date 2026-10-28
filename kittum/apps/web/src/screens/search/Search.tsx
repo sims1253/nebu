@@ -8,6 +8,7 @@ import { run, WorkbenchError } from "../../data/workbench.ts";
 import { KeyHint } from "../../ui/Key.tsx";
 import { useKeys } from "../../ui/keys.ts";
 import { LEAD_ONLY, useProject } from "../project.tsx";
+import { ImportSearch, RunSearch } from "./SearchForms.tsx";
 
 const when = (iso: string) =>
   new Date(iso).toLocaleString("en-GB", {
@@ -22,12 +23,24 @@ const when = (iso: string) =>
 
 export function SearchScreen() {
   const { workbench } = useRouteContext({ from: "/p/$projectId" });
-  const { project, me, seesLeadData } = useProject();
+  const { project, me, seesLeadData, protocol } = useProject();
   const lead = seesLeadData;
   const [executions, setExecutions] = useState<ReadonlyArray<SearchExecution> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState(0);
+  const [form, setForm] = useState<"import" | "run" | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
   const items = useRef<Array<HTMLElement | null>>([]);
+  const canAdd = lead && protocol !== null;
+
+  const added = (execution: SearchExecution) => {
+    setForm(null);
+    setNotice(
+      `Added the ${execution.plan.platform} search: ${execution.retrieved_count} records. Add the next database's search, or build the corpus on Studies once every search is in.`,
+    );
+    setTick((t) => t + 1);
+  };
 
   useEffect(() => {
     if (!lead) return;
@@ -41,13 +54,17 @@ export function SearchScreen() {
     return () => {
       live = false;
     };
-  }, [workbench, project.id, me.actor_id, lead]);
+  }, [workbench, project.id, me.actor_id, lead, tick]);
 
   useEffect(() => {
     items.current[selected]?.scrollIntoView({ block: "nearest" });
   }, [selected]);
 
   useKeys((event) => {
+    if (canAdd && (event.key === "i" || event.key === "n")) {
+      setForm(event.key === "i" ? "import" : "run");
+      return true;
+    }
     if (!executions?.length) return false;
     if (event.key === "j" || event.key === "ArrowDown") {
       setSelected((i) => Math.min(i + 1, executions.length - 1));
@@ -65,12 +82,45 @@ export function SearchScreen() {
       <div className="mx-auto max-w-[980px] px-10 pt-10 pb-16">
         <div className="flex items-baseline gap-6">
           <h1 className="text-xl font-semibold tracking-[-0.01em]">Searches</h1>
-          {executions?.length ? (
-            <span className="ml-auto">
+          <span className="ml-auto flex gap-5 text-sm">
+            {executions?.length ? (
               <KeyHint keys={["j", "k"]}>Next and previous search</KeyHint>
-            </span>
-          ) : null}
+            ) : null}
+            {canAdd ? (
+              <>
+                <button type="button" onClick={() => setForm("import")}>
+                  <KeyHint keys={["i"]}>Import a search file</KeyHint>
+                </button>
+                <button type="button" onClick={() => setForm("run")}>
+                  <KeyHint keys={["n"]}>Run a live search</KeyHint>
+                </button>
+              </>
+            ) : null}
+          </span>
         </div>
+        {notice ? (
+          <p
+            role="status"
+            className="mt-3 max-w-[70ch] border-l-2 border-petrol pl-3 text-sm"
+            data-testid="search-notice"
+          >
+            {notice}
+          </p>
+        ) : null}
+        {canAdd ? (
+          <>
+            <ImportSearch
+              open={form === "import"}
+              onOpenChange={(o) => setForm(o ? "import" : null)}
+              onDone={added}
+            />
+            <RunSearch
+              open={form === "run"}
+              onOpenChange={(o) => setForm(o ? "run" : null)}
+              onDone={added}
+            />
+          </>
+        ) : null}
         {!lead ? (
           <p className="mt-4 max-w-[60ch] text-ink-2" data-testid="lead-only">
             {LEAD_ONLY}
@@ -83,9 +133,9 @@ export function SearchScreen() {
           <p className="mt-4 text-ink-3">Loading the searches.</p>
         ) : executions.length === 0 ? (
           <p className="mt-4 max-w-[62ch] text-md text-ink-2">
-            No searches yet. Run one against PubMed or ClinicalTrials.gov with{" "}
-            <code>kittum project run-search</code>, or import an export from any other database with{" "}
-            <code>kittum project import-search</code>.
+            {protocol
+              ? "No searches yet. Import the export file of each database's search, or run PubMed and ClinicalTrials.gov live. One search per database and strategy."
+              : "Publish the protocol first: each search belongs to one of its search topics."}
           </p>
         ) : (
           <>

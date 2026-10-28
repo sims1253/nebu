@@ -30,10 +30,12 @@ export const Route = createFileRoute("/p/$projectId")({
 });
 
 type Section =
+  | "setup"
   | "adjudication"
   | "protocol"
   | "search"
   | "studies"
+  | "retrieval"
   | "screening/title-abstract"
   | "screening/full-text"
   | "extraction"
@@ -42,9 +44,11 @@ type Section =
   | "reports";
 
 const NAV: ReadonlyArray<{ section: Section; label: string; chord: string; group?: string }> = [
+  { section: "setup", label: "Setup", chord: "u" },
   { section: "protocol", label: "Protocol", chord: "p" },
   { section: "search", label: "Search", chord: "s" },
   { section: "studies", label: "Studies", chord: "d" },
+  { section: "retrieval", label: "Retrieval", chord: "v" },
   {
     section: "screening/title-abstract",
     label: "Title and abstract",
@@ -212,8 +216,26 @@ const KEYS: ReadonlyArray<{
   {
     screen: "Everywhere",
     keys: [
-      [["g", "t"], "Go to a stage: p, s, d, t, f, a, x, b, o, r"],
+      [["g", "t"], "Go to a stage: u, p, s, d, v, t, f, a, x, b, o, r"],
       [["h"], "Show these keys"],
+    ],
+  },
+  {
+    screen: "Setup (the methods lead)",
+    keys: [
+      [["j", "k"], "Next and previous step"],
+      [["Enter"], "Go to the step's screen"],
+      [["a"], "Add a person"],
+      [["b"], "Build the corpus, once the searches are in"],
+    ],
+  },
+  {
+    screen: "Protocol, Search, Retrieval (the methods lead)",
+    keys: [
+      [["v"], "Write a new protocol version"],
+      [["Ctrl", "Enter"], "Check the protocol in the editor"],
+      [["i", "n"], "Import a search file, run a live search"],
+      [["u", "s"], "Upload a full text, add a full-text sentinel"],
     ],
   },
   {
@@ -362,7 +384,7 @@ function IdentityPicker({
         </ol>
         {project.members.length === 0 ? (
           <p className="mt-4 text-ink-2">
-            This review has no people yet. Add them with <code>kittum project add-member</code>.
+            This review has no people yet. Its methods lead adds them under Setup.
           </p>
         ) : null}
       </div>

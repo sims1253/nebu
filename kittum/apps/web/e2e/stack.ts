@@ -24,18 +24,20 @@ const waitFor = async (url: string, child: ChildProcess) => {
   throw new Error(`${url} did not answer`);
 };
 
+/** The settings every process of the stack shares, for the CLI steps the journeys take too. */
+export const stackEnv = () => ({
+  ...process.env,
+  // Artifacts belong with their database: a store that lost them breaks every reader of it.
+  KITTUM_ARTIFACT_DIR: process.env["KITTUM_ARTIFACT_DIR"] ?? join(tmpdir(), "kittum-e2e-artifacts"),
+  KITTUM_JUDGE_BACKEND: "demo",
+  KITTUM_WEB_DIST: DIST,
+});
+
 export default async function stack() {
   if (!process.env["KITTUM_DATABASE_URL"]) {
     throw new Error("Set KITTUM_DATABASE_URL to a migrated Postgres database for the e2e run.");
   }
-  const env = {
-    ...process.env,
-    // Artifacts belong with their database: a store that lost them breaks every reader of it.
-    KITTUM_ARTIFACT_DIR:
-      process.env["KITTUM_ARTIFACT_DIR"] ?? join(tmpdir(), "kittum-e2e-artifacts"),
-    KITTUM_JUDGE_BACKEND: "demo",
-    KITTUM_WEB_DIST: DIST,
-  };
+  const env = stackEnv();
   // The key that signs the bundle's checkpoint; a real deployment holds it apart from the database.
   const key = join(mkdtempSync(join(tmpdir(), "kittum-e2e-key-")), "checkpoint.pem");
   writeFileSync(

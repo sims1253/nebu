@@ -26,6 +26,23 @@ const client = Effect.gen(function* () {
   });
 });
 
+/** The client for one upload: the generated operations declare a PDF body but do not send one. */
+const withPdf = (pdf: Uint8Array) =>
+  Effect.gen(function* () {
+    const http = yield* HttpClient.HttpClient;
+    return KittumApi.make(http, {
+      transformClient: (c) =>
+        Effect.succeed(
+          HttpClient.mapRequest(c, (request) =>
+            request.pipe(
+              HttpClientRequest.prependUrl(window.location.origin),
+              HttpClientRequest.bodyUint8Array(pdf, "application/pdf"),
+            ),
+          ),
+        ),
+    });
+  });
+
 /** The server's `detail`, or the error's own message. */
 const describe = (error: unknown): { status: number | null; message: string } => {
   const e = error as {
@@ -72,8 +89,11 @@ const toError = (error: unknown) => {
   return new WorkbenchError({ reason, message });
 };
 
-const call = <A, E>(program: (api: KittumApi.KittumApi) => Effect.Effect<A, E>) =>
-  client.pipe(
+const call = <A, E>(
+  program: (api: KittumApi.KittumApi) => Effect.Effect<A, E>,
+  api: Effect.Effect<KittumApi.KittumApi, never, HttpClient.HttpClient> = client,
+) =>
+  api.pipe(
     Effect.flatMap(program),
     Effect.provide(FetchHttpClient.layer),
     Effect.mapError(toError),
@@ -188,6 +208,80 @@ export const makeApiWorkbench = (): Workbench => ({
   protocol: (projectId) =>
     orNull(call((api) => api.getPublishedProtocol(projectId, undefined))).pipe(
       Effect.map((p) => (p ? toProtocol(p) : null)),
+    ),
+
+  createProject: ({ name, leadName }) =>
+    call((api) => api.createProject({ payload: { name, lead_name: leadName } })),
+
+  addMember: ({ projectId, as, displayName, roles }) =>
+    call((api) =>
+      api.addProjectMember(projectId, {
+        payload: { display_name: displayName, roles, added_by: as },
+      }),
+    ),
+
+  protocolExamples: () => call((api) => api.listExampleProtocols(undefined)),
+
+  protocolSource: (projectId) =>
+    call((api) => api.getPublishedProtocolSource(projectId, undefined)).pipe(
+      Effect.map((s) => s.text),
+    ),
+
+  parseProtocol: (text) => call((api) => api.parseProtocol({ payload: { text } })),
+
+  validateProtocol: (source) => call((api) => api.validateProtocol({ payload: source })),
+
+  previewProtocol: ({ projectId, source }) =>
+    call((api) => api.previewProtocolDiff(projectId, { payload: source })),
+
+  publishProtocol: ({ projectId, as, source, reason }) =>
+    call((api) =>
+      Effect.gen(function* () {
+        const draft = yield* api.saveProtocolDraft(projectId, { payload: source });
+        return yield* api.publishProtocolVersion(projectId, draft.id, {
+          payload: { approved_by: as, reason },
+        });
+      }),
+    ),
+
+  runSearch: ({ projectId, as, plan }) =>
+    call((api) => api.runSearch(projectId, { payload: { plan, actor_id: as } })),
+
+  importSearch: ({ projectId, as, plan, data, format }) =>
+    call((api) =>
+      api.importSearchFile(projectId, { payload: { plan, data, format, actor_id: as } }),
+    ),
+
+  ingestCorpus: ({ projectId, as }) =>
+    call((api) => api.ingestCorpus(projectId, { payload: { actor_id: as } })),
+
+  parseSentinels: ({ projectId, text }) =>
+    call((api) => api.parseScreeningSentinels(projectId, { payload: { text } })),
+
+  fullTexts: ({ projectId, as }) =>
+    call((api) => api.listFullTexts(projectId, { params: reviewer(as) })),
+
+  attachFullText: ({ projectId, as, itemRef, pdf, licence }) =>
+    call(
+      (api) =>
+        api.attachFullText(projectId, itemRef, {
+          params: { actor_id: as, ...(licence ? { licence } : {}) },
+        }),
+      withPdf(pdf),
+    ),
+
+  attachSentinelFullText: ({ projectId, as, title, expectedOutcome, pdf, licence }) =>
+    call(
+      (api) =>
+        api.attachFullTextSentinel(projectId, {
+          params: {
+            actor_id: as,
+            title,
+            expected_outcome: expectedOutcome,
+            ...(licence ? { licence } : {}),
+          },
+        }),
+      withPdf(pdf),
     ),
 
   queue: ({ projectId, as, scopeId, stage, after, limit }) =>
@@ -343,10 +437,16 @@ export const makeApiWorkbench = (): Workbench => ({
   progress: ({ projectId, as }) =>
     call((api) => api.getProjectProgress(projectId, { params: reviewer(as) })),
 
-  openStage: ({ projectId, as, scopeId, stage }) =>
+  openStage: ({ projectId, as, scopeId, stage, reveal, sentinels }) =>
     call((api) =>
       api.openScreeningStage(projectId, {
-        payload: { scope_id: scopeId, stage, actor_id: as },
+        payload: {
+          scope_id: scopeId,
+          stage,
+          actor_id: as,
+          ...(reveal ? { reveal } : {}),
+          ...(sentinels ? { sentinels } : {}),
+        },
       }),
     ),
 

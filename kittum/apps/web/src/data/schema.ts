@@ -49,6 +49,20 @@ export type RenderedReport = KittumApi.RenderedArtifact;
 export type SealedBundle = KittumApi.SealedBundle;
 type CriterionDecision = KittumApi.CriterionDecision;
 
+// Setting a review up: the protocol as the lead writes it, searches, the corpus, full texts.
+export type ExampleProtocol = KittumApi.ExampleProtocol;
+export type ParsedSource = KittumApi.ParsedSource;
+export type ProtocolSource = KittumApi.ProtocolSource;
+export type ProtocolIssue = KittumApi.ProtocolIssue;
+export type ValidationReport = KittumApi.ValidationReport;
+export type DiffPreview = KittumApi.DiffPreview;
+export type StoredProtocol = KittumApi.StoredProtocol;
+export type SearchPlan = KittumApi.SearchPlan;
+export type CorpusRevision = KittumApi.CorpusRevision;
+export type Sentinel = KittumApi.Sentinel;
+export type RetrievalItem = KittumApi.RetrievalItem;
+export type FullText = KittumApi.FullText;
+
 /** A decision as the screens build it: every field the server reads, none left to defaults. */
 export interface Decision {
   readonly outcome: Outcome;
