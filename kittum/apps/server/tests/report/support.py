@@ -544,6 +544,7 @@ def nrt_review(db: Database) -> tuple[ReviewWorld, NrtSeqs]:
     )
     assert resolved == 2
     seqs.title_abstract = world.head()
+    world.snapshot(seqs.statuses, ta)
 
     # Full text: the inhaler trial's report could not be obtained.
     ft: Stage = "full_text"

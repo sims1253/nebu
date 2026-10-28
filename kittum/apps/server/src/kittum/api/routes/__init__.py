@@ -3,6 +3,7 @@
 from typing import TYPE_CHECKING
 
 from kittum.api.routes import (
+    audit,
     corpus,
     documents,
     extraction,
@@ -18,6 +19,7 @@ if TYPE_CHECKING:
     from fastapi import APIRouter
 
 ROUTERS: list[APIRouter] = [
+    audit.router,
     corpus.router,
     documents.router,
     extraction.router,

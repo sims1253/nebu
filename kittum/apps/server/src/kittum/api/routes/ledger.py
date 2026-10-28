@@ -1,8 +1,8 @@
 """Ledger routes: verify a project's hash chain.
 
-Events themselves are not served: their payloads hold every reviewer's decisions, and the API
-has no authentication yet to keep them from reviewers. The counts by type reveal nothing a
-project's status does not.
+Events themselves are not served here: their payloads hold every reviewer's decisions, so the
+audit routes (`routes/audit.py`) serve them to the methods lead only. The counts by type reveal
+nothing a project's status does not.
 """
 
 from collections import Counter

@@ -13,6 +13,10 @@ through a cutoff (`load_review`). The core targets are:
   rendering;
 - `bundle`: the handover bundle, sealed with `seal_bundle` rather than rendered.
 
+The audit trail answers an assessor from the same ledger: `trace` lists one record's events from
+search to extraction, `events` pages through the ledger, `milestones` names cutoffs, and `as_of`
+computes the flows and the disclosure at a cutoff without storing a render.
+
 `render` stores a target's files by hash and returns an `Artifact`; `record_render` keeps the
 render in `report_artifact` with a `report.rendered` event, so a download can be limited to
 what was rendered for the project. `seal_bundle` renders every target into `reports/`, profile
@@ -35,6 +39,24 @@ from kittum.core import Id, KittumError, Record, Sha256, SystemClock, canonical_
 from kittum.ledger import EXPORTERS as LEDGER_EXPORTERS
 from kittum.ledger import EventDraft, PostgresLedger, register_exporter
 from kittum.ledger import seal as seal_ledger
+from kittum.report.audit import (
+    ArtifactRef,
+    AsOf,
+    EventPage,
+    Fact,
+    ItemLabel,
+    Milestone,
+    Occurrence,
+    RecordTrace,
+    RevealTiming,
+    StageDisclosure,
+    TracedEvent,
+    as_of,
+    events,
+    milestones,
+    referenced,
+    trace,
+)
 from kittum.report.exporters import EXPORTERS as _EXPORTERS
 from kittum.report.prisma import (
     AiInvolvement,
@@ -403,36 +425,51 @@ __all__ = [
     "AiInvolvement",
     "Artifact",
     "ArtifactFile",
+    "ArtifactRef",
+    "AsOf",
     "Check",
     "Conflict",
     "CoreTarget",
+    "EventPage",
+    "Fact",
     "HumanDecision",
     "Identity",
+    "ItemLabel",
     "ItemResult",
     "JudgeInfo",
     "Link",
+    "Milestone",
     "NotTheLead",
+    "Occurrence",
     "PrismaFlow",
     "ReasonCount",
+    "RecordTrace",
     "RenderedFile",
     "Renderer",
     "ReportRequestError",
+    "RevealTiming",
     "Review",
     "RightsProfile",
     "SearchRun",
     "SourceCount",
+    "StageDisclosure",
     "StageResult",
     "Target",
+    "TracedEvent",
+    "as_of",
     "bundle_reports",
     "disclosure",
+    "events",
     "flow",
     "flows",
     "head_seq",
     "json_file",
     "load_review",
     "md_table",
+    "milestones",
     "one_line",
     "record_render",
+    "referenced",
     "register_target",
     "render",
     "render_files",
@@ -447,4 +484,5 @@ __all__ = [
     "search_rows",
     "targets",
     "text_file",
+    "trace",
 ]

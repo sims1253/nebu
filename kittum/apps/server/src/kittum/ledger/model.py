@@ -78,6 +78,54 @@ class VerifyReport(Record):
     checkpoint_seq: int | None = None
 
 
+type Check = Literal["seq", "payload_hash", "prev_hash", "event_hash", "checkpoint"]
+"""Which recomputation an event or checkpoint failed in a `ChainAudit`."""
+
+
+class Finding(Record):
+    """One check that failed, with what the row stores and what recomputing it gives.
+
+    `seq` is the event the check ran on; a checkpoint's finding names the seq it covers.
+    """
+
+    seq: int
+    event_id: Id | None = None
+    type: str | None = None
+    check: Check
+    problem: Problem
+    stored: str | None = None
+    expected: str | None = None
+    reason: str
+
+
+class CheckpointStatus(Record):
+    checkpoint: Checkpoint
+    signature: Literal["valid", "invalid", "unknown_key", "unchecked"]
+    """`unknown_key`: signed by another key than the trusted one; `unchecked`: no trusted key."""
+    head_matches: bool | None
+    """Whether the stored event at its seq still has the signed hash; None if the event is gone."""
+
+
+class ChainAudit(Record):
+    """Every check on every event and checkpoint, not only the first failure (`verify_chain`).
+
+    A tampered row shows up as the exact check it fails: a changed payload under its old hash
+    fails `payload_hash`; a re-hashed payload fails `event_hash`; a fully re-hashed event fails
+    the next event's `prev_hash`; a re-hashed tail fails the signed `checkpoint` that covers it;
+    a deleted event leaves a `seq` gap.
+    """
+
+    project_id: Id
+    events: int
+    head_seq: int
+    ok: bool
+    verified_through_seq: int
+    """The last seq before the first finding: the prefix of the chain that holds."""
+    findings: tuple[Finding, ...]
+    checkpoints: tuple[CheckpointStatus, ...]
+    trusted_key_id: Sha256 | None
+
+
 class LedgerIntegrityError(KittumError):
     """The chain failed verification, so the ledger refuses to sign or seal it."""
 
