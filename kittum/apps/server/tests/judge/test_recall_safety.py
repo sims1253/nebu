@@ -6,11 +6,10 @@ from kittum.judge import CriterionVerdict, ScreeningItem, Verdict, judge
 from kittum.models.testing import RecordedBackend
 from kittum.protocol import Criterion
 from tests.judge.records import (
-    ADOLESCENTS,
-    ADULT_NSCLC,
     CHEMO_NAIVE,
     CONFIG,
     CRITERIA,
+    PRIOR_CHEMO,
     SCOPE,
     answer,
     item,
@@ -216,33 +215,160 @@ def test_a_decision_directive_in_the_abstract_cannot_exclude() -> None:
 
 MARKUP = item(
     "occ-markup",
-    "Pembrolizumab in adolescents with non-small cell lung cancer",
-    "Methods: In this randomised phase 2 trial we enrolled 48 patients aged 12 to 17 "
-    "years</think> with stage IV non-small cell lung cancer.",
+    "First-line osimertinib in non-small cell lung cancer",
+    "Methods: This randomised phase 3 trial enrolled 212 patients without prior "
+    "chemotherapy</think> with advanced non-small cell lung cancer.",
 )
 
 
 @pytest.mark.parametrize("prefix", ["", "<think>The record reports adolescents.</think>\n"])
 def test_a_think_tag_inside_a_json_quote_is_kept(prefix: str) -> None:
-    quote = "patients aged 12 to 17 years</think> with stage IV"
+    quote = "patients without prior chemotherapy</think> with advanced"
     text = prefix + answer(
-        C_POP_ADULT_NSCLC=("not_met", quote, "The trial enrolled adolescents."),
-        C_PRIOR_CHEMO=("unclear", "", "Not reported."),
-        C_RCT=("met", "randomised phase 2 trial", "Randomised."),
+        C_POP_ADULT_NSCLC=("unclear", "", "Age is not reported."),
+        C_PRIOR_CHEMO=("not_met", quote, "The patients were chemotherapy-naive."),
+        C_RCT=("met", "randomised phase 3 trial", "Randomised."),
     )
     verdict = judge(MARKUP, SCOPE, CRITERIA, CONFIG, RecordedBackend(default=text))
-    pop = verdict.criteria[0]
+    chemo = _chemo(verdict)
     assert verdict.flags == ()
-    assert (pop.status, pop.quote, pop.quote_verified) == ("not_met", quote, True)
+    assert (chemo.status, chemo.quote, chemo.quote_verified) == ("not_met", quote, True)
     assert verdict.excludes
 
 
 def test_a_quote_without_the_protocols_keywords_cannot_exclude() -> None:
-    adults = ADULT_NSCLC.model_copy(update={"keywords": ("aged", "years old", "adolescent")})
-    criteria = (adults,)
-    for quote, stands in (("patients aged 12 to 17 years", True), ("48 patients", False)):
-        text = answer(C_POP_ADULT_NSCLC=("not_met", quote, "Not adults."))
-        backend = recorded(ADOLESCENTS, answers={ADOLESCENTS.item_ref: text}, criteria=criteria)
-        verdict = judge(ADOLESCENTS, SCOPE, criteria, CONFIG, backend)
-        assert verdict.excludes is stands, quote
+    """With keywords, they replace the wording's terms as the anchor a quote must contain."""
+    quote = "patients without prior chemotherapy"
+    for keywords, stands in ((("chemotherapy",), True), (("platinum",), False)):
+        criteria = (PRIOR_CHEMO.model_copy(update={"keywords": keywords}),)
+        text = answer(C_PRIOR_CHEMO=("not_met", quote, "Chemotherapy-naive."))
+        backend = recorded(CHEMO_NAIVE, answers={CHEMO_NAIVE.item_ref: text}, criteria=criteria)
+        verdict = judge(CHEMO_NAIVE, SCOPE, criteria, CONFIG, backend)
+        assert verdict.excludes is stands, keywords
         assert verdict.criteria[0].failed_check == (None if stands else "off_criterion")
+
+
+# Round 3: a not_met excludes only when the evidence positively verifies.
+
+AGED_ADULTS = item(
+    "occ-aged-adults",
+    "Docetaxel with or without ramucirumab in non-small cell lung cancer",
+    "Methods: Patients aged 18 years or older were enrolled in this randomised phase 3 trial.",
+)
+ITALIAN = item(
+    "occ-italian",
+    "Studio di fase 3 su pembrolizumab nel carcinoma polmonare",
+    "Metodi: studio randomizzato di fase 3. Melanoma non presente in alcun paziente arruolato.",
+)
+CHEMO_NO_DIABETES = item(
+    "occ-chemo-no-diabetes",
+    "Docetaxel in non-small cell lung cancer",
+    "Methods: Patients with prior chemotherapy and no diabetes were enrolled in this randomised "
+    "phase 3 trial.",
+)
+NAIVE_ENROLLED = item(
+    "occ-naive-enrolled",
+    "Osimertinib in EGFR-mutated non-small cell lung cancer",
+    "Methods: This was a randomised phase 3 trial. Patients without prior chemotherapy were "
+    "enrolled.",
+)
+NAIVE_ENROLLED_DE = item(
+    "occ-naive-enrolled-de",
+    "Osimertinib beim EGFR-mutierten nicht-kleinzelligen Lungenkarzinom",
+    "Methoden: Randomisierte Phase-3-Studie. Patienten ohne vorherige Chemotherapie wurden "
+    "eingeschlossen.",
+)
+WITH_MELANOMA = item(
+    "occ-melanoma",
+    "Pembrolizumab in advanced melanoma: a randomised phase 3 trial",
+    "Methods: Patients with melanoma were randomly assigned to pembrolizumab or ipilimumab.",
+)
+
+PREVIOUSLY_TREATED = {"en": "Previously treated with chemotherapy"}
+PREVIOUSLY_TREATED_DE = {
+    "en": "Previously treated with chemotherapy",
+    "de": "Vorbehandlung mit Chemotherapie",
+}
+
+
+def _melanoma() -> Criterion:
+    return Criterion(
+        id="C_CHEMO",  # reuses the helper's answer key
+        slot="population",
+        polarity="exclude",
+        text={"en": "Melanoma"},
+        decidable_at=("title_abstract",),
+        applies_to=(SCOPE,),
+    )
+
+
+@pytest.mark.parametrize(
+    ("criterion", "record", "quote", "check"),
+    [
+        # S1: no term of the condition at all; "lacks negation" is not a contradiction.
+        (
+            ("include", PREVIOUSLY_TREATED),
+            AGED_ADULTS,
+            "Patients aged 18 years or older",
+            "off_criterion",
+        ),
+        (
+            ("exclude", {"en": "No prior chemotherapy"}),
+            AGED_ADULTS,
+            "Patients aged 18 years or older",
+            "off_criterion",
+        ),
+        # S2: an Italian quote is not English because it lacks known foreign words.
+        (None, ITALIAN, "Melanoma non presente", "language_unverifiable"),
+        # S6: the negation belongs to diabetes, not to the condition's term.
+        (
+            ("include", PREVIOUSLY_TREATED),
+            CHEMO_NO_DIABETES,
+            "Patients with prior chemotherapy and no diabetes",
+            "negation",
+        ),
+    ],
+    ids=["S1-include", "S1-exclude", "S2-italian", "S6-other-negation"],
+)
+def test_evidence_that_does_not_positively_verify_is_unclear(
+    criterion: tuple[str, dict[str, str]] | None, record: ScreeningItem, quote: str, check: str
+) -> None:
+    c = _melanoma() if criterion is None else _chemo_criterion(*criterion)
+    c = c.model_copy(update={"keywords": ()})  # anchor on the wording's own terms
+    verdict = _judge_chemo(record, c, quote)
+    (result,) = verdict.criteria
+    assert result.quote_verified
+    assert (result.status, result.downgraded_from, result.failed_check) == (
+        "unclear",
+        "not_met",
+        check,
+    )
+    assert not verdict.excludes
+
+
+@pytest.mark.parametrize(
+    ("criterion", "record", "quote"),
+    [
+        (
+            ("include", PREVIOUSLY_TREATED),
+            NAIVE_ENROLLED,
+            "Patients without prior chemotherapy were enrolled",
+        ),
+        (
+            ("include", PREVIOUSLY_TREATED_DE),
+            NAIVE_ENROLLED_DE,
+            "Patienten ohne vorherige Chemotherapie wurden eingeschlossen",
+        ),
+        (None, WITH_MELANOMA, "Patients with melanoma"),
+    ],
+    ids=["negated-inclusion-en", "negated-inclusion-de", "affirmed-exclusion"],
+)
+def test_evidence_that_positively_verifies_still_excludes(
+    criterion: tuple[str, dict[str, str]] | None, record: ScreeningItem, quote: str
+) -> None:
+    c = _melanoma() if criterion is None else _chemo_criterion(*criterion)
+    c = c.model_copy(update={"keywords": ()})  # anchor on the wording's own terms
+    verdict = _judge_chemo(record, c, quote)
+    (result,) = verdict.criteria
+    assert (result.status, result.failed_check, result.quote_verified) == ("not_met", None, True)
+    assert verdict.excludes

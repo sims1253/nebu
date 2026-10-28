@@ -273,7 +273,10 @@ Modules `kittum.judge` and `kittum.models`. Needs: `protocol`, `core`.
 - `judge.judge` and `judge.judge_many`: one call per record and scope, a per-criterion schema
   generated from Pydantic, verification and downgrades with `failed_check`, retry with the next
   seed on malformed output, then `unclear` with the `invalid_output` flag. Records that try to
-  instruct the model cannot be excluded. `judge_many` stores verdicts (migration
+  instruct the model cannot be excluded. A `not_met` excludes only when its evidence positively
+  verifies (rules in `judge/verify.py`): a key term of the condition in the quote, an English or
+  German quote, negation scoped to the key term, and the right polarity for an include or exclude
+  criterion. `judge_many` stores verdicts (migration
   `20261028120000_judge_verdicts.sql`), artifacts, and `judge.verdict_recorded` events, and
   skips records already judged under the same cache key.
 - `judge.judge_metrics`, `pair_metrics` (double-fault rate, OR rule, Cohen's kappa), and
@@ -288,11 +291,16 @@ Modules `kittum.judge` and `kittum.models`. Needs: `protocol`, `core`.
   of those types in `protocol/__init__.py`; drop it when the protocol branch is merged.
 - Ollama reports only the tag as the model identity. Record the blob digest from `/api/show` if
   audits need more.
+- Trade-off, accepted for recall: a quote that contradicts a criterion by value without naming
+  one of its terms ("patients aged 12 to 17 years" against "adults") is `unclear`, as are
+  exclusions on mixed conditions ("adults without EGFR mutation") and negations more than three
+  tokens or a clause away from the key term. Protocol `keywords` let authors anchor such criteria
+  ("aged", "adolescent"), but an affirmative inclusion condition still needs a scoped negation.
+  Measure the work saved this costs on gold data before loosening any rule.
 - Polarity is read in English and German only (`judge.verify.POLARITY_LANGUAGES`). A not_met
-  on a criterion without an en or de wording, or with a quote in another language, becomes
-  `unclear` (`language_unverifiable`). Add a language by adding its negation cues.
-- Calibrate the injection and negation patterns on gold data: they are conservative and will
-  cost some work saved.
+  on a criterion without an en or de wording, or with a quote that is not positively English or
+  German, becomes `unclear` (`language_unverifiable`). Add a language by adding its function
+  words and negation cues.
 - A live test against Ollama or vLLM; the tests use recorded response bodies.
 
 ## WP-09 Screening

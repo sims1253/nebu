@@ -32,16 +32,21 @@ def _by_id(verdict: Verdict) -> dict[str, object]:
     return {c.criterion_id: c for c in verdict.criteria}
 
 
-def test_a_verified_not_met_quote_excludes() -> None:
+def test_a_quote_of_a_different_value_without_a_key_term_is_unclear() -> None:
+    """ "Patients aged 12 to 17 years" contradicts "adults" by value, which the verifier cannot
+    confirm: it names no term of the condition. Humans decide; recall comes first."""
     backend = recorded(ADOLESCENTS)
     verdict = judge(ADOLESCENTS, SCOPE, CRITERIA, CONFIG, backend)
 
-    assert verdict.excludes
+    assert not verdict.excludes
     pop = _by_id(verdict)["C_POP_ADULT_NSCLC"]
-    assert pop.status == "not_met"
+    assert (pop.status, pop.downgraded_from, pop.failed_check) == (
+        "unclear",
+        "not_met",
+        "off_criterion",
+    )
     assert pop.quote == "patients aged 12 to 17 years"
     assert pop.quote_verified
-    assert pop.downgraded_from is None
     assert verdict.model_identity == "Qwen/Qwen3.8-27B"
     assert verdict.flags == ()
     # The full-text-only criterion is not asked at title and abstract.
@@ -131,16 +136,16 @@ def test_malformed_output_is_retried_with_a_new_seed_then_recorded_unclear() -> 
 
 
 def test_a_retry_that_returns_valid_json_is_used() -> None:
-    chosen = applicable(CRITERIA, SCOPE, ADOLESCENTS)
-    first, second = (build_request(ADOLESCENTS, chosen, CONFIG, attempt=n) for n in (0, 1))
-    valid = json.loads(recorded(ADOLESCENTS).complete(first).text)
+    chosen = applicable(CRITERIA, SCOPE, CHEMO_NAIVE)
+    first, second = (build_request(CHEMO_NAIVE, chosen, CONFIG, attempt=n) for n in (0, 1))
+    valid = json.loads(recorded(CHEMO_NAIVE).complete(first).text)
     backend = RecordedBackend(
         {
             RecordedBackend.key(first): "I need more information to decide.",
-            RecordedBackend.key(second): "<think>Adolescents only.</think>\n" + json.dumps(valid),
+            RecordedBackend.key(second): "<think>Chemotherapy-naive.</think>\n" + json.dumps(valid),
         }
     )
-    verdict = judge(ADOLESCENTS, SCOPE, CRITERIA, CONFIG, backend)
+    verdict = judge(CHEMO_NAIVE, SCOPE, CRITERIA, CONFIG, backend)
     assert verdict.excludes
     assert len(backend.requests) == 2
 

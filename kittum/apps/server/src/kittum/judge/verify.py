@@ -1,12 +1,25 @@
 """Deterministic checks that decide whether a model's answer may stand.
 
-An exclusion stands only if its quote is in the record (`kittum.core.find_quote`), relates to the
-criterion, is not turned around by a negation or exclusion cue, and fails the criterion in its
-polarity: it contradicts an inclusion condition or affirms an exclusion condition. Negation is
-read only in the languages Kittum has cues for; a criterion without a wording in one of them, or
-a quote in another language, cannot exclude. Any failure downgrades the
-criterion to `unclear` and names the check. The checks are deliberately conservative: a wrong
-downgrade costs a human a look, a wrong exclusion can lose a study.
+A `not_met` excludes only when the evidence positively verifies; every other case becomes
+`unclear` and names the check. A wrong downgrade costs a human a look, a wrong exclusion can
+lose a study, so the rules are conservative by construction:
+
+1. The quote is in the record (`kittum.core.find_quote`) and the record does not try to
+   instruct the model.
+2. The criterion has an English or German wording: negation is read only in those languages.
+3. The quote contains a key term of the condition: the protocol's `keywords` if it has any,
+   otherwise the content words of the en and de wordings. No key term, no exclusion, even when
+   the quote states a different value ("aged 12 to 17 years" against "adults").
+4. The quote is positively English or German: it has a function word of those languages (or is
+   made only of the condition's own terms and digits), and no short token that could be a
+   function word or negation of another language ("non", "sin", "pas").
+5. Every negation cue in the quote's sentence lies inside the quote, at most three tokens before
+   a key term and in the same clause. Any other cue, or a cue such as "excluded" or "with or
+   without", makes the scope ambiguous.
+6. The scoped quote fails the criterion in its polarity: it negates an affirmative inclusion
+   condition, states a negative inclusion condition's term unnegated, or states an exclusion
+   condition with the condition's own polarity. The condition's polarity is read the same way
+   from its wordings, which must agree.
 """
 
 import re
@@ -20,8 +33,6 @@ if TYPE_CHECKING:
     from kittum.judge.types import FailedCheck
     from kittum.protocol import Criterion
 
-_WORD = re.compile(r"[^\W_]+", re.UNICODE)
-
 
 def _vocabulary(words: str) -> frozenset[str]:
     return frozenset(words.split())
@@ -34,44 +45,6 @@ _STOPWORDS = _vocabulary(
     der die das und oder mit von zu im in ist sind ein eine einer eines den dem des für auf bei
     als aus mindestens nach wie"""
 )
-
-# Words that tie a quote to a PICO slot even when the criterion's own wording is not reused.
-_SLOT_WORDS: dict[str, frozenset[str]] = {
-    "population": _vocabulary(
-        "patient participant subject adult child adolescent pediatric paediatric infant "
-        "neonate elderly aged age old men women male female people individual volunteer "
-        "healthy diagnosed diagnosis disease disorder cancer carcinoma tumour tumor stage "
-        "metastatic advanced recurrent refractory relapsed prior previous previously "
-        "pretreated untreated naive history line enrolled eligible inclusion "
-        "patienten erwachsene kinder jugendliche alter jahre frauen männer erkrankung"
-    ),
-    "intervention": _vocabulary(
-        "treat treated treatment therapy dose dosage mg kg administered received receive "
-        "given regimen drug infusion oral intravenous subcutaneous monotherapy combination "
-        "plus arm group randomized randomised assigned allocated "
-        "behandlung behandelt therapie dosis"
-    ),
-    "comparator": _vocabulary(
-        "placebo versus vs compared comparison comparator control controlled standard care "
-        "usual sham active alone arm group single uncontrolled best supportive "
-        "vergleich kontrolle"
-    ),
-    "outcome": _vocabulary(
-        "survival mortality death response progression endpoint outcome quality life "
-        "adverse event safety toxicity hazard ratio efficacy pain symptom remission relapse "
-        "hospitalization hospitalisation exacerbation function score measured "
-        "überleben endpunkt lebensqualität nebenwirkung"
-    ),
-    "study_type": _vocabulary(
-        "randomized randomised random trial study controlled blind blinded double open label "
-        "phase cohort case report series review meta analysis observational retrospective "
-        "prospective cross sectional registry single arm crossover design editorial letter "
-        "comment protocol systematic narrative animal mice rats vitro preclinical "
-        "conference "
-        "randomisiert studie kontrolliert"
-    ),
-    "other": frozenset(),
-}
 
 _NEGATION_WORDS = _vocabulary(
     """no not without never none neither nor nobody nothing absence absent lack lacking naive
@@ -104,8 +77,30 @@ _FOREIGN_WORDS = (
     - _STOPWORDS
 )
 
-# "nicht-kleinzellig", "non-small": a compound modifier, not a negation.
-_COMPOUND_PREFIX = re.compile(r"\b(nicht|non|kein)-(?=\w)", re.IGNORECASE)
+
+# Other English and German function words. A quote needs at least one function word to count as
+# English or German.
+_FUNCTION_WORDS = (
+    _STOPWORDS
+    | _NEGATION_WORDS
+    | _vocabulary(
+        """after before during but if then there over under up out who whose what when where
+        while upon via versus vs did do does done being can could may might will would
+        wurden wurde werden worden waren war hatten hatte haben hat vor über unter durch gegen
+        bis seit sowie aber zur zum vom beim am"""
+    )
+)
+
+# Short English and German content words that are not function words.
+_SHORT_WORDS = _vocabulary(
+    """aged age old men mg kg ml day days week year arm arms dose rate risk cell lung type stage
+    line oral iv alt jahr tag tage"""
+)
+
+# Tokens that end a clause between a negation cue and the term it would negate.
+_CLAUSE_BREAKS = _vocabulary(", ; : and or but whereas while und oder aber sowie während")
+
+_WINDOW = 3  # a negation cue negates a key term at most this many tokens later
 
 # A line break alone does not end a sentence: abstracts are often wrapped mid-sentence.
 _SENTENCE_END = re.compile(r"(?<=[.;!?])\s+|\n\s*\n")
@@ -149,110 +144,149 @@ def injection_suspected(text: str) -> bool:
     return _INJECTION.search(text) is not None
 
 
-def _words(text: str) -> list[str]:
-    return [w.lower() for w in _WORD.findall(text)]
+_TOKEN = re.compile(r"[^\W_]+|[,;:]")
+_COMPOUND = frozenset({"non", "nicht", "kein"})  # "non-small", "nicht-kleinzellig"
 
 
-def _stem(word: str) -> str:
-    return word[:6]
-
-
-def criterion_keywords(criterion: Criterion) -> frozenset[str]:
-    """Stems of the criterion's own content words and of its slot's vocabulary."""
-    texts = [
-        *criterion.text.values(),
-        *criterion.keywords,
-        *criterion.positive_examples,
-        *criterion.negative_examples,
-    ]
-    own = {
-        _stem(w)
-        for t in texts
-        for w in _words(t)
-        if len(w) > 2 and not w.isdigit() and w not in _STOPWORDS
-    }
-    return frozenset(own | {_stem(w) for w in _SLOT_WORDS[criterion.slot]})
-
-
-def _relates_to_criterion(quote: str, criterion: Criterion) -> bool:
-    if criterion.keywords:  # the protocol's own rule: the quote must contain one of them
-        folded = quote.casefold()
-        return any(k.casefold() in folded for k in criterion.keywords)
-    keywords = criterion_keywords(criterion)
-    return any(_stem(w) in keywords for w in _words(quote))
-
-
-def _sentence_around(source: str, span: Span) -> tuple[str, str]:
-    """The text before and after the span, within the span's sentence."""
-    starts = [0] + [m.end() for m in _SENTENCE_END.finditer(source, 0, span.start)]
-    end_match = _SENTENCE_END.search(source, span.end)
-    end = end_match.start() if end_match else len(source)
-    return source[starts[-1] : span.start], source[span.end : end]
-
-
-def _negative(text: str) -> bool:
-    return any(w in _NEGATION_WORDS for w in _words(_COMPOUND_PREFIX.sub("", text)))
-
-
-def _supported_wordings(criterion: Criterion) -> list[str]:
-    return [t for lang, t in criterion.text.items() if lang.split("-")[0] in POLARITY_LANGUAGES]
-
-
-def _quote_readable(quote: str) -> bool:
-    """False if the quote carries a negation cue, or is mostly words, of another language."""
-    words = _words(quote)
-    if any(w in _FOREIGN_NEGATION for w in words):
-        return False
-    foreign = sum(w in _FOREIGN_WORDS for w in words)
-    own = sum(w in _STOPWORDS or w in _NEGATION_WORDS for w in words)
-    return not foreign or foreign < own
+def _tokens(text: str, offset: int = 0) -> list[tuple[str, int, int, str]]:
+    """Lowercased tokens with their offsets (plus `offset`) and original form."""
+    out = []
+    for m in _TOKEN.finditer(text):
+        word = m.group()
+        if word.lower() in _COMPOUND and text[m.end() : m.end() + 1] == "-":
+            continue
+        out.append((word.lower(), m.start() + offset, m.end() + offset, word))
+    return out
 
 
 def _term(word: str) -> str:
     return (word[:-1] if word.endswith("s") and len(word) > 4 else word)[:6]
 
 
-def _condition_terms(criterion: Criterion) -> frozenset[str]:
-    """Content words of the condition, without its slot's generic vocabulary where possible."""
-    terms = {
-        _term(w)
-        for t in _supported_wordings(criterion)
-        for w in _words(_COMPOUND_PREFIX.sub("", t))
-        if len(w) > 2 and not w.isdigit() and w not in _STOPWORDS and w not in _NEGATION_WORDS
-    }
-    specific = terms - {_term(w) for w in _SLOT_WORDS[criterion.slot]}
-    return frozenset(specific or terms)
+def _content(word: str) -> bool:
+    return (
+        len(word) > 2 and word.isalpha() and word not in _STOPWORDS and word not in _NEGATION_WORDS
+    )
 
 
-def _fails_in_polarity(quote: str, criterion: Criterion) -> bool:
-    """Whether the quote contradicts an inclusion condition or affirms an exclusion condition.
-
-    A quote that mentions the condition's terms is compared by negation: "patients without prior
-    chemotherapy" contradicts "previously treated with chemotherapy" and affirms "no prior
-    chemotherapy". A quote that does not mention them states another value ("patients aged 12 to
-    17 years" against "adults"), which the model judged; a negation in such a quote cannot be
-    tied to the condition, so it does not stand.
-    """
-    readings = {_negative(t) for t in _supported_wordings(criterion)}
-    if len(readings) != 1:
-        return False  # the wordings disagree, or none can be read
-    (condition_negative,) = readings
-    quote_negative = _negative(quote)
-    if not any(_term(w) in _condition_terms(criterion) for w in _words(quote)):
-        return not quote_negative
-    contradicts = quote_negative != condition_negative
-    return contradicts if criterion.polarity == "include" else not contradicts
+def _wordings(criterion: Criterion) -> list[str]:
+    return [t for lang, t in criterion.text.items() if lang.split("-")[0] in POLARITY_LANGUAGES]
 
 
-def _negation_flips(source: str, quote: str, spans: tuple[Span, ...]) -> bool:
-    for span in spans:
-        before, after = _sentence_around(source, span)
-        # "We excluded patients without ...", "patients with or without ...", "[patients
-        # without prior chemotherapy] did not participate": any negation or exclusion in the
-        # rest of the sentence may reverse the quote, so the exclusion goes to a human.
-        if _SCOPE_CUES.search(f"{before} {quote} {after}") or _negative(f"{before} {after}"):
-            return True
-    return False
+def _wording_terms(criterion: Criterion) -> frozenset[str]:
+    return frozenset(_term(w) for t in _wordings(criterion) for w, *_ in _tokens(t) if _content(w))
+
+
+def _key_terms(criterion: Criterion) -> tuple[tuple[str, ...], ...]:
+    """Each key term as a sequence of stems: the protocol's keywords, else the wording's terms."""
+    if criterion.keywords:
+        return tuple(
+            tuple(_term(w) for w, *_ in _tokens(k) if w not in ",;:") for k in criterion.keywords
+        )
+    return tuple((t,) for t in sorted(_wording_terms(criterion)))
+
+
+def _negates(words: list[str], cue: int, target: int) -> bool:
+    """Whether the cue at index `cue` scopes over the token at index `target`."""
+    return 0 < target - cue <= _WINDOW and not any(
+        w in _CLAUSE_BREAKS for w in words[cue + 1 : target]
+    )
+
+
+def _condition_negative(wording: str) -> bool | None:
+    """True for "no prior chemotherapy", False for "prior chemotherapy", None if mixed."""
+    words = [w for w, *_ in _tokens(wording)]
+    cues = [i for i, w in enumerate(words) if w in _NEGATION_WORDS]
+    if not cues:
+        return False
+    terms = [j for j, w in enumerate(words) if _content(w)]
+    every_term_negated = all(any(_negates(words, c, j) for c in cues) for j in terms)
+    every_cue_used = all(any(_negates(words, c, j) for j in terms) for c in cues)
+    return True if terms and every_term_negated and every_cue_used else None
+
+
+def _quote_readable(quote: str, criterion: Criterion) -> bool:
+    known = _wording_terms(criterion) | {t for key in _key_terms(criterion) for t in key}
+    tokens = [(w, original) for w, _, _, original in _tokens(quote) if w not in ",;:"]
+    if not any(w in _FUNCTION_WORDS for w, _ in tokens) and not all(
+        w.isdigit() or _term(w) in known for w, _ in tokens
+    ):
+        return False
+    for w, original in tokens:
+        if w in _FOREIGN_NEGATION or w in _FOREIGN_WORDS:
+            return False
+        short_unknown = (
+            w.isalpha()
+            and len(w) <= 4
+            and w not in _FUNCTION_WORDS
+            and w not in _SHORT_WORDS
+            and _term(w) not in known
+        )
+        if short_unknown and not (original.isupper() and len(original) > 1):
+            return False
+    return True
+
+
+def _sentence(source: str, span: Span) -> tuple[int, int]:
+    starts = [0] + [m.end() for m in _SENTENCE_END.finditer(source, 0, span.start)]
+    end_match = _SENTENCE_END.search(source, span.end)
+    return starts[-1], end_match.start() if end_match else len(source)
+
+
+def _anchored_negation(
+    criterion: Criterion, source: str, span: Span
+) -> tuple[FailedCheck | None, bool]:
+    """Whether the quote's key term is negated, or the check that fails reading it."""
+    start, end = _sentence(source, span)
+    sentence = source[start:end]
+    tokens = _tokens(sentence, start)
+    words = [_term(w) for w, *_ in tokens]
+    inside = [span.start <= s and e <= span.end for _, s, e, _ in tokens]
+    anchors = [
+        i
+        for key in _key_terms(criterion)
+        for i in range(len(words) - len(key) + 1)
+        if all(inside[i : i + len(key)]) and tuple(words[i : i + len(key)]) == key
+    ]
+    if not anchors:
+        return "off_criterion", False
+    if _SCOPE_CUES.search(sentence):
+        return "negation", False
+    raw = [w for w, *_ in tokens]
+    cues = [i for i, w in enumerate(raw) if w in _NEGATION_WORDS]
+    if any(not inside[c] for c in cues):
+        return "negation", False  # a negation outside the quote may reverse it
+    if any(not any(_negates(raw, c, a) for a in anchors) for c in cues):
+        return "negation", False  # a negation the key term does not explain
+    states = {any(_negates(raw, c, a) for c in cues) for a in anchors}
+    if len(states) != 1:
+        return "negation", False
+    return None, states.pop()
+
+
+def _check_not_met(
+    criterion: Criterion, quote: str, source: str, spans: tuple[Span, ...]
+) -> FailedCheck | None:
+    wordings = _wordings(criterion)
+    if not wordings:
+        return "language_unverifiable"
+    readings = {(span, _anchored_negation(criterion, source, span)) for span in spans}
+    failures = [failed for _, (failed, _) in readings if failed]
+    if "off_criterion" in failures:
+        return "off_criterion"
+    if not _quote_readable(quote, criterion):
+        return "language_unverifiable"
+    if failures:
+        return failures[0]
+    negated = {state for _, (_, state) in readings}
+    conditions = {_condition_negative(w) for w in wordings}
+    if len(negated) != 1 or len(conditions) != 1 or None in conditions:
+        return "polarity"
+    (quote_negated,) = negated
+    (condition_negative,) = conditions
+    contradicts = quote_negated != condition_negative
+    fails = contradicts if criterion.polarity == "include" else not contradicts
+    return None if fails else "polarity"
 
 
 def verify(
@@ -269,16 +303,9 @@ def verify(
     if quote and not verified and answer.status != "unclear":
         failed = "quote_not_found"
     elif answer.status == "not_met" and quote is not None:
-        if injection:
-            failed = "injection_suspected"
-        elif not _relates_to_criterion(quote, criterion):
-            failed = "off_criterion"
-        elif not _supported_wordings(criterion) or not _quote_readable(quote):
-            failed = "language_unverifiable"
-        elif _negation_flips(source, quote, spans):
-            failed = "negation"
-        elif not _fails_in_polarity(quote, criterion):
-            failed = "polarity"
+        failed = (
+            "injection_suspected" if injection else _check_not_met(criterion, quote, source, spans)
+        )
     elif answer.status == "not_met":
         failed = "no_quote"
     return CriterionVerdict(

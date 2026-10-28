@@ -11,10 +11,10 @@ type CriterionStatus = Literal["met", "not_met", "unclear"]
 type FailedCheck = Literal[
     "quote_not_found",  # the quote is not in the record
     "no_quote",  # not_met without a quote
-    "off_criterion",  # the quote shares no keyword with the criterion or its PICO slot
-    "negation",  # a negation or exclusion cue may flip what the quote means
+    "off_criterion",  # the quote contains no key term of the condition
+    "negation",  # a negation or exclusion cue whose scope is not the key term
     "polarity",  # the quote does not contradict an inclusion or affirm an exclusion condition
-    "language_unverifiable",  # the criterion or the quote is in a language Kittum cannot read
+    "language_unverifiable",  # the criterion or the quote is not positively English or German
     "injection_suspected",  # the record contains text that tries to instruct the model
     "invalid_output",  # the model gave no valid answer in any attempt
 ]

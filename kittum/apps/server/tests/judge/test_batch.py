@@ -93,7 +93,7 @@ def test_a_batch_records_verdicts_and_a_rerun_makes_no_model_calls(pg: Tx) -> No
 
     assert len(backend.requests) == 4
     assert [v.item_ref for v in verdicts] == [i.item_ref for i in ITEMS]
-    assert [v.excludes for v in verdicts] == [True, False, True, False]
+    assert [v.excludes for v in verdicts] == [False, False, True, False]
 
     rows = pg.execute(
         "select v.*, c.weights_hash, c.prompt_version from verdict v"
