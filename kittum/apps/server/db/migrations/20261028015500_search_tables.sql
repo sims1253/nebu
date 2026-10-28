@@ -15,14 +15,15 @@ create table search_execution (
     started_at timestamptz not null,
     ended_at timestamptz not null,
     raw_artifact_hashes jsonb not null default '[]'::jsonb,
-    created_at timestamptz not null default now()
+    created_at timestamptz not null default now(),
+    unique (id, project_id)
 );
 
 create index search_execution_project on search_execution (project_id, topic_id);
 
 create table source_occurrence (
     occurrence_id uuid primary key default uuidv7(),
-    execution_id uuid not null references search_execution (id) on delete cascade,
+    execution_id uuid not null,
     project_id uuid not null references project (id),
     source text not null,
     provider_record_id text not null,
@@ -37,7 +38,10 @@ create table source_occurrence (
     registry_ids jsonb not null default '[]'::jsonb,
     publication_types jsonb not null default '[]'::jsonb,
     raw_hash char(64) not null,
-    created_at timestamptz not null default now()
+    created_at timestamptz not null default now(),
+    -- An occurrence belongs to the same project as its execution.
+    foreign key (execution_id, project_id)
+        references search_execution (id, project_id) on delete cascade
 );
 
 create index source_occurrence_execution on source_occurrence (execution_id);

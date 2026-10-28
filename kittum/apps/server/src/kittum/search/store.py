@@ -10,15 +10,8 @@ if TYPE_CHECKING:
     from kittum.db import Tx
 
 
-def _is_null_tx(tx: Any) -> bool:
-    return type(tx).__name__ == "NullTx"
-
-
 def save_execution(tx: Tx, project_id: Id, execution: SearchExecution) -> None:
     """Save a search execution and all its source occurrences."""
-    if _is_null_tx(tx):
-        return
-
     tx.execute(
         """
         insert into search_execution (
@@ -86,24 +79,6 @@ def save_execution(tx: Tx, project_id: Id, execution: SearchExecution) -> None:
 
 
 def _row_to_record(row: dict[str, Any]) -> SourceRecord:
-    authors = row.get("authors")
-    if isinstance(authors, str):
-        authors = json.loads(authors)
-    elif authors is None:
-        authors = []
-
-    reg_ids = row.get("registry_ids")
-    if isinstance(reg_ids, str):
-        reg_ids = json.loads(reg_ids)
-    elif reg_ids is None:
-        reg_ids = []
-
-    pub_types = row.get("publication_types")
-    if isinstance(pub_types, str):
-        pub_types = json.loads(pub_types)
-    elif pub_types is None:
-        pub_types = []
-
     return SourceRecord(
         occurrence_id=row["occurrence_id"],
         source=row["source"],
@@ -111,36 +86,24 @@ def _row_to_record(row: dict[str, Any]) -> SourceRecord:
         ordinal=row["ordinal"],
         title=row["title"],
         abstract=row.get("abstract"),
-        authors=tuple(authors),
+        authors=tuple(row["authors"]),
         year=row.get("year"),
         journal=row.get("journal"),
         doi=row.get("doi"),
         pmid=row.get("pmid"),
-        registry_ids=tuple(reg_ids),
-        publication_types=tuple(pub_types),
+        registry_ids=tuple(row["registry_ids"]),
+        publication_types=tuple(row["publication_types"]),
         raw_hash=row["raw_hash"],
     )
 
 
 def _row_to_execution(row: dict[str, Any], records: tuple[SourceRecord, ...]) -> SearchExecution:
-    limits = row.get("limits")
-    if isinstance(limits, str):
-        limits = json.loads(limits)
-    elif limits is None:
-        limits = []
-
-    raw_hashes = row.get("raw_artifact_hashes")
-    if isinstance(raw_hashes, str):
-        raw_hashes = json.loads(raw_hashes)
-    elif raw_hashes is None:
-        raw_hashes = []
-
     plan = SearchPlan(
         topic_id=row["topic_id"],
         source=row["source"],
         platform=row["platform"],
         strategy=row["strategy"],
-        limits=tuple(limits),
+        limits=tuple(row["limits"]),
     )
 
     return SearchExecution(
@@ -152,16 +115,13 @@ def _row_to_execution(row: dict[str, Any], records: tuple[SourceRecord, ...]) ->
         query_translation=row.get("query_translation"),
         reported_count=row["reported_count"],
         retrieved_count=row["retrieved_count"],
-        raw_artifact_hashes=tuple(raw_hashes),
+        raw_artifact_hashes=tuple(row["raw_artifact_hashes"]),
         records=records,
     )
 
 
 def get_execution(tx: Tx, project_id: Id, execution_id: Id) -> SearchExecution | None:
     """Retrieve an execution with its records by execution_id."""
-    if _is_null_tx(tx):
-        return None
-
     row = tx.execute(
         """
         select * from search_execution
@@ -190,9 +150,6 @@ def list_executions(
     tx: Tx, project_id: Id, *, topic_id: str | None = None
 ) -> list[SearchExecution]:
     """List executions for a project, optionally filtered by topic_id."""
-    if _is_null_tx(tx):
-        return []
-
     if topic_id:
         exec_rows = tx.execute(
             """

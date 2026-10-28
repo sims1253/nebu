@@ -23,16 +23,7 @@ pytestmark = pytest.mark.postgres
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
-def _seed_project(pg: Tx) -> uuid.UUID:
-    row = pg.execute(
-        "insert into project (name, policy_version) values ('imports-test', 'v1') returning id"
-    ).fetchone()
-    assert row
-    return row["id"]
-
-
-def test_cochrane_central_ris_import(pg: Tx) -> None:
-    project_id = _seed_project(pg)
+def test_cochrane_central_ris_import(pg: Tx, project_id: uuid.UUID, actor_id: uuid.UUID) -> None:
     data = (FIXTURES / "central_export.ris").read_bytes()
     expected_hash = sha256_hex(data)
 
@@ -53,6 +44,7 @@ def test_cochrane_central_ris_import(pg: Tx) -> None:
         data,
         "central",
         ledger=ledger,
+        actor_id=actor_id,
         artifacts=artifacts,
     )
 
@@ -89,12 +81,14 @@ def test_cochrane_central_ris_import(pg: Tx) -> None:
     events = ledger.events(pg, project_id)
     assert len(events) == 1
     assert events[0].type == "search.executed"
+    assert events[0].actor_id == actor_id
+    assert events[0].payload["kind"] == "file_import"
+    assert events[0].payload["raw_artifact_hashes"] == [expected_hash]
     assert events[0].payload["strategy"] == '[mh "lumacaftor"]'
     assert events[0].payload["limits"] == ["2015:2025"]
 
 
-def test_embase_ris_import(pg: Tx) -> None:
-    project_id = _seed_project(pg)
+def test_embase_ris_import(pg: Tx, project_id: uuid.UUID, actor_id: uuid.UUID) -> None:
     data = (FIXTURES / "embase_export.ris").read_bytes()
 
     plan = SearchPlan(
@@ -112,6 +106,8 @@ def test_embase_ris_import(pg: Tx) -> None:
         data,
         "embase",
         ledger=ledger,
+        actor_id=actor_id,
+        artifacts=MemoryStore(),
     )
 
     assert execution.reported_count == 2
@@ -126,8 +122,7 @@ def test_embase_ris_import(pg: Tx) -> None:
     assert "2014-003667-28" in rec1.registry_ids
 
 
-def test_ctis_csv_import(pg: Tx) -> None:
-    project_id = _seed_project(pg)
+def test_ctis_csv_import(pg: Tx, project_id: uuid.UUID, actor_id: uuid.UUID) -> None:
     data = (FIXTURES / "ctis_export.csv").read_bytes()
 
     plan = SearchPlan(
@@ -145,6 +140,8 @@ def test_ctis_csv_import(pg: Tx) -> None:
         data,
         "ctis",
         ledger=ledger,
+        actor_id=actor_id,
+        artifacts=MemoryStore(),
     )
 
     assert execution.reported_count == 2
@@ -157,8 +154,7 @@ def test_ctis_csv_import(pg: Tx) -> None:
     assert "Vertex Pharmaceuticals" in rec0.authors
 
 
-def test_euctr_csv_import(pg: Tx) -> None:
-    project_id = _seed_project(pg)
+def test_euctr_csv_import(pg: Tx, project_id: uuid.UUID, actor_id: uuid.UUID) -> None:
     data = (FIXTURES / "euctr_export.csv").read_bytes()
 
     plan = SearchPlan(
@@ -176,6 +172,8 @@ def test_euctr_csv_import(pg: Tx) -> None:
         data,
         "euctr",
         ledger=ledger,
+        actor_id=actor_id,
+        artifacts=MemoryStore(),
     )
 
     assert execution.reported_count == 2
@@ -187,8 +185,7 @@ def test_euctr_csv_import(pg: Tx) -> None:
     assert "Completed" in " ".join(rec0.publication_types)
 
 
-def test_list_executions(pg: Tx) -> None:
-    project_id = _seed_project(pg)
+def test_list_executions(pg: Tx, project_id: uuid.UUID, actor_id: uuid.UUID) -> None:
 
     plan1 = SearchPlan(
         topic_id="topic-A",
@@ -204,8 +201,19 @@ def test_list_executions(pg: Tx) -> None:
     )
 
     data = (FIXTURES / "central_export.ris").read_bytes()
-    import_file(pg, project_id, plan1, data, "central")
-    import_file(pg, project_id, plan2, data, "central")
+    ledger = InMemoryLedger()
+    artifacts = MemoryStore()
+    for plan in (plan1, plan2):
+        import_file(
+            pg,
+            project_id,
+            plan,
+            data,
+            "central",
+            ledger=ledger,
+            actor_id=actor_id,
+            artifacts=artifacts,
+        )
 
     all_execs = list_executions(pg, project_id)
     assert len(all_execs) == 2
@@ -213,3 +221,41 @@ def test_list_executions(pg: Tx) -> None:
     topic_a_execs = list_executions(pg, project_id, topic_id="topic-A")
     assert len(topic_a_execs) == 1
     assert topic_a_execs[0].plan.topic_id == "topic-A"
+
+
+@pytest.mark.parametrize(
+    ("data", "format", "error"),
+    [
+        (b"TY  - JOUR\nTI  - x\nER  - \n", "endnote", "unsupported import format 'endnote'"),
+        # The last record has no `ER`, which rispy would drop without a word.
+        (
+            (FIXTURES / "central_export.ris").read_bytes() + b"TY  - JOUR\nTI  - cut off\n",
+            "central",
+            "3 TY lines but 2 readable records",
+        ),
+        ((FIXTURES / "ctis_export.csv").read_bytes(), "ris", "0 TY lines"),
+        ((FIXTURES / "central_export.ris").read_bytes(), "ctis", "CSV header needs"),
+        ("Trial Title,EU CT Number\nCaf\u00e9,1\n".encode("latin-1"), "ctis", "not valid UTF-8"),
+    ],
+    ids=["unknown-format", "truncated-ris", "csv-as-ris", "ris-as-csv", "latin-1"],
+)
+def test_import_rejects_files_it_cannot_read_completely(
+    pg: Tx, project_id: uuid.UUID, actor_id: uuid.UUID, data: bytes, format: str, error: str
+) -> None:
+    plan = SearchPlan(topic_id="t", source="central", platform="Cochrane", strategy="q")
+    ledger = InMemoryLedger()
+
+    with pytest.raises(ValueError, match=error):
+        import_file(
+            pg,
+            project_id,
+            plan,
+            data,
+            format,
+            ledger=ledger,
+            actor_id=actor_id,
+            artifacts=MemoryStore(),
+        )
+
+    assert list_executions(pg, project_id) == []
+    assert ledger.events(pg, project_id) == []

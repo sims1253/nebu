@@ -3,14 +3,15 @@
 from fastapi import APIRouter, HTTPException
 
 from kittum.api import Context  # noqa: TC001
-from kittum.core import Id, Record, sha256_hex
-from kittum.gateway import Gateway, HttpRequest, HttpResponse
+from kittum.core import Id, Record
+from kittum.ledger import Ledger  # noqa: TC001
 from kittum.search import (
     CtgovSource,
     PubMedSource,
     SearchExecution,
     SearchPlan,
     Source,
+    SourceError,
     get_execution,
     import_file,
     list_executions,
@@ -22,57 +23,35 @@ router = APIRouter(prefix="/api/projects/{project_id}/search", tags=["search"])
 
 class RunSearchRequest(Record):
     plan: SearchPlan
+    actor_id: Id
 
 
 class ImportSearchRequest(Record):
     plan: SearchPlan
     data: str
     format: str
+    actor_id: Id
 
 
-class _DefaultHttpxTransport:
-    def send(self, request: HttpRequest) -> HttpResponse:
-        import httpx2
-
-        resp = httpx2.request(
-            method=request.method,
-            url=request.url,
-            headers=dict(request.headers),
-            content=request.body,
-        )
-        return HttpResponse(
-            status=resp.status_code,
-            headers=tuple(resp.headers.items()),
-            body=resp.content,
-            body_hash=sha256_hex(resp.content),
-        )
-
-
-class _DefaultGateway:
-    def __init__(self) -> None:
-        self._transport = _DefaultHttpxTransport()
-
-    def fetch(self, source: str, request: HttpRequest) -> HttpResponse:
-        _ = source
-        return self._transport.send(request)
+def _ledger(ctx: Context) -> Ledger:
+    if ctx.ledger is None:
+        raise HTTPException(status_code=503, detail="No ledger is configured")
+    return ctx.ledger
 
 
 def _get_source(plan: SearchPlan, ctx: Context) -> Source:
-    gw: Gateway = ctx.gateway or _DefaultGateway()
+    if ctx.gateway is None:
+        raise HTTPException(status_code=503, detail="No HTTP gateway is configured")
     if plan.source.lower() in ("pubmed", "medline"):
         return PubMedSource(
-            gw,
+            ctx.gateway,
             ctx.artifacts,
             contact_email=ctx.settings.contact_email,
             ncbi_api_key=ctx.settings.ncbi_api_key,
             clock=ctx.clock,
         )
     if plan.source.lower() in ("ctgov", "clinicaltrials"):
-        return CtgovSource(
-            gw,
-            ctx.artifacts,
-            clock=ctx.clock,
-        )
+        return CtgovSource(ctx.gateway, ctx.artifacts, clock=ctx.clock)
     raise HTTPException(
         status_code=400,
         detail=f"Unsupported live search source '{plan.source}'. Use file import instead.",
@@ -85,17 +64,21 @@ def run_search(
     body: RunSearchRequest,
     ctx: Context,
 ) -> SearchExecution:
+    ledger = _ledger(ctx)
     source = _get_source(body.plan, ctx)
-    with ctx.db.transaction() as tx:
-        return run(
-            tx,
-            project_id,
-            body.plan,
-            source,
-            ledger=ctx.ledger,
-            artifacts=ctx.artifacts,
-            clock=ctx.clock,
-        )
+    try:
+        with ctx.db.transaction() as tx:
+            return run(
+                tx,
+                project_id,
+                body.plan,
+                source,
+                ledger=ledger,
+                actor_id=body.actor_id,
+                artifacts=ctx.artifacts,
+            )
+    except SourceError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @router.post("/import", operation_id="importSearchFile")
@@ -104,17 +87,22 @@ def import_search(
     body: ImportSearchRequest,
     ctx: Context,
 ) -> SearchExecution:
-    with ctx.db.transaction() as tx:
-        return import_file(
-            tx,
-            project_id,
-            body.plan,
-            body.data,
-            body.format,
-            ledger=ctx.ledger,
-            artifacts=ctx.artifacts,
-            clock=ctx.clock,
-        )
+    ledger = _ledger(ctx)
+    try:
+        with ctx.db.transaction() as tx:
+            return import_file(
+                tx,
+                project_id,
+                body.plan,
+                body.data,
+                body.format,
+                ledger=ledger,
+                actor_id=body.actor_id,
+                artifacts=ctx.artifacts,
+                clock=ctx.clock,
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/executions", operation_id="listSearchExecutions")

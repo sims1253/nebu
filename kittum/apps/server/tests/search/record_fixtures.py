@@ -41,21 +41,24 @@ def record_pubmed() -> None:
 
 
 def record_ctgov() -> None:
-    page1_url = "https://clinicaltrials.gov/api/v2/studies?query.term=lumacaftor&pageSize=5"
+    # Nine trials, so two real pages of five; the bodies are saved byte for byte.
+    page1_url = (
+        "https://clinicaltrials.gov/api/v2/studies?"
+        "query.term=lumacaftor%20AND%20AREA%5BPhase%5DPHASE2&pageSize=5&countTotal=true"
+    )
     print(f"Fetching CT.gov page 1: {page1_url}")
     resp1 = httpx2.get(page1_url)
     resp1.raise_for_status()
-    data1 = resp1.json()
-    (FIXTURES_DIR / "ctgov_page1.json").write_text(json.dumps(data1, indent=2))
+    (FIXTURES_DIR / "ctgov_page1.json").write_bytes(resp1.content)
 
-    next_token = data1.get("nextPageToken")
+    next_token = json.loads(resp1.content).get("nextPageToken")
     assert next_token, "No nextPageToken on page 1"
-    page2_url = f"https://clinicaltrials.gov/api/v2/studies?query.term=lumacaftor&pageSize=5&pageToken={next_token}"
+    page2_url = f"{page1_url}&pageToken={next_token}"
     print(f"Fetching CT.gov page 2: {page2_url}")
     resp2 = httpx2.get(page2_url)
     resp2.raise_for_status()
-    data2 = resp2.json()
-    (FIXTURES_DIR / "ctgov_page2.json").write_text(json.dumps(data2, indent=2))
+    assert "nextPageToken" not in json.loads(resp2.content), "Expected two pages"
+    (FIXTURES_DIR / "ctgov_page2.json").write_bytes(resp2.content)
     print(f"Saved ctgov_page1.json and ctgov_page2.json (next_token={next_token})")
 
 

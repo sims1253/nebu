@@ -1,15 +1,13 @@
 import logging
 from datetime import date, timedelta
-from typing import TYPE_CHECKING
 from urllib.parse import parse_qs, urlparse
+
+import pytest
 
 from kittum.core import FixedClock, SystemClock, sha256_hex
 from kittum.gateway import HttpRequest, HttpResponse
-from kittum.search import PubMedSource
+from kittum.search import PubMedSource, SourceError
 from kittum.storage import MemoryStore
-
-if TYPE_CHECKING:
-    import pytest
 
 
 class SimulatedLargeCountTransport:
@@ -19,14 +17,17 @@ class SimulatedLargeCountTransport:
     If date window span <= 100 days, returns count 500.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, small_window_count: int = 450) -> None:
+        self.small_window_count = small_window_count
         self.requested_windows: list[tuple[date, date, int]] = []
+        self.esearch_calls = 0
 
     def send(self, request: HttpRequest) -> HttpResponse:
         parsed = urlparse(request.url)
         params = parse_qs(parsed.query)
 
         if "esearch.fcgi" in parsed.path:
+            self.esearch_calls += 1
             mindate_str = params.get("mindate", [None])[0]
             maxdate_str = params.get("maxdate", [None])[0]
 
@@ -42,7 +43,7 @@ class SimulatedLargeCountTransport:
                 e_date = date(e_y, e_m, e_d)
                 span = (e_date - s_date).days
 
-                count = 15000 if span > 100 else 450
+                count = 15000 if span > 100 else self.small_window_count
 
                 web_env = f"MCID_{s_date}_{e_date}"
                 query_key = "1"
@@ -98,17 +99,21 @@ def test_date_window_splitting_produces_complete_non_overlapping_windows(
     start_date = date(2020, 1, 1)
     end_date = date(2020, 12, 31)
 
+    raw_hashes: list[str] = []
     with caplog.at_level(logging.INFO):
-        windows = source._split_date_windows("lumacaftor", start_date, end_date)
+        windows = source._split_date_windows("lumacaftor", start_date, end_date, raw_hashes)
 
     # 1. Non-empty list of windows
     assert len(windows) > 1
 
     # 2. Every window has count <= 9,999
-    for w_start, w_end, count, _w_env, _w_key, _, _ in windows:
-        assert count <= 9999
-        assert count > 0
+    for w_start, w_end, result in windows:
+        assert 0 < result.count <= 9999
         assert w_start <= w_end
+
+    # Every ESearch reply is a raw response of the execution, including the ones that were split
+    assert len(raw_hashes) == transport.esearch_calls > len(windows)
+    assert all(artifacts.exists(h) for h in raw_hashes)
 
     # 3. Check complete coverage from start_date to end_date
     assert windows[0][0] == start_date
@@ -127,3 +132,12 @@ def test_date_window_splitting_produces_complete_non_overlapping_windows(
     assert len(log_records) == len(windows)
     for r in log_records:
         assert "count=" in r.message
+
+
+def test_a_single_day_over_the_cap_fails_instead_of_truncating() -> None:
+    # Every window, down to one day, reports more records than EFetch can page through.
+    transport = SimulatedLargeCountTransport(small_window_count=15000)
+    source = PubMedSource(SimulatedGateway(transport), MemoryStore())  # type: ignore[arg-type]
+
+    with pytest.raises(SourceError, match="for 2020-01-01 alone"):
+        source._split_date_windows("lumacaftor", date(2020, 1, 1), date(2020, 1, 4), [])

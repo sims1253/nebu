@@ -198,6 +198,13 @@ Module `kittum.search`. Needs: `gateway`, `protocol`, `ledger`.
 - HTTP API routes (`/api/projects/{project_id}/search/*`) registered and contract generated.
 - `FakeSource` in `search/testing.py`.
 - Acceptance: recorded real responses in `tests/search/fixtures/` reproduce counts, query translation, and PRISMA-S fields; tests pass end-to-end without network.
+- `run` and `import_file` take the caller's ledger, actor, and artifact store. Occurrence IDs are
+  assigned at persistence; every raw hash must be in the store before rows are written; the
+  `search.executed` payload is built once (`prisma_s_payload`). Routes take `actor_id` in the body
+  and answer 503 without a ledger or gateway.
+- Left: take the actor from the session once auth exists; run live searches as a job (the HTTP calls
+  currently happen inside the route's transaction); map `PubmedBookArticle` records (today they are
+  skipped, so they show only as reported > retrieved).
 
 ## WP-06 Enrichment
 

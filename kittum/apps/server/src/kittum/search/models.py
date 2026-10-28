@@ -50,6 +50,10 @@ class SearchExecution(Record):
     records: tuple[SourceRecord, ...]
 
 
+class SourceError(Exception):
+    """A source answered with an error or with something that cannot be a complete result."""
+
+
 class Source(Protocol):
     name: str
 
@@ -60,5 +64,6 @@ __all__ = [
     "SearchExecution",
     "SearchPlan",
     "Source",
+    "SourceError",
     "SourceRecord",
 ]

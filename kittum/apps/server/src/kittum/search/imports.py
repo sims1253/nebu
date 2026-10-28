@@ -2,24 +2,26 @@
 
 import csv
 import io
-import json
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import rispy
 
-from kittum.core import Clock, Id, SystemClock, new_id, sha256_hex
-from kittum.ledger import GENESIS_HASH, EventDraft, Ledger, event_hash, payload_hash
+from kittum.core import Clock, Id, SystemClock, new_id
 from kittum.search.models import SearchExecution, SearchPlan, SourceRecord
-from kittum.search.store import save_execution
+from kittum.search.service import record_execution
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from kittum.db import Tx
+    from kittum.ledger import Ledger
     from kittum.storage import ArtifactStore
 
 NCT_PATTERN = re.compile(r"(?i)\b(NCT\d{8})\b")
 EUDRACT_PATTERN = re.compile(r"\b(\d{4}-\d{6}-\d{2}(?:-\d{2})?)\b")
 YEAR_PATTERN = re.compile(r"\b(19\d\d|20\d\d)\b")
+RIS_START = re.compile(r"(?m)^TY  - ")
 
 
 def _find_registry_ids(*texts: str | None) -> tuple[str, ...]:
@@ -36,23 +38,19 @@ def _parse_year(text: str | None) -> int | None:
     if not text:
         return None
     m = YEAR_PATTERN.search(str(text))
-    if m:
-        try:
-            return int(m.group(1))
-        except ValueError:
-            return None
-    return None
+    return int(m.group(1)) if m else None
 
 
-def parse_ris(
-    text: str, raw_hash: str, format_name: str, start_ordinal: int = 0
-) -> list[SourceRecord]:
+def parse_ris(text: str, raw_hash: str, format_name: str) -> list[SourceRecord]:
     """Parse RIS text into SourceRecord models."""
     entries = rispy.loads(text)
+    # rispy skips anything it cannot read, including a record without `ER`; count `TY` lines.
+    expected = len(RIS_START.findall(text))
+    if len(entries) != expected or (expected == 0 and text.strip()):
+        raise ValueError(f"RIS file has {expected} TY lines but {len(entries)} readable records")
     records: list[SourceRecord] = []
-    ordinal = start_ordinal
 
-    for entry in entries:
+    for ordinal, entry in enumerate(entries):
         title = entry.get("title") or entry.get("primary_title") or ""
         abstract = entry.get("abstract") or entry.get("notes_abstract")
 
@@ -97,9 +95,23 @@ def parse_ris(
             raw_hash=raw_hash,
         )
         records.append(rec)
-        ordinal += 1
 
     return records
+
+
+CSV_ID_COLUMNS = (
+    "eu_ct_number",
+    "eudract_number",
+    "trial_number",
+    "id",
+    "protocol_number",
+    "sponsor_protocol_number",
+)
+CSV_TITLE_COLUMNS = ("trial_title", "full_title", "title")
+
+
+def _norm_key(key: str) -> str:
+    return key.strip().lower().replace(" ", "_")
 
 
 def _get_col(norm: dict[str, str], *keys: str) -> str | None:
@@ -109,32 +121,23 @@ def _get_col(norm: dict[str, str], *keys: str) -> str | None:
     return None
 
 
-def parse_csv(
-    text: str, raw_hash: str, format_name: str, start_ordinal: int = 0
-) -> list[SourceRecord]:
+def parse_csv(text: str, raw_hash: str, format_name: str) -> list[SourceRecord]:
     """Parse CTIS or EU-CTR CSV into SourceRecord models."""
     reader = csv.DictReader(io.StringIO(text))
-    records: list[SourceRecord] = []
-    ordinal = start_ordinal
-
-    for row in reader:
-        # Normalize keys
-        norm = {k.strip().lower().replace(" ", "_"): v for k, v in row.items() if k}
-
-        record_id = (
-            _get_col(
-                norm,
-                "eu_ct_number",
-                "eudract_number",
-                "trial_number",
-                "id",
-                "protocol_number",
-                "sponsor_protocol_number",
-            )
-            or f"{format_name}-{ordinal}"
+    header = {_norm_key(k) for k in reader.fieldnames or ()}
+    if not header & set(CSV_ID_COLUMNS) or not header & set(CSV_TITLE_COLUMNS):
+        raise ValueError(
+            f"CSV header needs a trial ID column ({', '.join(CSV_ID_COLUMNS)}) "
+            f"and a title column ({', '.join(CSV_TITLE_COLUMNS)})"
         )
+    records: list[SourceRecord] = []
 
-        title = _get_col(norm, "trial_title", "full_title", "title") or ""
+    for ordinal, row in enumerate(reader):
+        norm = {_norm_key(k): v for k, v in row.items() if k}
+
+        record_id = _get_col(norm, *CSV_ID_COLUMNS) or f"{format_name}-{ordinal}"
+
+        title = _get_col(norm, *CSV_TITLE_COLUMNS) or ""
         abstract = _get_col(
             norm, "brief_summary", "medical_condition", "disease", "condition", "summary"
         )
@@ -180,9 +183,20 @@ def parse_csv(
             raw_hash=raw_hash,
         )
         records.append(rec)
-        ordinal += 1
 
     return records
+
+
+_PARSERS: dict[str, Callable[[str, str, str], list[SourceRecord]]] = {
+    "ris": parse_ris,
+    "central": parse_ris,
+    "centralexport": parse_ris,
+    "embase": parse_ris,
+    "csv": parse_csv,
+    "ctis": parse_csv,
+    "euctr": parse_csv,
+    "eu-ctr": parse_csv,
+}
 
 
 def import_file(
@@ -192,154 +206,43 @@ def import_file(
     data: bytes | str,
     format: str,
     *,
-    ledger: Ledger | None = None,
-    actor_id: Id | None = None,
-    artifacts: ArtifactStore | None = None,
+    ledger: Ledger,
+    actor_id: Id,
+    artifacts: ArtifactStore,
     clock: Clock | None = None,
 ) -> SearchExecution:
-    """Import records from an exported file (RIS, CENTRAL, Embase, CTIS, EU-CTR)."""
-    now = (clock or SystemClock()).now()
+    """Import records from an exported file (RIS, CENTRAL, Embase, CTIS, EU-CTR).
+
+    The file is stored as the execution's one raw artifact. Its record count is the reported count;
+    an export carries no separate platform total.
+    """
+    parse = _PARSERS.get(format.lower())
+    if parse is None:
+        raise ValueError(
+            f"unsupported import format {format!r}; supported: {', '.join(sorted(_PARSERS))}"
+        )
     raw_bytes = data.encode("utf-8") if isinstance(data, str) else data
-    raw_hash = sha256_hex(raw_bytes)
-    text_content = raw_bytes.decode("utf-8", errors="replace")
+    try:
+        text_content = raw_bytes.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise ValueError(f"import file is not valid UTF-8: {exc}") from exc
 
-    if artifacts is not None:
-        artifacts.put(raw_bytes)
-
-    fmt = format.lower()
-    if fmt in ("ris", "central", "centralexport", "embase"):
-        records = parse_ris(text_content, raw_hash, plan.source)
-    elif fmt in ("csv", "ctis", "euctr", "eu-ctr"):
-        records = parse_csv(text_content, raw_hash, plan.source)
-    else:
-        # Default to RIS attempt, then CSV
-        try:
-            records = parse_ris(text_content, raw_hash, plan.source)
-        except Exception:
-            records = parse_csv(text_content, raw_hash, plan.source)
-
-    count = len(records)
-    exec_id = new_id()
+    now = (clock or SystemClock()).now()
+    raw_hash = artifacts.put(raw_bytes)
+    records = parse(text_content, raw_hash, plan.source)
 
     execution = SearchExecution(
-        id=exec_id,
+        id=new_id(),
         plan=plan,
         kind="file_import",
         started_at=now,
         ended_at=now,
         query_translation=None,
-        reported_count=count,
-        retrieved_count=count,
+        reported_count=len(records),
+        retrieved_count=len(records),
         raw_artifact_hashes=(raw_hash,),
         records=tuple(records),
     )
-
-    save_execution(tx, project_id, execution)
-
-    if ledger is not None:
-        draft = EventDraft(
-            project_id=project_id,
-            type="search.executed",
-            schema_version=1,
-            actor_id=actor_id or new_id(),
-            payload={
-                "execution_id": str(execution.id),
-                "topic_id": plan.topic_id,
-                "source": plan.source,
-                "platform": plan.platform,
-                "kind": execution.kind,
-                "strategy": plan.strategy,
-                "limits": list(plan.limits),
-                "query_translation": execution.query_translation,
-                "reported_count": execution.reported_count,
-                "retrieved_count": execution.retrieved_count,
-                "started_at": execution.started_at.isoformat(),
-                "ended_at": execution.ended_at.isoformat(),
-                "raw_artifact_hashes": list(execution.raw_artifact_hashes),
-            },
-        )
-        ledger.append(tx, draft)
-    elif type(tx).__name__ != "NullTx":
-        _append_postgres_ledger(tx, project_id, actor_id or new_id(), execution, now)
-
-    return execution
-
-
-def _append_postgres_ledger(
-    tx: Tx, project_id: Id, actor_id: Id, execution: SearchExecution, now: Any
-) -> None:
-    # Ensure system actor exists for FK constraint
-    actor_row = tx.execute(
-        """
-        insert into actor (identity_ref, kind) values ('system', 'system')
-        on conflict (identity_ref) do update set identity_ref = excluded.identity_ref
-        returning id
-        """
-    ).fetchone()
-    effective_actor_id = actor_row["id"] if actor_row else actor_id
-
-    payload = {
-        "execution_id": str(execution.id),
-        "topic_id": execution.plan.topic_id,
-        "source": execution.plan.source,
-        "platform": execution.plan.platform,
-        "kind": execution.kind,
-        "strategy": execution.plan.strategy,
-        "limits": list(execution.plan.limits),
-        "query_translation": execution.query_translation,
-        "reported_count": execution.reported_count,
-        "retrieved_count": execution.retrieved_count,
-        "started_at": execution.started_at.isoformat(),
-        "ended_at": execution.ended_at.isoformat(),
-        "raw_artifact_hashes": list(execution.raw_artifact_hashes),
-    }
-
-    last = tx.execute(
-        """
-        select seq, event_hash from audit_event
-        where project_id = %s
-        order by seq desc limit 1 for update
-        """,
-        (project_id,),
-    ).fetchone()
-
-    seq = (last["seq"] + 1) if last else 1
-    prev_h = last["event_hash"] if last else GENESIS_HASH
-    event_id = new_id()
-    p_hash = payload_hash(payload)
-    e_hash = event_hash(
-        project_id=project_id,
-        seq=seq,
-        event_id=event_id,
-        type="search.executed",
-        schema_version=1,
-        actor_id=effective_actor_id,
-        recorded_at=now,
-        payload_hash=p_hash,
-        prev_hash=prev_h,
-    )
-
-    tx.execute(
-        """
-        insert into audit_event (
-            project_id, seq, event_id, type, schema_version, actor_id,
-            recorded_at, payload, payload_hash, prev_hash, event_hash
-        ) values (
-            %s, %s, %s, %s, %s, %s,
-            %s, %s, %s, %s, %s
-        )
-        """,
-        (
-            project_id,
-            seq,
-            event_id,
-            "search.executed",
-            1,
-            effective_actor_id,
-            now,
-            json.dumps(payload),
-            p_hash,
-            prev_h,
-            e_hash,
-        ),
+    return record_execution(
+        tx, project_id, execution, ledger=ledger, actor_id=actor_id, artifacts=artifacts
     )

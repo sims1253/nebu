@@ -9,7 +9,9 @@ from kittum.ledger.testing import InMemoryLedger
 from kittum.search import (
     PubMedSource,
     SearchPlan,
+    SourceError,
     get_execution,
+    list_executions,
     run,
 )
 from kittum.storage import MemoryStore
@@ -24,24 +26,18 @@ pytestmark = pytest.mark.postgres
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
-def _seed_project(pg: Tx) -> uuid.UUID:
-    row = pg.execute(
-        "insert into project (name, policy_version) values ('search-test', 'v1') returning id"
-    ).fetchone()
-    assert row
-    return row["id"]
-
-
-def test_pubmed_recorded_search_end_to_end_into_postgres(pg: Tx) -> None:
-    project_id = _seed_project(pg)
+def test_pubmed_recorded_search_end_to_end_into_postgres(
+    pg: Tx, project_id: uuid.UUID, actor_id: uuid.UUID
+) -> None:
     strategy = "lumacaftor[ti] AND trial[tiab]"
 
     esearch_xml = (FIXTURES / "pubmed_esearch.xml").read_bytes()
     efetch_xml = (FIXTURES / "pubmed_efetch.xml").read_bytes()
 
+    # The strategy is percent-encoded, so `#`, `&`, and spaces reach PubMed intact.
     esearch_url = (
-        f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?"
-        f"db=pubmed&term={strategy}&usehistory=y&retmode=xml&tool=kittum"
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?"
+        "db=pubmed&term=lumacaftor%5Bti%5D%20AND%20trial%5Btiab%5D&usehistory=y&retmode=xml&tool=kittum"
     )
     efetch_url = (
         "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?"
@@ -72,6 +68,7 @@ def test_pubmed_recorded_search_end_to_end_into_postgres(pg: Tx) -> None:
         plan,
         source,
         ledger=ledger,
+        actor_id=actor_id,
         artifacts=artifacts,
     )
 
@@ -105,17 +102,16 @@ def test_pubmed_recorded_search_end_to_end_into_postgres(pg: Tx) -> None:
     assert art_33600745.year == 2021
     assert art_33600745.journal is not None
 
-    # 5. Raw response artifacts stored
+    # 5. Raw responses stored byte for byte, and every record points at its EFetch body
     esearch_hash = sha256_hex(esearch_xml)
     efetch_hash = sha256_hex(efetch_xml)
-    assert esearch_hash in execution.raw_artifact_hashes
-    assert efetch_hash in execution.raw_artifact_hashes
-    assert artifacts.exists(esearch_hash)
-    assert artifacts.exists(efetch_hash)
+    assert execution.raw_artifact_hashes == (esearch_hash, efetch_hash)
+    assert artifacts.get(esearch_hash) == esearch_xml
+    assert artifacts.get(efetch_hash) == efetch_xml
+    assert {r.raw_hash for r in execution.records} == {efetch_hash}
 
-    # 6. Occurrence IDs assigned
-    for r in execution.records:
-        assert r.occurrence_id is not None
+    # 6. Occurrence IDs are unique and survive the round trip
+    assert len({r.occurrence_id for r in execution.records}) == 24
 
     # 7. Persistence into Postgres: load back and verify
     loaded = get_execution(pg, project_id, execution.id)
@@ -125,12 +121,39 @@ def test_pubmed_recorded_search_end_to_end_into_postgres(pg: Tx) -> None:
     assert loaded.retrieved_count == 24
     assert loaded.query_translation == execution.query_translation
     assert len(loaded.records) == 24
-    assert loaded.records[0].occurrence_id == execution.records[0].occurrence_id
+    assert loaded.raw_artifact_hashes == execution.raw_artifact_hashes
+    assert [r.occurrence_id for r in loaded.records] == [r.occurrence_id for r in execution.records]
     assert loaded.records[0].title == execution.records[0].title
+    stored = pg.execute(
+        "select count(*) as n from source_occurrence where execution_id = %s", (execution.id,)
+    ).fetchone()
+    assert stored and stored["n"] == execution.retrieved_count
 
     # 8. Ledger event recorded
     events = ledger.events(pg, project_id)
     assert len(events) == 1
     assert events[0].type == "search.executed"
+    assert events[0].actor_id == actor_id
+    assert events[0].payload["execution_id"] == str(execution.id)
     assert events[0].payload["reported_count"] == 24
+    assert events[0].payload["retrieved_count"] == 24
     assert events[0].payload["strategy"] == strategy
+    assert events[0].payload["query_translation"] == execution.query_translation
+    assert events[0].payload["raw_artifact_hashes"] == [esearch_hash, efetch_hash]
+    assert ledger.verify(pg, project_id).ok
+
+
+def test_pubmed_error_reply_writes_nothing(
+    pg: Tx, project_id: uuid.UUID, actor_id: uuid.UUID
+) -> None:
+    # The fake transport answers 404 for every URL, as PubMed would for a broken request.
+    artifacts = MemoryStore()
+    source = PubMedSource(PassThroughGateway(FakeTransport({})), artifacts)
+    plan = SearchPlan(topic_id="t", source="pubmed", platform="PubMed", strategy="x")
+    ledger = InMemoryLedger()
+
+    with pytest.raises(SourceError, match="HTTP 404"):
+        run(pg, project_id, plan, source, ledger=ledger, actor_id=actor_id, artifacts=artifacts)
+
+    assert list_executions(pg, project_id) == []
+    assert ledger.events(pg, project_id) == []

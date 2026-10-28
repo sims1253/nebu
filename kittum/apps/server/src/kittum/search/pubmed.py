@@ -8,11 +8,12 @@ import logging
 import re
 import xml.etree.ElementTree as ET
 from datetime import date, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
+from urllib.parse import quote, urlencode
 
-from kittum.core import Clock, Sha256, SystemClock, new_id, sha256_hex
+from kittum.core import Clock, Sha256, SystemClock, new_id
 from kittum.gateway import HttpRequest
-from kittum.search.models import SearchExecution, SearchPlan, SourceRecord
+from kittum.search.models import SearchExecution, SearchPlan, SourceError, SourceRecord
 
 if TYPE_CHECKING:
     from kittum.gateway import Gateway
@@ -99,11 +100,8 @@ def parse_pubmed_xml(
                     m = YEAR_PATTERN.search(medline_date)
                     if m:
                         year_str = m.group(1)
-            if year_str:
-                try:
-                    year = int(year_str)
-                except ValueError:
-                    year = None
+            if year_str and year_str.isdigit():
+                year = int(year_str)
 
             # Journal
             journal = (
@@ -172,6 +170,13 @@ def parse_pubmed_xml(
     return records
 
 
+class ESearchResult(NamedTuple):
+    count: int
+    web_env: str
+    query_key: str
+    query_translation: str | None
+
+
 class PubMedSource:
     """Live API source adapter for PubMed E-utilities."""
 
@@ -196,174 +201,132 @@ class PubMedSource:
         self._clock = clock or SystemClock()
         self._max_count_per_window = max_count_per_window
 
-    def _auth_params(self) -> dict[str, str]:
-        params: dict[str, str] = {"tool": self._tool}
+    def _url(self, endpoint: str, params: dict[str, str]) -> str:
+        params = {**params, "tool": self._tool}
         if self._contact_email:
             params["email"] = self._contact_email
         if self._ncbi_api_key:
             params["api_key"] = self._ncbi_api_key
-        return params
+        return f"{EUTILS_BASE}/{endpoint}?{urlencode(params, quote_via=quote)}"
 
-    def _build_esearch_url(
-        self,
-        term: str,
-        *,
-        mindate: str | None = None,
-        maxdate: str | None = None,
-        datetype: str = "pdat",
-    ) -> str:
-        parts = [
-            f"{EUTILS_BASE}/esearch.fcgi?db=pubmed",
-            f"term={term}",
-            "usehistory=y",
-            "retmode=xml",
-        ]
-        auth = self._auth_params()
-        for k, v in auth.items():
-            parts.append(f"{k}={v}")
-        if mindate and maxdate:
-            parts.append(f"datetype={datetype}")
-            parts.append(f"mindate={mindate}")
-            parts.append(f"maxdate={maxdate}")
-        return "&".join(parts)
-
-    def _build_efetch_url(
-        self,
-        query_key: str,
-        web_env: str,
-        retstart: int,
-        retmax: int,
-    ) -> str:
-        parts = [
-            f"{EUTILS_BASE}/efetch.fcgi?db=pubmed",
-            f"query_key={query_key}",
-            f"WebEnv={web_env}",
-            f"retstart={retstart}",
-            f"retmax={retmax}",
-            "retmode=xml",
-        ]
-        auth = self._auth_params()
-        for k, v in auth.items():
-            parts.append(f"{k}={v}")
-        return "&".join(parts)
+    def _fetch(self, url: str, raw_hashes: list[Sha256]) -> tuple[bytes, Sha256]:
+        """Fetch through the gateway, store the body, and record its hash."""
+        resp = self._gateway.fetch("pubmed", HttpRequest(url=url))
+        if not 200 <= resp.status < 300:
+            raise SourceError(f"PubMed returned HTTP {resp.status} for {url}")
+        body_hash = self._artifacts.put(resp.body)
+        raw_hashes.append(body_hash)
+        return resp.body, body_hash
 
     def _esearch(
         self,
         term: str,
+        raw_hashes: list[Sha256],
         *,
         mindate: str | None = None,
         maxdate: str | None = None,
-    ) -> tuple[int, str | None, str | None, str | None, bytes, Sha256]:
-        url = self._build_esearch_url(term, mindate=mindate, maxdate=maxdate)
-        req = HttpRequest(url=url)
-        resp = self._gateway.fetch("pubmed", req)
-        body = resp.body
-        body_hash = sha256_hex(body)
-        self._artifacts.put(body)
+    ) -> ESearchResult:
+        params = {"db": "pubmed", "term": term, "usehistory": "y", "retmode": "xml"}
+        if mindate and maxdate:
+            params |= {"datetype": "pdat", "mindate": mindate, "maxdate": maxdate}
+        body, _ = self._fetch(self._url("esearch.fcgi", params), raw_hashes)
 
         root = ET.fromstring(body)
+        error = root.findtext("ERROR")
         count_str = root.findtext("Count")
-        count = int(count_str) if count_str else 0
         web_env = root.findtext("WebEnv")
         query_key = root.findtext("QueryKey")
-        query_trans = root.findtext("QueryTranslation")
-        return count, web_env, query_key, query_trans, body, body_hash
+        if error or count_str is None or not web_env or not query_key:
+            raise SourceError(f"PubMed ESearch failed for {term!r}: {error or 'incomplete reply'}")
+        return ESearchResult(int(count_str), web_env, query_key, root.findtext("QueryTranslation"))
 
     def _split_date_windows(
         self,
         term: str,
         start_date: date,
         end_date: date,
-    ) -> list[tuple[date, date, int, str, str, str | None, Sha256]]:
+        raw_hashes: list[Sha256],
+    ) -> list[tuple[date, date, ESearchResult]]:
         """Recursively split a date range into subwindows with count <= max_count."""
-        min_str = start_date.strftime("%Y/%m/%d")
-        max_str = end_date.strftime("%Y/%m/%d")
-
-        count, web_env, query_key, q_trans, _, b_hash = self._esearch(
-            term, mindate=min_str, maxdate=max_str
+        result = self._esearch(
+            term,
+            raw_hashes,
+            mindate=start_date.strftime("%Y/%m/%d"),
+            maxdate=end_date.strftime("%Y/%m/%d"),
         )
 
-        if count == 0:
+        if result.count == 0:
             return []
 
-        if count <= self._max_count_per_window or start_date >= end_date:
+        if result.count <= self._max_count_per_window:
             logger.info(
                 "PubMed date window %s to %s: count=%d",
                 start_date.isoformat(),
                 end_date.isoformat(),
-                count,
+                result.count,
             )
-            assert web_env and query_key
-            return [(start_date, end_date, count, web_env, query_key, q_trans, b_hash)]
+            return [(start_date, end_date, result)]
 
-        # Split in half
+        if start_date >= end_date:
+            # EFetch cannot page past the cap, so the rest of this day would be lost.
+            raise SourceError(
+                f"PubMed returns {result.count} records for {start_date.isoformat()} alone, "
+                f"more than the {self._max_count_per_window} one window can fetch"
+            )
+
         mid_date = start_date + (end_date - start_date) // 2
-        left = self._split_date_windows(term, start_date, mid_date)
-        right = self._split_date_windows(term, mid_date + timedelta(days=1), end_date)
+        left = self._split_date_windows(term, start_date, mid_date, raw_hashes)
+        right = self._split_date_windows(term, mid_date + timedelta(days=1), end_date, raw_hashes)
         return left + right
 
     def run(self, plan: SearchPlan) -> SearchExecution:
         started_at = self._clock.now()
-        exec_id = new_id()
         raw_hashes: list[Sha256] = []
 
-        # Initial ESearch
-        count, web_env, query_key, query_trans, _, initial_hash = self._esearch(plan.strategy)
-        raw_hashes.append(initial_hash)
-
-        windows: list[tuple[int, str, str]] = []
-        if count > self._max_count_per_window:
-            # Need date window splitting
+        initial = self._esearch(plan.strategy, raw_hashes)
+        windows = [initial] if initial.count > 0 else []
+        if initial.count > self._max_count_per_window:
             logger.info(
                 "Search count %d exceeds %d; splitting into date windows",
-                count,
+                initial.count,
                 self._max_count_per_window,
             )
-            start_date = date(1900, 1, 1)
-            end_date = self._clock.now().date()
-            split_windows = self._split_date_windows(plan.strategy, start_date, end_date)
-            for _, _, win_count, win_env, win_key, _, win_hash in split_windows:
-                windows.append((win_count, win_env, win_key))
-                raw_hashes.append(win_hash)
-        else:
-            if count > 0:
-                assert web_env and query_key
-                windows.append((count, web_env, query_key))
+            split = self._split_date_windows(
+                plan.strategy, date(1900, 1, 1), self._clock.now().date(), raw_hashes
+            )
+            windows = [result for _, _, result in split]
 
-        # EFetch records for all windows
         all_records: list[SourceRecord] = []
-        current_ordinal = 0
-
-        for win_count, w_env, w_key in windows:
+        for window in windows:
             retstart = 0
-            while retstart < win_count:
-                retmax = min(BATCH_SIZE, win_count - retstart)
-                fetch_url = self._build_efetch_url(w_key, w_env, retstart, retmax)
-                req = HttpRequest(url=fetch_url)
-                resp = self._gateway.fetch("pubmed", req)
-                body = resp.body
-                body_hash = sha256_hex(body)
-                self._artifacts.put(body)
-                raw_hashes.append(body_hash)
-
-                records = parse_pubmed_xml(body, body_hash, start_ordinal=current_ordinal)
-                all_records.extend(records)
-                current_ordinal += len(records)
+            while retstart < window.count:
+                retmax = min(BATCH_SIZE, window.count - retstart)
+                params = {
+                    "db": "pubmed",
+                    "query_key": window.query_key,
+                    "WebEnv": window.web_env,
+                    "retstart": str(retstart),
+                    "retmax": str(retmax),
+                    "retmode": "xml",
+                }
+                body, body_hash = self._fetch(self._url("efetch.fcgi", params), raw_hashes)
+                error = ET.fromstring(body).findtext("ERROR")
+                if error:
+                    raise SourceError(f"PubMed EFetch failed at retstart={retstart}: {error}")
+                all_records.extend(
+                    parse_pubmed_xml(body, body_hash, start_ordinal=len(all_records))
+                )
                 retstart += retmax
 
-        ended_at = self._clock.now()
-        retrieved_count = len(all_records)
-        reported_count = count
-
         return SearchExecution(
-            id=exec_id,
+            id=new_id(),
             plan=plan,
             kind="live_api",
             started_at=started_at,
-            ended_at=ended_at,
-            query_translation=query_trans,
-            reported_count=reported_count,
-            retrieved_count=retrieved_count,
+            ended_at=self._clock.now(),
+            query_translation=initial.query_translation,
+            reported_count=initial.count,
+            retrieved_count=len(all_records),
             raw_artifact_hashes=tuple(raw_hashes),
             records=tuple(all_records),
         )

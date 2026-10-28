@@ -24,24 +24,21 @@ pytestmark = pytest.mark.postgres
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
-def _seed_project(pg: Tx) -> uuid.UUID:
-    row = pg.execute(
-        "insert into project (name, policy_version) values ('ctgov-test', 'v1') returning id"
-    ).fetchone()
-    assert row
-    return row["id"]
-
-
-def test_ctgov_paginated_search_returns_every_page(pg: Tx) -> None:
-    project_id = _seed_project(pg)
-    strategy = "lumacaftor"
+def test_ctgov_paginated_search_returns_every_page(
+    pg: Tx, project_id: uuid.UUID, actor_id: uuid.UUID
+) -> None:
+    strategy = "lumacaftor AND AREA[Phase]PHASE2"
 
     page1_bytes = (FIXTURES / "ctgov_page1.json").read_bytes()
     page2_bytes = (FIXTURES / "ctgov_page2.json").read_bytes()
 
-    token = "ZVNj7o2Elu8o3lpzTd6s47mtmpOQJJxtZPGg2PcW"
-    url_p1 = f"https://clinicaltrials.gov/api/v2/studies?query.term={strategy}&pageSize=5"
-    url_p2 = f"https://clinicaltrials.gov/api/v2/studies?query.term={strategy}&pageSize=5&pageToken={token}"
+    # Recorded with tests/search/record_fixtures.py: nine trials in two pages.
+    token = "ZVNj7o2Elu8o3lpzTd6s47mtmpOQJJxtY_el3_ASkA"
+    url_p1 = (
+        "https://clinicaltrials.gov/api/v2/studies?"
+        "query.term=lumacaftor%20AND%20AREA%5BPhase%5DPHASE2&pageSize=5&countTotal=true"
+    )
+    url_p2 = f"{url_p1}&pageToken={token}"
 
     transport = FakeTransport(
         {
@@ -67,12 +64,14 @@ def test_ctgov_paginated_search_returns_every_page(pg: Tx) -> None:
         plan,
         source,
         ledger=ledger,
+        actor_id=actor_id,
         artifacts=artifacts,
     )
 
-    # 1. Total 10 records retrieved across the 2 pages
-    assert len(execution.records) == 10
-    assert execution.retrieved_count == 10
+    # 1. The reported count is CT.gov's totalCount; all nine came back across both pages
+    assert execution.reported_count == 9
+    assert execution.retrieved_count == 9
+    assert [r.ordinal for r in execution.records] == list(range(9))
 
     # 2. Both pages were fetched
     assert len(transport.sent) == 2
@@ -82,10 +81,10 @@ def test_ctgov_paginated_search_returns_every_page(pg: Tx) -> None:
     # 3. Both page hashes stored
     h1 = sha256_hex(page1_bytes)
     h2 = sha256_hex(page2_bytes)
-    assert h1 in execution.raw_artifact_hashes
-    assert h2 in execution.raw_artifact_hashes
-    assert artifacts.exists(h1)
-    assert artifacts.exists(h2)
+    assert execution.raw_artifact_hashes == (h1, h2)
+    assert artifacts.get(h1) == page1_bytes
+    assert artifacts.get(h2) == page2_bytes
+    assert [r.raw_hash for r in execution.records] == [h1] * 5 + [h2] * 4
 
     # 4. Fields mapped properly on SourceRecord
     first_rec = execution.records[0]
@@ -103,11 +102,14 @@ def test_ctgov_paginated_search_returns_every_page(pg: Tx) -> None:
     # 5. Persisted in database and re-loaded
     loaded = get_execution(pg, project_id, execution.id)
     assert loaded is not None
-    assert len(loaded.records) == 10
+    assert len(loaded.records) == 9
     assert loaded.records[0].provider_record_id == first_rec.provider_record_id
 
     # 6. Ledger event emitted
     events = ledger.events(pg, project_id)
     assert len(events) == 1
     assert events[0].type == "search.executed"
-    assert events[0].payload["retrieved_count"] == 10
+    assert events[0].actor_id == actor_id
+    assert events[0].payload["reported_count"] == 9
+    assert events[0].payload["retrieved_count"] == 9
+    assert events[0].payload["raw_artifact_hashes"] == [h1, h2]

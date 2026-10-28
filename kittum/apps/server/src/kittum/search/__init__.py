@@ -8,7 +8,7 @@ Owner: WP-05.
 
 from kittum.search.ctgov import CtgovSource
 from kittum.search.imports import import_file
-from kittum.search.models import SearchExecution, SearchPlan, Source, SourceRecord
+from kittum.search.models import SearchExecution, SearchPlan, Source, SourceError, SourceRecord
 from kittum.search.pubmed import PubMedSource
 from kittum.search.service import run
 from kittum.search.store import get_execution, list_executions
@@ -19,6 +19,7 @@ __all__ = [
     "SearchExecution",
     "SearchPlan",
     "Source",
+    "SourceError",
     "SourceRecord",
     "get_execution",
     "import_file",

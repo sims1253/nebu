@@ -7,10 +7,11 @@ and maps studies to SourceRecord models.
 import json
 import re
 from typing import TYPE_CHECKING, Any
+from urllib.parse import quote, urlencode
 
-from kittum.core import Clock, Sha256, SystemClock, new_id, sha256_hex
+from kittum.core import Clock, Sha256, SystemClock, new_id
 from kittum.gateway import HttpRequest
-from kittum.search.models import SearchExecution, SearchPlan, SourceRecord
+from kittum.search.models import SearchExecution, SearchPlan, SourceError, SourceRecord
 
 if TYPE_CHECKING:
     from kittum.gateway import Gateway
@@ -37,10 +38,7 @@ def _parse_study(study: dict[str, Any], raw_hash: Sha256, ordinal: int) -> Sourc
     if start_date:
         m = YEAR_PATTERN.search(start_date)
         if m:
-            try:
-                year = int(m.group(1))
-            except ValueError:
-                year = None
+            year = int(m.group(1))
 
     sponsors = proto.get("sponsorCollaboratorsModule", {})
     lead_sponsor = sponsors.get("leadSponsor", {}).get("name")
@@ -110,59 +108,46 @@ class CtgovSource:
         self._page_size = page_size
 
     def _build_url(self, strategy: str, page_token: str | None = None) -> str:
-        parts = [
-            f"{CTGOV_BASE}?query.term={strategy}",
-            f"pageSize={self._page_size}",
-        ]
+        # `countTotal` makes the first page carry `totalCount`, the platform's reported count.
+        params = {"query.term": strategy, "pageSize": str(self._page_size), "countTotal": "true"}
         if page_token:
-            parts.append(f"pageToken={page_token}")
-        return "&".join(parts)
+            params["pageToken"] = page_token
+        return f"{CTGOV_BASE}?{urlencode(params, quote_via=quote)}"
 
     def run(self, plan: SearchPlan) -> SearchExecution:
         started_at = self._clock.now()
-        exec_id = new_id()
         raw_hashes: list[Sha256] = []
         all_records: list[SourceRecord] = []
-
+        reported_count: int | None = None
         next_token: str | None = None
-        ordinal = 0
-        reported_count = 0
 
         while True:
             url = self._build_url(plan.strategy, next_token)
-            req = HttpRequest(url=url)
-            resp = self._gateway.fetch("ctgov", req)
-            body = resp.body
-            body_hash = sha256_hex(body)
-            self._artifacts.put(body)
+            resp = self._gateway.fetch("ctgov", HttpRequest(url=url))
+            if not 200 <= resp.status < 300:
+                raise SourceError(f"ClinicalTrials.gov returned HTTP {resp.status} for {url}")
+            body_hash = self._artifacts.put(resp.body)
             raw_hashes.append(body_hash)
 
-            data = json.loads(body)
-            total_count = data.get("totalCount")
-            if total_count is not None and reported_count == 0:
-                reported_count = int(total_count)
+            data = json.loads(resp.body)
+            if reported_count is None:
+                if "totalCount" not in data:
+                    raise SourceError("ClinicalTrials.gov did not report totalCount")
+                reported_count = int(data["totalCount"])
 
-            studies = data.get("studies", [])
-            for study in studies:
-                rec = _parse_study(study, body_hash, ordinal)
-                all_records.append(rec)
-                ordinal += 1
+            for study in data.get("studies", []):
+                all_records.append(_parse_study(study, body_hash, len(all_records)))
 
             next_token = data.get("nextPageToken")
             if not next_token:
                 break
 
-        if reported_count == 0:
-            reported_count = len(all_records)
-
-        ended_at = self._clock.now()
-
         return SearchExecution(
-            id=exec_id,
+            id=new_id(),
             plan=plan,
             kind="live_api",
             started_at=started_at,
-            ended_at=ended_at,
+            ended_at=self._clock.now(),
             query_translation=None,
             reported_count=reported_count,
             retrieved_count=len(all_records),
