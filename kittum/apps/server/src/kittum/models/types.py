@@ -1,0 +1,102 @@
+"""The values that cross the model seam, and the confidentiality rule."""
+
+from enum import StrEnum
+from typing import Any, Literal, Protocol
+
+from pydantic import Field
+
+from kittum.core import KittumError, Record, Sha256, content_hash
+
+ALLOWED_WEIGHTS_LICENCES = frozenset(
+    {"apache-2.0", "mit", "bsd-3-clause", "openmdw-1.1", "public-domain"},
+)
+
+
+class Confidentiality(StrEnum):
+    PUBLIC = "public"
+    CONFIDENTIAL = "confidential"  # hosted EU models allowed with a DPA
+    LOCAL_ONLY = "local_only"  # default for CSRs
+
+
+class ModelRecipe(Record):
+    id: str  # Kittum's name, e.g. "qwen3.8-27b-bf16"
+    family: str  # for judge diversity, e.g. "qwen", "gemma", "nemotron"
+    repository: str  # e.g. "Qwen/Qwen3.8-27B"
+    revision: str
+    file_hashes: tuple[tuple[str, Sha256], ...]
+    weights_licence: str
+    licence_url: str
+    serving: Literal["vllm", "ollama", "hosted"]
+    context_tokens: int
+    vision: bool = False
+    served_name: str | None = None  # the name the server answers to; defaults to `repository`
+    upstream_repository: str | None = None  # where the weights and their licence come from
+    reasoning: bool = False  # the model may think before it answers
+    extra_body: dict[str, Any] = Field(default_factory=dict)  # merged into every request body
+    notes: str = ""
+
+    @property
+    def api_model(self) -> str:
+        return self.served_name or self.repository
+
+
+def weights_hash(recipe: ModelRecipe) -> str:
+    """Identifies the weights a recipe runs, independent of its name and serving options."""
+    return content_hash(
+        {
+            "repository": recipe.repository,
+            "revision": recipe.revision,
+            "file_hashes": [list(pair) for pair in recipe.file_hashes],
+        },
+        domain="kittum.model_weights.v1",
+    )
+
+
+class Message(Record):
+    role: Literal["system", "user", "assistant"]
+    content: str
+
+
+class CompletionRequest(Record):
+    model_id: str
+    messages: tuple[Message, ...]
+    json_schema: dict[str, Any] | None = None
+    temperature: float = 0.0
+    seed: int | None = 0
+    max_tokens: int = 2048
+    confidentiality: Confidentiality = Confidentiality.LOCAL_ONLY
+
+
+def request_key(request: CompletionRequest) -> str:
+    """The identity of a request, used as `Completion.request_hash` by every backend."""
+    return content_hash(request, domain="kittum.completion_request.v1")
+
+
+class Completion(Record):
+    text: str  # the answer, with any thinking removed
+    model_identity: str  # what the server reports, not the requested alias
+    request_hash: Sha256
+    raw_response_hash: Sha256
+    raw_request_hash: Sha256 | None = None  # the exact bytes sent, in the artifact store
+    reasoning: str | None = None
+    finish_reason: str | None = None
+
+
+class LlmBackend(Protocol):
+    def complete(self, request: CompletionRequest) -> Completion: ...
+
+
+class ConfidentialityError(KittumError):
+    """A request would send `local_only` content to a hosted model."""
+
+
+class BackendError(KittumError):
+    """The model server answered, but not with a usable completion."""
+
+
+def check_confidentiality(recipe: ModelRecipe, request: CompletionRequest) -> None:
+    """Refuse to send `local_only` content to a hosted backend."""
+    if recipe.serving == "hosted" and request.confidentiality is Confidentiality.LOCAL_ONLY:
+        raise ConfidentialityError(
+            f"refusing to send local_only content to hosted model {recipe.id}"
+        )

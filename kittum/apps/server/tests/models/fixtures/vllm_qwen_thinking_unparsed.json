@@ -1,0 +1,36 @@
+{
+  "id": "chatcmpl-1b7e0c94d2a64f7d9e3c8a5b6f2d1e07",
+  "object": "chat.completion",
+  "created": 1793178902,
+  "model": "Qwen/Qwen3.8-27B",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "The criterion asks for adults. The abstract says the participants were aged 12 to 17 years, so they are adolescents.\n</think>\n\n{\"C_POP_ADULT_NSCLC\": {\"quote\": \"patients aged 12 to 17 years\", \"rationale\": \"The trial enrolled adolescents, not adults.\", \"status\": \"not_met\"}}",
+        "refusal": null,
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "tool_calls": [],
+        "reasoning": null
+      },
+      "logprobs": null,
+      "finish_reason": "stop",
+      "stop_reason": null,
+      "token_ids": null
+    }
+  ],
+  "service_tier": null,
+  "system_fingerprint": null,
+  "usage": {
+    "prompt_tokens": 1184,
+    "total_tokens": 1302,
+    "completion_tokens": 118,
+    "prompt_tokens_details": null
+  },
+  "prompt_logprobs": null,
+  "prompt_token_ids": null,
+  "kv_transfer_params": null
+}

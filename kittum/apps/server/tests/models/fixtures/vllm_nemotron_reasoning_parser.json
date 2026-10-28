@@ -1,0 +1,37 @@
+{
+  "id": "chatcmpl-6d2f8b1e9c3a47e5b0f7d4c2a8e6b3f9",
+  "object": "chat.completion",
+  "created": 1793179015,
+  "model": "nemotron-3.5-super-vl",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"C_POP_ADULT_NSCLC\": {\"quote\": \"patients aged 12 to 17 years\", \"rationale\": \"The trial enrolled adolescents, not adults.\", \"status\": \"not_met\"}}",
+        "refusal": null,
+        "annotations": null,
+        "audio": null,
+        "function_call": null,
+        "tool_calls": [],
+        "reasoning": "Adults are 18 or older. The record reports an age range of 12 to 17 years.",
+        "reasoning_content": "Adults are 18 or older. The record reports an age range of 12 to 17 years."
+      },
+      "logprobs": null,
+      "finish_reason": "stop",
+      "stop_reason": null,
+      "token_ids": null
+    }
+  ],
+  "service_tier": null,
+  "system_fingerprint": null,
+  "usage": {
+    "prompt_tokens": 1201,
+    "total_tokens": 1290,
+    "completion_tokens": 89,
+    "prompt_tokens_details": null
+  },
+  "prompt_logprobs": null,
+  "prompt_token_ids": null,
+  "kv_transfer_params": null
+}

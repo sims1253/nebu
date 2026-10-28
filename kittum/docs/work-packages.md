@@ -19,7 +19,7 @@ The two-week spike in [DESIGN.md](../DESIGN.md#two-week-spike) picks from these 
 | 05 | `search` | Done |
 | 06 | `enrich` | Clients, stored enrichment, and full-text waterfall done; local tagging open |
 | 07 | `corpus` | Dedupe, link proposals, immutable identity revisions, PRISMA counts done |
-| 08 | `judge` and `models` | Types and recorded backend done; open |
+| 08 | `judge` and `models` | Done; ledger store and job wiring wait for WP-01 and WP-02 |
 | 09 | `screening` | Types done; open |
 | 10 | `documents` | Types done; open |
 | 11 | `extraction` | Types done; open |
@@ -257,6 +257,62 @@ Modules `kittum.judge` and `kittum.models`. Needs: `protocol`, `core`.
   checks, downgrade to `unclear`, raw output capture.
 - Gold-data metrics: per-judge recall and specificity, the double-fault rate, run-to-run kappa.
 - Acceptance: recorded completions cover verified, unverified, paraphrased, and negated quotes.
+
+**Done.**
+
+- `models.OpenAICompatibleBackend`: `response_format` with `json_schema`, temperature 0, a seed,
+  the recipe's `extra_body` (thinking switches), raw request and response bytes in the artifact
+  store, the model identity the server reports, thinking removed before the JSON (`<think>`,
+  Gemma channels, harmony, code fences, or the `reasoning` field), retries on transport errors
+  only. `backends_from_endpoints` builds backends from `Settings.llm_endpoints`. A `local_only`
+  request to a `hosted` recipe raises `ConfidentialityError` before anything is sent.
+- `models.ModelRegistry` loads `models/recipes.yaml`: Qwen3.8-27B (thinking off and on),
+  Gemma-4-31B-it, Nemotron 3.5 Super VL NVFP4, and Gemma 4 E4B, Gemma 4 12B, and Qwen3.5-4B on
+  Ollama. Revisions and weight hashes were checked against Hugging Face and the Ollama registry on
+  28.10.2026. Loading rejects licences outside `ALLOWED_WEIGHTS_LICENCES`.
+- `judge.judge` and `judge.judge_many`: one call per record and scope, a per-criterion schema
+  generated from Pydantic, verification and downgrades with `failed_check`, retry with the next
+  seed on malformed output, then `unclear` with the `invalid_output` flag. Records that try to
+  instruct the model cannot be excluded. A cheap, conservative filter (`judge/verify.py`)
+  downgrades `not_met` answers whose evidence is not structurally supported: one sentence, a
+  whole-word key term without a negating compound prefix, an English or German quote, at most one
+  negation cue and it scoped to the key term, and the right polarity for an include or exclude
+  criterion. `Verdict.excludes` is a proposal for humans and adjudication, never a final
+  exclusion. `judge_many` stores verdicts (migration
+  `20261028120000_judge_verdicts.sql`), artifacts, and `judge.verdict_recorded` events, and
+  skips records already judged under the same cache key.
+- `judge.judge_metrics`, `pair_metrics` (double-fault rate, OR rule, Cohen's kappa), and
+  `fleiss_kappa` for run-to-run agreement.
+
+**Left.**
+
+- `judge_many` holds the caller's transaction across model calls. When WP-02 lands, split it into
+  a job that calls the model and a command that records the verdict.
+- The judge is built against WP-03's `Criterion` (`text` per language, `polarity`, `keywords`)
+  and renders criteria with `kittum.protocol.render_prompt`. This branch carries a temporary copy
+  of those types in `protocol/__init__.py`; drop it when the protocol branch is merged.
+- Ollama reports only the tag as the model identity. Record the blob digest from `/api/show` if
+  audits need more.
+- Trade-off, accepted for recall: a quote that contradicts a criterion by value without naming
+  one of its terms ("patients aged 12 to 17 years" against "adults") is `unclear`, as are
+  exclusions on mixed conditions ("adults without EGFR mutation") and negations more than three
+  tokens or a clause away from the key term. Protocol `keywords` let authors anchor such criteria
+  ("aged", "adolescent"), but an affirmative inclusion condition still needs a scoped negation.
+  Measure the work saved this costs on gold data before loosening any rule.
+- Accepted limitations of the filter, not to be chased with more patterns: foreign content words
+  that carry negation ("Melanoma assente"); a negation in an intervening clause about another
+  condition within the window ("Patients with no diabetes received chemotherapy"); evidence about
+  another arm or population; partial matches ("skeletal metastases" against "brain metastases");
+  and in general anything semantic, since the filter is not a semantic verifier. Mitigation: every
+  record is seen by a human, an AI exclusion is a proposal, and disagreements, AI-only exclusions,
+  and audits go to adjudication. Requiring all wording terms (up to three) in the quote would
+  narrow partial matches, but it rejects the positive controls ("Patients without prior
+  chemotherapy" against "Previously treated with chemotherapy"), so it is not done.
+- Polarity is read in English and German only (`judge.verify.POLARITY_LANGUAGES`). A not_met
+  on a criterion without an en or de wording, or with a quote that is not positively English or
+  German, becomes `unclear` (`language_unverifiable`). Add a language by adding its function
+  words and negation cues.
+- A live test against Ollama or vLLM; the tests use recorded response bodies.
 
 ## WP-09 Screening
 

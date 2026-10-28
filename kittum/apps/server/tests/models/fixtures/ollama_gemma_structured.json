@@ -1,0 +1,22 @@
+{
+  "id": "chatcmpl-482",
+  "object": "chat.completion",
+  "created": 1793179120,
+  "model": "gemma4:e4b",
+  "system_fingerprint": "fp_ollama",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"C_POP_ADULT_NSCLC\": {\"quote\": \"patients aged 12 to 17 years\", \"rationale\": \"The trial enrolled adolescents, not adults.\", \"status\": \"not_met\"}}"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1240,
+    "completion_tokens": 52,
+    "total_tokens": 1292
+  }
+}

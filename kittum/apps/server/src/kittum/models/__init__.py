@@ -1,77 +1,59 @@
 """Model recipes and backends (docs/document-tools.md, "Language models").
 
 Every model call goes through an `LlmBackend`. A `ModelRecipe` pins what runs: repository,
-revision, file hashes, and the weights licence. Kittum supports only licences on the allowlist
-below, which carry no revenue caps, field-of-use limits, or no-competition clauses.
+revision, file hashes, and the weights licence. Kittum supports only licences on the allowlist,
+which carry no revenue caps, field-of-use limits, or no-competition clauses; `ModelRegistry`
+refuses to load any other recipe. The shipped recipes live in `recipes.yaml`.
 
-The gateway refuses to send a `local_only` document to a hosted backend.
+`OpenAICompatibleBackend` talks to vLLM, Ollama, or a hosted API with JSON Schema-constrained
+decoding, stores the raw request and response bytes, and reports the model identity the server
+returns. `backends_from_endpoints` builds one per entry in `Settings.llm_endpoints`. Every backend
+refuses to send a `local_only` request to a hosted recipe.
 
-Owner: WP-08 (with the judge). Shipped now: the types, the licence allowlist, and a recorded
-backend in `kittum.models.testing`. Still to build: an OpenAI-compatible backend for vLLM and
-Ollama with JSON Schema-constrained decoding, the recipe registry, and the confidentiality check.
+Owner: WP-08. `kittum.models.testing.RecordedBackend` replays stored answers for tests.
 """
 
-from enum import StrEnum
-from typing import Any, Literal, Protocol
-
-from kittum.core import Record, Sha256
-
-ALLOWED_WEIGHTS_LICENCES = frozenset(
-    {"apache-2.0", "mit", "bsd-3-clause", "openmdw-1.1", "public-domain"},
+from kittum.models.openai_compat import (
+    ArtifactSink,
+    Endpoint,
+    OpenAICompatibleBackend,
+    backends_from_endpoints,
 )
-
-
-class Confidentiality(StrEnum):
-    PUBLIC = "public"
-    CONFIDENTIAL = "confidential"  # hosted EU models allowed with a DPA
-    LOCAL_ONLY = "local_only"  # default for CSRs
-
-
-class ModelRecipe(Record):
-    id: str  # Kittum's name, e.g. "qwen3.8-27b-bf16"
-    family: str  # for judge diversity, e.g. "qwen", "gemma", "nemotron"
-    repository: str  # e.g. "Qwen/Qwen3.8-27B"
-    revision: str
-    file_hashes: tuple[tuple[str, Sha256], ...]
-    weights_licence: str
-    licence_url: str
-    serving: Literal["vllm", "ollama", "hosted"]
-    context_tokens: int
-    vision: bool = False
-
-
-class Message(Record):
-    role: Literal["system", "user", "assistant"]
-    content: str
-
-
-class CompletionRequest(Record):
-    model_id: str
-    messages: tuple[Message, ...]
-    json_schema: dict[str, Any] | None = None
-    temperature: float = 0.0
-    seed: int | None = 0
-    max_tokens: int = 2048
-    confidentiality: Confidentiality = Confidentiality.LOCAL_ONLY
-
-
-class Completion(Record):
-    text: str
-    model_identity: str  # what the server reports, not the requested alias
-    request_hash: Sha256
-    raw_response_hash: Sha256
-
-
-class LlmBackend(Protocol):
-    def complete(self, request: CompletionRequest) -> Completion: ...
-
+from kittum.models.reasoning import split_reasoning
+from kittum.models.registry import ModelRegistry, RecipeError
+from kittum.models.types import (
+    ALLOWED_WEIGHTS_LICENCES,
+    BackendError,
+    Completion,
+    CompletionRequest,
+    Confidentiality,
+    ConfidentialityError,
+    LlmBackend,
+    Message,
+    ModelRecipe,
+    check_confidentiality,
+    request_key,
+    weights_hash,
+)
 
 __all__ = [
     "ALLOWED_WEIGHTS_LICENCES",
+    "ArtifactSink",
+    "BackendError",
     "Completion",
     "CompletionRequest",
     "Confidentiality",
+    "ConfidentialityError",
+    "Endpoint",
     "LlmBackend",
     "Message",
     "ModelRecipe",
+    "ModelRegistry",
+    "OpenAICompatibleBackend",
+    "RecipeError",
+    "backends_from_endpoints",
+    "check_confidentiality",
+    "request_key",
+    "split_reasoning",
+    "weights_hash",
 ]
