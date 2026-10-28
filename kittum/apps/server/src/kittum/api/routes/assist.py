@@ -22,7 +22,7 @@ from kittum.app import (
 from kittum.core import Id, NotFoundError, Record
 from kittum.gateway import GatewayError
 from kittum.protocol import ProtocolDiff, ProtocolStateError, StoredProtocol
-from kittum.search import QueryCount, SourceError
+from kittum.search import QueryCount, SourceError, failure_message
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -56,6 +56,17 @@ class PublishRevisionRequest(Record):
     reason: str | None = None
 
 
+class AssistModel(Record):
+    """The model the assistant asks, so the lead knows who is answering and what they wait for."""
+
+    configured: bool
+    recipe_id: str | None = None
+    endpoint: str | None = None
+    """Where the model server is; None for recorded answers."""
+    timeout_seconds: float | None = None
+    """How long Kittum waits for one answer; None for recorded answers."""
+
+
 class CountRequest(Record):
     dialect: Literal["pubmed", "ctgov"]
     strategy: str = Field(min_length=1)
@@ -79,7 +90,7 @@ def _errors() -> Generator[None]:
     except AssistUnavailable as e:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e)) from None
     except (SourceError, GatewayError) as e:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e)) from None
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, failure_message(e)) from None
 
 
 @router.get("/revisions", operation_id="listAssistRevisions")
@@ -88,6 +99,20 @@ def list_revisions(project_id: Id, viewer: Viewer, ctx: Context) -> list[assist.
     with _errors(), ctx.db.transaction() as tx:
         require_project_lead(tx, project_id, viewer)
         return assist.list_revisions(tx, project_id)
+
+
+@router.get("/model", operation_id="getAssistModel")
+def model(project_id: Id, viewer: Viewer, ctx: Context) -> AssistModel:
+    with _errors(), ctx.db.transaction() as tx:
+        require_project_lead(tx, project_id, viewer)
+    if ctx.assistant is None:
+        return AssistModel(configured=False)
+    return AssistModel(
+        configured=True,
+        recipe_id=ctx.assistant.recipe_id,
+        endpoint=getattr(ctx.assistant.backend, "endpoint", None),
+        timeout_seconds=getattr(ctx.assistant.backend, "timeout", None),
+    )
 
 
 @router.post("/draft", operation_id="draftProtocol")

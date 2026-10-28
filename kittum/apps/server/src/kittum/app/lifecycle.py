@@ -54,6 +54,8 @@ from kittum.screening import (
 from kittum.search import list_executions
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from kittum.app.context import AppContext
     from kittum.db import Tx
     from kittum.documents import Acquisition, Document
@@ -303,12 +305,13 @@ def protocol_source(tx: Tx, project_id: Id) -> str:
     """The published protocol as YAML, to edit into its next version. It compiles to the same
     content hash."""
     protocol = _published(tx, project_id).version.protocol
-    return yaml.safe_dump(
-        protocol.model_dump(mode="json", exclude_none=True),
-        sort_keys=False,
-        allow_unicode=True,
-        width=100,
-    )
+    return source_yaml(protocol.model_dump(mode="json", exclude_none=True))
+
+
+def source_yaml(source: Mapping[str, Any]) -> str:
+    """A protocol source as YAML, in its own field order, whether it compiles or not: the form
+    and the YAML editor show the same protocol."""
+    return yaml.safe_dump(dict(source), sort_keys=False, allow_unicode=True, width=100)
 
 
 def _published(tx: Tx, project_id: Id) -> StoredProtocol:
@@ -834,5 +837,6 @@ __all__ = [
     "require_lead",
     "require_project_lead",
     "retrieval",
+    "source_yaml",
     "visible_reports",
 ]

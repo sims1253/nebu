@@ -1,8 +1,10 @@
 import os
 import uuid
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import httpx2
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
@@ -12,7 +14,7 @@ from kittum.api import AppContext, create_app
 from kittum.core import new_id, sha256_hex
 from kittum.db import Database
 from kittum.db.testing import null_tx
-from kittum.gateway import RecordedTransport, SourceGateway
+from kittum.gateway import HttpRequest, HttpResponse, RecordedTransport, SourceGateway
 from kittum.gateway.testing import FakeTransport, PassThroughGateway
 from kittum.ledger.testing import InMemoryLedger
 from kittum.settings import Settings
@@ -278,8 +280,8 @@ def test_an_offline_search_with_no_recording_is_an_unreachable_source(
     ctgov_plan = {**PUBMED_PLAN, "source": "ctgov", "platform": "ClinicalTrials.gov"}
     with TestClient(create_app(context)) as client:
         for plan, source, host in (
-            (PUBMED_PLAN, "pubmed", "https://eutils.ncbi.nlm.nih.gov/"),
-            (ctgov_plan, "clinicaltrials", "https://clinicaltrials.gov/"),
+            (PUBMED_PLAN, "PubMed", "https://eutils.ncbi.nlm.nih.gov/"),
+            (ctgov_plan, "ClinicalTrials.gov", "https://clinicaltrials.gov/"),
         ):
             resp = client.post(
                 f"/api/projects/{project_id}/search/run",
@@ -287,10 +289,82 @@ def test_an_offline_search_with_no_recording_is_an_unreachable_source(
             )
             assert resp.status_code == 502, resp.text
             assert resp.json()["detail"].startswith(
-                f"{source} is unreachable: no recorded response for {host}"
+                f"Kittum could not reach {source}. No recorded response for {host}"
             )
         listed = client.get(
             f"/api/projects/{project_id}/search/executions",
             headers={"X-Kittum-Reviewer": actor_id},
         )
+        assert listed.json() == []
+
+
+class _Down:
+    """A network on which PubMed refuses the connection and ClinicalTrials.gov never answers,
+    as httpx2 raises it from a live transport, and PubMed answers HTTP 400 to a query it rejects."""
+
+    def __init__(self) -> None:
+        self.sent: list[str] = []
+
+    def send(self, request: HttpRequest) -> HttpResponse:
+        self.sent.append(request.url)
+        if "rejected" in request.url:
+            return HttpResponse(status=400, headers=(), body=b"", body_hash=sha256_hex(b""))
+        if "eutils.ncbi.nlm.nih.gov" in request.url:
+            raise httpx2.ConnectError("[Errno 111] Connection refused")
+        raise httpx2.ReadTimeout("The read operation timed out")
+
+
+def test_a_source_the_network_cannot_reach_is_a_502_that_says_why_for_counts_and_searches(
+    url: str, actor_id: str, context: AppContext
+) -> None:
+    """A live search and a hit count whose connection fails or times out answer 502 with the
+    reason in plain words, as an unreachable source does, never a 500; the lead's next try asks
+    the source again, and nothing is stored."""
+    project_id = _project(url)
+    _lead(url, project_id, actor_id)
+    down = _Down()
+    context.gateway = SourceGateway(
+        database=context.db,
+        transport=down,
+        artifacts=context.artifacts,
+        buckets="memory",
+        cache="memory",
+    )
+    ctgov_plan = {**PUBMED_PLAN, "source": "ctgov", "platform": "ClinicalTrials.gov"}
+    lead = {"X-Kittum-Reviewer": actor_id}
+    pubmed = "Kittum could not reach PubMed. The connection failed (ConnectError)."
+    ctgov = "Kittum could not reach ClinicalTrials.gov. It did not answer in time (ReadTimeout)."
+    with TestClient(create_app(context), raise_server_exceptions=False) as client:
+        for plan, detail in ((PUBMED_PLAN, pubmed), (ctgov_plan, ctgov)):
+            resp = client.post(
+                f"/api/projects/{project_id}/search/run",
+                json={"plan": plan, "actor_id": actor_id},
+            )
+            assert (resp.status_code, resp.json()["detail"]) == (502, detail)
+        for dialect, detail in (("pubmed", pubmed), ("ctgov", ctgov)):
+            for _ in range(2):  # a retry asks the source again rather than repeat an answer
+                resp = client.post(
+                    f"/api/projects/{project_id}/assist/count",
+                    json={"dialect": dialect, "strategy": STRATEGY},
+                    headers=lead,
+                )
+                assert (resp.status_code, resp.json()["detail"]) == (502, detail)
+        assert len(down.sent) == 6
+        # A query PubMed rejects names the request it sent, without the contact address and the
+        # NCBI key the request carried.
+        context.settings = replace(
+            context.settings, contact_email="lead@example.org", ncbi_api_key="ncbi-secret"
+        )
+        resp = client.post(
+            f"/api/projects/{project_id}/search/run",
+            json={"plan": {**PUBMED_PLAN, "strategy": "rejected"}, "actor_id": actor_id},
+        )
+        assert (
+            "email=lead%40example.org" in down.sent[-1] and "api_key=ncbi-secret" in down.sent[-1]
+        )
+        assert (resp.status_code, resp.json()["detail"]) == (
+            502,
+            "PubMed returned HTTP 400 for https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
+        )
+        listed = client.get(f"/api/projects/{project_id}/search/executions", headers=lead)
         assert listed.json() == []

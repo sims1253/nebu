@@ -91,6 +91,7 @@ from kittum.app.lifecycle import (
     require_lead,
     require_project_lead,
     retrieval,
+    source_yaml,
     visible_reports,
 )
 from kittum.app.open_access import (
@@ -194,5 +195,6 @@ __all__ = [
     "run_judge_jobs",
     "seed_demo",
     "sought_for_retrieval",
+    "source_yaml",
     "visible_reports",
 ]

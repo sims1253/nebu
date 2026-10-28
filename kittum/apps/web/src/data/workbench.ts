@@ -38,6 +38,7 @@ import type {
   Member,
   OpenAccessRun,
   PageLayer,
+  AssistModel,
   AssistOutcome,
   ParsedSource,
   ProtocolDiff,
@@ -120,6 +121,8 @@ export interface Workbench {
   readonly protocolSource: (projectId: string) => Call<string>;
   /** YAML or JSON text as data; a syntax error comes back as an issue. */
   readonly parseProtocol: (text: string) => Call<ParsedSource>;
+  /** A source as YAML, compiling or not, so the YAML editor opens what the form holds. */
+  readonly protocolYaml: (source: ProtocolSource) => Call<string>;
   readonly validateProtocol: (source: ProtocolSource) => Call<ValidationReport>;
   /** What publishing `source` would change against the published version; saves nothing. */
   readonly previewProtocol: (
@@ -134,6 +137,8 @@ export interface Workbench {
   // description or suggests changes to one part; every draft, suggestion, accepted selection,
   // edit, and restore is a revision, and only the lead publishes one.
 
+  /** The model the assistant asks; `configured` is false when there is none. */
+  readonly assistModel: (caller: Caller) => Call<AssistModel>;
   /** Every revision of the project, oldest first. */
   readonly assistRevisions: (caller: Caller) => Call<ReadonlyArray<ProtocolRevision>>;
   /** A first protocol from the lead's description; without a revision, the problems. */

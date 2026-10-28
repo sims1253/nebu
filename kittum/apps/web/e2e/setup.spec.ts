@@ -184,11 +184,10 @@ test("a lead sets up a review from nothing in the browser, as the CLI would", as
   await test.step("the protocol: a slip is shown beside the text, then version one is published", async () => {
     await page.keyboard.press("Escape"); // out of the name field
     await page.keyboard.press("j"); // the protocol, next on the spine
-    await expect(page.getByTestId("setup-step")).toContainText(
-      "Write it, check it, and publish it",
-    );
-    await page.keyboard.press("Enter"); // its screen: the protocol editor
+    await expect(page.getByTestId("setup-step")).toContainText("Write it and publish it");
+    await page.keyboard.press("Enter"); // its screen: the protocol form
     await expect(page.getByRole("heading", { name: "Write the protocol" })).toBeVisible();
+    await page.getByRole("tab", { name: "YAML" }).click(); // a lead who knows the format
     await page.getByLabel("Start from an example").selectOption("nicotine-replacement");
     await page.getByRole("button", { name: "Load" }).click();
     const editor = page.getByRole("textbox", { name: "Protocol", exact: true });
@@ -204,12 +203,12 @@ test("a lead sets up a review from nothing in the browser, as the CLI would", as
 
     await editor.fill(readFileSync(PROTOCOL, "utf8"));
     await editor.press("Control+Enter");
-    await expect(page.getByTestId("protocol-check")).toContainText("It compiles");
+    await expect(page.getByTestId("protocol-check")).toContainText("No problems found");
     await expect(page.getByTestId("protocol-check")).toContainText("The first version");
     await page.getByLabel("Reason").fill("The protocol as approved by the steering group.");
     await page.getByRole("button", { name: "Publish this version" }).click();
     await expect(page.getByTestId("protocol-notice")).toHaveText(
-      "Published version 0.3. Your approval is in the ledger.",
+      "Published version 0.3. The ledger records your approval.",
     );
     await expect(
       page.getByRole("heading", { name: "Nicotine replacement therapy for smoking cessation" }),
@@ -218,12 +217,15 @@ test("a lead sets up a review from nothing in the browser, as the CLI would", as
 
   await test.step("version two: the editor starts from version one and shows what changes", async () => {
     await page.keyboard.press("v");
-    await expect(page.getByRole("heading", { name: "A new version after 0.3" })).toBeVisible();
+    await page.getByRole("tab", { name: "YAML" }).click();
+    await expect(
+      page.getByRole("heading", { name: "A new version after version 0.3" }),
+    ).toBeVisible();
     const editor = page.getByRole("textbox", { name: "Protocol", exact: true });
     await expect(editor).toHaveValue(/version_label: '0.3'/);
     // An unedited version changes nothing and cannot be published.
     await editor.press("Control+Enter");
-    await expect(page.getByTestId("protocol-diff")).toContainText("Nothing changes");
+    await expect(page.getByTestId("protocol-diff")).toContainText("without changes");
     await expect(page.getByRole("button", { name: "Publish this version" })).toHaveCount(0);
 
     const second = (await editor.inputValue())
@@ -236,7 +238,7 @@ test("a lead sets up a review from nothing in the browser, as the CLI would", as
     await editor.fill(second);
     await editor.press("Control+Enter");
     const diff = page.getByTestId("protocol-diff");
-    await expect(page.getByTestId("protocol-check")).toContainText("Against version 0.3");
+    await expect(page.getByTestId("protocol-check")).toContainText("Changes against version 0.3");
     await expect(diff).toContainText("Criteria changed: POP");
     await expect(page.getByTestId("protocol-change")).toHaveText([
       /^version_label0\.30\.4$/,
@@ -257,11 +259,11 @@ test("a lead sets up a review from nothing in the browser, as the CLI would", as
       await dialog.getByLabel("File format").selectOption(search.format);
       await dialog.getByLabel("Source").fill(search.source);
       await dialog.getByLabel("Platform").fill(search.platform);
-      await dialog.getByLabel("Strategy").fill(search.strategy);
+      await dialog.getByLabel("Query").fill(search.strategy);
       await dialog.getByLabel("Search file").setInputFiles(join(DEMO_DATA, search.file));
       await dialog.getByRole("button", { name: "Import the search" }).click();
       await expect(page.getByTestId("search-notice")).toContainText(
-        `Added the ${search.platform} search: ${search.records} records.`,
+        `Added the ${search.platform} search with ${search.records} records.`,
       );
     }
     await expect(page.getByTestId("search-counts")).toHaveText(

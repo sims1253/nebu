@@ -37,7 +37,7 @@ export function SearchScreen() {
   const added = (execution: SearchExecution) => {
     setForm(null);
     setNotice(
-      `Added the ${execution.plan.platform} search: ${execution.retrieved_count} records. Add the next database's search, or build the corpus on Studies once every search is in.`,
+      `Added the ${execution.plan.platform} search with ${execution.retrieved_count} records. Add the next database's search. Once every search is in, build the corpus on the Studies screen.`,
     );
     setTick((t) => t + 1);
   };
@@ -49,7 +49,8 @@ export function SearchScreen() {
       // The server lists the newest first; read them in the order they were run.
       (found) => live && setExecutions([...found].reverse()),
       (e: unknown) =>
-        live && setError(e instanceof WorkbenchError ? e.message : "The searches could not load."),
+        live &&
+        setError(e instanceof WorkbenchError ? e.message : "Kittum could not load the searches."),
     );
     return () => {
       live = false;
@@ -134,8 +135,8 @@ export function SearchScreen() {
         ) : executions.length === 0 ? (
           <p className="mt-4 max-w-[62ch] text-md text-ink-2">
             {protocol
-              ? "No searches yet. Import the export file of each database's search, or run PubMed and ClinicalTrials.gov live. One search per database and strategy."
-              : "Publish the protocol first: each search belongs to one of its search topics."}
+              ? "No searches yet. Run PubMed and ClinicalTrials.gov live, and import the export file of every other database. Add one search per database and query."
+              : "Publish the protocol first. Each search belongs to one of its search topics."}
           </p>
         ) : (
           <>
@@ -177,7 +178,7 @@ function Execution({ execution: e }: { execution: SearchExecution }) {
       <header className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
         <h2 className="text-md font-semibold">{e.plan.platform}</h2>
         <span className="text-sm text-ink-2">
-          {e.kind === "live_api" ? "Run live through the API" : "Imported from an export file"}
+          {e.kind === "live_api" ? "Run live by Kittum" : "Imported from an export file"}
         </span>
         <span className="text-sm text-ink-3">{e.plan.source}</span>
       </header>
@@ -193,8 +194,8 @@ function Execution({ execution: e }: { execution: SearchExecution }) {
           {differs ? (
             <span className="ml-2 text-exclude">
               {skipped > 0
-                ? `${skipped} the source cannot map yet (book records)`
-                : "The counts differ: this search is incomplete"}
+                ? `${skipped} book records that Kittum cannot read yet`
+                : "The counts differ, so this search is incomplete"}
             </span>
           ) : null}
         </dd>
@@ -204,7 +205,7 @@ function Execution({ execution: e }: { execution: SearchExecution }) {
             <dd>{e.plan.limits.join("; ")}</dd>
           </>
         ) : null}
-        <dt className="narrow pt-1 text-right text-xs font-semibold text-ink-2">Strategy</dt>
+        <dt className="narrow pt-1 text-right text-xs font-semibold text-ink-2">Query</dt>
         <dd>
           <ol className="border-l border-rule pl-3">
             {lines.map((line, i) => (

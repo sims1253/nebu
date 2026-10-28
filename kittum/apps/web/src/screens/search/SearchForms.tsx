@@ -1,6 +1,6 @@
 // The methods lead's two ways to add a search: import a database's export file, or run PubMed or
-// ClinicalTrials.gov live through the server's gateway. Either way the strategy is recorded
-// verbatim, as PRISMA-S asks.
+// ClinicalTrials.gov live through the server's gateway. Either way Kittum records the query
+// exactly as it ran, as PRISMA-S asks.
 import { useRouteContext } from "@tanstack/react-router";
 import { useState } from "react";
 
@@ -66,7 +66,7 @@ export function ImportSearch({
 
   const submit = async () => {
     if (!topic || !source.trim() || !platform.trim() || !strategy.trim() || !file) {
-      setError("Every field but the limits is needed: the report shows each one.");
+      setError("Fill in every field except the limits. The report shows each one.");
       return;
     }
     setBusy(true);
@@ -94,7 +94,7 @@ export function ImportSearch({
       setFile(null);
       onDone(execution);
     } catch (e) {
-      setError(failure(e, "The file was not imported."));
+      setError(failure(e, "Kittum could not import the file."));
     } finally {
       setBusy(false);
     }
@@ -106,7 +106,7 @@ export function ImportSearch({
       onOpenChange={onOpenChange}
       wide
       title="Import a search file"
-      description="The export of one database's search, with the strategy as you ran it there. Kittum stores the file as the search's raw record and counts what it holds."
+      description="The export file of one database's search, with the query as you ran it there. Kittum keeps the file as the search's raw record and counts the records in it."
       submit="Import the search"
       busy={busy}
       error={error}
@@ -133,7 +133,7 @@ export function ImportSearch({
         </Field>
         <Field
           label="Source"
-          hint="Its ID in the source plan, or your own; the flow counts per source."
+          hint="Its ID in the protocol's source plan, or your own. The PRISMA flow diagram counts per source."
         >
           <TextInput
             list="planned-sources"
@@ -154,11 +154,14 @@ export function ImportSearch({
             ))}
           </datalist>
         </Field>
-        <Field label="Platform" hint="Where it was searched, e.g. Cochrane Library (Wiley), Ovid.">
+        <Field
+          label="Platform"
+          hint="Where you searched it, for example Cochrane Library (Wiley) or Ovid."
+        >
           <TextInput value={platform} onChange={(e) => setPlatform(e.currentTarget.value)} />
         </Field>
       </div>
-      <Field label="Strategy" hint="Verbatim, one line per search line.">
+      <Field label="Query" hint="Exactly as you ran it, one line per search line.">
         <TextArea
           rows={4}
           value={strategy}
@@ -166,7 +169,10 @@ export function ImportSearch({
           className="font-mono text-[13px]"
         />
       </Field>
-      <Field label="Limits" hint="Optional, one per line: dates, languages, filters.">
+      <Field
+        label="Limits"
+        hint="Optional. One limit per line, such as a date range, a language, or a filter."
+      >
         <TextArea rows={2} value={limits} onChange={(e) => setLimits(e.currentTarget.value)} />
       </Field>
       <Field label="File">
@@ -198,7 +204,7 @@ export function RunSearch({
 
   const submit = async () => {
     if (!topic || !strategy.trim()) {
-      setError("Give the strategy.");
+      setError("Write the query.");
       return;
     }
     setBusy(true);
@@ -221,7 +227,7 @@ export function RunSearch({
       setLimits("");
       onDone(execution);
     } catch (e) {
-      setError(failure(e, "The search did not run."));
+      setError(failure(e, "Kittum could not run the search."));
     } finally {
       setBusy(false);
     }
@@ -233,7 +239,7 @@ export function RunSearch({
       onOpenChange={onOpenChange}
       wide
       title="Run a live search"
-      description="Kittum queries the source through its gateway, records the platform's own reading of the query, and stores every raw response. A large PubMed search takes a while."
+      description="Kittum sends the query to the source and keeps every raw response, with the source's own reading of the query. A large PubMed search can take several minutes."
       submit="Run the search"
       busy={busy}
       error={error}
@@ -260,11 +266,11 @@ export function RunSearch({
         </Field>
       </div>
       <Field
-        label="Strategy"
+        label="Query"
         hint={
           source === "pubmed"
-            ? 'PubMed\'s query syntax, e.g. "nicotine patch"[tiab] AND randomized controlled trial[pt].'
-            : "ClinicalTrials.gov's search expression."
+            ? 'In PubMed\'s syntax, for example "nicotine patch"[tiab] AND randomized controlled trial[pt].'
+            : "In ClinicalTrials.gov's syntax."
         }
       >
         <TextArea
@@ -274,7 +280,7 @@ export function RunSearch({
           className="font-mono text-[13px]"
         />
       </Field>
-      <Field label="Limits" hint="Optional, one per line, as the report should state them.">
+      <Field label="Limits" hint="Optional. One limit per line, as the report should state it.">
         <TextArea rows={2} value={limits} onChange={(e) => setLimits(e.currentTarget.value)} />
       </Field>
     </FormDialog>

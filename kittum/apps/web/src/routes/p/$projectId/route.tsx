@@ -246,7 +246,10 @@ const KEYS: ReadonlyArray<{
     screen: "Protocol, Search, Retrieval (the methods lead)",
     keys: [
       [["v"], "Write a new protocol version"],
-      [["Ctrl", "Enter"], "Check the protocol in the editor"],
+      [[",", "."], "Previous and next revision of the protocol"],
+      [["r"], "Restore the older revision on screen as the newest"],
+      [["Ctrl", "Enter"], "Save the form as a revision, or check the YAML"],
+      [["1–9", "a"], "Tick a suggested change, accept the ticked ones"],
       [["i", "n"], "Import a search file, run a live search"],
       [["u", "s"], "Upload a full text, add a full-text sentinel"],
     ],

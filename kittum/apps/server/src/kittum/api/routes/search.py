@@ -11,16 +11,19 @@ from kittum.core import Id, Record
 from kittum.gateway import GatewayError
 from kittum.ledger import Ledger  # noqa: TC001
 from kittum.search import (
+    TRANSPORT_ERRORS,
     CtgovSource,
     PubMedSource,
     SearchExecution,
     SearchPlan,
     Source,
     SourceError,
+    failure_message,
     get_execution,
     import_file,
     list_executions,
     run,
+    unreachable,
 )
 
 if TYPE_CHECKING:
@@ -85,17 +88,21 @@ def run_search(
             # The execution comes back with every record it found: the lead's catalogue.
             _require_lead(tx, project_id, body.actor_id)
             source = _get_source(body.plan, ctx)
-            return run(
-                tx,
-                project_id,
-                body.plan,
-                source,
-                ledger=ledger,
-                actor_id=body.actor_id,
-                artifacts=ctx.artifacts,
-            )
+            try:
+                return run(
+                    tx,
+                    project_id,
+                    body.plan,
+                    source,
+                    ledger=ledger,
+                    actor_id=body.actor_id,
+                    artifacts=ctx.artifacts,
+                )
+            except TRANSPORT_ERRORS as exc:
+                # A connection that failed or timed out reaches here as the transport raised it.
+                raise unreachable(body.plan.source, exc) from exc
     except (SourceError, GatewayError) as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(status_code=502, detail=failure_message(exc)) from exc
 
 
 @router.post("/import", operation_id="importSearchFile")

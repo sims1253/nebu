@@ -17,9 +17,9 @@ const STAGES: Record<Stage, string> = {
 
 const REVEALS: Record<RevealSetting, string> = {
   on_disagreement:
-    "After a reviewer's own decision, and only when the AI reads the record differently (the default)",
-  always: "After every decision of a reviewer's own",
-  never: "Never: the AI reads beside the reviewers but they never see its reading",
+    "After a reviewer decides, and only when the AI decided differently. This is the default.",
+  always: "After every decision a reviewer makes",
+  never: "Never. The AI reads every record, but reviewers never see what it decided",
 };
 
 const names = (people: ReadonlyArray<string>) =>
@@ -75,7 +75,7 @@ export function OpenStage({ onOpened }: { onOpened: (message: string) => void })
         await run(workbench.parseSentinels({ projectId: project.id, as: me.actor_id, text })),
       );
     } catch (e) {
-      setSentinelError(failure(e, "The sentinel file could not be read."));
+      setSentinelError(failure(e, "Kittum could not read the sentinel file."));
     }
   };
 
@@ -99,7 +99,7 @@ export function OpenStage({ onOpened }: { onOpened: (message: string) => void })
         `${STAGES[chosen.stage]} screening is open for ${scopeLabel(chosen.scopeId)}. The AI judge reads every record first; the reviewers' queues fill as it reads.`,
       );
     } catch (e) {
-      setError(failure(e, "The stage did not open."));
+      setError(failure(e, "Kittum could not open the stage."));
     } finally {
       setBusy(false);
     }
@@ -138,8 +138,8 @@ export function OpenStage({ onOpened }: { onOpened: (message: string) => void })
           label="Sentinels"
           hint={
             Number(chosen.topic.sentinel_percent) > 0
-              ? `The protocol seeds ${chosen.topic.sentinel_percent}% of each queue with sentinels: a YAML or JSON list, as in examples/sentinels/. Reviewers cannot tell them from other records.`
-              : "Optional: the protocol asks for none. A YAML or JSON list, as in examples/sentinels/."
+              ? `The protocol puts sentinels into ${chosen.topic.sentinel_percent}% of each queue. Give them as a YAML or JSON list, as in examples/sentinels/. Reviewers cannot tell them from other records.`
+              : "Optional, because the protocol asks for none. Give them as a YAML or JSON list, as in examples/sentinels/."
           }
         >
           <FileInput
@@ -150,7 +150,7 @@ export function OpenStage({ onOpened }: { onOpened: (message: string) => void })
         </Field>
       ) : (
         <p className="text-sm text-ink-2">
-          Full-text stages draw their sentinels from the full-text sentinels added on Retrieval.
+          Full-text stages take their sentinels from the ones added on the Retrieval screen.
         </p>
       )}
       {sentinelError ? (

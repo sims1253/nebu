@@ -79,7 +79,9 @@ def public_url(url: str) -> str:
 
 class OpenAICompatibleBackend:
     """Serves one recipe from one server. `base_url` ends in `/v1`. `api_key_env` names the
-    environment variable that holds the server's API key, if it needs one."""
+    environment variable that holds the server's API key, if it needs one. `timeout` is how long
+    one answer may take: a model that reasons at length (GLM-5.3-Flash with high reasoning)
+    sends nothing for minutes before its whole answer arrives."""
 
     def __init__(
         self,
@@ -89,7 +91,7 @@ class OpenAICompatibleBackend:
         *,
         api_key_env: str | None = None,
         client: httpx2.Client | None = None,
-        timeout: float = 600.0,
+        timeout: float = 900.0,
         attempts: int = 3,
         wait_initial: float = 1.0,
     ) -> None:
@@ -98,6 +100,7 @@ class OpenAICompatibleBackend:
         self.endpoint = public_url(base_url)
         self._store = store
         self._api_key_env = api_key_env
+        self.timeout = timeout
         self._client = client or httpx2.Client(timeout=timeout)
         self._attempts = attempts
         self._wait_initial = wait_initial
