@@ -2,7 +2,9 @@
 
 Publishing freezes the version (a trigger rejects later changes) and appends a
 `protocol.published` event in the caller's transaction. A version that changes a topic's screening
-mode relative to the last published version needs a reason, which the event records.
+mode relative to the last published version needs a reason, which the event records. So does every
+part of the version a model wrote and a human accepted (`ai_parts`, from `kittum.assist`): which
+field, from which assistant revision, by which model.
 """
 
 from datetime import datetime
@@ -16,6 +18,8 @@ from kittum.protocol.compiler import ProtocolVersion, compile
 from kittum.protocol.diffing import diff
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
+
     from kittum.db import Tx
     from kittum.ledger import AuditEvent, Ledger
 
@@ -45,7 +49,14 @@ class ProtocolStore(Protocol):
     def save_draft(self, tx: Tx, project_id: Id, version: ProtocolVersion) -> StoredProtocol: ...
 
     def publish(
-        self, tx: Tx, project_id: Id, version_id: Id, approved_by: Id, *, reason: str | None = None
+        self,
+        tx: Tx,
+        project_id: Id,
+        version_id: Id,
+        approved_by: Id,
+        *,
+        reason: str | None = None,
+        ai_parts: Sequence[Mapping[str, Any]] = (),
     ) -> StoredProtocol: ...
 
     def get_version(self, tx: Tx, project_id: Id, version_id: Id) -> StoredProtocol: ...
@@ -56,7 +67,10 @@ class ProtocolStore(Protocol):
 
 
 def published_payload(
-    stored: StoredProtocol, previous: StoredProtocol | None, reason: str | None
+    stored: StoredProtocol,
+    previous: StoredProtocol | None,
+    reason: str | None,
+    ai_parts: Sequence[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
     """The `protocol.published` payload. Shared with the in-memory store."""
     changes = diff(previous.version, stored.version) if previous else None
@@ -73,6 +87,7 @@ def published_payload(
         "added_criteria": list(changes.added_criteria) if changes else [],
         "removed_criteria": list(changes.removed_criteria) if changes else [],
         "changed_criteria": list(changes.changed_criteria) if changes else [],
+        "ai_parts": [dict(p) for p in ai_parts],
     }
 
 
@@ -89,14 +104,18 @@ def check_publishable(
 
 
 def published_event(
-    stored: StoredProtocol, previous: StoredProtocol | None, approved_by: Id, reason: str | None
+    stored: StoredProtocol,
+    previous: StoredProtocol | None,
+    approved_by: Id,
+    reason: str | None,
+    ai_parts: Sequence[Mapping[str, Any]] = (),
 ) -> EventDraft:
     return EventDraft(
         project_id=stored.project_id,
         type=PUBLISHED_EVENT,
         schema_version=1,
         actor_id=approved_by,
-        payload=published_payload(stored, previous, reason),
+        payload=published_payload(stored, previous, reason, ai_parts),
     )
 
 
@@ -171,8 +190,12 @@ def publish(
     *,
     ledger: Ledger,
     reason: str | None = None,
+    ai_parts: Sequence[Mapping[str, Any]] = (),
 ) -> StoredProtocol:
     """Freeze a draft with a human approval and append `protocol.published`.
+
+    `ai_parts` names the fields a model wrote and the approver accepted; the event keeps them for
+    the AI disclosure.
 
     Publications serialize per project, so the version compared against is the one in force when
     this one commits: two concurrent publications cannot both skip the mode-change reason.
@@ -195,7 +218,7 @@ def publish(
         raise ProtocolStateError("publishing a protocol needs the approval of a human actor")
     previous = latest_published(tx, project_id)
     check_publishable(stored, previous, reason)
-    event = ledger.append(tx, published_event(stored, previous, approved_by, reason))
+    event = ledger.append(tx, published_event(stored, previous, approved_by, reason, ai_parts))
     published = mark_published(stored, event, approved_by, reason)
     tx.execute(
         "update protocol_version set status = 'published', published_at = %s, approved_by = %s,"
@@ -244,9 +267,24 @@ class PostgresProtocolStore:
         return save_draft(tx, project_id, version)
 
     def publish(
-        self, tx: Tx, project_id: Id, version_id: Id, approved_by: Id, *, reason: str | None = None
+        self,
+        tx: Tx,
+        project_id: Id,
+        version_id: Id,
+        approved_by: Id,
+        *,
+        reason: str | None = None,
+        ai_parts: Sequence[Mapping[str, Any]] = (),
     ) -> StoredProtocol:
-        return publish(tx, project_id, version_id, approved_by, ledger=self._ledger, reason=reason)
+        return publish(
+            tx,
+            project_id,
+            version_id,
+            approved_by,
+            ledger=self._ledger,
+            reason=reason,
+            ai_parts=ai_parts,
+        )
 
     def get_version(self, tx: Tx, project_id: Id, version_id: Id) -> StoredProtocol:
         return get_version(tx, project_id, version_id)

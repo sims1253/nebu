@@ -26,6 +26,7 @@ ALLOWED: dict[str, set[str]] = {
     "enrich": {"core", "db", "storage", "gateway", "search", "models"},
     "corpus": {"core", "db", "ledger", "search", "enrich"},
     "judge": {"core", "db", "storage", "ledger", "protocol", "models"},
+    "assist": {"core", "db", "ledger", "protocol", "models"},
     "screening": {
         "core",
         "db",

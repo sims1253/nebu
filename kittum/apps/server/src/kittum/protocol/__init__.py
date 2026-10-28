@@ -22,9 +22,12 @@ from kittum.protocol.compiler import (
     ProtocolError,
     ProtocolIssue,
     ProtocolVersion,
+    StrategyDialect,
     compile,
     path_of,
     protocol_hash,
+    strategy_dialect,
+    strategy_problems,
 )
 from kittum.protocol.diffing import FieldChange, ModeChange, ProtocolDiff, diff
 from kittum.protocol.model import (
@@ -112,6 +115,7 @@ __all__ = [
     "Stage",
     "StoppingPlan",
     "StoredProtocol",
+    "StrategyDialect",
     "compile",
     "diff",
     "get_profile",
@@ -126,4 +130,6 @@ __all__ = [
     "render_prompt",
     "render_question",
     "save_draft",
+    "strategy_dialect",
+    "strategy_problems",
 ]

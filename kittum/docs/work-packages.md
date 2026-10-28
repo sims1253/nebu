@@ -151,6 +151,38 @@ Left:
 - Approver identity comes from the request body until the API has authentication (WP-15).
 - A profile for EU JCA dossiers as a report target, if JCA needs more than linked questions.
 
+## Protocol assistant
+
+A model helps the methods lead write the protocol: `kittum.assist`, `app/assist.py`,
+`api/routes/assist.py`, and the editor's **With the assistant** tab.
+
+Done:
+
+- Sources carry an optional `strategy`, left out of the document when absent so older protocols
+  keep their content hash. Compile checks quotes, parentheses, and PubMed's field tags
+  (`strategy_problems`); `strategy_dialect` names PubMed or ClinicalTrials.gov.
+- `draft` and `improve` (a question, a criterion, or a strategy as find-and-replace changes) ask
+  the model in a strict JSON Schema derived from the protocol's models (`strict_schema`,
+  `from_strict`), compile every answer, and send problems back at most twice (`REPAIRS`).
+- `record` stores a compiled answer as a `draft` or `suggestion` revision and writes a
+  `protocol.assist` ledger event with every attempt, also for an answer that never compiled.
+  `accept` (some changes), `restore`, and `save_edit` add revisions; `assist_revision` is
+  append-only.
+- AI marks per field, carried while unchanged, dropped when a person changes the field; the
+  `protocol.published` event records them (`ai_parts`), also for a version published from the
+  plain editor, and the `ai_disclosure` report lists them with every assistant request.
+- `kittum.search.count_hits`: ESearch count or ClinicalTrials.gov `totalCount` through the gateway.
+- Settings: `KITTUM_ASSIST_MODEL`, `KITTUM_ASSIST_BACKEND` (`demo` replays recorded answers).
+- Tests: `tests/assist/test_assist.py` on GLM-5.3-Flash's recorded answers and PubMed's recorded
+  counts; `e2e/assist.spec.ts` in the browser.
+
+Left:
+
+- Model calls run in the request; a slow model holds the request for up to a minute. A job would
+  free it.
+- Strategies for platforms other than PubMed and ClinicalTrials.gov are not syntax-checked or
+  counted.
+
 ## WP-04 Gateway
 
 Module `kittum.gateway`. Needs: `core`.

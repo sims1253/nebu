@@ -6,6 +6,7 @@ query translation, limits, dates, counts, and the raw responses by hash.
 Owner: WP-05.
 """
 
+from kittum.search.count import QueryCount, QueryDialect, count_hits
 from kittum.search.ctgov import CtgovSource
 from kittum.search.imports import import_file
 from kittum.search.models import SearchExecution, SearchPlan, Source, SourceError, SourceRecord
@@ -16,11 +17,14 @@ from kittum.search.store import get_execution, list_executions
 __all__ = [
     "CtgovSource",
     "PubMedSource",
+    "QueryCount",
+    "QueryDialect",
     "SearchExecution",
     "SearchPlan",
     "Source",
     "SourceError",
     "SourceRecord",
+    "count_hits",
     "get_execution",
     "import_file",
     "list_executions",

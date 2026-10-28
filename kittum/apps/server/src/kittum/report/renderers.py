@@ -474,10 +474,36 @@ def disclosure(review: Review) -> dict[str, Any]:
                 "audit": s.audit.model_dump(mode="json"),
             }
         )
+    assistant = {
+        "requests": [
+            {
+                "purpose": r.get("purpose"),
+                "outcome": r.get("outcome"),
+                "part": r.get("part"),
+                "revision_id": r.get("revision_id"),
+                "recipe_id": r.get("recipe_id"),
+                "model_identity": r.get("model_identity"),
+                "serving": r.get("serving"),
+                "endpoint": r.get("endpoint"),
+                "prompt_version": r.get("prompt_version"),
+                "prompt_hash": r.get("prompt_hash"),
+                "attempts": len(r.get("attempts", [])),
+                "rejected_attempts": sum(1 for a in r.get("attempts", []) if a.get("issues")),
+                "raw_response_hashes": [
+                    a["raw_response_hash"]
+                    for a in r.get("attempts", [])
+                    if a.get("raw_response_hash")
+                ],
+            }
+            for r in review.assist_requests
+        ],
+        "ai_parts": [dict(p) for p in review.protocol_ai_parts],
+    }
     return {
         "project": review.project_name,
         "cutoff_seq": review.cutoff_seq,
         "protocol_hash": review.protocol.version.content_hash if review.protocol else None,
+        "protocol_assistant": assistant,
         "models": models,
         "topics": topics,
         "stages": stages,
@@ -498,6 +524,13 @@ def _served_as(model: dict[str, Any]) -> str:
     if model["endpoints"]:
         served += f" ({model['serving']} at {', '.join(model['endpoints'])})"
     return served
+
+
+def _served_as_assistant(entry: dict[str, Any]) -> str:
+    served = entry.get("model_identity") or entry.get("recipe_id") or "unknown"
+    if entry.get("endpoint"):
+        served += f" ({entry.get('serving')} at {entry['endpoint']})"
+    return f"{entry.get('recipe_id')}: {served}"
 
 
 def render_disclosure(review: Review, scope_id: str | None) -> list[RenderedFile]:
@@ -590,6 +623,45 @@ def render_disclosure(review: Review, scope_id: str | None) -> list[RenderedFile
                 for s in d["stages"]
             ],
         ),
+        "### Writing the protocol",
+        "",
+        "A model may draft the protocol or suggest changes to one part of it; a lead accepts each "
+        "change or not, and only a lead publishes. Every request to the assistant, with each "
+        "attempt Kittum checked and sent back:",
+        "",
+        md_table(
+            ["Purpose", "Part", "Outcome", "Model", "Attempts", "Rejected", "Prompt"],
+            [
+                [
+                    r["purpose"],
+                    f"`{r['part']}`" if r["part"] else "whole protocol",
+                    r["outcome"],
+                    _served_as_assistant(r),
+                    r["attempts"],
+                    r["rejected_attempts"],
+                    f"{r['prompt_version']} `{(r['prompt_hash'] or '')[:16]}`",
+                ]
+                for r in d["protocol_assistant"]["requests"]
+            ],
+        )
+        if d["protocol_assistant"]["requests"]
+        else "The protocol assistant was not used.\n",
+        "Fields of the protocol in force that a model wrote:",
+        "",
+        md_table(
+            ["Field", "Written in revision", "Accepted in revision", "Model"],
+            [
+                [
+                    f"`{p['path']}`",
+                    p["revision_id"],
+                    p["accepted_in"],
+                    _served_as_assistant(p),
+                ]
+                for p in d["protocol_assistant"]["ai_parts"]
+            ],
+        )
+        if d["protocol_assistant"]["ai_parts"]
+        else "None: people wrote every field.\n",
         "## 3. Performance in this review",
         "",
         "Agreement on include against exclude, from the blind decisions made before any reveal "

@@ -33,6 +33,24 @@
         "title": "AcceptBody",
         "type": "object"
       },
+      "AcceptRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "change_ids": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Change Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "change_ids"
+        ],
+        "title": "AcceptRequest",
+        "type": "object"
+      },
       "Acceptance": {
         "additionalProperties": false,
         "description": "A human's acceptance of one field: the value, its source span, and how it was reached.",
@@ -124,6 +142,27 @@
           "event_seq"
         ],
         "title": "Acceptance",
+        "type": "object"
+      },
+      "Accepted": {
+        "additionalProperties": false,
+        "properties": {
+          "change_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Change Ids",
+            "type": "array"
+          },
+          "suggestion_id": {
+            "$ref": "#/components/schemas/Id"
+          }
+        },
+        "required": [
+          "suggestion_id",
+          "change_ids"
+        ],
+        "title": "Accepted",
         "type": "object"
       },
       "AddMemberRequest": {
@@ -415,6 +454,77 @@
           "excluded_with_ai_involvement"
         ],
         "title": "AiInvolvement",
+        "type": "object"
+      },
+      "AiMark": {
+        "additionalProperties": false,
+        "description": "A field a model wrote: the model revision it came from, and the revision in which the\nlead accepted it (None while it is only suggested).",
+        "properties": {
+          "accepted_in": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "endpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endpoint"
+          },
+          "model_identity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Identity"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "recipe_id": {
+            "title": "Recipe Id",
+            "type": "string"
+          },
+          "revision_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "serving": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serving"
+          }
+        },
+        "required": [
+          "path",
+          "revision_id",
+          "recipe_id",
+          "model_identity",
+          "serving",
+          "endpoint",
+          "accepted_in"
+        ],
+        "title": "AiMark",
         "type": "object"
       },
       "Anchor": {
@@ -823,6 +933,60 @@
           "mentions"
         ],
         "title": "AssignmentFullText",
+        "type": "object"
+      },
+      "AssistOutcome": {
+        "additionalProperties": false,
+        "description": "The result of asking the assistant. Without a revision, `issues` says why: the answer\nstill did not compile after the repair rounds (with the last raw answer), or it changed\nnothing.",
+        "properties": {
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "event_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "issues": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ProtocolIssue"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "raw_answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Answer"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProtocolRevision"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unchanged": {
+            "default": false,
+            "title": "Unchanged",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "revision",
+          "attempts",
+          "event_id"
+        ],
+        "title": "AssistOutcome",
         "type": "object"
       },
       "AttemptView": {
@@ -1456,6 +1620,30 @@
         "title": "CorpusView",
         "type": "object"
       },
+      "CountRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "dialect": {
+            "enum": [
+              "pubmed",
+              "ctgov"
+            ],
+            "title": "Dialect",
+            "type": "string"
+          },
+          "strategy": {
+            "minLength": 1,
+            "title": "Strategy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dialect",
+          "strategy"
+        ],
+        "title": "CountRequest",
+        "type": "object"
+      },
       "CreateProjectRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1950,6 +2138,26 @@
         "title": "DocumentView",
         "type": "object"
       },
+      "DraftRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "language": {
+            "default": "en",
+            "title": "Language",
+            "type": "string"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "title": "DraftRequest",
+        "type": "object"
+      },
       "EditBody": {
         "additionalProperties": false,
         "properties": {
@@ -2004,6 +2212,31 @@
           "quote"
         ],
         "title": "EditBody",
+        "type": "object"
+      },
+      "EditRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "base_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "additionalProperties": true,
+            "title": "Source",
+            "type": "object"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "title": "EditRequest",
         "type": "object"
       },
       "EffectModifier": {
@@ -2926,6 +3159,20 @@
         "title": "ImportSearchRequest",
         "type": "object"
       },
+      "ImproveRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "part": {
+            "title": "Part",
+            "type": "string"
+          }
+        },
+        "required": [
+          "part"
+        ],
+        "title": "ImproveRequest",
+        "type": "object"
+      },
       "IngestRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3348,6 +3595,155 @@
           "after"
         ],
         "title": "ModeChange",
+        "type": "object"
+      },
+      "ModelAttempt": {
+        "additionalProperties": false,
+        "description": "One model call. A rejected answer carries the problems Kittum sent back to the model.",
+        "properties": {
+          "finish_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finish Reason"
+          },
+          "issues": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ProtocolIssue"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "model_identity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Identity"
+          },
+          "raw_request_hash": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Sha256"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "raw_response_hash": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Sha256"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "request_hash": {
+            "$ref": "#/components/schemas/Sha256"
+          }
+        },
+        "required": [
+          "request_hash",
+          "raw_request_hash",
+          "raw_response_hash",
+          "model_identity"
+        ],
+        "title": "ModelAttempt",
+        "type": "object"
+      },
+      "ModelUse": {
+        "additionalProperties": false,
+        "description": "Who wrote a model revision, and how: the recipe, where it ran, the fixed instructions by\nversion and hash, and every attempt with its raw request and response in the artifact store.",
+        "properties": {
+          "attempts": {
+            "items": {
+              "$ref": "#/components/schemas/ModelAttempt"
+            },
+            "title": "Attempts",
+            "type": "array"
+          },
+          "endpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endpoint"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "model_identity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Identity"
+          },
+          "prompt_hash": {
+            "$ref": "#/components/schemas/Sha256"
+          },
+          "prompt_version": {
+            "title": "Prompt Version",
+            "type": "string"
+          },
+          "purpose": {
+            "$ref": "#/components/schemas/Purpose"
+          },
+          "recipe_id": {
+            "title": "Recipe Id",
+            "type": "string"
+          },
+          "serving": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serving"
+          }
+        },
+        "required": [
+          "purpose",
+          "recipe_id",
+          "model_identity",
+          "serving",
+          "endpoint",
+          "prompt_version",
+          "prompt_hash",
+          "attempts"
+        ],
+        "title": "ModelUse",
         "type": "object"
       },
       "OaLocation": {
@@ -3813,6 +4209,14 @@
         ],
         "title": "ParsedSource",
         "type": "object"
+      },
+      "PartKind": {
+        "enum": [
+          "question",
+          "criterion",
+          "strategy"
+        ],
+        "type": "string"
       },
       "Path": {
         "enum": [
@@ -4448,6 +4852,112 @@
         "title": "ProtocolRef",
         "type": "object"
       },
+      "ProtocolRevision": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Accepted"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "actor_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "ai_parts": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AiMark"
+            },
+            "title": "Ai Parts",
+            "type": "array"
+          },
+          "content_hash": {
+            "$ref": "#/components/schemas/Sha256"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "document": {
+            "additionalProperties": true,
+            "title": "Document",
+            "type": "object"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/RevisionKind"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelUse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "project_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "suggestion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Suggestion"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "seq",
+          "parent_id",
+          "kind",
+          "document",
+          "content_hash",
+          "actor_id",
+          "created_at"
+        ],
+        "title": "ProtocolRevision",
+        "type": "object"
+      },
       "ProtocolSource": {
         "additionalProperties": true,
         "type": "object"
@@ -4555,6 +5065,24 @@
         "title": "PublishRequest",
         "type": "object"
       },
+      "PublishRevisionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "PublishRevisionRequest",
+        "type": "object"
+      },
       "PublishedProtocol": {
         "additionalProperties": false,
         "description": "The version every decision reads now, with the words the review uses for core concepts:\nthe profile's labels where it has them, the core's otherwise.",
@@ -4576,6 +5104,13 @@
         ],
         "title": "PublishedProtocol",
         "type": "object"
+      },
+      "Purpose": {
+        "enum": [
+          "draft",
+          "improve"
+        ],
+        "type": "string"
       },
       "QuantitySpec": {
         "additionalProperties": false,
@@ -4648,6 +5183,65 @@
         ],
         "title": "QuantitySpec",
         "type": "object"
+      },
+      "QueryCount": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "counted_at": {
+            "format": "date-time",
+            "title": "Counted At",
+            "type": "string"
+          },
+          "dialect": {
+            "$ref": "#/components/schemas/QueryDialect"
+          },
+          "query_translation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query Translation"
+          },
+          "raw_hash": {
+            "$ref": "#/components/schemas/Sha256"
+          },
+          "strategy": {
+            "title": "Strategy",
+            "type": "string"
+          },
+          "warnings": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "dialect",
+          "strategy",
+          "count",
+          "raw_hash",
+          "counted_at"
+        ],
+        "title": "QueryCount",
+        "type": "object"
+      },
+      "QueryDialect": {
+        "enum": [
+          "pubmed",
+          "ctgov"
+        ],
+        "type": "string"
       },
       "QueueItem": {
         "additionalProperties": false,
@@ -5977,6 +6571,16 @@
         "title": "ReviewerColumn",
         "type": "object"
       },
+      "RevisionKind": {
+        "enum": [
+          "draft",
+          "suggestion",
+          "accepted",
+          "edit",
+          "restore"
+        ],
+        "type": "string"
+      },
       "Role": {
         "enum": [
           "outcome",
@@ -6633,6 +7237,16 @@
             "$ref": "#/components/schemas/Text"
           },
           "platform": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Text"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "strategy": {
             "anyOf": [
               {
                 "$ref": "#/components/schemas/Text"
@@ -7402,6 +8016,79 @@
           "created_at"
         ],
         "title": "StoredProtocol",
+        "type": "object"
+      },
+      "SuggestedChange": {
+        "additionalProperties": false,
+        "description": "One change the model suggests, which the lead accepts or not on its own. For a strategy,\n`before` is the passage it replaces at `start` and `after` its replacement; otherwise both are\nthe whole field.",
+        "properties": {
+          "after": {
+            "title": "After"
+          },
+          "before": {
+            "title": "Before"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start"
+          }
+        },
+        "required": [
+          "id",
+          "path",
+          "field",
+          "rationale"
+        ],
+        "title": "SuggestedChange",
+        "type": "object"
+      },
+      "Suggestion": {
+        "additionalProperties": false,
+        "properties": {
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/SuggestedChange"
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PartKind"
+          },
+          "part": {
+            "title": "Part",
+            "type": "string"
+          }
+        },
+        "required": [
+          "part",
+          "kind",
+          "changes"
+        ],
+        "title": "Suggestion",
         "type": "object"
       },
       "Target": {
@@ -8468,6 +9155,613 @@
         "summary": "Get Project",
         "tags": [
           "projects"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/assist/count": {
+      "post": {
+        "description": "How many records a PubMed or ClinicalTrials.gov strategy finds today. Informational: it\nruns no search and records none.",
+        "operationId": "countStrategyHits",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueryCount"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Count",
+        "tags": [
+          "assist"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/assist/draft": {
+      "post": {
+        "description": "Ask the model for a first protocol. A draft that compiles becomes a new revision; one that\nstill does not after the repair rounds comes back with its problems and the raw answer.",
+        "operationId": "draftProtocol",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistOutcome"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Draft",
+        "tags": [
+          "assist"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/assist/revisions": {
+      "get": {
+        "description": "Every revision, oldest first.",
+        "operationId": "listAssistRevisions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProtocolRevision"
+                  },
+                  "title": "Response Listassistrevisions",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Revisions",
+        "tags": [
+          "assist"
+        ]
+      },
+      "post": {
+        "description": "The lead's own text as a revision. 422 with every problem if it does not compile.",
+        "operationId": "saveAssistRevision",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProtocolRevision"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Revision",
+        "tags": [
+          "assist"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/assist/revisions/{revision_id}/accept": {
+      "post": {
+        "description": "The suggestion's base with the chosen changes, as a new revision.",
+        "operationId": "acceptSuggestedChanges",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "revision_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Revision Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProtocolRevision"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Accept",
+        "tags": [
+          "assist"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/assist/revisions/{revision_id}/diff/{other_id}": {
+      "get": {
+        "description": "What changes from one revision to the other.",
+        "operationId": "compareAssistRevisions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "revision_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Revision Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "other_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Other Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProtocolDiff"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Compare",
+        "tags": [
+          "assist"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/assist/revisions/{revision_id}/improve": {
+      "post": {
+        "description": "Ask the model to improve one part of a revision. Its changes, each with a rationale, become\na suggestion revision; accept some or all of them with `acceptSuggestedChanges`.",
+        "operationId": "improveProtocolPart",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "revision_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Revision Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImproveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistOutcome"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Improve",
+        "tags": [
+          "assist"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/assist/revisions/{revision_id}/publish": {
+      "post": {
+        "description": "Publish a revision with the lead's approval. The ledger event names every field a model\nwrote.",
+        "operationId": "publishAssistRevision",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "revision_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Revision Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishRevisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoredProtocol"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Publish",
+        "tags": [
+          "assist"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/assist/revisions/{revision_id}/restore": {
+      "post": {
+        "operationId": "restoreAssistRevision",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "revision_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Revision Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProtocolRevision"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Restore",
+        "tags": [
+          "assist"
         ]
       }
     },

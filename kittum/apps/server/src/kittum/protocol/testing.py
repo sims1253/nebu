@@ -4,7 +4,7 @@ It ignores the transaction; pass `kittum.db.testing.null_tx()`. It cannot check 
 is a human actor, because it has no actor table, so it trusts the ID.
 """
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from kittum.core import Clock, Id, KittumError, NotFoundError, SystemClock, new_id
 from kittum.protocol.compiler import ProtocolVersion, protocol_hash
@@ -16,6 +16,8 @@ from kittum.protocol.store import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
+
     from kittum.db import Tx
     from kittum.ledger import Ledger
 
@@ -48,12 +50,21 @@ class InMemoryProtocolStore:
         return stored
 
     def publish(
-        self, tx: Tx, project_id: Id, version_id: Id, approved_by: Id, *, reason: str | None = None
+        self,
+        tx: Tx,
+        project_id: Id,
+        version_id: Id,
+        approved_by: Id,
+        *,
+        reason: str | None = None,
+        ai_parts: Sequence[Mapping[str, Any]] = (),
     ) -> StoredProtocol:
         stored = self.get_version(tx, project_id, version_id)
         previous = self.latest_published(tx, project_id)
         check_publishable(stored, previous, reason)
-        event = self.ledger.append(tx, published_event(stored, previous, approved_by, reason))
+        event = self.ledger.append(
+            tx, published_event(stored, previous, approved_by, reason, ai_parts)
+        )
         published = mark_published(stored, event, approved_by, reason)
         self._versions[version_id] = published
         return published

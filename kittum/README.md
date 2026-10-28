@@ -120,6 +120,13 @@ export KITTUM_JUDGE_MODEL=example-provider-model
 uv run kittum demo seed --live
 ```
 
+The protocol editor's **With the assistant** tab lets a model draft the protocol from a few
+sentences and suggest changes to one part at a time, which the lead accepts change by change.
+`KITTUM_ASSIST_MODEL` names its recipe (by default the judge's), served by one of
+`KITTUM_LLM_ENDPOINTS`; **Count** asks PubMed and ClinicalTrials.gov through the gateway.
+`KITTUM_ASSIST_BACKEND=demo` replays the answers recorded in `apps/server/src/kittum/app/demo_data/assist`
+instead; `uv run python -m tests.assist.record_fixtures <recipe>` records them again.
+
 For development, `pnpm dev:web` serves the workbench with hot reload on port 5180 against
 `kittum serve`, and `VITE_KITTUM_WORKBENCH=mock pnpm dev:web` shows recorded example data without
 a server. `pnpm --dir apps/web e2e` runs the end-to-end journeys against a migrated database in

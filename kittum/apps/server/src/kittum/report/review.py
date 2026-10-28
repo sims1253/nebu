@@ -59,6 +59,8 @@ VERDICT_RECORDED = "judge.verdict_recorded"
 CORPUS_INGESTED = "corpus.ingested"
 
 # Adapter names of the core search sources, mapped to the protocol source IDs they serve.
+ASSIST_EVENT = "protocol.assist"  # `kittum.assist` writes it; the report only reads the ledger
+
 SOURCE_ALIASES: dict[str, str] = {
     "pubmed": "medline",
     "ctgov": "clinicaltrials_gov",
@@ -301,6 +303,10 @@ class Review(Record):
     stages: tuple[StageResult, ...]
     judges: tuple[JudgeInfo, ...]
     actors: tuple[Actor, ...]
+    protocol_ai_parts: tuple[dict[str, Any], ...] = ()
+    """The fields of the protocol in force that a model wrote, as its publication recorded them."""
+    assist_requests: tuple[dict[str, Any], ...] = ()
+    """Every request to the protocol assistant through the cutoff (`protocol.assist` payloads)."""
 
     @property
     def document(self) -> ReviewProtocol:
@@ -390,6 +396,17 @@ def load_review(
         stages=stages,
         judges=judges,
         actors=tuple(Actor.model_validate(a) for a in actors),
+        protocol_ai_parts=tuple(
+            next(
+                (
+                    e.payload.get("ai_parts", [])
+                    for e in events
+                    if protocol and e.event_id == protocol.approved_event_id
+                ),
+                [],
+            )
+        ),
+        assist_requests=tuple(e.payload for e in events if e.type == ASSIST_EVENT),
     )
 
 
