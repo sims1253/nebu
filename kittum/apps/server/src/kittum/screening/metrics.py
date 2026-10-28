@@ -10,7 +10,7 @@ from itertools import combinations
 from typing import TYPE_CHECKING, Any, Literal
 
 from kittum.protocol import ScreeningMode
-from kittum.screening.types import AuditGauge, PairAgreement, StageMetrics, StopStatus
+from kittum.screening.types import AuditGauge, AuditStratum, PairAgreement, StageMetrics, StopStatus
 from kittum.stats import Stratum, cohen_kappa, elusion_estimate, pabak, stop_test
 
 if TYPE_CHECKING:
@@ -56,7 +56,8 @@ def stage_metrics(
     items = {
         r["item_ref"]: r
         for r in tx.execute(
-            "select item_ref, kind, expected_outcome, audit from screening_item where stage_id = %s",
+            "select item_ref, kind, expected_outcome, audit from screening_item"
+            " where stage_id = %s",
             (stage_id,),
         ).fetchall()
     }
@@ -185,17 +186,28 @@ def stage_metrics(
         for a in assignments
         if a["role"] == "auditor" and a["f_outcome"] is not None and items[a["item_ref"]]["audit"]
     }
-    sampled = [r for r in population if r in audit_final]
-    relevant = [r for r in sampled if audit_final[r] != "exclude"]
+    # One stratum per verified AI reading: records the AI verifiably excluded, and the rest.
+    strata = []
+    for ai_excludes in (True, False):
+        members = [
+            r for r in population if (r in readings and readings[r]["excludes"]) == ai_excludes
+        ]
+        sampled = [r for r in members if r in audit_final]
+        strata.append(
+            AuditStratum(
+                ai_excludes=ai_excludes,
+                population=len(members),
+                sampled=len(sampled),
+                relevant_found=sum(audit_final[r] != "exclude" for r in sampled),
+            )
+        )
+    filled = [s for s in strata if s.population]
     elusion = None
-    if not population:
-        elusion = elusion_estimate([], confidence=AUDIT_CONFIDENCE)
-    elif sampled:
+    if all(s.sampled for s in filled):  # a stratum without a decided sample has no estimate
         elusion = elusion_estimate(
             [
-                Stratum(
-                    population=len(population), sampled=len(sampled), relevant_found=len(relevant)
-                )
+                Stratum(population=s.population, sampled=s.sampled, relevant_found=s.relevant_found)
+                for s in filled
             ],
             confidence=AUDIT_CONFIDENCE,
         )
@@ -206,7 +218,8 @@ def stage_metrics(
         audit_samples=len(audited),
         audit_decided=sum(1 for r in audited if r in audit_final),
         excluded_population=len(population),
-        audit_relevant_found=len(relevant),
+        audit_relevant_found=sum(s.relevant_found for s in strata),
+        strata=tuple(strata),
         elusion=elusion,
     )
 

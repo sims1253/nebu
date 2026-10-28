@@ -11,18 +11,24 @@ AI has read it: M1 and M2 queues follow a seeded order per reviewer, M3 queues t
 shared by both humans.
 
 The human decides first. `decide` takes a provisional decision; if the stage reveals (`never`,
-`on_disagreement`, or `always`) and the AI disagrees, the result carries the AI's criterion,
-quote, and rationale, and the reviewer keeps or revises with a final decision. Otherwise the
-provisional decision is final at once. Every decision is a command with a receipt and a ledger
-event, checks `expected_revision`, and records the client's timing; `undo` returns an item to the
-queue with a new revision. AI exclusions are proposals only: no mode lets the AI exclude a record
-that no human saw.
+`on_disagreement`, or `always`) and the AI disagrees in the sense below, the result carries the
+AI's criterion, quote, and rationale, and the reviewer keeps or revises with a final decision.
+Otherwise the provisional decision is final at once. Every decision is a command with a receipt
+and a ledger event, checks `expected_revision`, and records the client's timing; `undo` returns
+an item to the queue with a new revision. AI exclusions are proposals only: no mode lets the AI
+exclude a record that no human saw.
+
+The AI's verdict is read two ways. Its verified reading (`Verdict.excludes`) counts wherever an
+AI exclusion would remove or deprioritize a record: when the human includes, in the M3 order,
+and in the audit strata. The model's own reading (no criterion it answered `not_met`, before the
+filter's downgrades) counts where the AI argues for keeping a record that humans excluded. The
+filter protects against wrongful exclusions; it never manufactures a disagreement.
 
 Once every screener of a record has decided, conflicts go to adjudication: human disagreements in
-every mode, records the AI includes and both humans exclude in M1, every disagreement between the
-AI and the human in M2 (provisional or final, the protocol's census), and audit samples the
-auditor includes. The adjudicator sees the humans' decisions under pseudonyms; the AI column opens
-after the commit.
+every mode, records both humans exclude while the model saw no failing criterion in M1, every
+disagreement between the AI and the human in M2 (provisional or final, the protocol's census),
+and audit samples the auditor includes. The adjudicator sees the humans' decisions under
+pseudonyms; the AI column opens after the commit.
 
 Blinding is enforced below the service: reviewers read only through the SQL functions
 `screening_reviewer_queue` and `screening_reviewer_progress`, which return the reviewer's own
@@ -58,6 +64,7 @@ from kittum.screening.types import (
     AdjudicationResult,
     AiColumn,
     AuditGauge,
+    AuditStratum,
     ConflictKind,
     CriterionDecision,
     DecideResult,
@@ -101,6 +108,7 @@ __all__ = [
     "AdjudicationResult",
     "AiColumn",
     "AuditGauge",
+    "AuditStratum",
     "ConflictKind",
     "CriterionDecision",
     "DecideResult",

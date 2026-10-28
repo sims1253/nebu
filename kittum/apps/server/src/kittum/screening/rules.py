@@ -27,10 +27,44 @@ OUTCOMES_AT: dict[str, frozenset[str]] = {
 
 @dataclass(frozen=True)
 class Reading:
-    """The AI's verdict on one item, as screening uses it."""
+    """The AI's verdict on one item, read two ways.
+
+    `excludes` is the verified reading, `Verdict.excludes`: a `not_met` whose quote the judge's
+    filter confirmed. Screening uses it wherever an AI exclusion would remove or deprioritize a
+    record: the M2 disagreement when the human includes, the M3 order, and the audit strata.
+
+    `includes_by_own_reading` is the model's own reading: no criterion the model itself answered
+    `not_met` (`downgraded_from` if the filter changed it, else `status`). The filter exists to
+    stop wrongful exclusions, not to manufacture disagreement, so this reading decides when the
+    AI argues for keeping a record that humans excluded. A record whose content tried to instruct
+    the model has no trustworthy own reading, and counts as included.
+    """
 
     excludes: bool
     criteria: tuple[CriterionVerdict, ...]
+    flags: tuple[str, ...] = ()
+
+    @property
+    def includes_by_own_reading(self) -> bool:
+        if "injection_suspected" in self.flags:
+            return True
+        return not any(_model_status(c) == "not_met" for c in self.criteria)
+
+
+def _model_status(verdict: CriterionVerdict) -> str:
+    """What the model answered, before the filter downgraded it."""
+    return verdict.downgraded_from or verdict.status
+
+
+def disagrees(decision: Decision, reading: Reading) -> bool:
+    """Whether the AI disagrees with a human decision.
+
+    A human exclusion meets disagreement only if the model itself saw no failing criterion; a
+    human inclusion only if the AI's exclusion is verified. An exclusion the filter could not
+    verify is agreement with an inclusion, and the model's unverified `not_met` is agreement with
+    an exclusion.
+    """
+    return reading.includes_by_own_reading if excludes(decision) else reading.excludes
 
 
 def topic_for(protocol: ReviewProtocol, scope_id: str, topic_id: str | None) -> SearchTopic:
@@ -155,20 +189,25 @@ def _reveal(verdict: CriterionVerdict) -> Reveal:
 def reveal_for(setting: RevealSetting, decision: Decision, reading: Reading) -> Reveal | None:
     """What the reviewer sees after a provisional decision, or None to move on.
 
-    On disagreement the banner shows the AI's reason to exclude, or, when the human excludes and
-    the AI does not, the AI's reading of the human's criterion.
+    On disagreement (see `disagrees`) the banner shows the AI's verified reason to exclude, or,
+    when the human excludes and the model saw no failing criterion, the AI's reading of the
+    human's criterion.
     """
     if setting == "never":
         return None
     by_id = {c.criterion_id: c for c in reading.criteria}
     own = by_id.get(decision.reason_criterion_id or "")
     ai_reason = excluding_criterion(reading)
-    if reading.excludes != excludes(decision):
-        basis = ai_reason if reading.excludes else own
+    if disagrees(decision, reading):
+        basis = own if excludes(decision) else ai_reason
     elif setting == "always":
         basis = (
-            (own if own and own.status == "not_met" else ai_reason)
-            if reading.excludes
+            (
+                own
+                if own and _model_status(own) == "not_met"
+                else next((c for c in reading.criteria if _model_status(c) == "not_met"), None)
+            )
+            if excludes(decision)
             else next((c for c in reading.criteria if c.status == "met"), None)
         )
     else:
@@ -203,10 +242,10 @@ def conflict_kinds(
     ):
         kinds.append("exclusion_reason")
     if reading is not None:
-        if mode == ScreeningMode.M1 and all(excluded) and not reading.excludes:
+        if mode == ScreeningMode.M1 and all(excluded) and reading.includes_by_own_reading:
             kinds.append("ai_include")
         if mode == ScreeningMode.M2 and any(
-            excludes(d) != reading.excludes for d in (*screener_finals, *screener_provisionals)
+            disagrees(d, reading) for d in (*screener_finals, *screener_provisionals)
         ):
             kinds.append("ai_disagreement")
     if auditor_final is not None and all(excluded) and not excludes(auditor_final):

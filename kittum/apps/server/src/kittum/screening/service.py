@@ -1023,7 +1023,8 @@ class Screening:
                 raise InvalidDecision(f"conflict {conflict_id} is {c['state']}")
             if c["revision"] != expected_revision:
                 raise StaleRevision(
-                    f"conflict {conflict_id} is at revision {c['revision']}, not {expected_revision}"
+                    f"conflict {conflict_id} is at revision {c['revision']}, "
+                    f"not {expected_revision}"
                 )
             if not st["human"]:
                 raise InvalidDecision("an adjudicator must be a human actor")

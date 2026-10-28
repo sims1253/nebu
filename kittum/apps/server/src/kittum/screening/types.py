@@ -30,7 +30,8 @@ class StaleRevision(CommandRejected):
 
 
 class InvalidDecision(CommandRejected):
-    """The decision breaks a rule: a missing criterion, a wrong phase, an outcome for another stage."""
+    """The decision breaks a rule: a missing criterion, a wrong phase, or an outcome of another
+    stage."""
 
 
 class NotAssigned(KittumError):
@@ -236,6 +237,15 @@ class PairAgreement(Record):
     pabak: float | None
 
 
+class AuditStratum(Record):
+    """Excluded records whose AI reading was, or was not, a verified exclusion."""
+
+    ai_excludes: bool
+    population: int
+    sampled: int  # decided audit samples in the stratum
+    relevant_found: int
+
+
 class AuditGauge(Record):
     sentinels: int  # sentinel assignments
     sentinels_decided: int
@@ -245,9 +255,11 @@ class AuditGauge(Record):
     excluded_population: int
     """Records excluded without adjudication (plus, in M3, every record not yet screened)."""
     audit_relevant_found: int
+    strata: tuple[AuditStratum, ...]
     elusion: Interval | None
-    """Estimated relevant records among the excluded ones, with its one-sided 95% upper bound.
-    None while the population has no decided audit sample."""
+    """Estimated relevant records among the excluded ones, stratified by the verified AI
+    reading, with its one-sided 95% upper bound. None while a stratum with records has no
+    decided audit sample."""
 
 
 class StopStatus(Record):

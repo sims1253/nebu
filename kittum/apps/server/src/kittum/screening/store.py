@@ -76,6 +76,7 @@ def reading_of(row: dict[str, Any]) -> Reading:
     return Reading(
         excludes=row["excludes"],
         criteria=tuple(CriterionVerdict.model_validate(c) for c in row["criteria"]),
+        flags=tuple(row["flags"]),
     )
 
 
@@ -85,7 +86,8 @@ def queue_record(facts: dict[str, Any], **extra: Any) -> QueueRecord:
 
 def reading(tx: Tx, stage_id: Id, item_ref: str) -> Reading | None:
     row = tx.execute(
-        "select excludes, criteria from screening_ai_reading where stage_id = %s and item_ref = %s",
+        "select excludes, criteria, flags from screening_ai_reading"
+        " where stage_id = %s and item_ref = %s",
         (stage_id, item_ref),
     ).fetchone()
     return reading_of(row) if row else None
