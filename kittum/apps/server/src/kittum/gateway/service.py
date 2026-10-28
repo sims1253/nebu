@@ -185,7 +185,11 @@ class SourceGateway:
     # -- public surface -------------------------------------------------------------------
 
     def fetch(self, source: str, request: HttpRequest, *, use_cache: bool = True) -> HttpResponse:
-        """Return the response, from the cache when possible, else from the source."""
+        """Return the response, from the cache when possible, else from the source.
+
+        `use_cache=False` is for a new execution of a query, such as an update search: it skips
+        the cache read but still stores the fresh response, so later replays see the newest one.
+        """
         policy = self._policy(source)
         key = request_hash(request)
         if use_cache:
@@ -201,7 +205,7 @@ class SourceGateway:
         except _Retryable as error:
             raise SourceUnavailable(source, error.status, attempts[0]) from error
 
-        if use_cache and 200 <= response.status < 300:
+        if 200 <= response.status < 300:
             self._remember(source, key, response)
         return response
 

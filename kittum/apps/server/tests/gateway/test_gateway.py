@@ -366,3 +366,30 @@ def test_concurrency_cap_serializes_a_source(database: Database) -> None:
 
     assert not failures
     assert transport.max_active == 1
+
+
+def test_a_new_execution_bypasses_the_cache_and_refreshes_it(database: Database) -> None:
+    clock = FixedClock(START)
+    url = "https://clinicaltrials.gov/api/v2/studies/NCT01234567"
+    before, after = b'{"hasResults": false}', b'{"hasResults": true}'
+    transport = FakeTransport(sequence=[response(200, before), response(200, after)])
+    gateway = _gateway(
+        database,
+        transport,
+        policies=[_policy("ctgov")],
+        clock=clock,
+        sleep=RecordingSleep(clock),
+        store=MemoryStore(),
+        buckets="memory",
+    )
+    request = HttpRequest(url=url)
+
+    assert gateway.fetch("ctgov", request).body == before
+    update = gateway.fetch("ctgov", request, use_cache=False)
+    replay = gateway.fetch("ctgov", request)
+
+    assert update.body == after
+    assert not update.from_cache
+    assert replay.from_cache
+    assert replay.body == after
+    assert len(transport.sent) == 2
