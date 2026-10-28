@@ -15,6 +15,7 @@ from fastapi import Depends, FastAPI, Request
 from kittum.core import Clock, Record, SystemClock
 from kittum.db import Database
 from kittum.ledger import PostgresLedger
+from kittum.runs import PostgresJobQueue, PostgresReceipts
 from kittum.settings import Settings
 from kittum.storage import ArtifactStore, FilesystemStore
 
@@ -23,6 +24,7 @@ if TYPE_CHECKING:
 
     from kittum.gateway import Gateway
     from kittum.ledger import Ledger
+    from kittum.runs import JobQueue, ReceiptStore
 
 
 @dataclass
@@ -35,6 +37,8 @@ class AppContext:
     clock: Clock = field(default_factory=SystemClock)
     gateway: Gateway | None = None
     ledger: Ledger | None = None
+    queue: JobQueue | None = None
+    receipts: ReceiptStore | None = None
 
     @classmethod
     def from_settings(cls, settings: Settings) -> AppContext:
@@ -43,6 +47,8 @@ class AppContext:
             db=Database(settings.database_url),
             artifacts=FilesystemStore(settings.artifact_dir),
             ledger=PostgresLedger(),
+            queue=PostgresJobQueue(),
+            receipts=PostgresReceipts(),
         )
 
 

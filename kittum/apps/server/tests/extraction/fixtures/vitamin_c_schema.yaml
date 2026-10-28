@@ -1,0 +1,62 @@
+# Li et al. 2026 (BMC Medicine 24:515): vitamin C and bleeding after kidney biopsy.
+# Table 3 on page 6 prints the primary outcomes; the per-arm N sits in a header row.
+schema_version: 1
+name: Vitamin C and bleeding after kidney biopsy
+analysis_set: itt
+arms:
+  - id: vitamin_c
+    label: Vitamin C
+    columns: [Vitamin C group]
+  - id: control
+    label: Control
+    columns: [Control group]
+comparisons:
+  - id: vitamin_c_vs_control
+    label: Vitamin C versus control
+    intervention: vitamin_c
+    comparator: control
+    columns: [Effect size (95% CI)]
+endpoints:
+  - id: randomization
+    label: Randomization
+    role: baseline
+    timepoints: [{id: baseline, label: Baseline}]
+    quantities:
+      - quantity: n_randomized
+        arms: [vitamin_c, control, total]
+  - id: any_hematoma
+    label: Any perirenal hematoma
+    timepoints: [{id: h24, label: 24 h after biopsy}]
+    locate:
+      rows: ["Any hematoma, n (%)"]
+      sections: [All Participants]
+    quantities:
+      - quantity: events
+        arms: [vitamin_c, control]
+        locate: {cell: count_percentage.count}
+      - quantity: percent
+        arms: [vitamin_c, control]
+        locate: {cell: count_percentage.percentage}
+      - quantity: risk_ratio
+        comparisons: [vitamin_c_vs_control]
+        locate: {cell: estimate_interval.estimate}
+      - quantity: ci_lower
+        comparisons: [vitamin_c_vs_control]
+        locate: {cell: estimate_interval.lower}
+      - quantity: ci_upper
+        comparisons: [vitamin_c_vs_control]
+        locate: {cell: estimate_interval.upper}
+      - quantity: p_value
+        comparisons: [vitamin_c_vs_control]
+        locate: {columns: [P value]}
+  - id: female_sex
+    label: Female sex
+    role: baseline
+    timepoints: [{id: baseline, label: Baseline}]
+    locate:
+      rows: ["Female sex, n (%)"]
+    quantities:
+      - quantity: events
+        description: Female participants
+        arms: [vitamin_c, control]
+        locate: {cell: count_percentage.count}
