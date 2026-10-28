@@ -29,7 +29,7 @@ from kittum.app import (
     request_open_access,
 )
 from kittum.app.demo import DATA
-from kittum.core import SystemClock
+from kittum.core import FixedClock, SystemClock
 from kittum.corpus import latest_revision, reports
 from kittum.gateway import HttpRequest, RecordedTransport, SourceGateway, request_hash
 from kittum.ledger import PostgresLedger
@@ -79,14 +79,22 @@ class Sources:
 
 def _context(db: Database, sources: Sources) -> AppContext:
     artifacts = MemoryStore()
+    clock = FixedClock(datetime(2026, 10, 28, 12, tzinfo=UTC))
     return AppContext(
         settings=Settings(
             database_url="unused", artifact_dir=Path("unused"), contact_email=CONTACT_EMAIL
         ),
         db=db,
         artifacts=artifacts,
+        # Rate-limit waits pass on the gateway's own clock, not on the wall.
         gateway=SourceGateway(
-            database=db, transport=sources, artifacts=artifacts, buckets="memory", cache="memory"
+            database=db,
+            transport=sources,
+            artifacts=artifacts,
+            buckets="memory",
+            cache="memory",
+            clock=clock,
+            sleep=lambda seconds: clock.advance(timedelta(seconds=seconds)),
         ),
         ledger=PostgresLedger(),
         queue=PostgresJobQueue(),

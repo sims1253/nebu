@@ -26,7 +26,7 @@ from fastapi.testclient import TestClient
 from kittum.api import AppContext, create_app
 from kittum.app import job_handlers, open_access
 from kittum.app.demo import DATA, PDFS, PROTOCOL, SENTINELS, demo_judge
-from kittum.core import new_id
+from kittum.core import FixedClock, new_id
 from kittum.gateway import RecordedTransport, SourceGateway
 from kittum.gateway.testing import response
 from kittum.ledger import PostgresLedger
@@ -100,6 +100,7 @@ def test_a_lead_enriches_the_corpus_and_fetches_open_access_full_texts(
     pg: Tx, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     stack = Stack()
+    gateway_clock = FixedClock(datetime(2026, 10, 28, 12, tzinfo=UTC))
     db = savepoint_db(pg)
     artifacts = MemoryStore()
     ledger = PostgresLedger()
@@ -109,13 +110,18 @@ def test_a_lead_enriches_the_corpus_and_fetches_open_access_full_texts(
         ),
         db=db,
         artifacts=artifacts,
+        # The gateway's waits (for a rate-limit token, a cooldown) pass on a clock of the test's
+        # own, so they take no wall time and never depend on how fast the machine is: run 1 spends
+        # PubTator's two tokens for the second, and run 2 waits for the next one, however soon it
+        # starts.
         gateway=SourceGateway(
             database=db,
             transport=stack,
             artifacts=artifacts,
             buckets="memory",
             max_attempts=2,
-            sleep=lambda _: None,
+            clock=gateway_clock,
+            sleep=lambda seconds: gateway_clock.advance(timedelta(seconds=seconds)),
         ),
         ledger=ledger,
         queue=PostgresJobQueue(),
