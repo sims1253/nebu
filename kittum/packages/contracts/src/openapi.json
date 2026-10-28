@@ -3058,24 +3058,52 @@
         "additionalProperties": false,
         "properties": {
           "by_type": {
-            "additionalProperties": {
-              "type": "integer"
-            },
-            "title": "By Type",
-            "type": "object"
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "By Type"
           },
-          "events": {
-            "title": "Events",
+          "checked_through_seq": {
+            "title": "Checked Through Seq",
             "type": "integer"
           },
+          "events": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Events"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
           "verify": {
-            "$ref": "#/components/schemas/VerifyReport"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VerifyReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
-          "verify",
-          "events",
-          "by_type"
+          "ok",
+          "checked_through_seq"
         ],
         "title": "LedgerSummary",
         "type": "object"
@@ -10548,6 +10576,24 @@
               "format": "uuid",
               "title": "Project Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Id"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The caller's actor ID. A stand-in until the API has authentication.",
+              "title": "X-Kittum-Reviewer"
             }
           }
         ],

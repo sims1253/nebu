@@ -450,7 +450,8 @@ export const makeApiWorkbench = (): Workbench => ({
       }),
     ),
 
-  ledger: (projectId) => call((api) => api.verifyProjectLedger(projectId, undefined)),
+  ledger: ({ projectId, as }) =>
+    call((api) => api.verifyProjectLedger(projectId, { params: reviewer(as) })),
 
   searches: ({ projectId, as }) =>
     call((api) => api.listSearchExecutions(projectId, { params: reviewer(as) })),

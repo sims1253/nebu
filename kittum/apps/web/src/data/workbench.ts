@@ -216,7 +216,8 @@ export interface Workbench {
       readonly sentinels?: ReadonlyArray<Sentinel>;
     },
   ) => Call<StageInfo>;
-  readonly ledger: (projectId: string) => Call<LedgerSummary>;
+  /** Whether the hash chain holds; its event counts and where it breaks for the lead only. */
+  readonly ledger: (caller: Caller) => Call<LedgerSummary>;
 
   // The catalogue (every search's records, the corpus, the link proposals) is the methods
   // lead's alone: a reviewer who could list every record could tell the sentinels in their

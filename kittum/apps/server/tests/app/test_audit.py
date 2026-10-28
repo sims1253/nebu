@@ -628,8 +628,11 @@ def test_a_tampered_decision_is_pinpointed_and_a_bundle_sealed_before_still_veri
     assert audit["head_seq"] == audit["events"] > seq
     (status,) = audit["checkpoints"]
     assert status["signature"] == "valid" and status["head_matches"] is True
-    summary = r.ok(r.client.get(f"{base}/ledger/verify"))["verify"]
+    summary = r.ok(r.client.get(f"{base}/ledger/verify", headers=r.as_("Morgan")))["verify"]
     assert (summary["first_bad_seq"], summary["problem"]) == (seq, "payload_mismatch")
+    # Anyone else learns only that the chain no longer holds.
+    theirs = r.ok(r.client.get(f"{base}/ledger/verify", headers=r.as_("Sam")))
+    assert (theirs["ok"], theirs["verify"], theirs["by_type"]) == (False, None, None)
 
     # The bundle sealed before the edit still verifies: it holds its own copy of the chain. A new
     # bundle cannot be sealed over a chain that does not verify.

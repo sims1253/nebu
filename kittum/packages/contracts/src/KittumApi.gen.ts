@@ -361,8 +361,8 @@ export type AsOf = { readonly "cutoff_recorded_at": string | null, readonly "cut
 export const AsOf = Schema.Struct({ "cutoff_recorded_at": Schema.Union([Schema.String.annotate({ "format": "date-time" }), Schema.Null]).annotate({ "title": "Cutoff Recorded At" }), "cutoff_seq": Schema.Number.annotate({ "title": "Cutoff Seq" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "cutoff_type": Schema.Union([Schema.String, Schema.Null]).annotate({ "title": "Cutoff Type" }), "disclosure": Schema.Record(Schema.String, Schema.Json.annotate({ "expected": "JSON value" })).annotate({ "title": "Disclosure" }), "disclosure_hash": Sha256, "flows": Schema.Array(PrismaFlow).annotate({ "title": "Flows" }), "head_seq": Schema.Number.annotate({ "title": "Head Seq" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "items": Schema.Record(Schema.String, ItemLabel).annotate({ "title": "Items" }), "stages": Schema.Array(StageDisclosure).annotate({ "title": "Stages" }) }).annotate({ "title": "AsOf", "identifier": "AsOf" })
 export type CheckpointStatus = { readonly "checkpoint": Checkpoint, readonly "head_matches": boolean | null, readonly "signature": "valid" | "invalid" | "unknown_key" | "unchecked" }
 export const CheckpointStatus = Schema.Struct({ "checkpoint": Checkpoint, "head_matches": Schema.Union([Schema.Boolean, Schema.Null]).annotate({ "title": "Head Matches" }), "signature": Schema.Literals(["valid", "invalid", "unknown_key", "unchecked"]).annotate({ "title": "Signature" }) }).annotate({ "title": "CheckpointStatus", "identifier": "CheckpointStatus" })
-export type LedgerSummary = { readonly "by_type": { readonly [x: string]: number }, readonly "events": number, readonly "verify": VerifyReport }
-export const LedgerSummary = Schema.Struct({ "by_type": Schema.Record(Schema.String, Schema.Int).annotate({ "title": "By Type" }), "events": Schema.Number.annotate({ "title": "Events" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "verify": VerifyReport }).annotate({ "title": "LedgerSummary", "identifier": "LedgerSummary" })
+export type LedgerSummary = { readonly "by_type"?: { readonly [x: string]: number } | null, readonly "checked_through_seq": number, readonly "events"?: number | null, readonly "ok": boolean, readonly "verify"?: VerifyReport | null }
+export const LedgerSummary = Schema.Struct({ "by_type": Schema.optionalKey(Schema.Union([Schema.Record(Schema.String, Schema.Int), Schema.Null]).annotate({ "title": "By Type" })), "checked_through_seq": Schema.Number.annotate({ "title": "Checked Through Seq" }).check(Schema.isInt().annotate({ "expected": "an integer" })), "events": Schema.optionalKey(Schema.Union([Schema.Int, Schema.Null]).annotate({ "title": "Events" })), "ok": Schema.Boolean.annotate({ "title": "Ok" }), "verify": Schema.optionalKey(Schema.Union([VerifyReport, Schema.Null])) }).annotate({ "title": "LedgerSummary", "identifier": "LedgerSummary" })
 export type CorpusRevision = { readonly "id": Id, readonly "identity_revision_id"?: Id | null, readonly "occurrences": ReadonlyArray<Occurrence>, readonly "project_id": Id, readonly "proposals": ReadonlyArray<LinkProposal> }
 export const CorpusRevision = Schema.Struct({ "id": Id, "identity_revision_id": Schema.optionalKey(Schema.Union([Id, Schema.Null])), "occurrences": Schema.Array(Occurrence).annotate({ "title": "Occurrences" }), "project_id": Id, "proposals": Schema.Array(LinkProposal).annotate({ "title": "Proposals" }) }).annotate({ "title": "CorpusRevision", "identifier": "CorpusRevision" })
 export type RunListing = { readonly "accepted": number, readonly "fields": number, readonly "report": ReportInfo, readonly "run": ExtractionRun }
@@ -684,6 +684,8 @@ export type AttachFullText201 = FullText
 export const AttachFullText201 = FullText
 export type AttachFullText422 = HTTPValidationError
 export const AttachFullText422 = HTTPValidationError
+export type VerifyProjectLedgerParams = { readonly "X-Kittum-Reviewer"?: Id | null }
+export const VerifyProjectLedgerParams = Schema.Struct({ "X-Kittum-Reviewer": Schema.optionalKey(Schema.Union([Id, Schema.Null]).annotate({ "title": "X-Kittum-Reviewer", "description": "The caller's actor ID. A stand-in until the API has authentication." })) })
 export type VerifyProjectLedger200 = LedgerSummary
 export const VerifyProjectLedger200 = LedgerSummary
 export type VerifyProjectLedger422 = HTTPValidationError
@@ -1417,6 +1419,7 @@ export const make = (
   ),
     "verifyProjectLedger": (projectId, options: Parameters<KittumApi["verifyProjectLedger"]>[1]) => __makePathRequest(HttpClientRequest.get, [projectId], () => "/api/projects/" + __encodePathParam(projectId) + "/ledger/verify").pipe(
     Effect.flatMap((request) => request.pipe(
+      HttpClientRequest.setHeaders({ "X-Kittum-Reviewer": options?.params?.["X-Kittum-Reviewer"] ?? undefined }),
       withResponse(options?.config)(HttpClientResponse.matchStatus({
       "2xx": decodeSuccess(VerifyProjectLedger200),
       "422": decodeError("VerifyProjectLedger422", VerifyProjectLedger422),
@@ -2088,8 +2091,8 @@ readonly "attachFullText": {
 * Recompute every event hash and link of the project's chain.
 */
 readonly "verifyProjectLedger": {
-    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly config: Config }): Effect.Effect<WithOptionalResponse<VerifyProjectLedger200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"VerifyProjectLedger422", VerifyProjectLedger422>>;
-    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<VerifyProjectLedger200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"VerifyProjectLedger422", VerifyProjectLedger422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly params?: typeof VerifyProjectLedgerParams.Encoded | undefined; readonly config: Config }): Effect.Effect<WithOptionalResponse<VerifyProjectLedger200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"VerifyProjectLedger422", VerifyProjectLedger422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly params?: typeof VerifyProjectLedgerParams.Encoded | undefined; readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<VerifyProjectLedger200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"VerifyProjectLedger422", VerifyProjectLedger422>>;
   }
   /**
 * Add Member Route
