@@ -93,8 +93,110 @@ def test_a_negative_criterion_in_any_language_is_checked_for_polarity() -> None:
     verdict = judge(CHEMO_NAIVE, SCOPE, (german_only,), CONFIG, backend)
     (c,) = verdict.criteria
     assert c.quote_verified
-    assert (c.status, c.failed_check) == ("unclear", "negation")
+    assert (c.status, c.failed_check) == ("unclear", "polarity")
     assert not verdict.excludes
+
+
+def _chemo_criterion(polarity: str, text: dict[str, str]) -> Criterion:
+    return Criterion(
+        id="C_CHEMO",
+        slot="population",
+        polarity=polarity,  # ty: ignore[invalid-argument-type]
+        text=text,
+        decidable_at=("title_abstract",),
+        applies_to=(SCOPE,),
+        keywords=("chemotherapy", "quimioterapia"),
+    )
+
+
+def _judge_chemo(record: ScreeningItem, criterion: Criterion, quote: str) -> Verdict:
+    text = answer(C_CHEMO=("not_met", quote, "About prior chemotherapy."))
+    backend = recorded(record, answers={record.item_ref: text}, criteria=(criterion,))
+    return judge(record, SCOPE, (criterion,), CONFIG, backend)
+
+
+def test_a_criterion_with_no_wording_kittum_can_read_cannot_exclude() -> None:
+    """S2: "Sin quimioterapia previa" is met by "without prior chemotherapy"."""
+    spanish_only = _chemo_criterion("include", {"es": "Sin quimioterapia previa"})
+    verdict = _judge_chemo(CHEMO_NAIVE, spanish_only, "patients without prior chemotherapy")
+    (c,) = verdict.criteria
+    assert c.quote_verified
+    assert (c.status, c.downgraded_from, c.failed_check) == (
+        "unclear",
+        "not_met",
+        "language_unverifiable",
+    )
+    assert not verdict.excludes
+
+
+SPANISH = item(
+    "occ-spanish",
+    "Docetaxel en cáncer de pulmón de células no pequeñas",
+    "Métodos: Este ensayo aleatorizado de fase 3 incluyó 120 pacientes sin quimioterapia previa "
+    "con cáncer de pulmón de células no pequeñas avanzado.",
+)
+
+
+@pytest.mark.parametrize(
+    "quote", ["pacientes sin quimioterapia previa", "120 pacientes sin quimioterapia"]
+)
+def test_a_quote_in_a_language_kittum_cannot_read_cannot_exclude(quote: str) -> None:
+    criterion = _chemo_criterion(
+        "include",
+        {"en": "Previously treated with chemotherapy", "es": "Tratados con quimioterapia"},
+    )
+    verdict = _judge_chemo(SPANISH, criterion, quote)
+    (c,) = verdict.criteria
+    assert c.quote_verified
+    assert (c.status, c.failed_check) == ("unclear", "language_unverifiable")
+    assert not verdict.excludes
+
+
+WITH_CHEMO = item(
+    "occ-with-chemo",
+    "Ramucirumab plus docetaxel in non-small cell lung cancer",
+    "Methods: This randomised phase 3 trial enrolled 304 patients with prior chemotherapy and "
+    "stage IV non-small cell lung cancer.",
+)
+WITHOUT = (CHEMO_NAIVE, "patients without prior chemotherapy")
+WITH = (WITH_CHEMO, "patients with prior chemotherapy")
+
+
+@pytest.mark.parametrize(
+    ("polarity", "wording", "evidence", "stands"),
+    [
+        # An inclusion condition is failed only by a quote that contradicts it.
+        ("include", "Previously treated with chemotherapy", WITHOUT, True),
+        ("include", "Previously treated with chemotherapy", WITH, False),
+        ("include", "No prior chemotherapy", WITHOUT, False),
+        ("include", "No prior chemotherapy", WITH, True),
+        # An exclusion condition excludes only with a quote that affirms it.
+        ("exclude", "Prior chemotherapy", WITHOUT, False),
+        ("exclude", "Prior chemotherapy", WITH, True),
+        ("exclude", "No prior chemotherapy", WITHOUT, True),
+        ("exclude", "No prior chemotherapy", WITH, False),  # S6
+    ],
+)
+def test_not_met_needs_a_quote_that_fails_the_criterion_in_its_polarity(
+    polarity: str, wording: str, evidence: tuple[ScreeningItem, str], stands: bool
+) -> None:
+    record, quote = evidence
+    verdict = _judge_chemo(record, _chemo_criterion(polarity, {"en": wording}), quote)
+    (c,) = verdict.criteria
+    assert c.quote_verified
+    assert verdict.excludes is stands
+    assert c.failed_check == (None if stands else "polarity")
+    assert c.status == ("not_met" if stands else "unclear")
+
+
+def test_the_judge_sees_the_protocols_polarity() -> None:
+    criterion = _chemo_criterion("exclude", {"en": "Prior chemotherapy"})
+    text = answer(C_CHEMO=("unclear", "", "Not stated."))
+    backend = recorded(CHEMO_NAIVE, answers={CHEMO_NAIVE.item_ref: text}, criteria=(criterion,))
+    judge(CHEMO_NAIVE, SCOPE, (criterion,), CONFIG, backend)
+    assert "Exclusion condition. The record passes unless it shows this:" in (
+        backend.requests[0].messages[1].content
+    )
 
 
 def test_a_decision_directive_in_the_abstract_cannot_exclude() -> None:
@@ -133,37 +235,6 @@ def test_a_think_tag_inside_a_json_quote_is_kept(prefix: str) -> None:
     assert verdict.flags == ()
     assert (pop.status, pop.quote, pop.quote_verified) == ("not_met", quote, True)
     assert verdict.excludes
-
-
-@pytest.mark.parametrize(
-    ("wording", "stands"),
-    [
-        ("Prior chemotherapy", False),  # "without" is the opposite of what excludes
-        ("No prior chemotherapy", True),  # the record shows the exclusion condition
-    ],
-)
-def test_an_exclude_criterion_is_checked_against_what_it_excludes(
-    wording: str, stands: bool
-) -> None:
-    exclusion = Criterion(
-        id="C_EXCL_CHEMO",
-        slot="population",
-        polarity="exclude",
-        text={"en": wording},
-        decidable_at=("title_abstract",),
-        applies_to=(SCOPE,),
-    )
-    text = answer(
-        C_EXCL_CHEMO=("not_met", "patients without prior chemotherapy", "Chemotherapy-naive.")
-    )
-    backend = recorded(CHEMO_NAIVE, answers={CHEMO_NAIVE.item_ref: text}, criteria=(exclusion,))
-    verdict = judge(CHEMO_NAIVE, SCOPE, (exclusion,), CONFIG, backend)
-    assert verdict.excludes is stands
-    assert verdict.criteria[0].failed_check == (None if stands else "negation")
-    # The judge sees the protocol's own rendering, with the polarity spelled out.
-    assert "Exclusion condition. The record passes unless it shows this:" in (
-        backend.requests[0].messages[1].content
-    )
 
 
 def test_a_quote_without_the_protocols_keywords_cannot_exclude() -> None:

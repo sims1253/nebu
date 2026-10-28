@@ -13,6 +13,8 @@ type FailedCheck = Literal[
     "no_quote",  # not_met without a quote
     "off_criterion",  # the quote shares no keyword with the criterion or its PICO slot
     "negation",  # a negation or exclusion cue may flip what the quote means
+    "polarity",  # the quote does not contradict an inclusion or affirm an exclusion condition
+    "language_unverifiable",  # the criterion or the quote is in a language Kittum cannot read
     "injection_suspected",  # the record contains text that tries to instruct the model
     "invalid_output",  # the model gave no valid answer in any attempt
 ]

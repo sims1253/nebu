@@ -288,6 +288,9 @@ Modules `kittum.judge` and `kittum.models`. Needs: `protocol`, `core`.
   of those types in `protocol/__init__.py`; drop it when the protocol branch is merged.
 - Ollama reports only the tag as the model identity. Record the blob digest from `/api/show` if
   audits need more.
+- Polarity is read in English and German only (`judge.verify.POLARITY_LANGUAGES`). A not_met
+  on a criterion without an en or de wording, or with a quote in another language, becomes
+  `unclear` (`language_unverifiable`). Add a language by adding its negation cues.
 - Calibrate the injection and negation patterns on gold data: they are conservative and will
   cost some work saved.
 - A live test against Ollama or vLLM; the tests use recorded response bodies.
