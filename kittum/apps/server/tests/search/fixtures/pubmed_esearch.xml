@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE eSearchResult PUBLIC "-//NLM//DTD esearch 20060628//EN" "https://eutils.ncbi.nlm.nih.gov/eutils/dtd/20060628/esearch.dtd">
+<eSearchResult><Count>24</Count><RetMax>20</RetMax><RetStart>0</RetStart><QueryKey>1</QueryKey><WebEnv>MCID_6ae14800045d3e9e3004e3fd</WebEnv><IdList>
+<Id>40551045</Id>
+<Id>40418577</Id>
+<Id>39173175</Id>
+<Id>37407341</Id>
+<Id>36943405</Id>
+<Id>35771568</Id>
+<Id>33600745</Id>
+<Id>33358691</Id>
+<Id>32644818</Id>
+<Id>32586736</Id>
+<Id>32487229</Id>
+<Id>31594690</Id>
+<Id>31208380</Id>
+<Id>30201329</Id>
+<Id>29451946</Id>
+<Id>29327948</Id>
+<Id>28606620</Id>
+<Id>28406713</Id>
+<Id>27898234</Id>
+<Id>27805836</Id>
+</IdList><TranslationSet/><QueryTranslation>"lumacaftor"[Title] AND "trial"[Title/Abstract]</QueryTranslation></eSearchResult>
