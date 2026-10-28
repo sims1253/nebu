@@ -27,7 +27,7 @@ ALLOWED: dict[str, set[str]] = {
     "judge": {"core", "db", "storage", "ledger", "protocol", "models"},
     "screening": {"core", "db", "ledger", "runs", "protocol", "corpus", "judge", "stats"},
     "documents": {"core", "db", "storage", "ledger", "gateway"},
-    "extraction": {"core", "db", "storage", "ledger", "protocol", "documents", "models"},
+    "extraction": {"core", "db", "storage", "ledger", "runs", "protocol", "documents", "models"},
     "appraisal": {"core", "db", "ledger", "protocol", "documents", "extraction", "models"},
     "report": {
         "core",
