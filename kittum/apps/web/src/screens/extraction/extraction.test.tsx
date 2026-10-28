@@ -132,7 +132,56 @@ describe("extraction review", () => {
       boxes: [expect.objectContaining({ page: 6 })],
     });
   });
+
+  test("needs every line of a multi-line source on screen, not only the first", async () => {
+    const app = mount("/p/ivosidenib-cca/extraction");
+    unmount = app.unmount;
+    await expect.element(page.getByText("1 of 19 accepted")).toBeVisible();
+    await press("Tab"); // "randomly assigned to ASC alone (n=81)" breaks over two lines
+    await expect
+      .poll(
+        () => document.querySelectorAll("[data-page='6'] [data-testid=source-highlight]").length,
+      )
+      .toBe(2);
+    await expect
+      .poll(() => document.querySelector<HTMLImageElement>("[data-page='6'] img")?.complete)
+      .toBe(true);
+    const [first, second] = [
+      ...document.querySelectorAll<HTMLElement>("[data-page='6'] [data-testid=source-highlight]"),
+    ];
+    const scroller = scrollParent(first!);
+
+    // The first line sits just above the bottom edge; at most a sliver of the second shows.
+    const bottom = scroller.getBoundingClientRect().bottom;
+    scroller.scrollTop += first!.getBoundingClientRect().bottom - bottom + 2;
+    await pause(100);
+    expect(first!.getBoundingClientRect().bottom).toBeLessThanOrEqual(bottom);
+    const rest = second!.getBoundingClientRect();
+    expect((bottom - rest.top) / rest.height).toBeLessThan(0.5);
+    await pause(VIEW_MS + 300);
+    await press("Enter");
+    await expect.element(notice()).toMatchTextContent("Look at the highlighted source");
+    expect(app.workbench.acceptances).toHaveLength(0);
+
+    // The refusal brought the source back into view; centre it to be sure, and the gate opens.
+    first!.scrollIntoView({ block: "center" });
+    await pause(VIEW_MS + 300);
+    await press("Enter");
+    await expect.element(page.getByText("2 of 19 accepted")).toBeVisible();
+  });
 });
+
+const scrollParent = (element: HTMLElement): HTMLElement => {
+  let node = element.parentElement;
+  while (
+    node &&
+    !(node.scrollHeight > node.clientHeight && getComputedStyle(node).overflowY !== "visible")
+  ) {
+    node = node.parentElement;
+  }
+  if (!node) throw new Error("no scrolling ancestor");
+  return node;
+};
 
 const wordSpan = (text: string) =>
   [...document.querySelectorAll<HTMLElement>("[data-page='6'] .text-layer > span")].find(

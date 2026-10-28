@@ -88,6 +88,23 @@ export function PdfViewer({
   }, []);
 
   const pageWidth = Math.max(0, Math.min(width - 2 * GAP, MAX_WIDTH));
+  // The source is on screen when every page it touches reports all of its boxes on screen.
+  const currentPages = [
+    ...new Set(
+      highlights.filter((h) => h.kind === "current").flatMap((h) => h.boxes.map((b) => b.page)),
+    ),
+  ].join(",");
+  const pagesVisible = useRef(new Map<number, boolean>());
+  const reportPage = useMemo(() => {
+    if (!onCurrentVisible) return undefined;
+    const needed = currentPages.split(",").filter(Boolean).map(Number);
+    return (page: number, visible: boolean) => {
+      pagesVisible.current.set(page, visible);
+      onCurrentVisible(
+        needed.length > 0 && needed.every((p) => pagesVisible.current.get(p) === true),
+      );
+    };
+  }, [onCurrentVisible, currentPages]);
   // One code-point map per layer; every word and selection on every page reads from it.
   const at = useMemo(() => codePointIndex(layer.text), [layer.text]);
   const heights = useMemo(
@@ -182,7 +199,7 @@ export function PdfViewer({
                 size={item}
                 width={pageWidth}
                 highlights={highlights}
-                {...(onCurrentVisible ? { onCurrentVisible } : {})}
+                {...(reportPage ? { onCurrentVisible: reportPage } : {})}
               />
             )}
           />
@@ -207,13 +224,13 @@ function PageView({
   size: PageSize;
   width: number;
   highlights: ReadonlyArray<PageHighlight>;
-  onCurrentVisible?: (visible: boolean) => void;
+  onCurrentVisible?: (page: number, visible: boolean) => void;
 }) {
   const [page, setPage] = useState<PageLayer | null>(null);
   const [failed, setFailed] = useState(false);
   // The source exists for the reviewer only once the page image has drawn.
   const [imageReady, setImageReady] = useState(false);
-  const current = useRef<HTMLDivElement>(null);
+  const frame = useRef<HTMLDivElement>(null);
   const scale = width / size.width;
   const height = Math.round(size.height * scale);
 
@@ -231,29 +248,39 @@ function PageView({
   const boxes = highlights.flatMap((h) =>
     h.boxes.filter((b) => b.page === size.page).map((box, i) => ({ highlight: h, box, i })),
   );
-  const hasCurrent = boxes.some((b) => b.highlight.kind === "current");
 
+  // Every line of the current source on this page, not only the first, must be on screen.
+  const currentBoxes = boxes
+    .filter((b) => b.highlight.kind === "current")
+    .map(({ box }) => `${box.x0},${box.y0},${box.x1},${box.y1}`)
+    .join(";");
   useEffect(() => {
-    const element = current.current;
-    if (!element || !onCurrentVisible || !imageReady) return;
-    // `isIntersecting` is true for any overlap; the gate wants 90% of the source on screen.
+    const elements = [
+      ...(frame.current?.querySelectorAll(".evidence-box[data-kind=current]") ?? []),
+    ];
+    if (elements.length === 0 || !onCurrentVisible || !imageReady) return;
+    const report = (visible: boolean) => onCurrentVisible(size.page, visible);
+    // `isIntersecting` is true for any overlap; the gate wants 90% of each box on screen.
+    const ratios = new Map<Element, number>();
     const observer = new IntersectionObserver(
-      ([entry]) => onCurrentVisible((entry?.intersectionRatio ?? 0) >= VISIBLE_RATIO),
+      (entries) => {
+        for (const entry of entries) ratios.set(entry.target, entry.intersectionRatio);
+        report(elements.every((e) => (ratios.get(e) ?? 0) >= VISIBLE_RATIO));
+      },
       { threshold: VISIBLE_RATIO },
     );
-    observer.observe(element);
+    for (const element of elements) observer.observe(element);
     return () => {
       observer.disconnect();
-      onCurrentVisible(false);
+      report(false);
     };
-  }, [hasCurrent, onCurrentVisible, imageReady]);
-
-  const current0 = boxes.find((b) => b.highlight.kind === "current")?.box;
+  }, [currentBoxes, onCurrentVisible, imageReady, size.page]);
 
   return (
     <div className="flex justify-center pt-4" style={{ height: height + GAP }}>
       <div
         className="relative bg-white shadow-[0_0_0_1px_var(--rule),0_1px_3px_rgb(0_0_0/0.08)]"
+        ref={frame}
         style={{ width, height }}
         data-page={size.page}
       >
@@ -292,19 +319,6 @@ function PageView({
             }}
           />
         ))}
-        {current0 ? (
-          // The whole current source, for the "was it on screen" check.
-          <div
-            ref={current}
-            className="pointer-events-none absolute"
-            style={{
-              left: current0.x0 * scale,
-              top: current0.y0 * scale,
-              width: (current0.x1 - current0.x0) * scale,
-              height: (current0.y1 - current0.y0) * scale,
-            }}
-          />
-        ) : null}
       </div>
     </div>
   );
