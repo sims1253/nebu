@@ -1,10 +1,17 @@
 """The ledger in a SQLite file: the handover bundle's `kittum.sqlite`, and a test store.
 
-It owns its connection and ignores the `tx` argument, like the in-memory fake. Each append is its
-own `begin immediate` transaction, which serializes appends from any process.
+It owns its connection. To make appends commit or roll back with your own writes, open
+`transaction()` and pass the `tx` it yields: appends and checkpoints join it, and your writes
+go through the same connection. Outside one, each append is its own `begin immediate`
+transaction. Either way, appends from any process serialize.
+
+    with ledger.transaction() as tx:
+        ledger.append(tx, draft)
+        tx.execute("insert into decision values (?, ?)", (record, outcome))
 """
 
-# The store's methods take the interface's `tx` and ignore it.
+# The store's methods take the interface's `tx` and use their own connection, which is the
+# caller's `tx` inside `transaction()`.
 # ruff: noqa: ARG002
 
 import json
@@ -103,6 +110,14 @@ class SqliteLedger(ChainStore):
     @property
     def connection(self) -> sqlite3.Connection:
         return self._conn
+
+    @contextmanager
+    def transaction(self) -> Generator[Tx]:
+        """A transaction the caller owns. It commits on exit and rolls back on an exception."""
+        if self._conn.in_transaction:
+            raise RuntimeError("a transaction is already open on this ledger")
+        with self._atomic(NO_TX):
+            yield cast("Tx", self._conn)
 
     def close(self) -> None:
         self._conn.close()
