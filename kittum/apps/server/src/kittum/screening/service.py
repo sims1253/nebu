@@ -150,6 +150,15 @@ class _Rescreen:
 
 
 @dataclass(frozen=True)
+class _Withdrawal:
+    """A record taken out of every full-text stage that holds it, with each stage's
+    assignments."""
+
+    item_ref: str
+    stages: tuple[tuple[Id, tuple[Id, ...]], ...]
+
+
+@dataclass(frozen=True)
 class _DecideChanges:
     stage_id: Id
     decision_id: Id
@@ -185,6 +194,7 @@ class Screening:
         judge_batch_size: int = 25,
     ) -> None:
         self._clock = clock or SystemClock()
+        self._receipts = receipts
         self._commands = Commands(ledger, queue, receipts, self._clock)
         self._batch = judge_batch_size
         self._protocols: dict[Id, ReviewProtocol] = {}
@@ -192,6 +202,11 @@ class Screening:
     @classmethod
     def postgres(cls, ledger: Ledger, clock: Clock | None = None) -> Screening:
         return cls(ledger, PostgresJobQueue(clock), PostgresReceipts(), clock)
+
+    def lock_project(self, tx: Tx, project_id: Id) -> None:
+        """Hold off the project's screening commands until `tx` commits: the lock every command
+        takes, for an entry point that reads before it runs one and writes after it."""
+        self._receipts.lock_project(tx, project_id)
 
     # Stages
 
@@ -1070,14 +1085,19 @@ class Screening:
         expected_etag: str,
         reason: WithdrawReason,
     ) -> WithdrawResult:
-        """Take the item of one of the reviewer's full-text assignments out of screening: the
-        full text shown is not the record's report.
+        """Take a record out of full-text screening: the full text shown on one of the reviewer's
+        own assignments is not the record's report.
 
-        The item leaves every reviewer's queue, and no count, outcome, agreement figure, or audit
-        stratum includes it; decisions already made on it stay on record. An open conflict on it
-        is withdrawn. This is not an exclusion. The caller detaches the document from the record
-        in the same transaction, so the record is back to having no full text. Refused once the
-        reviewer has decided the item, and once the item was adjudicated.
+        The full text belongs to the record, not to a scope, so the record leaves every
+        full-text stage of the project that holds it, each with its own
+        `screening.item_withdrawn` event. It leaves every queue, and no count, outcome, agreement
+        figure, or audit stratum includes it. This is not an exclusion. The caller detaches the
+        document from the record in the same transaction, so the record is back to having no
+        full text.
+
+        Only from an assignment the reviewer has not decided, not even provisionally (a reveal
+        must not be escaped this way), and only while nobody has decided the record in any of
+        those stages: a decision someone made stands.
         """
         command = Command(
             command_id=command_id,
@@ -1093,61 +1113,80 @@ class Screening:
 
         def load(tx: Tx, _: Command) -> dict[str, Any]:
             a = self._own_assignment(tx, project_id, reviewer_id, assignment_id, lock=True)
+            stages = tx.execute(
+                "select i.stage_id from screening_item i"
+                " join screening_stage s on s.id = i.stage_id"
+                " where s.project_id = %s and s.stage = 'full_text' and i.item_ref = %s"
+                " and i.withdrawn_event_id is null order by s.opened_at, s.id",
+                (project_id, a["item_ref"]),
+            ).fetchall()
             return {
                 "a": a,
                 "stage": store.stage_row(tx, project_id, a["stage_id"]),
-                "conflicts": store.conflicts(tx, a["stage_id"], a["item_ref"]),
+                "stages": {
+                    r["stage_id"]: (
+                        store.item_assignments(tx, r["stage_id"], a["item_ref"]),
+                        store.conflicts(tx, r["stage_id"], a["item_ref"]),
+                    )
+                    for r in stages
+                },
             }
 
-        def decide(_: Command, st: dict[str, Any]) -> RunDecision[dict[str, Any]]:
+        def decide(_: Command, st: dict[str, Any]) -> RunDecision[_Withdrawal]:
             a, row = st["a"], st["stage"]
             if a["etag"] != expected_etag:
                 raise StaleRevision("This item changed since you loaded it. Reload the queue.")
             if row["stage"] != "full_text":
                 raise InvalidDecision("Only a full text can be the wrong document.")
             _refuse_withdrawn(a)
-            if a["state"] == "decided":
-                raise InvalidDecision("You decided this report already. Undo the decision first.")
-            if any(c["state"] == "resolved" for c in st["conflicts"]):
-                raise InvalidDecision("This report was adjudicated. Its decisions stand.")
-            events = [
+            if a["state"] != "pending":
+                raise InvalidDecision(
+                    "You decided this report already, so it stays in screening. Keep or change"
+                    " your decision."
+                )
+            for peers, conflicts in st["stages"].values():
+                if any(p["state"] != "pending" for p in peers) or any(
+                    c["state"] != "withdrawn" for c in conflicts
+                ):
+                    raise InvalidDecision(
+                        "Someone already decided this report, so it stays in screening. Tell the"
+                        " methods lead that the PDF is wrong."
+                    )
+            events = tuple(
                 _event(
                     project_id,
                     ITEM_WITHDRAWN,
                     reviewer_id,
                     {
-                        "stage_id": str(row["id"]),
+                        "stage_id": str(stage_id),
                         "item_ref": a["item_ref"],
                         "assignment_id": str(assignment_id),
                         "reason": reason,
                     },
                 )
-            ]
-            open_ = next((c for c in st["conflicts"] if c["state"] == "open"), None)
-            withdrawn = [_ConflictChange("withdraw", open_["id"], a["item_ref"])] if open_ else []
-            events += [_conflict_event(project_id, reviewer_id, row["id"], c) for c in withdrawn]
-            return RunDecision(
-                events=tuple(events),
-                changes={"stage_id": row["id"], "item_ref": a["item_ref"], "withdrawn": withdrawn},
+                for stage_id in st["stages"]
             )
+            stages = tuple(
+                (sid, tuple(p["id"] for p in peers)) for sid, (peers, _) in st["stages"].items()
+            )
+            return RunDecision(events=events, changes=_Withdrawal(a["item_ref"], stages))
 
-        def apply(tx: Tx, result: RunDecision[dict[str, Any]], events: tuple[AuditEvent, ...]):
-            c = result.changes
-            assert c is not None
-            tx.execute(
-                "update screening_item set withdrawn_reason = %s, withdrawn_event_id = %s"
-                " where stage_id = %s and item_ref = %s",
-                (reason, events[0].event_id, c["stage_id"], c["item_ref"]),
-            )
-            # New tokens: a client still holding the item can no longer decide it.
-            for a in store.item_assignments(tx, c["stage_id"], c["item_ref"]):
+        def apply(tx: Tx, result: RunDecision[_Withdrawal], events: tuple[AuditEvent, ...]):
+            w = result.changes
+            assert w is not None
+            for (stage_id, assignments), event in zip(w.stages, events, strict=True):
                 tx.execute(
-                    "update screening_assignment set etag = %s, revision = revision + 1"
-                    " where id = %s",
-                    (_etag(), a["id"]),
+                    "update screening_item set withdrawn_reason = %s, withdrawn_event_id = %s"
+                    " where stage_id = %s and item_ref = %s",
+                    (reason, event.event_id, stage_id, w.item_ref),
                 )
-            for change, event in zip(c["withdrawn"], events[1:], strict=True):
-                self._write_conflict(tx, change, c["stage_id"], event)
+                # New tokens: a client still holding the item can no longer decide it.
+                for assignment in assignments:
+                    tx.execute(
+                        "update screening_assignment set etag = %s, revision = revision + 1"
+                        " where id = %s",
+                        (_etag(), assignment),
+                    )
 
         receipt = self._commands.execute(tx, command, decide, load=load, apply=apply)
         return WithdrawResult(recorded_at=receipt.accepted_at)

@@ -40,6 +40,7 @@ VITAMIN_C = PDFS / "li2026-vitamin-c-kidney-biopsy-rct.pdf"
 TRIAL = "Community health worker-led"
 COHORT = "Community-Based Chronic Disease Care"
 SCOPE = "nrt-vs-control"
+OTHER = "combination-vs-single"  # the topic's other scope: the same records, its own stages
 NOTE = "This is the journal's CONSORT-EHEALTH checklist, not the cohort study."
 
 
@@ -108,18 +109,21 @@ def test_one_reason_per_decision_and_a_wrong_document_is_missing_not_excluded(pg
             f"/api/projects/{pid}/screening/sentinels/parse", json={"text": SENTINELS.read_text()}
         )
     )
-    stage = {"scope_id": SCOPE, "stage": "title_abstract", "actor_id": lead}
-    ok(
-        client.post(f"/api/projects/{pid}/screening/stages", json=stage | {"sentinels": sentinels}),
-        201,
-    )
+    for scope in (SCOPE, OTHER):
+        stage = {"scope_id": scope, "stage": "title_abstract", "actor_id": lead}
+        ok(
+            client.post(
+                f"/api/projects/{pid}/screening/stages", json=stage | {"sentinels": sentinels}
+            ),
+            201,
+        )
     work()
 
     def as_(person: str) -> dict[str, str]:
         return {"X-Kittum-Reviewer": people[person]}
 
-    def queue_of(person: str, stage: str) -> list[dict[str, Any]]:
-        params = {"scope_id": SCOPE, "stage": stage, "limit": 50}
+    def queue_of(person: str, stage: str, scope: str = SCOPE) -> list[dict[str, Any]]:
+        params = {"scope_id": scope, "stage": stage, "limit": 50}
         return ok(
             client.get(f"/api/projects/{pid}/screening/queue", params=params, headers=as_(person))
         )
@@ -150,11 +154,10 @@ def test_one_reason_per_decision_and_a_wrong_document_is_missing_not_excluded(pg
             "criteria": list(criteria),
         }
 
-    for person in ("Sam", "Jun"):
-        for item in queue_of(person, "title_abstract"):
-            ok(decide(person, item, outcome("include")))
-    for item in queue_of("Rita", "title_abstract"):
-        ok(decide("Rita", item, outcome("include")))
+    for scope in (SCOPE, OTHER):
+        for person in ("Sam", "Jun", "Rita"):
+            for item in queue_of(person, "title_abstract", scope):
+                ok(decide(person, item, outcome("include")))
 
     reports = ok(client.get(f"/api/projects/{pid}/full-texts", headers=as_("Morgan")))
     trial = next(r for r in reports if r["title"].startswith(TRIAL))
@@ -183,9 +186,29 @@ def test_one_reason_per_decision_and_a_wrong_document_is_missing_not_excluded(pg
         ),
         201,
     )
-    ft = {"scope_id": SCOPE, "stage": "full_text", "actor_id": lead}
-    ok(client.post(f"/api/projects/{pid}/screening/stages", json=ft), 201)
+    for scope in (SCOPE, OTHER):
+        ft = {"scope_id": scope, "stage": "full_text", "actor_id": lead}
+        ok(client.post(f"/api/projects/{pid}/screening/stages", json=ft), 201)
     work()
+
+    def wrong_document(person: str, item: dict[str, Any], etag: str | None = None) -> Any:
+        """Mark the PDF of the person's assignment as the wrong document."""
+        base = f"/api/projects/{pid}/screening/assignments/{item['assignment_id']}"
+        shown = ok(client.get(f"{base}/full-text", headers=as_(person)))
+        body = {
+            "command_id": str(new_id()),
+            "expected_etag": etag or item["etag"],
+            "document_id": shown["document_id"],
+        }
+        return client.post(f"{base}/wrong-document", json=body, headers=as_(person))
+
+    def titles(person: str, scope: str = SCOPE) -> list[str]:
+        return [i["title"] for i in queue_of(person, "full_text", scope)]
+
+    sam_other_trial = next(
+        i for i in queue_of("Sam", "full_text", OTHER) if i["title"].startswith(TRIAL)
+    )
+    assert any(t.startswith(COHORT) for t in titles("Jun", OTHER))
 
     def status_of(person: str) -> Any:
         params = {"scope_id": SCOPE, "stage": "full_text"}
@@ -228,9 +251,11 @@ def test_one_reason_per_decision_and_a_wrong_document_is_missing_not_excluded(pg
     assert ok(client.post(path, json=command, headers=as_("Sam"))) == marked  # a retry: no-op
     assert len(ctx.require_ledger().events(pg, UUID(pid))) == head
 
-    # The report left both screeners' queues. Jun, who still held it, can no longer decide it.
-    assert not any(t.startswith(COHORT) for t in (i["title"] for i in queue_of("Sam", "full_text")))
-    assert not any(t.startswith(COHORT) for t in (i["title"] for i in queue_of("Jun", "full_text")))
+    # The report left both screeners' queues, in both scopes: the PDF was the record's, not a
+    # scope's. Jun, who still held it, can no longer decide it.
+    for scope in (SCOPE, OTHER):
+        for person in ("Sam", "Jun"):
+            assert not any(t.startswith(COHORT) for t in titles(person, scope)), (person, scope)
     assert status_of("Jun")["remaining"] == jun_before - 1
     stale = decide("Jun", jun_cohort, outcome("include"))
     assert stale.status_code == 409
@@ -240,11 +265,7 @@ def test_one_reason_per_decision_and_a_wrong_document_is_missing_not_excluded(pg
     assert next(r for r in reports if r["item_ref"] == cohort["item_ref"])["full_text"] is None
     assert next(r for r in reports if r["item_ref"] == trial["item_ref"])["full_text"] is not None
 
-    # Sam includes the trial in one action: every criterion met, no verdict on each, no evidence.
-    sam_trial = next(i for i in queue_of("Sam", "full_text") if i["title"].startswith(TRIAL))
-    ok(decide("Sam", sam_trial, outcome("include")))
-
-    # Jun excludes it on the one criterion it fails, with evidence for that criterion only.
+    # Jun excludes the trial on the one criterion it fails, with evidence for that criterion only.
     jun_trial = next(i for i in queue_of("Jun", "full_text") if i["title"].startswith(TRIAL))
     source = ok(
         client.get(
@@ -269,11 +290,45 @@ def test_one_reason_per_decision_and_a_wrong_document_is_missing_not_excluded(pg
         201,
     )
     reading = {"criterion_id": "POP", "status": "not_met", "evidence_anchor_ids": [anchor["id"]]}
-    first = ok(decide("Jun", jun_trial, outcome("exclude", "POP", [reading], [anchor["id"]])))
+    excluded = outcome("exclude", "POP", [reading], [anchor["id"]])
+    now = datetime.now(UTC).isoformat()
+    timing = {"shown_at": now, "first_key_at": now, "decided_at": now, "reveal_shown_at": None}
+    decide_path = f"/api/projects/{pid}/screening/assignments/{jun_trial['assignment_id']}/decide"
+    first = ok(
+        client.post(
+            decide_path,
+            json={
+                "command_id": str(new_id()),
+                "decision": excluded,
+                "phase": "provisional",
+                "expected_etag": jun_trial["etag"],
+                "timing": timing,
+            },
+            headers=as_("Jun"),
+        )
+    )
     # The model saw no failing criterion, so Jun's exclusion shows its reading of the population.
     # It quoted nothing, so nothing is placed on the page.
+    assert first["phase"] == "provisional"
     assert first["reveal"]["criterion_id"] == "POP"
     assert first["reveal"]["quote_span"] is None
+    # Having seen the AI disagree, Jun cannot take the report out instead of deciding.
+    escaped = wrong_document("Jun", jun_trial, first["etag"])
+    assert escaped.status_code == 422
+    assert "You decided this report already" in escaped.json()["detail"][0]["msg"]
+    ok(
+        client.post(
+            decide_path,
+            json={
+                "command_id": str(new_id()),
+                "decision": excluded,
+                "phase": "final",
+                "expected_etag": first["etag"],
+                "timing": timing | {"reveal_shown_at": now},
+            },
+            headers=as_("Jun"),
+        )
+    )
     revealed = ok(
         client.get(
             f"/api/projects/{pid}/screening/assignments/{jun_trial['assignment_id']}/full-text",
@@ -282,6 +337,17 @@ def test_one_reason_per_decision_and_a_wrong_document_is_missing_not_excluded(pg
     )
     assert revealed["ai_quote"] is None
 
+    # Once someone has decided a report, nobody can take it out of screening: not Sam, who has
+    # not decided it yet, in this scope or in the other.
+    sam_trial = next(i for i in queue_of("Sam", "full_text") if i["title"].startswith(TRIAL))
+    for person, item in (("Sam", sam_trial), ("Sam", sam_other_trial)):
+        refused = wrong_document(person, item)
+        assert refused.status_code == 422, (person, refused.text)
+        assert "Someone already decided this report" in refused.json()["detail"][0]["msg"]
+
+    # Sam includes the trial in one action: every criterion met, no verdict on each, no evidence.
+    ok(decide("Sam", sam_trial, outcome("include")))
+
     for person in ("Sam", "Jun", "Rita"):
         for item in queue_of(person, "full_text"):
             ok(decide(person, item, outcome("include")))
@@ -289,6 +355,11 @@ def test_one_reason_per_decision_and_a_wrong_document_is_missing_not_excluded(pg
     # PRISMA: the cohort study is a report not retrieved, never an exclusion. The trial is in
     # conflict between Sam and Jun. The flow's own checks hold.
     flows = ok(client.get(f"/api/projects/{pid}/audit/as-of", headers=as_("Morgan")))["flows"]
+    # The other scope too: there, the cohort study is not retrieved either.
+    (other,) = [f for f in flows if f["scope_id"] == OTHER]
+    assert cohort["item_ref"] in other["members"]["reports_not_retrieved"]
+    assert cohort["item_ref"] not in other["members"]["reports_assessed"]
+    assert all(c["holds"] for c in other["checks"]), other["checks"]
     (flow,) = [f for f in flows if f["scope_id"] == SCOPE]
     members = flow["members"]
     assert cohort["item_ref"] in members["reports_not_retrieved"]
