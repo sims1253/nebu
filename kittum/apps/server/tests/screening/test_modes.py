@@ -6,7 +6,7 @@ import pytest
 
 from kittum.core import new_id
 from kittum.protocol import StoppingPlan
-from kittum.screening import Decision, stop_status
+from kittum.screening import AI_DISAGREEMENT_RESCREEN, Decision, stop_status
 from tests.screening.support import (
     NON_SMOKERS,
     OFF_TOPIC,
@@ -47,7 +47,7 @@ def decide(
             assignment_id=item.assignment_id,
             decision=decision,
             phase="provisional",
-            expected_revision=item.revision,
+            expected_etag=item.etag,
             timing=timing(0),
         )
         if result.phase == "provisional":
@@ -59,7 +59,7 @@ def decide(
                 assignment_id=item.assignment_id,
                 decision=decision,
                 phase="final",
-                expected_revision=result.revision,
+                expected_etag=result.etag,
                 timing=timing(0, revealed=True),
             )
     return result
@@ -111,7 +111,7 @@ def test_m2_sends_every_ai_disagreement_to_adjudication(database: Database) -> N
             assignment_id=prescription.assignment_id,
             decision=Decision(outcome="exclude", reason_criterion_id="DESIGN"),
             phase="provisional",
-            expected_revision=0,
+            expected_etag=prescription.etag,
             timing=timing(0),
         )
         assert first.phase == "provisional"
@@ -123,43 +123,87 @@ def test_m2_sends_every_ai_disagreement_to_adjudication(database: Database) -> N
             assignment_id=prescription.assignment_id,
             decision=Decision(outcome="include"),
             phase="final",
-            expected_revision=first.revision,
+            expected_etag=first.etag,
             timing=timing(0, revealed=True),
         )
 
+    # No AI-only disagreement reaches adjudication: the three records the AI disputed (colitis,
+    # GLPG2737, and the census case) go to the auditor for a blind extra screen instead.
     with world.db.transaction() as tx:
-        conflicts = world.screening.adjudication_queue(
+        assert (
+            world.screening.adjudication_queue(
+                tx, world.project_id, world.people.adjudicator, SCOPE, STAGE
+            )
+            == []
+        )
+        outcomes = world.screening.outcomes(tx, world.project_id, SCOPE, STAGE)
+        rescreened = [
+            e.payload
+            for e in world.ledger.events(tx, world.project_id)
+            if e.type == AI_DISAGREEMENT_RESCREEN
+        ]
+    assert [p["reason"] for p in rescreened] == ["ai_disagreement"] * 3
+    titles = {r.item_ref: r.title[:20] for r in world.records}
+    assert sorted(titles[p["item_ref"]] for p in rescreened) == [
+        "GLPG2737 in lumacaft",
+        "Rate and predictors ",
+        "Transdermal nicotine",
+    ]
+    assert all(outcomes[p["item_ref"]] is None for p in rescreened)  # waiting for the auditor
+
+    # The auditor screens their whole stream blind, as they judge each record.
+    truth = {
+        "Nicotine patch": ("include", None),
+        "Transdermal nicotine": ("exclude", "POP"),
+        "Varenicline": ("exclude", "INT"),
+        "Use of": ("exclude", "DESIGN"),
+        "GLPG2737": ("exclude", "POP"),
+        "Rate and predictors": ("include", None),
+        "Nicotine lozenge": ("include", None),
+        "Nicotine mouth spray": ("include", None),
+    }
+    auditor = world.people.auditor
+    for item in queue(world, auditor):
+        outcome, reason = next(v for k, v in truth.items() if item.title.startswith(k))
+        decide(world, auditor, item, outcome, reason)
+
+    with world.db.transaction() as tx:
+        # The auditor excluded the colitis trial the human included: a human disagreement.
+        (conflict,) = world.screening.adjudication_queue(
             tx, world.project_id, world.people.adjudicator, SCOPE, STAGE
         )
-        # Two conflicts only the AI raised, each published with a decoy of the same visible
-        # outcome: the patch trial (included, the AI agreed) and one of the two exclusions the
-        # model agreed with. The third AI-driven case found no free decoy, so it is held back.
-        titles = sorted(c.title[:20] for c in conflicts)
-        decoy_exclusion = next(t for t in titles if t.startswith(("Varenicline", "Use of")))
-        assert titles == sorted(
-            [
-                "GLPG2737 in lumacaft",
-                "Transdermal nicotine",
-                "Nicotine patch versu",
-                decoy_exclusion,
-            ]
-        )
-        assert all(len(c.columns) == 1 and c.columns[0].label == "A" for c in conflicts)
-        colitis = next(c for c in conflicts if c.title.startswith("Transdermal"))
+        assert conflict.title.startswith("Transdermal nicotine")
+        assert sorted(c.outcome for c in conflict.columns) == ["exclude", "include"]
         result = world.screening.adjudicate(
             tx,
             command_id=new_id(),
             project_id=world.project_id,
             adjudicator_id=world.people.adjudicator,
-            conflict_id=colitis.conflict_id,
-            expected_revision=colitis.revision,
+            conflict_id=conflict.conflict_id,
+            expected_etag=conflict.etag,
             decision=Decision(outcome="exclude", reason_criterion_id="POP"),
         )
-        assert result.ai.excludes is True
+        assert result.ai.excludes is True  # the AI column opens after the commit
+        outcomes = world.screening.outcomes(tx, world.project_id, SCOPE, STAGE)
+        final_outcomes = {r.title[:20]: outcomes[r.item_ref] for r in world.records}
+        # The auditor agreed on GLPG2737 and the census case: the human decisions stand.
+        assert final_outcomes == {
+            "Nicotine patch versu": "include",
+            "Transdermal nicotine": "exclude",
+            "Varenicline versus p": "exclude",
+            "Use of nicotine repl": "exclude",
+            "GLPG2737 in lumacaft": "exclude",
+            "Rate and predictors ": "include",
+        }
         status = world.screening.status(tx, world.project_id, world.people.lead, SCOPE, STAGE)
-        assert (status.screened, status.remaining, status.conflicts) == (6, 0, 2)
+        assert (status.screened, status.remaining, status.conflicts) == (6, 0, 0)
         assert status.metrics is not None
-        assert (status.metrics.decoys.cases, status.metrics.decoys.held) == (2, 1)
+        assert status.metrics.rescreens.model_dump() == {
+            "triggered": 3,
+            "pending": 0,
+            "upheld": 2,
+            "adjudicated": 1,
+        }
         own, verified = status.metrics.agreement
         assert (own.kind, verified.kind) == ("human_ai", "human_ai_verified")
         # The model's own reading agrees on the patch trial and the two exclusions it shares;
@@ -235,7 +279,7 @@ def test_m3_screens_in_ai_order_and_the_stop_test_fires(database: Database) -> N
             project_id=world.project_id,
             adjudicator_id=world.people.adjudicator,
             conflict_id=conflict.conflict_id,
-            expected_revision=conflict.revision,
+            expected_etag=conflict.etag,
             decision=Decision(outcome="exclude", reason_criterion_id="POP"),
         )
     certified = stop()

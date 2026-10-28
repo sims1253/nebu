@@ -16,7 +16,13 @@ if TYPE_CHECKING:
 
     from kittum.judge import CriterionVerdict, Verdict
     from kittum.protocol import Criterion, ReviewProtocol, SearchTopic, Stage
-    from kittum.screening.types import ConflictKind, Decision, Highlight, RevealSetting
+    from kittum.screening.types import (
+        ConflictKind,
+        Decision,
+        Highlight,
+        RescreenReason,
+        RevealSetting,
+    )
 
 SCREENERS_PER_MODE = {ScreeningMode.M1: 2, ScreeningMode.M2: 1, ScreeningMode.M3: 2}
 OUTCOMES_AT: dict[str, frozenset[str]] = {
@@ -217,19 +223,16 @@ def reveal_for(setting: RevealSetting, decision: Decision, reading: Reading) -> 
 
 
 def conflict_kinds(
-    mode: ScreeningMode,
     stage: Stage,
     screener_finals: Sequence[Decision],
-    screener_provisionals: Sequence[Decision],
     auditor_final: Decision | None,
-    reading: Reading | None,
 ) -> tuple[ConflictKind, ...]:
-    """Why a record goes to adjudication once every screener has decided.
+    """Why a record goes to adjudication once every screener has decided: human decisions that
+    disagree, and nothing else.
 
-    Every mode adjudicates human disagreements, full-text exclusions on different criteria, and
-    audit samples an auditor includes against the screeners. M1 adds records the AI includes and
-    every human excludes; M2 adds every disagreement between the AI and the human, provisional
-    or final (the protocol's census of disagreements). M3 uses the AI for ranking only.
+    The screeners disagree on inclusion, or at full text exclude on different criteria; or the
+    auditor's screen (a random audit sample, or the extra screen of an AI-only disagreement)
+    disagrees with the screeners.
     """
     kinds: list[ConflictKind] = []
     excluded = [excludes(d) for d in screener_finals]
@@ -241,16 +244,36 @@ def conflict_kinds(
         and len({d.reason_criterion_id for d in screener_finals}) > 1
     ):
         kinds.append("exclusion_reason")
-    if reading is not None:
-        if mode == ScreeningMode.M1 and all(excluded) and reading.includes_by_own_reading:
-            kinds.append("ai_include")
-        if mode == ScreeningMode.M2 and any(
-            disagrees(d, reading) for d in (*screener_finals, *screener_provisionals)
-        ):
-            kinds.append("ai_disagreement")
-    if auditor_final is not None and all(excluded) and not excludes(auditor_final):
-        kinds.append("audit_miss")
+    if auditor_final is not None and any(excludes(auditor_final) != e for e in excluded):
+        kinds.append("audit_disagreement")
     return tuple(kinds)
+
+
+def rescreen_reason(
+    mode: ScreeningMode,
+    screener_finals: Sequence[Decision],
+    screener_provisionals: Sequence[Decision],
+    reading: Reading | None,
+) -> RescreenReason | None:
+    """Whether an AI-only disagreement sends the record to a blind extra screen.
+
+    M1: the screeners agree on an exclusion while the model, by its own reading, saw no failing
+    criterion. M2: the AI disagrees with the lone human (`disagrees`), provisionally or finally
+    (the protocol's census). M3 uses the AI for ranking only. The extra screen is the auditor's;
+    if it disagrees with the screeners, that human disagreement goes to adjudication.
+    """
+    if reading is None:
+        return None
+    excluded = [excludes(d) for d in screener_finals]
+    if len(set(excluded)) > 1:
+        return None  # the humans disagree already
+    if mode == ScreeningMode.M1 and all(excluded) and reading.includes_by_own_reading:
+        return "ai_include"
+    if mode == ScreeningMode.M2 and any(
+        disagrees(d, reading) for d in (*screener_finals, *screener_provisionals)
+    ):
+        return "ai_disagreement"
+    return None
 
 
 def highlights(text: str, criteria: Sequence[Criterion]) -> tuple[Highlight, ...]:

@@ -1,10 +1,10 @@
-"""The methods lead's view of a stage: progress, agreement, the audit gauge, decoys, and the M3
-stop test.
+"""The methods lead's view of a stage: progress, agreement, the audit gauge, the extra screens
+of AI-only disagreements, and the M3 stop test.
 
 Agreement uses the blind provisional decisions: a final decision may follow an AI reveal, and a
 reviewer never sees the other's. Labels are include against exclude (`unclear` and insufficient
-information count as include). Decoys in the adjudication queue change no outcome and count in
-no conflict total; they have their own gauge.
+information count as include). A record sent to an extra screen counts as screened once the
+auditor has decided it.
 """
 
 from dataclasses import dataclass, field
@@ -17,8 +17,8 @@ from kittum.screening.store import reading_of
 from kittum.screening.types import (
     AuditGauge,
     AuditStratum,
-    DecoyGauge,
     PairAgreement,
+    RescreenGauge,
     StageMetrics,
     StopStatus,
 )
@@ -83,7 +83,7 @@ class StageData:
         items = {
             r["item_ref"]: r
             for r in tx.execute(
-                "select item_ref, kind, expected_outcome, audit from screening_item"
+                "select item_ref, kind, expected_outcome, audit, rescreen from screening_item"
                 " where stage_id = %s",
                 (stage_id,),
             ).fetchall()
@@ -108,8 +108,7 @@ class StageData:
         }
         conflicts: dict[str, list[dict[str, Any]]] = {}
         for c in tx.execute(
-            "select c.item_ref, c.state, c.kinds, c.decoy, c.pattern, c.visible,"
-            " c.released_without_cover, j.outcome"
+            "select c.item_ref, c.state, c.kinds, j.outcome"
             " from screening_conflict c left join screening_adjudication j on j.conflict_id = c.id"
             " where c.stage_id = %s order by c.opened_at, c.id",
             (stage_id,),
@@ -124,14 +123,21 @@ class StageData:
     def screeners(self, ref: str) -> list[dict[str, Any]]:
         return [a for a in self.by_item.get(ref, []) if a["role"] == "screener"]
 
+    def auditor(self, ref: str) -> dict[str, Any] | None:
+        return next((a for a in self.by_item.get(ref, []) if a["role"] == "auditor"), None)
+
     def screened(self, ref: str) -> bool:
-        return all(a["f_outcome"] is not None for a in self.screeners(ref))
+        """Every screener decided, and the auditor too if the record went to an extra screen."""
+        if any(a["f_outcome"] is None for a in self.screeners(ref)):
+            return False
+        auditor = self.auditor(ref)
+        return not self.items[ref]["rescreen"] or (
+            auditor is not None and auditor["f_outcome"] is not None
+        )
 
     def genuine(self, ref: str) -> list[dict[str, Any]]:
-        """The record's conflicts that count: neither withdrawn nor decoys."""
-        return [
-            c for c in self.conflicts.get(ref, []) if c["state"] != "withdrawn" and not c["decoy"]
-        ]
+        """The record's conflicts that were not withdrawn."""
+        return [c for c in self.conflicts.get(ref, []) if c["state"] != "withdrawn"]
 
     def outcome(self, ref: str) -> RecordOutcome:
         history = self.genuine(ref)
@@ -163,7 +169,7 @@ def stage_metrics(
 
     def excluded_unseen(ref: str) -> bool:
         """Excluded on the screeners' path alone, without an adjudicator deciding it."""
-        path = [c for c in data.genuine(ref) if set(c["kinds"]) - {"audit_miss"}]
+        path = [c for c in data.genuine(ref) if set(c["kinds"]) - {"audit_disagreement"}]
         finals = [a["f_outcome"] for a in data.screeners(ref)]
         return data.screened(ref) and not path and all(f == "exclude" for f in finals)
 
@@ -262,23 +268,21 @@ def stage_metrics(
         elusion=elusion,
     )
 
-    decoys = [
-        c
-        for r in records
-        for c in data.conflicts.get(r, [])
-        if c["decoy"] and c["state"] != "withdrawn"
-    ]
-    adjudicated = [c for c in decoys if c["state"] == "resolved"]
-    decoy_gauge = DecoyGauge(
-        cases=len(decoys),
-        adjudicated=len(adjudicated),
-        matching=sum(_label(c["outcome"]) == c["pattern"] for c in adjudicated),
-        held=sum(
-            1 for r in records for c in data.genuine(r) if c["state"] == "open" and not c["visible"]
-        ),
-        released_without_cover=sum(
-            1 for r in records for c in data.genuine(r) if c["released_without_cover"]
-        ),
+    rescreened = [r for r in records if items[r]["rescreen"]]
+    rescreen_finals = {
+        r: auditor["f_outcome"]
+        for r in rescreened
+        if (auditor := data.auditor(r)) is not None and auditor["f_outcome"] is not None
+    }
+    upheld = sum(
+        all(_label(rescreen_finals[r]) == _label(a["f_outcome"]) for a in data.screeners(r))
+        for r in rescreen_finals
+    )
+    rescreens = RescreenGauge(
+        triggered=len(rescreened),
+        pending=len(rescreened) - len(rescreen_finals),
+        upheld=upheld,
+        adjudicated=len(rescreen_finals) - upheld,
     )
 
     stop = None
@@ -300,7 +304,7 @@ def stage_metrics(
         revised_after_reveal=len(revised),
         agreement=tuple(agreement),
         audit=audit,
-        decoys=decoy_gauge,
+        rescreens=rescreens,
         stop_test=stop,
     )
     return len(done), len(records) - len(done), open_conflicts, metrics

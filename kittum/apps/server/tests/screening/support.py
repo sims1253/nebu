@@ -75,13 +75,17 @@ JUDGE_MARK = "(judge)"  # every recorded rationale ends with it, so tests can fi
 
 def protocol_source(mode: str = "M1") -> dict[str, Any]:
     """The example protocol, with the topic switched to M2 or M3 when asked (a new version with
-    a rationale, as a mode change needs)."""
+    a rationale, as a mode change needs).
+
+    The example's M1 topic samples no records for audit. Screening hides the blind extra screens
+    of AI-only disagreements among the audit samples, so it needs some: 10% here.
+    """
     source = yaml.safe_load(EXAMPLE.read_text())
     topic = source["search_topics"][0]
+    topic["audit"] = {**topic["audit"], "random_audit_percent": "10"}
     if mode != "M1":
         topic["mode"] = mode
         topic["mode_rationale"] = {"en": f"Screened in {mode} for the screening tests."}
-        topic["audit"] = {**topic["audit"], "random_audit_percent": "10"}
     if mode == "M2":
         topic["validation_pack"] = "kittum-validation-pack/2026-10"
     if mode == "M3":
@@ -502,7 +506,7 @@ class World:
                     stage=stage,
                     records=tuple(records),
                     screeners=screeners or (self.people.a, self.people.b),
-                    auditor_id=auditor,
+                    auditor_id=auditor or self.people.auditor,
                     adjudicators=adjudicators or (self.people.adjudicator,),
                     sentinels=SENTINELS,
                     reveal=reveal,  # type: ignore[arg-type]

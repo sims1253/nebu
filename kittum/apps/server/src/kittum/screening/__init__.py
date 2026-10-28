@@ -14,9 +14,10 @@ The human decides first. `decide` takes a provisional decision; if the stage rev
 `on_disagreement`, or `always`) and the AI disagrees in the sense below, the result carries the
 AI's criterion, quote, and rationale, and the reviewer keeps or revises with a final decision.
 Otherwise the provisional decision is final at once. Every decision is a command with a receipt
-and a ledger event, checks `expected_revision`, and records the client's timing; `undo` returns
-an item to the queue with a new revision. AI exclusions are proposals only: no mode lets the AI
-exclude a record that no human saw.
+and a ledger event, checks the opaque `etag` the client last saw (a random token per state, so
+it reveals no count of decisions), and records the client's timing; `undo` returns an item to
+the queue under a new token. AI exclusions are proposals only: no mode lets the AI exclude a
+record that no human saw.
 
 The AI's verdict is read two ways. Its verified reading (`Verdict.excludes`) counts wherever an
 AI exclusion would remove or deprioritize a record: when the human includes, in the M3 order,
@@ -24,18 +25,23 @@ and in the audit strata. The model's own reading (no criterion it answered `not_
 filter's downgrades) counts where the AI argues for keeping a record that humans excluded. The
 filter protects against wrongful exclusions; it never manufactures a disagreement.
 
-Once every screener of a record has decided, conflicts go to adjudication: human disagreements in
-every mode, records both humans exclude while the model saw no failing criterion in M1, every
-disagreement between the AI and the human in M2 (provisional or final, the protocol's census),
-and audit samples the auditor includes. The adjudicator sees the humans' decisions under
-pseudonyms; the AI column opens after the commit.
+Once every screener of a record has decided, humans who disagree go to adjudication. An AI-only
+disagreement never does: records both humans exclude while the model saw no failing criterion
+(M1), and every disagreement between the AI and the lone human (M2, provisional or final, the
+protocol's census), get a blind extra screen by the stage's auditor instead, mixed into the
+auditor's queue among the random audit samples (`screening.ai_disagreement_rescreen`). If that
+screen agrees with the screeners, their decision stands; if not, the human disagreement goes to
+adjudication. So adjudication holds only human disagreements, and the adjudicator, who sees the
+humans' decisions under pseudonyms, learns nothing about the AI from the queue; the AI column
+opens after the commit.
 
 Blinding is enforced below the service: reviewers read only through the SQL functions
 `screening_reviewer_queue` and `screening_reviewer_progress`, which return the reviewer's own
 assignments without AI output (until their own provisional decision is revealed), sentinel or
-audit flags, or anything of another reviewer. `status` shows a screener only their own counts and
-everyone else the whole stage: kappa and PABAK for human pairs and human-AI pairs, the audit
-gauge (sentinel accuracy and the elusion estimate), and the M3 stop test.
+audit flags, or anything of another reviewer. `status` shows screeners and the auditor only their
+own counts, adjudicators their pending adjudications, and the methods lead the whole stage:
+conflicts, the extra screens and their outcomes, kappa and PABAK for human pairs and human-AI
+pairs, the audit gauge (sentinel accuracy and the elusion estimate), and the M3 stop test.
 
 Full-text decisions carry per-criterion readings (met, not met, unclear) with evidence anchor IDs
 from `kittum.documents`, held as opaque IDs; the outcomes are include, exclude, and insufficient
@@ -49,16 +55,14 @@ from kittum.screening.metrics import RecordOutcome, stop_status
 from kittum.screening.rules import criteria_for, topic_for
 from kittum.screening.service import (
     ADJUDICATED,
+    AI_DISAGREEMENT_RESCREEN,
     AI_READ,
-    CONFLICT_HIDDEN,
     CONFLICT_OPENED,
-    CONFLICT_PUBLISHED,
     CONFLICT_UPDATED,
     CONFLICT_WITHDRAWN,
     DECIDED,
     JUDGE_JOB,
     JUDGING_REQUESTED,
-    RELEASED_WITHOUT_COVER,
     STAGE_OPENED,
     UNDONE,
     Screening,
@@ -74,7 +78,6 @@ from kittum.screening.types import (
     DecideResult,
     Decision,
     DecisionTiming,
-    DecoyGauge,
     Highlight,
     InvalidDecision,
     NotAssigned,
@@ -84,6 +87,8 @@ from kittum.screening.types import (
     QueueItem,
     QueueRecord,
     RecordFacts,
+    RescreenGauge,
+    RescreenReason,
     Reveal,
     RevealSetting,
     ReviewerColumn,
@@ -100,16 +105,14 @@ from kittum.screening.types import (
 
 __all__ = [
     "ADJUDICATED",
+    "AI_DISAGREEMENT_RESCREEN",
     "AI_READ",
-    "CONFLICT_HIDDEN",
     "CONFLICT_OPENED",
-    "CONFLICT_PUBLISHED",
     "CONFLICT_UPDATED",
     "CONFLICT_WITHDRAWN",
     "DECIDED",
     "JUDGE_JOB",
     "JUDGING_REQUESTED",
-    "RELEASED_WITHOUT_COVER",
     "STAGE_OPENED",
     "UNDONE",
     "AdjudicationItem",
@@ -122,7 +125,6 @@ __all__ = [
     "DecideResult",
     "Decision",
     "DecisionTiming",
-    "DecoyGauge",
     "Highlight",
     "InvalidDecision",
     "JudgeRunner",
@@ -134,6 +136,8 @@ __all__ = [
     "QueueRecord",
     "RecordFacts",
     "RecordOutcome",
+    "RescreenGauge",
+    "RescreenReason",
     "Reveal",
     "RevealSetting",
     "ReviewerColumn",

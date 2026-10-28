@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 from kittum.core import NotFoundError
 from kittum.judge import CriterionVerdict
 from kittum.protocol import ScreeningMode
-from kittum.screening.rules import Reading, sort_key
+from kittum.screening.rules import Reading
 from kittum.screening.types import (
     CriterionDecision,
     Decision,
@@ -95,7 +95,7 @@ def reading(tx: Tx, stage_id: Id, item_ref: str) -> Reading | None:
 
 
 _ASSIGNMENT = """
-    select a.*, i.kind, i.audit,
+    select a.*, i.kind, i.audit, i.rescreen,
         p.outcome as p_outcome, p.reason_criterion_id as p_reason_criterion_id,
         p.evidence_anchor_ids as p_evidence_anchor_ids, p.comment as p_comment,
         p.criteria as p_criteria,
@@ -135,66 +135,3 @@ def item(tx: Tx, stage_id: Id, item_ref: str) -> dict[str, Any]:
     ).fetchone()
     assert row is not None
     return row
-
-
-def decoy_state(tx: Tx, stage: dict[str, Any], item_ref: str) -> dict[str, dict[str, Any]]:
-    """Per visible outcome: the conflicts only the AI raised that wait for a decoy (`held`, as
-    (conflict ID, item_ref)), and the records free to become decoys (`pool`), both in a seeded
-    order. `item_ref` is left out of the pool: it is being decided."""
-    held: dict[str, list[tuple[Id, str]]] = {}
-    for r in tx.execute(
-        "select id, item_ref, pattern from screening_conflict where stage_id = %s"
-        " and state = 'open' and not visible and not decoy",
-        (stage["id"],),
-    ).fetchall():
-        held.setdefault(r["pattern"], []).append((r["id"], r["item_ref"]))
-    pool: dict[str, list[str]] = {}
-    for r in tx.execute(
-        "select i.item_ref, case when bool_and(f.outcome = 'exclude') then 'exclude'"
-        " when bool_and(f.outcome <> 'exclude') then 'include' end as pattern"
-        " from screening_item i"
-        " join screening_assignment a on a.stage_id = i.stage_id and a.item_ref = i.item_ref"
-        " and a.role = 'screener'"
-        " left join screening_decision f on f.id = a.final_decision_id"
-        " where i.stage_id = %s and i.kind = 'record' and i.item_ref <> %s"
-        " and not exists (select 1 from screening_conflict c where c.stage_id = i.stage_id"
-        " and c.item_ref = i.item_ref and c.state <> 'withdrawn')"
-        " group by i.item_ref having bool_and(f.outcome is not null)",
-        (stage["id"], item_ref),
-    ).fetchall():
-        if r["pattern"] is not None:
-            pool.setdefault(r["pattern"], []).append(r["item_ref"])
-    for refs in pool.values():
-        refs.sort(key=lambda ref: sort_key(stage["seed"], ref, "decoy"))
-    for conflicts in held.values():
-        conflicts.sort(key=lambda c: sort_key(stage["seed"], c[1], "held"))
-    return {"held": held, "pool": pool}
-
-
-def pending_elsewhere(tx: Tx, stage_id: Id, assignment_id: Id) -> int:
-    """Undecided assignments of the stage other than this one."""
-    row = tx.execute(
-        "select count(*) as n from screening_assignment where stage_id = %s"
-        " and state <> 'decided' and id <> %s",
-        (stage_id, assignment_id),
-    ).fetchone()
-    assert row is not None
-    return row["n"]
-
-
-def held_conflicts(tx: Tx, stage_id: Id) -> list[dict[str, Any]]:
-    """Conflicts only the AI raised that still wait for a decoy, with the record's reviewers."""
-    return tx.execute(
-        "select c.id, c.item_ref, array_agg(a.reviewer_id) as reviewers"
-        " from screening_conflict c join screening_assignment a"
-        " on a.stage_id = c.stage_id and a.item_ref = c.item_ref"
-        " where c.stage_id = %s and c.state = 'open' and not c.visible and not c.decoy"
-        " group by c.id, c.item_ref order by c.item_ref",
-        (stage_id,),
-    ).fetchall()
-
-
-def conflict(tx: Tx, conflict_id: Id | None) -> dict[str, Any] | None:
-    if conflict_id is None:
-        return None
-    return tx.execute("select * from screening_conflict where id = %s", (conflict_id,)).fetchone()

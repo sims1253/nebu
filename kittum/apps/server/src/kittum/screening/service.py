@@ -2,7 +2,6 @@
 decider, one ledger event or more, the module's rows, and a receipt, in the caller's transaction.
 A replayed command returns the stored outcome and writes nothing."""
 
-import dataclasses
 import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple
@@ -33,6 +32,7 @@ from kittum.screening.rules import (
     default_seed,
     highlights,
     percent_of,
+    rescreen_reason,
     reveal_for,
     sections,
     seeded_sample,
@@ -72,6 +72,7 @@ if TYPE_CHECKING:
         ConflictKind,
         DecisionTiming,
         Phase,
+        RescreenReason,
         ScreeningRecord,
         StageSpec,
     )
@@ -84,9 +85,7 @@ UNDONE = "screening.undone"
 CONFLICT_OPENED = "screening.conflict_opened"
 CONFLICT_UPDATED = "screening.conflict_updated"
 CONFLICT_WITHDRAWN = "screening.conflict_withdrawn"
-CONFLICT_PUBLISHED = "screening.conflict_published"
-CONFLICT_HIDDEN = "screening.conflict_hidden"
-RELEASED_WITHOUT_COVER = "screening.released_without_cover"
+AI_DISAGREEMENT_RESCREEN = "screening.ai_disagreement_rescreen"
 ADJUDICATED = "screening.adjudicated"
 JUDGE_JOB = "screening.judge"
 
@@ -108,38 +107,41 @@ class _Item(NamedTuple):
     audit: bool
 
 
-AI_KINDS = frozenset({"ai_include", "ai_disagreement"})
-"""Conflicts the AI alone raises. Their membership in the adjudication queue would reveal the AI's
-reading, so decoys accompany them."""
-
-
-def _conflict_id() -> Id:
-    """A random (version 4) ID. Adjudicators see conflict IDs; time-ordered ones would tell a
-    conflict from the decoy created after it."""
+def _random_id() -> Id:
+    """A random (version 4) ID, for rows whose IDs adjudicators see: time-ordered ones would say
+    which came first."""
     return uuid.uuid4()
+
+
+def _etag() -> str:
+    """An opaque concurrency token: random per state, so it reveals no count of decisions."""
+    return uuid.uuid4().hex
 
 
 @dataclass(frozen=True)
 class _ConflictChange:
-    action: Literal["open", "update", "withdraw", "publish", "hide", "release"]
+    action: Literal["open", "update", "withdraw"]
     conflict_id: Id
     item_ref: str
     kinds: tuple[ConflictKind, ...] = ()
-    pattern: str | None = None  # the screeners' shared outcome, if they share one
-    decoy: bool = False
-    visible: bool = True  # False while a conflict only the AI raised waits for a decoy
-    partner_id: Id | None = None  # the conflict a decoy covers
-    assigned_to: Id | None = None  # the one adjudicator of a conflict released without cover
+    etag: str = ""
 
 
 _EVENT_OF = {
     "open": CONFLICT_OPENED,
     "update": CONFLICT_UPDATED,
     "withdraw": CONFLICT_WITHDRAWN,
-    "publish": CONFLICT_PUBLISHED,
-    "hide": CONFLICT_HIDDEN,
-    "release": RELEASED_WITHOUT_COVER,
 }
+
+
+@dataclass(frozen=True)
+class _Rescreen:
+    """A blind extra screen by the auditor, for an AI-only disagreement."""
+
+    item_ref: str
+    reason: RescreenReason
+    assignment_id: Id | None  # a new auditor assignment, or None if the auditor has one already
+    sort_key: str
 
 
 @dataclass(frozen=True)
@@ -149,10 +151,12 @@ class _DecideChanges:
     state: str
     revealed: bool
     revision: int
+    etag: str
     provisional_id: Id | None
     final_id: Id | None
     reveal: Reveal | None
     conflicts: tuple[_ConflictChange, ...]
+    rescreen: _Rescreen | None
 
 
 class Screening:
@@ -205,6 +209,10 @@ class Screening:
         plan: `sentinel_percent` of the record count is drawn from `spec.sentinels` and given to
         every reviewer, and `random_audit_percent` of the records go to `spec.auditor_id` as
         well. Both draws are seeded, so anyone can redraw them; the ledger event names them.
+
+        The auditor's queue is also where AI-only disagreements get their blind extra screen,
+        among the audit samples. So in M1 and M2 the audit plan must sample records: without
+        audit samples to hide among, an extra screen would tell the auditor the AI disagreed.
         """
         command = Command(
             command_id=command_id,
@@ -216,11 +224,7 @@ class Screening:
 
         def load(tx: Tx, _: Command) -> dict[str, Any]:
             stored = get_version(tx, project_id, spec.protocol_version_id)
-            people = [
-                *spec.screeners,
-                *spec.adjudicators,
-                *([spec.auditor_id] if spec.auditor_id else []),
-            ]
+            people = [*spec.screeners, *spec.adjudicators, spec.auditor_id]
             rows = tx.execute("select id, kind from actor where id = any(%s)", (people,))
             existing = tx.execute(
                 "select topic_id from screening_stage where project_id = %s and scope_id = %s"
@@ -249,11 +253,7 @@ class Screening:
                 raise InvalidDecision(
                     f"mode {mode} needs {SCREENERS_PER_MODE[mode]} different screeners"
                 )
-            people = [
-                *screeners,
-                *spec.adjudicators,
-                *([spec.auditor_id] if spec.auditor_id else []),
-            ]
+            people = [*screeners, *spec.adjudicators, spec.auditor_id]
             if any(state["kinds"].get(p) != "human" for p in people):
                 raise InvalidDecision("every screener, auditor, and adjudicator must be human")
             if len(set(spec.adjudicators)) != len(spec.adjudicators) or set(
@@ -265,10 +265,11 @@ class Screening:
             if len(set(refs) | set(sentinel_refs)) != len(refs) + len(sentinel_refs):
                 raise InvalidDecision("item references must be unique across records and sentinels")
             audit_n = percent_of(topic.audit.random_audit_percent, len(refs))
-            if audit_n and spec.auditor_id is None:
-                raise InvalidDecision("the audit plan samples records, so it needs an auditor")
-            if not audit_n and spec.auditor_id is not None:
-                raise InvalidDecision("the audit plan samples no records; leave out the auditor")
+            if not audit_n and mode in (ScreeningMode.M1, ScreeningMode.M2):
+                raise InvalidDecision(
+                    f"mode {mode} sends AI-only disagreements to blind extra screens among the "
+                    "audit samples, so the audit plan must sample records"
+                )
             if spec.auditor_id in screeners:
                 raise InvalidDecision("the auditor must not screen the same records")
             sentinel_n = percent_of(topic.audit.sentinel_percent, len(refs))
@@ -292,13 +293,13 @@ class Screening:
             for it in items:
                 ref = it.record.item_ref
                 reviewers = [(s, "screener") for s in screeners]
-                if spec.auditor_id and (it.audit or it.kind == "sentinel"):
+                if it.audit or it.kind == "sentinel":
                     reviewers.append((spec.auditor_id, "auditor"))
                 for reviewer, role in reviewers:
                     key = sort_key(
                         seed, ref, "" if shared and role == "screener" else str(reviewer)
                     )
-                    assignments.append((new_id(), stage_id, ref, reviewer, role, key))
+                    assignments.append((new_id(), stage_id, ref, reviewer, role, key, _etag()))
             info = StageInfo(
                 stage_id=stage_id,
                 project_id=project_id,
@@ -376,7 +377,7 @@ class Screening:
                 )
                 cur.executemany(
                     "insert into screening_assignment (id, stage_id, item_ref, reviewer_id, role,"
-                    " sort_key) values (%s, %s, %s, %s, %s, %s)",
+                    " sort_key, etag) values (%s, %s, %s, %s, %s, %s, %s)",
                     changes["assignments"],
                 )
 
@@ -592,7 +593,7 @@ class Screening:
                 title=r["title"],
                 text=r["text"],
                 highlights=highlights(r["text"], criteria),
-                revision=r["revision"],
+                etag=r["etag"],
                 record=store.queue_record(
                     r["facts"],
                     title_highlights=highlights(r["title"], criteria),
@@ -614,15 +615,21 @@ class Screening:
         assignment_id: Id,
         decision: Decision,
         phase: Phase,
-        expected_revision: int,
+        expected_etag: str,
         timing: DecisionTiming,
     ) -> DecideResult:
         """Record a provisional or final decision.
 
         A provisional decision is the reviewer's own, before any AI output. If the stage reveals
         and the AI disagrees (or reveals always), the result carries the reveal and the item waits
-        for a final decision; otherwise the provisional decision is final at once. Once every
-        screener of a record has decided, the mode's conflict rules may send it to adjudication.
+        for a final decision; otherwise the provisional decision is final at once.
+
+        Once every screener of a record has decided, humans who disagree go to adjudication. An
+        AI-only disagreement (`rules.rescreen_reason`) instead gives the auditor a blind extra
+        screen of the record, among their audit samples, and is recorded as
+        `screening.ai_disagreement_rescreen`. If the auditor's screen then disagrees with the
+        screeners, that human disagreement goes to adjudication; if it agrees, the decision
+        stands. Adjudication thus never holds a record only because of the AI.
         """
         command = Command(
             command_id=command_id,
@@ -633,7 +640,7 @@ class Screening:
                 "assignment_id": str(assignment_id),
                 "decision": decision.model_dump(mode="json"),
                 "phase": phase,
-                "expected_revision": expected_revision,
+                "expected_etag": expected_etag,
                 "timing": timing.model_dump(mode="json"),
             },
         )
@@ -646,24 +653,15 @@ class Screening:
                 "stage": row,
                 "criteria": self._criteria(tx, row),
                 "reading": store.reading(tx, a["stage_id"], a["item_ref"]),
-                "peers": (peers := store.item_assignments(tx, a["stage_id"], a["item_ref"])),
-                "conflicts": (conflicts := store.conflicts(tx, a["stage_id"], a["item_ref"])),
-                "partners": _partners(tx, conflicts),
-                "decoys": store.decoy_state(tx, row, a["item_ref"])
-                if _may_complete(row, a, peers)
-                else None,
-                "held": store.held_conflicts(tx, row["id"])
-                if row["mode"] in ("M1", "M2")
-                and store.pending_elsewhere(tx, row["id"], a["id"]) == 0
-                else None,
+                "peers": store.item_assignments(tx, a["stage_id"], a["item_ref"]),
+                "conflicts": store.conflicts(tx, a["stage_id"], a["item_ref"]),
             }
 
         def decide(_: Command, st: dict[str, Any]) -> RunDecision[_DecideChanges]:
             a, row = st["a"], st["stage"]
-            if a["revision"] != expected_revision:
+            if a["etag"] != expected_etag:
                 raise StaleRevision(
-                    f"assignment {assignment_id} is at revision {a['revision']}, not "
-                    f"{expected_revision}; reload the queue"
+                    f"assignment {assignment_id} changed since it was loaded; reload the queue"
                 )
             validate(decision, row["stage"], st["criteria"])
             reading: Reading | None = st["reading"]
@@ -716,23 +714,20 @@ class Screening:
                 )
             ]
             changes: list[_ConflictChange] = []
+            rescreen = None
             if new_state == "decided" and a["kind"] == "record":
-                changes = self._conflict_change(
-                    row,
-                    st["peers"],
-                    st["conflicts"],
-                    st["partners"],
-                    reading,
-                    a["id"],
-                    provisional,
-                    decision,
+                changes, rescreen = self._after_decision(
+                    row, a, st["peers"], st["conflicts"], reading, provisional, decision
                 )
-                if st["decoys"] is not None:
-                    changes = _cover(
-                        st["decoys"], a, st["peers"], decision, changes, st["conflicts"]
-                    )
-            if new_state == "decided" and st["held"] is not None:
-                changes += _release(row, st["held"], st["peers"], changes)
+            if rescreen is not None:
+                payload = {
+                    "stage_id": str(row["id"]),
+                    "item_ref": rescreen.item_ref,
+                    "reason": rescreen.reason,
+                    "auditor_id": str(row["auditor_id"]),
+                    "new_assignment": rescreen.assignment_id is not None,
+                }
+                events.append(_event(project_id, AI_DISAGREEMENT_RESCREEN, reviewer_id, payload))
             events += [_conflict_event(project_id, reviewer_id, row["id"], c) for c in changes]
             return RunDecision(
                 events=tuple(events),
@@ -742,10 +737,12 @@ class Screening:
                     state=new_state,
                     revealed=a["revealed"] or reveal is not None,
                     revision=revision,
+                    etag=_etag(),
                     provisional_id=provisional_id,
                     final_id=final_id,
                     reveal=reveal,
                     conflicts=tuple(changes),
+                    rescreen=rescreen,
                 ),
             )
 
@@ -756,8 +753,8 @@ class Screening:
             tx.execute(
                 "insert into screening_decision (id, assignment_id, command_id, event_id, phase,"
                 " outcome, reason_criterion_id, criteria, evidence_anchor_ids, comment, revision,"
-                " reveal, shown_at, first_key_at, decided_at, reveal_shown_at, recorded_at)"
-                " values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                " etag, reveal, shown_at, first_key_at, decided_at, reveal_shown_at, recorded_at)"
+                " values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                 (
                     c.decision_id,
                     assignment_id,
@@ -770,6 +767,7 @@ class Screening:
                     list(decision.evidence_anchor_ids),
                     decision.comment,
                     c.revision,
+                    c.etag,
                     Jsonb(_json(c.reveal)) if c.reveal else None,
                     timing.shown_at,
                     timing.first_key_at,
@@ -780,10 +778,39 @@ class Screening:
             )
             tx.execute(
                 "update screening_assignment set state = %s, revealed = %s, revision = %s,"
-                " provisional_decision_id = %s, final_decision_id = %s where id = %s",
-                (c.state, c.revealed, c.revision, c.provisional_id, c.final_id, assignment_id),
+                " etag = %s, provisional_decision_id = %s, final_decision_id = %s where id = %s",
+                (
+                    c.state,
+                    c.revealed,
+                    c.revision,
+                    c.etag,
+                    c.provisional_id,
+                    c.final_id,
+                    assignment_id,
+                ),
             )
-            for change, event in zip(c.conflicts, events[1:], strict=True):
+            rest = list(events[1:])
+            if c.rescreen is not None:
+                rest.pop(0)
+                tx.execute(
+                    "update screening_item set rescreen = true where stage_id = %s and item_ref = %s",
+                    (c.stage_id, c.rescreen.item_ref),
+                )
+                if c.rescreen.assignment_id is not None:
+                    tx.execute(
+                        "insert into screening_assignment (id, stage_id, item_ref, reviewer_id,"
+                        " role, sort_key, etag)"
+                        " select %s, id, %s, auditor_id, 'auditor', %s, %s"
+                        " from screening_stage where id = %s",
+                        (
+                            c.rescreen.assignment_id,
+                            c.rescreen.item_ref,
+                            c.rescreen.sort_key,
+                            _etag(),
+                            c.stage_id,
+                        ),
+                    )
+            for change, event in zip(c.conflicts, rest, strict=True):
                 self._write_conflict(tx, change, c.stage_id, event)
 
         self._commands.execute(tx, command, decide, load=load, apply=apply)
@@ -799,7 +826,7 @@ class Screening:
             phase="provisional" if reveal and row["phase"] == "provisional" else "final",
             reveal=reveal,
             recorded_at=row["recorded_at"],
-            revision=row["revision"],
+            etag=row["etag"],
         )
 
     def _own_assignment(
@@ -811,21 +838,21 @@ class Screening:
         store.stage_row(tx, project_id, a["stage_id"])
         return a
 
-    def _conflict_change(
+    def _after_decision(
         self,
         row: dict[str, Any],
+        a: dict[str, Any],
         peers: list[dict[str, Any]],
         conflicts: list[dict[str, Any]],
-        partners: dict[Id, dict[str, Any]],
         reading: Reading,
-        own_id: Id,
         own_provisional: Decision,
         own_final: Decision,
-    ) -> list[_ConflictChange]:
+    ) -> tuple[list[_ConflictChange], _Rescreen | None]:
+        """The conflicts and the extra screen a settled decision calls for."""
         finals: list[tuple[str, Decision | None]] = []
         provisionals: list[Decision] = []
         for p in peers:
-            if p["id"] == own_id:
+            if p["id"] == a["id"]:
                 final, provisional = own_final, own_provisional
             else:
                 final = store.decision_of(p, "f_") if p["f_outcome"] else None
@@ -835,98 +862,61 @@ class Screening:
                 provisionals.append(provisional)
         screener_finals = [d for role, d in finals if role == "screener"]
         if any(d is None for d in screener_finals):
-            return []
-        labels = {_label(d) for d in screener_finals if d is not None}
-        pattern = labels.pop() if len(labels) == 1 else None
-        ref = peers[0]["item_ref"]
-        auditor = next((d for role, d in finals if role == "auditor"), None)
-        kinds = conflict_kinds(
-            ScreeningMode(row["mode"]),
-            row["stage"],
-            [d for d in screener_finals if d is not None],
-            provisionals,
-            auditor,
-            reading,
-        )
-        open_ = next((c for c in conflicts if c["state"] == "open"), None)
-        if open_ is not None and open_["decoy"]:
-            # A real conflict on a decoy (an auditor's late inclusion) takes the decoy's place,
-            # and the conflict it covered waits for cover again.
-            if not kinds:
-                return [_ConflictChange("update", open_["id"], ref, ("decoy",), pattern, True)]
-            changes = [_ConflictChange("update", open_["id"], ref, kinds, pattern)]
-            return changes + _uncover(partners.get(open_["partner_id"]))
-        if open_ is not None:
-            # Any new decision on the item bumps the revision, for decoys and conflicts alike.
-            merged = tuple(dict.fromkeys((*open_["kinds"], *kinds)))
-            visible = open_["visible"] or not set(merged) <= AI_KINDS
-            return [
-                _ConflictChange(
-                    "update", open_["id"], ref, merged, open_["pattern"], False, visible
+            return [], None
+        decided = [d for d in screener_finals if d is not None]
+        ref = a["item_ref"]
+        rescreen = None
+        if a["role"] == "screener" and not a["rescreen"]:
+            reason = rescreen_reason(ScreeningMode(row["mode"]), decided, provisionals, reading)
+            if reason is not None:
+                has_auditor = any(p["role"] == "auditor" for p in peers)
+                rescreen = _Rescreen(
+                    item_ref=ref,
+                    reason=reason,
+                    assignment_id=None if has_auditor else new_id(),
+                    sort_key=sort_key(row["seed"], ref, str(row["auditor_id"])),
                 )
-            ]
-        settled = {
-            k for c in conflicts if c["state"] == "resolved" and not c["decoy"] for k in c["kinds"]
-        }
+        auditor = next((d for role, d in finals if role == "auditor"), None)
+        kinds = conflict_kinds(row["stage"], decided, auditor)
+        open_ = next((c for c in conflicts if c["state"] == "open"), None)
+        if open_ is not None:
+            # A new decision on an item in conflict (the auditor's) changes what adjudicators see.
+            merged = tuple(dict.fromkeys((*open_["kinds"], *kinds)))
+            return [_ConflictChange("update", open_["id"], ref, merged, _etag())], rescreen
+        settled = {k for c in conflicts if c["state"] == "resolved" for k in c["kinds"]}
         new = tuple(k for k in kinds if k not in settled)
         if not new:
-            return []
-        # A conflict only the AI raised stays invisible until a decoy covers it (`_cover`).
-        return [
-            _ConflictChange(
-                "open", _conflict_id(), ref, new, pattern, False, not set(new) <= AI_KINDS
-            )
-        ]
+            return [], rescreen
+        return [_ConflictChange("open", _random_id(), ref, new, _etag())], rescreen
 
     def _write_conflict(
         self, tx: Tx, change: _ConflictChange, stage_id: Id, event: AuditEvent
     ) -> None:
         if change.action == "open":
             tx.execute(
-                "insert into screening_conflict (id, stage_id, item_ref, kinds, pattern, decoy,"
-                " partner_id, visible, state, opened_event_id, opened_at)"
-                " values (%s, %s, %s, %s, %s, %s, %s, %s, 'open', %s, %s)",
+                "insert into screening_conflict (id, stage_id, item_ref, kinds, etag, state,"
+                " opened_event_id, opened_at) values (%s, %s, %s, %s, %s, 'open', %s, %s)",
                 (
                     change.conflict_id,
                     stage_id,
                     change.item_ref,
                     list(change.kinds),
-                    change.pattern,
-                    change.decoy,
-                    change.partner_id,
-                    change.visible,
+                    change.etag,
                     event.event_id,
                     event.recorded_at,
                 ),
             )
         elif change.action == "update":
             tx.execute(
-                "update screening_conflict set kinds = %s, pattern = %s, decoy = %s,"
-                " visible = %s, revision = revision + 1 where id = %s",
-                (
-                    list(change.kinds),
-                    change.pattern,
-                    change.decoy,
-                    change.visible,
-                    change.conflict_id,
-                ),
-            )
-        elif change.action in ("publish", "hide"):
-            tx.execute(
-                "update screening_conflict set visible = %s where id = %s",
-                (change.action == "publish", change.conflict_id),
-            )
-        elif change.action == "release":
-            tx.execute(
-                "update screening_conflict set visible = true, released_without_cover = true,"
-                " assigned_to = %s where id = %s",
-                (change.assigned_to, change.conflict_id),
+                "update screening_conflict set kinds = %s, etag = %s, revision = revision + 1"
+                " where id = %s",
+                (list(change.kinds), change.etag, change.conflict_id),
             )
         else:
             tx.execute(
                 "update screening_conflict set state = 'withdrawn', revision = revision + 1,"
-                " closed_event_id = %s where id = %s",
-                (event.event_id, change.conflict_id),
+                " etag = %s, closed_event_id = %s where id = %s",
+                (_etag(), event.event_id, change.conflict_id),
             )
 
     def undo(
@@ -937,34 +927,32 @@ class Screening:
         project_id: Id,
         reviewer_id: Id,
         assignment_id: Id,
-        expected_revision: int,
+        expected_etag: str,
     ) -> UndoResult:
         """Take back the reviewer's decision on an item; it returns to the queue with a new
-        revision. The decisions stay in the record. An open conflict on the item is withdrawn;
+        token. The decisions stay in the record. An open conflict on the item is withdrawn;
         an adjudicated item cannot be undone."""
         command = Command(
             command_id=command_id,
             project_id=project_id,
             type="screening.undo",
             actor_id=reviewer_id,
-            payload={"assignment_id": str(assignment_id), "expected_revision": expected_revision},
+            payload={"assignment_id": str(assignment_id), "expected_etag": expected_etag},
         )
 
         def load(tx: Tx, _: Command) -> dict[str, Any]:
             a = self._own_assignment(tx, project_id, reviewer_id, assignment_id, lock=True)
-            conflicts = store.conflicts(tx, a["stage_id"], a["item_ref"])
-            return {"a": a, "conflicts": conflicts, "partners": _partners(tx, conflicts)}
+            return {"a": a, "conflicts": store.conflicts(tx, a["stage_id"], a["item_ref"])}
 
         def decide(_: Command, st: dict[str, Any]) -> RunDecision[dict[str, Any]]:
             a = st["a"]
-            if a["revision"] != expected_revision:
+            if a["etag"] != expected_etag:
                 raise StaleRevision(
-                    f"assignment {assignment_id} is at revision {a['revision']}, not "
-                    f"{expected_revision}; reload the queue"
+                    f"assignment {assignment_id} changed since it was loaded; reload the queue"
                 )
             if a["state"] == "pending":
                 raise InvalidDecision("there is no decision to undo")
-            if any(c["state"] == "resolved" and not c["decoy"] for c in st["conflicts"]):
+            if any(c["state"] == "resolved" for c in st["conflicts"]):
                 raise InvalidDecision("this item was adjudicated; its decisions stand")
             undone = [
                 str(x)
@@ -989,8 +977,6 @@ class Screening:
             withdrawn: list[_ConflictChange] = []
             if open_ is not None:
                 withdrawn.append(_ConflictChange("withdraw", open_["id"], a["item_ref"]))
-                if open_["decoy"]:
-                    withdrawn += _uncover(st["partners"].get(open_["partner_id"]))
             events += [
                 _conflict_event(project_id, reviewer_id, a["stage_id"], c) for c in withdrawn
             ]
@@ -999,6 +985,7 @@ class Screening:
                 changes={
                     "undone": undone,
                     "revision": revision,
+                    "etag": _etag(),
                     "withdrawn": withdrawn,
                     "stage_id": a["stage_id"],
                 },
@@ -1009,8 +996,8 @@ class Screening:
             assert c is not None
             tx.execute(
                 "insert into screening_undo (id, assignment_id, command_id, event_id,"
-                " undone_decision_ids, revision, recorded_at)"
-                " values (%s, %s, %s, %s, %s, %s, %s)",
+                " undone_decision_ids, revision, etag, recorded_at)"
+                " values (%s, %s, %s, %s, %s, %s, %s, %s)",
                 (
                     new_id(),
                     assignment_id,
@@ -1018,26 +1005,27 @@ class Screening:
                     events[0].event_id,
                     c["undone"],
                     c["revision"],
+                    c["etag"],
                     events[0].recorded_at,
                 ),
             )
             tx.execute(
-                "update screening_assignment set state = 'pending', revision = %s,"
+                "update screening_assignment set state = 'pending', revision = %s, etag = %s,"
                 " provisional_decision_id = null, final_decision_id = null where id = %s",
-                (c["revision"], assignment_id),
+                (c["revision"], c["etag"], assignment_id),
             )
             for change, event in zip(c["withdrawn"], events[1:], strict=True):
                 self._write_conflict(tx, change, c["stage_id"], event)
 
         self._commands.execute(tx, command, decide, load=load, apply=apply)
         row = tx.execute(
-            "select u.revision, u.recorded_at, a.reviewer_id from screening_undo u"
+            "select u.etag, u.recorded_at, a.reviewer_id from screening_undo u"
             " join screening_assignment a on a.id = u.assignment_id where u.command_id = %s",
             (command_id,),
         ).fetchone()
         if row is None or row["reviewer_id"] != reviewer_id:
             raise NotAssigned(f"command {command_id} undid nothing of this reviewer")
-        return UndoResult(revision=row["revision"], recorded_at=row["recorded_at"])
+        return UndoResult(etag=row["etag"], recorded_at=row["recorded_at"])
 
     # Adjudication
 
@@ -1052,18 +1040,15 @@ class Screening:
         topic_id: str | None = None,
     ) -> list[AdjudicationItem]:
         """Open conflicts the adjudicator did not screen, with every human's final decision under a
-        pseudonym. The AI column opens only after the adjudicator commits.
-
-        Decoys are mixed in and look the same: records the humans and the AI agreed on, with the
-        same visible outcome as the conflicts only the AI raised (see `_decoys`). The order is a
-        hash of the conflict ID, not the time a conflict opened."""
+        pseudonym. Every one is a disagreement between humans, so being in the queue says nothing
+        about the AI; its column opens only after the adjudicator commits."""
         row = store.find_stage(tx, project_id, scope_id, stage, topic_id)
         conflicts = _adjudicable(tx, row, adjudicator_id)
         criteria = self._criteria(tx, row)
         return [
             AdjudicationItem(
                 conflict_id=c["id"],
-                revision=c["revision"],
+                etag=c["etag"],
                 stage=row["stage"],
                 scope_id=row["scope_id"],
                 title=c["title"],
@@ -1091,7 +1076,7 @@ class Screening:
         project_id: Id,
         adjudicator_id: Id,
         conflict_id: Id,
-        expected_revision: int,
+        expected_etag: str,
         adopted: str | None = None,
         decision: Decision | None = None,
         timing: DecisionTiming | None = None,
@@ -1109,7 +1094,7 @@ class Screening:
             actor_id=adjudicator_id,
             payload={
                 "conflict_id": str(conflict_id),
-                "expected_revision": expected_revision,
+                "expected_etag": expected_etag,
                 "adopted": adopted,
                 "decision": _json(decision),
             },
@@ -1119,7 +1104,7 @@ class Screening:
             c = tx.execute(
                 "select * from screening_conflict where id = %s for update", (conflict_id,)
             ).fetchone()
-            if c is None or not c["visible"] or c["assigned_to"] not in (None, adjudicator_id):
+            if c is None:
                 raise NotAssigned(f"conflict {conflict_id} not found")
             row = store.stage_row(tx, project_id, c["stage_id"])
             if adjudicator_id not in row["adjudicators"]:
@@ -1137,11 +1122,8 @@ class Screening:
             c, row = st["c"], st["stage"]
             if c["state"] != "open":
                 raise InvalidDecision(f"conflict {conflict_id} is {c['state']}")
-            if c["revision"] != expected_revision:
-                raise StaleRevision(
-                    f"conflict {conflict_id} is at revision {c['revision']}, "
-                    f"not {expected_revision}"
-                )
+            if c["etag"] != expected_etag:
+                raise StaleRevision(f"conflict {conflict_id} changed since it was loaded")
             if not st["human"]:
                 raise InvalidDecision("an adjudicator must be a human actor")
             if any(p["reviewer_id"] == adjudicator_id for p in st["peers"]):
@@ -1210,8 +1192,8 @@ class Screening:
             )
             tx.execute(
                 "update screening_conflict set state = 'resolved', revision = revision + 1,"
-                " closed_event_id = %s where id = %s",
-                (events[0].event_id, conflict_id),
+                " etag = %s, closed_event_id = %s where id = %s",
+                (_etag(), events[0].event_id, conflict_id),
             )
 
         self._commands.execute(tx, command, decide, load=load, apply=apply)
@@ -1244,7 +1226,8 @@ class Screening:
     ) -> dict[str, RecordOutcome]:
         """Each record's current outcome by `item_ref`: `include` or `exclude` (by consensus or
         adjudication), `conflict`, or None while it is not fully screened. Sentinels are not
-        records; decoy adjudications change nothing. For the methods lead and later stages, never
+        records. A record waiting for its extra screen is not yet screened. For the lead and later
+        stages, never
         for reviewers."""
         return record_outcomes(tx, store.find_stage(tx, project_id, scope_id, stage, topic_id))
 
@@ -1269,7 +1252,7 @@ class Screening:
             and viewer_id not in row["screeners"]
             and viewer_id != row["auditor_id"]
         ):
-            # Pending adjudications as one count, decoys included, and nothing else of the AI.
+            # Their pending adjudications and the screening progress; nothing of the AI.
             protocol = self._protocol(tx, project_id, row["protocol_version_id"])
             screened, remaining, _, _ = stage_metrics(
                 tx, row, topic_for(protocol, scope_id, row["topic_id"])
@@ -1312,134 +1295,20 @@ class Screening:
 
 
 def _adjudicable(tx: Tx, row: dict[str, Any], adjudicator_id: Id) -> list[dict[str, Any]]:
-    """The open conflicts an adjudicator of the stage may see: published (covered by a decoy, or
-    released to them), on records they did not review, in an order hashed from random IDs."""
+    """The open conflicts an adjudicator of the stage may see: on records they did not review, in
+    an order hashed from random IDs."""
     if adjudicator_id not in row["adjudicators"]:
         raise NotAssigned(f"actor {adjudicator_id} does not adjudicate this stage")
     return tx.execute(
-        "select c.id, c.item_ref, c.revision, i.title, i.text, i.facts"
+        "select c.id, c.item_ref, c.etag, i.title, i.text, i.facts"
         " from screening_conflict c"
         " join screening_item i on i.stage_id = c.stage_id and i.item_ref = c.item_ref"
-        " where c.stage_id = %s and c.state = 'open' and c.visible"
-        " and (c.assigned_to is null or c.assigned_to = %s)"
+        " where c.stage_id = %s and c.state = 'open'"
         " and not exists (select 1 from screening_assignment a where a.stage_id = c.stage_id"
         " and a.item_ref = c.item_ref and a.reviewer_id = %s)"
         " order by md5(c.id::text)",
-        (row["id"], adjudicator_id, adjudicator_id),
+        (row["id"], adjudicator_id),
     ).fetchall()
-
-
-def _label(decision: Decision) -> str:
-    return "exclude" if decision.outcome == "exclude" else "include"
-
-
-def _may_complete(row: dict[str, Any], a: dict[str, Any], peers: list[dict[str, Any]]) -> bool:
-    """Whether this screener's decision could complete a record that the AI alone can send to
-    adjudication (M1 and M2), so the decoy bookkeeping is needed."""
-    return (
-        row["mode"] in ("M1", "M2")
-        and a["kind"] == "record"
-        and a["role"] == "screener"
-        and all(
-            p["f_outcome"] is not None
-            for p in peers
-            if p["role"] == "screener" and p["id"] != a["id"]
-        )
-    )
-
-
-def _cover(
-    state: dict[str, dict[str, Any]],
-    a: dict[str, Any],
-    peers: list[dict[str, Any]],
-    decision: Decision,
-    changes: list[_ConflictChange],
-    conflicts: list[dict[str, Any]],
-) -> list[_ConflictChange]:
-    """Pair conflicts only the AI raised with decoys, and publish them together.
-
-    Such a conflict (M1: the model includes, both humans exclude; M2: the AI disagrees with the
-    lone human) shows the adjudicator only human decisions that agree, so its membership in the
-    queue would reveal the AI. It opens invisible. It is published, in the same transaction, only
-    with a decoy: a fully screened record with the same visible outcome and no conflict (so
-    humans and AI agreed), drawn in a seeded order. If none is free when the conflict opens, the
-    next record completed with that outcome becomes its decoy and both appear then. A queue item
-    with a given visible outcome is therefore AI-driven with probability at most one half.
-    """
-    finals = [decision] + [
-        store.decision_of(p, "f_") for p in peers if p["role"] == "screener" and p["id"] != a["id"]
-    ]
-    labels = {_label(d) for d in finals}
-    if len(labels) != 1:
-        return changes
-    pattern = labels.pop()
-    held = state["held"].get(pattern, [])
-    pool = state["pool"].get(pattern, [])
-    new = next((c for c in changes if c.action == "open" and not c.visible), None)
-    if new is not None and pool:
-        decoy = _ConflictChange(
-            "open", _conflict_id(), pool[0], ("decoy",), pattern, True, partner_id=new.conflict_id
-        )
-        published = dataclasses.replace(new, visible=True)
-        return [published if c is new else c for c in changes] + [decoy]
-    if not changes and held and not any(c["state"] != "withdrawn" for c in conflicts):
-        conflict_id, item_ref = held[0]
-        decoy = _ConflictChange(
-            "open", _conflict_id(), a["item_ref"], ("decoy",), pattern, True, partner_id=conflict_id
-        )
-        return [decoy, _ConflictChange("publish", conflict_id, item_ref)]
-    return changes
-
-
-def _uncover(partner: dict[str, Any] | None) -> list[_ConflictChange]:
-    """When a decoy goes, the conflict it covered waits for cover again, unless it was released."""
-    if partner is None or partner["state"] != "open" or not partner["visible"]:
-        return []
-    if partner["released_without_cover"]:
-        return []
-    return [_ConflictChange("hide", partner["id"], partner["item_ref"])]
-
-
-def _release(
-    row: dict[str, Any],
-    held: list[dict[str, Any]],
-    peers: list[dict[str, Any]],
-    changes: list[_ConflictChange],
-) -> list[_ConflictChange]:
-    """The fallback when screening ends without cover.
-
-    Once no assignment of the stage is left undecided, no decoy can arrive. Every conflict only
-    the AI raised that still waits is then released to one adjudicator, preferably one who did
-    not review the record, and flagged `released_without_cover` in the lead's view and the ledger
-    (the AI disclosure reports it). The adjudicator's item looks like any other and shows no AI
-    column before they commit.
-    """
-    published = {c.conflict_id for c in changes if c.action == "publish"}
-    waiting = [
-        (h["id"], h["item_ref"], set(h["reviewers"])) for h in held if h["id"] not in published
-    ]
-    waiting += [
-        (c.conflict_id, c.item_ref, {p["reviewer_id"] for p in peers})
-        for c in changes
-        if c.action == "open" and not c.visible
-    ]
-    released = []
-    for conflict_id, item_ref, reviewers in waiting:
-        ranked = sorted(row["adjudicators"], key=lambda x: sort_key(row["seed"], item_ref, str(x)))
-        unseen = [x for x in ranked if x not in reviewers]
-        released.append(
-            _ConflictChange("release", conflict_id, item_ref, assigned_to=(unseen or ranked)[0])
-        )
-    return released
-
-
-def _partners(tx: Tx, conflicts: list[dict[str, Any]]) -> dict[Id, dict[str, Any]]:
-    """The conflicts that the item's open decoys cover."""
-    found = {}
-    for c in conflicts:
-        if c["decoy"] and c["state"] == "open" and (partner := store.conflict(tx, c["partner_id"])):
-            found[partner["id"]] = partner
-    return found
 
 
 def _conflict_event(
@@ -1454,10 +1323,6 @@ def _conflict_event(
             "stage_id": str(stage_id),
             "item_ref": change.item_ref,
             "kinds": list(change.kinds),
-            "decoy": change.decoy,
-            "visible": change.visible,
-            "partner_id": str(change.partner_id) if change.partner_id else None,
-            "assigned_to": str(change.assigned_to) if change.assigned_to else None,
         },
     )
 

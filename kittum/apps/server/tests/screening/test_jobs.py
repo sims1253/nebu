@@ -67,6 +67,7 @@ def test_judge_jobs_run_through_the_worker_once(database: Database) -> None:
                 stage=STAGE,
                 records=tuple(world.records),
                 screeners=(world.people.a, world.people.b),
+                auditor_id=world.people.auditor,
                 adjudicators=(world.people.adjudicator,),
                 sentinels=SENTINELS,
                 judge_config_id=CONFIG.id,

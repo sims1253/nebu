@@ -49,7 +49,7 @@ def settle(world: World, reviewer: Id, item: QueueItem, outcome: str) -> None:
             assignment_id=item.assignment_id,
             decision=decision,
             phase="provisional",
-            expected_revision=item.revision,
+            expected_etag=item.etag,
             timing=timing(0),
         )
         if result.phase == "provisional":
@@ -61,7 +61,7 @@ def settle(world: World, reviewer: Id, item: QueueItem, outcome: str) -> None:
                 assignment_id=item.assignment_id,
                 decision=decision,
                 phase="final",
-                expected_revision=result.revision,
+                expected_etag=result.etag,
                 timing=timing(0, revealed=True),
             )
 
@@ -134,7 +134,7 @@ def test_sentinels_and_audits_are_invisible_but_count_in_the_gauge(
             "title",
             "text",
             "facts",
-            "revision",
+            "etag",
             "state",
             "own_reveal",
             "position",

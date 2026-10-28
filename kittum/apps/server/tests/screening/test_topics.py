@@ -74,6 +74,7 @@ def test_topic_id_scopes_queue_and_progress(database: Database) -> None:
                     topic_id=topic,
                     records=tuple(recs),
                     screeners=(a, people.b),
+                    auditor_id=people.auditor,
                     adjudicators=(people.adjudicator,),
                     sentinels=SENTINELS,
                     judge_config_id=CONFIG.id,

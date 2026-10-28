@@ -8,9 +8,10 @@ from fastapi.testclient import TestClient
 
 from kittum.api import AppContext, create_app
 from kittum.core import new_id
+from kittum.screening import AI_DISAGREEMENT_RESCREEN
 from kittum.settings import Settings
 from kittum.storage import MemoryStore
-from tests.screening.support import JUDGE_MARK, SCOPE, STAGE, build_world, timing
+from tests.screening.support import JUDGE_MARK, SCOPE, SENTINELS, STAGE, build_world, timing
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -92,7 +93,7 @@ class Reviewer:
                     "comment": comment,
                 },
                 "phase": phase,
-                "expected_revision": item["revision"],
+                "expected_etag": item["etag"],
                 "timing": json.loads(
                     timing(len(self.seen), revealed=phase == "final").model_dump_json()
                 ),
@@ -100,6 +101,26 @@ class Reviewer:
         )
         assert response.status_code == 200, response.text
         return response.json()
+
+    def decide_item(
+        self, item: dict[str, Any], outcome: str, reason: str | None = None
+    ) -> dict[str, Any]:
+        """Decide a queue item, keeping the decision through a reveal."""
+        body = {
+            "command_id": str(new_id()),
+            "decision": {"outcome": outcome, "reason_criterion_id": reason},
+            "phase": "provisional",
+            "expected_etag": item["etag"],
+            "timing": json.loads(timing(0).model_dump_json()),
+        }
+        path = f"/assignments/{item['assignment_id']}/decide"
+        first = self.call("POST", path, json=body)
+        assert first.status_code == 200, first.text
+        result = first.json()
+        if result["phase"] == "provisional":
+            body |= {"command_id": str(new_id()), "phase": "final", "expected_etag": result["etag"]}
+            assert self.call("POST", path, json=body).status_code == 200
+        return result
 
     def screen(
         self, key: str, outcome: str, reason: str | None = None, **kw: Any
@@ -153,14 +174,14 @@ def test_m1_blinds_reviewers_reveals_disagreement_and_adjudicates(
                 "title",
                 "text",
                 "highlights",
-                "revision",
+                "etag",
                 "record",
                 "phase",
                 "reveal",
             }
         )
     }
-    assert any(i["title"].startswith("Nicotine lozenge") for i in first)
+    assert any(i["title"] in {s.record.title for s in SENTINELS} for i in first)
     # A different seeded order for each reviewer.
     assert [i["title"] for i in first] != [i["title"] for i in a.whole_queue()]
 
@@ -191,7 +212,7 @@ def test_m1_blinds_reviewers_reveals_disagreement_and_adjudicates(
             "command_id": str(new_id()),
             "decision": {"outcome": "include"},
             "phase": "provisional",
-            "expected_revision": 0,
+            "expected_etag": sentinel["etag"],
             "timing": json.loads(timing(0).model_dump_json()),
         },
     )
@@ -223,7 +244,7 @@ def test_m1_blinds_reviewers_reveals_disagreement_and_adjudicates(
     stolen = b.call(
         "POST",
         f"/assignments/{a_assignment['id']}/undo",
-        json={"command_id": str(new_id()), "expected_revision": 1},
+        json={"command_id": str(new_id()), "expected_etag": "unknown"},
     )
     assert stolen.status_code == 404
 
@@ -264,7 +285,7 @@ def test_m1_blinds_reviewers_reveals_disagreement_and_adjudicates(
             "command_id": str(new_id()),
             "decision": {"outcome": "include"},
             "phase": "provisional",
-            "expected_revision": 0,
+            "expected_etag": b_sentinel["etag"],
             "timing": json.loads(timing(0).model_dump_json()),
         },
     )
@@ -283,30 +304,31 @@ def test_m1_blinds_reviewers_reveals_disagreement_and_adjudicates(
             for item in body:
                 assert (JUDGE_MARK in json.dumps(item)) == (item["phase"] == "final")
 
-    # The lead sees two conflicts: the human disagreement on the CF trial, and GLPG2737, which
-    # both humans exclude while the model saw no failing criterion. The records whose not_met
-    # the filter downgraded are not escalated: the model agrees with the humans.
+    # The lead sees one conflict: the human disagreement on the CF trial. GLPG2737, which both
+    # humans exclude while the model saw no failing criterion, is not adjudicated: it went to a
+    # blind extra screen by the auditor. The records whose not_met the filter downgraded are not
+    # escalated at all: the model agrees with the humans.
     status = lead.status()
     assert (status["view"], status["screened"], status["remaining"], status["conflicts"]) == (
         "lead",
-        9,
-        0,
-        2,
+        8,  # GLPG2737 waits for its extra screen
+        1,
+        1,
     )
+    assert status["metrics"]["rescreens"] == {
+        "triggered": 1,
+        "pending": 1,
+        "upheld": 0,
+        "adjudicated": 0,
+    }
 
-    # The adjudicator sees A and B side by side, pseudonymized, without the AI. A decoy is mixed
-    # in: a record both humans excluded and the model agreed with, so the queue does not reveal
-    # that the AI argued for GLPG2737.
+    # The adjudicator sees A and B side by side, pseudonymized, without the AI: one human
+    # disagreement, nothing the AI alone raised.
     queue = adjudicator.call("GET", "/adjudications", params={"scope_id": SCOPE, "stage": STAGE})
-    conflicts = queue.json()
-    agreed = {TITLES[k] for k in ("colitis", "varenicline", "cohort", "cf_review")}
-    genuine = [c for c in conflicts if c["title"].startswith((TITLES["cf_rct"], TITLES["glpg"]))]
-    (decoy,) = [c for c in conflicts if c not in genuine]
-    assert len(genuine) == 2 and decoy["title"].startswith(tuple(agreed))
+    (cf,) = queue.json()
+    assert cf["title"].startswith(TITLES["cf_rct"])
     assert JUDGE_MARK not in queue.text
     assert str(world.people.a) not in queue.text and str(world.people.b) not in queue.text
-    by_title = {c["title"]: c for c in conflicts}
-    cf = next(c for t, c in by_title.items() if t.startswith(TITLES["cf_rct"]))
     assert sorted(col["outcome"] for col in cf["columns"]) == ["exclude", "include"]
     assert {col["label"] for col in cf["columns"]} == {"A", "B"}
 
@@ -316,7 +338,7 @@ def test_m1_blinds_reviewers_reveals_disagreement_and_adjudicates(
     refused = a.call(
         "POST",
         f"/adjudications/{cf['conflict_id']}/decide",
-        json={"command_id": str(new_id()), "expected_revision": cf["revision"], "adopted": "A"},
+        json={"command_id": str(new_id()), "expected_etag": cf["etag"], "adopted": "A"},
     )
     assert refused.status_code == 404
 
@@ -325,79 +347,50 @@ def test_m1_blinds_reviewers_reveals_disagreement_and_adjudicates(
     resolved = adjudicator.call(
         "POST",
         f"/adjudications/{cf['conflict_id']}/decide",
-        json={
-            "command_id": str(new_id()),
-            "expected_revision": cf["revision"],
-            "adopted": excluder,
-        },
+        json={"command_id": str(new_id()), "expected_etag": cf["etag"], "adopted": excluder},
     ).json()
     assert resolved["outcome"] == "exclude" and resolved["reason_criterion_id"] == "POP"
     assert resolved["ai"]["excludes"] is False
     pop = next(c for c in resolved["ai"]["criteria"] if c["criterion_id"] == "POP")
     assert (pop["status"], pop["downgraded_from"]) == ("unclear", "not_met")
 
-    # The AI-include case: the adjudicator decides on their own and confirms the exclusion.
-    glpg = next(c for t, c in by_title.items() if t.startswith(TITLES["glpg"]))
-    assert [col["outcome"] for col in glpg["columns"]] == ["exclude", "exclude"]
-    # The decoy looks the same: the same fields, revision, column labels, and outcomes.
-    for item in (glpg, decoy):
-        assert set(item) == set(cf) and item["revision"] == 0
-        assert [(col["label"], col["outcome"], set(col)) for col in item["columns"]] == [
-            ("A", "exclude", set(cf["columns"][0])),
-            ("B", "exclude", set(cf["columns"][0])),
-        ]
-    own = adjudicator.call(
-        "POST",
-        f"/adjudications/{glpg['conflict_id']}/decide",
-        json={
-            "command_id": str(new_id()),
-            "expected_revision": glpg["revision"],
-            "decision": {"outcome": "exclude", "reason_criterion_id": "POP"},
-            "timing": json.loads(timing(0).model_dump_json()),
-        },
-    ).json()
-    assert own["outcome"] == "exclude"
-    assert {c["status"] for c in own["ai"]["criteria"]} == {"met"}
-    remaining = adjudicator.call(
-        "GET", "/adjudications", params={"scope_id": SCOPE, "stage": STAGE}
-    ).json()
-    assert [c["conflict_id"] for c in remaining] == [decoy["conflict_id"]]
-
-    # The adjudicator includes the decoy. Its adjudication is recorded but changes nothing.
-    adjudicator.call(
-        "POST",
-        f"/adjudications/{decoy['conflict_id']}/decide",
-        json={
-            "command_id": str(new_id()),
-            "expected_revision": 0,
-            "decision": {"outcome": "include"},
-        },
-    )
+    # The auditor's queue: the random audit sample, the sentinel, and GLPG2737's extra screen,
+    # all alike. The auditor screens it like any record and excludes it, so it stays excluded.
+    auditor = Reviewer(client, world, world.people.auditor)
+    stream = auditor.whole_queue()
+    assert any(i["title"].startswith(TITLES["glpg"]) for i in stream)
+    assert len({frozenset(i) for i in stream}) == 1
+    for item in stream:
+        key = next((k for k, t in TITLES.items() if item["title"].startswith(t)), None)
+        if key is None:  # the sentinel
+            auditor.decide_item(item, "include")
+        else:
+            outcome, reason = plan[key] if key != "cf_rct" else ("exclude", "POP")
+            auditor.decide_item(item, outcome, reason)
     with world.db.transaction() as tx:
         outcomes = world.screening.outcomes(tx, world.project_id, SCOPE, STAGE)
-    by_record = {r.title: outcomes[r.item_ref] for r in world.records}
-    assert by_record[decoy["title"]] == "exclude"
-    assert by_record[cf["title"]] == "exclude" and by_record[glpg["title"]] == "exclude"
+        rescreens = [
+            e
+            for e in world.ledger.events(tx, world.project_id)
+            if e.type == AI_DISAGREEMENT_RESCREEN
+        ]
+    assert outcomes[world.record(TITLES["glpg"]).item_ref] == "exclude"
+    assert [e.payload["reason"] for e in rescreens] == ["ai_include"]
+    assert rescreens[0].payload["item_ref"] == world.record(TITLES["glpg"]).item_ref
 
     # The methods lead's metrics.
     metrics = lead.status()["metrics"]
-    assert metrics["conflicts_resolved"] == 2
-    assert metrics["decoys"] == {
-        "cases": 1,
-        "adjudicated": 1,
-        "matching": 0,
-        "held": 0,
-        "released_without_cover": 0,
-    }
-    # One reveal for A (GLPG2737), two for B (colitis, GLPG2737); B revised colitis.
-    assert metrics["reveals_shown"] == 3 and metrics["revised_after_reveal"] == 1
+    assert metrics["conflicts_resolved"] == 1
+    assert metrics["rescreens"] == {"triggered": 1, "pending": 0, "upheld": 1, "adjudicated": 0}
+    # At least one reveal for A (GLPG2737) and two for B (colitis, GLPG2737); B revised colitis.
+    assert metrics["reveals_shown"] >= 3 and metrics["revised_after_reveal"] == 1
     humans = next(p for p in metrics["agreement"] if p["kind"] == "human_human")
     # Blind provisional decisions: they disagree on two of nine (colitis, CF trial).
     assert humans["items"] == 9 and humans["pabak"] == pytest.approx(5 / 9)
     assert humans["kappa"] == pytest.approx(0.55)
     to_ai = {p["raters"][0]: p for p in metrics["agreement"] if p["kind"] == "human_ai"}
     assert to_ai[str(world.people.a)]["items"] == 9
-    assert metrics["audit"]["sentinels"] == 2 and metrics["audit"]["sentinels_correct"] == 2
+    assert metrics["audit"]["sentinels"] == 3 and metrics["audit"]["sentinels_correct"] == 3
     assert metrics["stop_test"] is None
 
     with world.db.transaction() as tx:

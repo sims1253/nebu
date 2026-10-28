@@ -17,27 +17,29 @@ create table screening_stage (
     judge_config_id text not null,
     seed text not null,
     screeners uuid[] not null,
-    auditor_id uuid references actor (id),
+    auditor_id uuid not null references actor (id),
     adjudicators uuid[] not null,
     opened_event_id uuid not null,
     opened_at timestamptz not null,
     unique (project_id, topic_id, scope_id, stage)
 );
 
--- `kind` and `audit` say which items are sentinels or audit samples. Reviewer reads never select
--- them (see screening_reviewer_queue below).
+-- `kind` and `audit` say which items are sentinels or audit samples; `rescreen` marks a record
+-- whose AI-only disagreement sent it to the auditor for a blind extra screen. Reviewer reads never
+-- select them (see screening_reviewer_queue below).
 create table screening_item (
     stage_id uuid not null references screening_stage (id),
     item_ref text not null,
     kind text not null check (kind in ('record', 'sentinel')),
     expected_outcome text check (expected_outcome in ('include', 'exclude')),
     audit boolean not null default false,
+    rescreen boolean not null default false,
     title text not null,
     text text not null,
     facts jsonb not null,
     primary key (stage_id, item_ref),
     check ((kind = 'sentinel') = (expected_outcome is not null)),
-    check (not (kind = 'sentinel' and audit))
+    check (not (kind = 'sentinel' and (audit or rescreen)))
 );
 
 create table screening_assignment (
@@ -51,6 +53,7 @@ create table screening_assignment (
         check (state in ('pending', 'awaiting_final', 'decided')),
     revealed boolean not null default false,
     revision integer not null default 0,
+    etag text not null,
     provisional_decision_id uuid,
     final_decision_id uuid,
     foreign key (stage_id, item_ref) references screening_item (stage_id, item_ref),
@@ -72,6 +75,7 @@ create table screening_decision (
     evidence_anchor_ids uuid[] not null,
     comment text,
     revision integer not null,
+    etag text not null,
     reveal jsonb,
     shown_at timestamptz not null,
     first_key_at timestamptz,
@@ -92,6 +96,7 @@ create table screening_undo (
     event_id uuid not null,
     undone_decision_ids uuid[] not null,
     revision integer not null,
+    etag text not null,
     recorded_at timestamptz not null
 );
 
@@ -110,25 +115,16 @@ create table screening_ai_reading (
     foreign key (stage_id, item_ref) references screening_item (stage_id, item_ref)
 );
 
--- A decoy is a record the humans and the AI agreed on, mixed into the adjudication queue so that
--- membership does not reveal the AI. `pattern` is the screeners' shared outcome, which decoys
--- match; `partner_id` is the conflict a decoy covers. Adjudicating a decoy changes no outcome.
--- A conflict only the AI raised stays invisible to adjudicators until a decoy covers it, or until
--- screening ends without cover (`released_without_cover`, then `assigned_to` one adjudicator).
--- IDs are random (version 4), so their order says nothing about which conflict came first.
+-- Conflicts are human disagreements only: an AI-only disagreement becomes a blind extra screen in
+-- the audit stream instead. IDs are random, and `etag` is the opaque concurrency token clients see.
 create table screening_conflict (
     id uuid primary key,
     stage_id uuid not null,
     item_ref text not null,
     kinds text[] not null,
-    pattern text check (pattern in ('include', 'exclude')),
-    decoy boolean not null default false,
-    partner_id uuid references screening_conflict (id),
-    visible boolean not null default true,
-    released_without_cover boolean not null default false,
-    assigned_to uuid references actor (id),
     state text not null check (state in ('open', 'resolved', 'withdrawn')),
     revision integer not null default 0,
+    etag text not null,
     opened_event_id uuid not null,
     opened_at timestamptz not null,
     closed_event_id uuid,
@@ -187,13 +183,13 @@ create function screening_reviewer_queue(p_stage_id uuid, p_reviewer uuid) retur
     title text,
     text text,
     facts jsonb,
-    revision integer,
+    etag text,
     state text,
     own_reveal jsonb,
     "position" bigint
 )
 language sql stable as $$
-    select a.id, s.stage, s.scope_id, i.title, i.text, i.facts, a.revision, a.state,
+    select a.id, s.stage, s.scope_id, i.title, i.text, i.facts, a.etag, a.state,
         case when a.state = 'awaiting_final' then d.reveal end,
         row_number() over (
             order by case when s.mode = 'M3' then r.rank else 0 end, a.sort_key, a.id

@@ -17,10 +17,13 @@ type RevealSetting = Literal["never", "on_disagreement", "always"]
 type ConflictKind = Literal[
     "human_disagreement",  # the screeners disagree on inclusion
     "exclusion_reason",  # at full text, both exclude on different criteria
-    "ai_include",  # M1: the AI includes, every human excludes
-    "ai_disagreement",  # M2: the AI and the human disagree
-    "audit_miss",  # an auditor includes a record the screeners excluded
-    "decoy",  # humans and AI agreed; mixed in so that membership does not reveal the AI
+    "audit_disagreement",  # the auditor's screen disagrees with the screeners
+]
+"""Why a record goes to adjudication. Only human decisions disagree here: an AI-only disagreement
+becomes a blind extra screen in the audit stream instead (`RescreenReason`)."""
+type RescreenReason = Literal[
+    "ai_include",  # M1: the model saw no failing criterion, both humans excluded
+    "ai_disagreement",  # M2: the AI disagrees with the lone human
 ]
 type Highlight = tuple[int, int, str]
 """(start, end, tag): half-open code-point offsets; tags are `protocol:<criterion id>`."""
@@ -82,7 +85,9 @@ class StageSpec(Record):
     topic_id: str | None = None  # needed only when the scope is in several topics
     records: tuple[ScreeningRecord, ...] = Field(min_length=1)
     screeners: tuple[Id, ...] = Field(min_length=1)
-    auditor_id: Id | None = None
+    auditor_id: Id
+    """Screens the random audit sample and the blind extra screens of AI-only disagreements; never
+    one of the screeners."""
     adjudicators: tuple[Id, ...] = Field(min_length=1)
     """Who adjudicates the stage's conflicts. They see the adjudicator's view of `status`."""
     sentinels: tuple[Sentinel, ...] = ()
@@ -102,7 +107,7 @@ class StageInfo(Record):
     protocol_hash: str
     judge_config_id: str
     screeners: tuple[Id, ...]
-    auditor_id: Id | None
+    auditor_id: Id
     adjudicators: tuple[Id, ...]
 
 
@@ -167,7 +172,8 @@ class QueueItem(Record):
     title: str
     text: str
     highlights: tuple[Highlight, ...]
-    revision: int
+    etag: str
+    """An opaque token for the item's current state; send it back as `expected_etag`."""
     record: QueueRecord
     phase: Phase
     """The phase the next decision must have: `final` after a reveal of this reviewer's own
@@ -181,11 +187,11 @@ class DecideResult(Record):
     reviewer keeps or revises with a `final` decision."""
     reveal: Reveal | None
     recorded_at: datetime
-    revision: int
+    etag: str
 
 
 class UndoResult(Record):
-    revision: int
+    etag: str
     recorded_at: datetime
 
 
@@ -207,7 +213,7 @@ class AdjudicationItem(Record):
     """A conflict for the adjudicator. The AI column is not here; it opens after the commit."""
 
     conflict_id: Id
-    revision: int
+    etag: str
     stage: Stage
     scope_id: str
     title: str
@@ -287,16 +293,13 @@ class StopStatus(Record):
     method: str
 
 
-class DecoyGauge(Record):
-    """Decoys in the adjudication queue and the conflicts they cover. Lead's view only."""
+class RescreenGauge(Record):
+    """Blind extra screens that AI-only disagreements sent to the auditor. Lead's view only."""
 
-    cases: int  # decoys
-    adjudicated: int
-    matching: int  # decoys the adjudicator decided as the humans and the AI had
-    held: int  # conflicts only the AI raised, still waiting for a decoy, invisible to adjudicators
-    released_without_cover: int
-    """Conflicts only the AI raised that were released to one adjudicator when screening ended
-    without a decoy for them. The AI disclosure reports them."""
+    triggered: int
+    pending: int
+    upheld: int  # the auditor agreed with the screeners: their decision stands
+    adjudicated: int  # the auditor disagreed: a human disagreement went to adjudication
 
 
 class StageMetrics(Record):
@@ -307,7 +310,7 @@ class StageMetrics(Record):
     revised_after_reveal: int
     agreement: tuple[PairAgreement, ...]
     audit: AuditGauge
-    decoys: DecoyGauge
+    rescreens: RescreenGauge
     stop_test: StopStatus | None  # M3 only
 
 
@@ -316,8 +319,8 @@ class ScopeStatus(Record):
 
     A reviewer who screens or audits the stage sees only their own counts (`view == "reviewer"`,
     hidden items included, no conflicts, no metrics). An adjudicator of the stage sees the
-    screening progress and, as `conflicts`, the adjudications pending for them, decoys included
-    and indistinguishable, without metrics. Anyone else (the methods lead) sees the whole stage.
+    screening progress and, as `conflicts`, the adjudications pending for them, without
+    metrics. Anyone else (the methods lead) sees the whole stage.
     """
 
     scope_id: str

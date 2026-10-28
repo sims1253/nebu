@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from kittum.core import new_id
-from kittum.screening import Decision
+from kittum.screening import AI_DISAGREEMENT_RESCREEN, Decision
 from tests.screening.support import SCOPE, STAGE, build_world, timing
 
 if TYPE_CHECKING:
@@ -50,7 +50,7 @@ def screen(world: World, reviewer: Id, title: str, decision: Decision) -> Decide
             assignment_id=item.assignment_id,
             decision=decision,
             phase="provisional",
-            expected_revision=item.revision,
+            expected_etag=item.etag,
             timing=timing(0),
         )
         if result.phase == "provisional":
@@ -62,26 +62,10 @@ def screen(world: World, reviewer: Id, title: str, decision: Decision) -> Decide
                 assignment_id=item.assignment_id,
                 decision=decision,
                 phase="final",
-                expected_revision=result.revision,
+                expected_etag=result.etag,
                 timing=timing(0, revealed=True),
             )
     return result
-
-
-def finish(world: World) -> None:
-    """Every remaining assignment decided: sentinels included, records excluded."""
-    reviewers = (world.people.a, world.people.b, world.people.auditor)
-    for reviewer in reviewers:
-        with world.db.transaction() as tx:
-            items = world.screening.queue(tx, world.project_id, reviewer, SCOPE, STAGE, limit=50)
-        for item in items:
-            sentinel = item.title.startswith("Nicotine")
-            decision = (
-                Decision(outcome="include")
-                if sentinel
-                else Decision(outcome="exclude", reason_criterion_id="POP")
-            )
-            screen(world, reviewer, item.title, decision)
 
 
 def model_said(world: World, title: str) -> dict[str, tuple[str, str | None]]:
@@ -131,7 +115,7 @@ def test_m1_downgraded_not_met_with_both_humans_excluding_is_not_adjudicated(
     assert stratum.ai_excludes is False
 
 
-def test_m1_model_seeing_no_failing_criterion_with_both_humans_excluding_is_adjudicated(
+def test_m1_model_seeing_no_failing_criterion_with_both_humans_excluding_gets_an_extra_screen(
     database: Database,
 ) -> None:
     world = setup(database, "M1", (NO_FAILING,))
@@ -140,16 +124,12 @@ def test_m1_model_seeing_no_failing_criterion_with_both_humans_excluding_is_adju
     for reviewer in (world.people.a, world.people.b):
         result = screen(world, reviewer, NO_FAILING, exclusion)
         assert result.reveal is not None and result.reveal.status == "met"
-    # Escalated, but held back: no agreed record is free to cover it yet.
+    # Escalated, but not to adjudication: the auditor screens the record blind.
     now = status(world)
-    assert now.conflicts == 1 and now.metrics is not None and now.metrics.decoys.held == 1
-    assert now.metrics.audit.excluded_population == 0
+    assert now.conflicts == 0 and now.metrics is not None
+    assert (now.metrics.rescreens.triggered, now.metrics.rescreens.pending) == (1, 1)
     assert adjudications(world) == []
-    # Once screening ends without cover, it goes to the adjudicator, flagged for the lead.
-    finish(world)
-    (title,) = adjudications(world)
-    assert title.startswith(NO_FAILING)
-    assert status(world).metrics.decoys.released_without_cover == 1  # type: ignore[union-attr]
+    assert rescreens(world) == ["ai_include"]
 
 
 def test_m2_downgraded_not_met_is_agreement_either_way(database: Database) -> None:
@@ -166,21 +146,27 @@ def test_m2_downgraded_not_met_is_agreement_either_way(database: Database) -> No
     assert status(world).conflicts == 0
 
 
-def test_m2_model_including_against_a_human_exclusion_is_adjudicated(database: Database) -> None:
+def test_m2_model_including_against_a_human_exclusion_gets_an_extra_screen(
+    database: Database,
+) -> None:
     world = setup(database, "M2", (NO_FAILING,))
     result = screen(
         world, world.people.a, NO_FAILING, Decision(outcome="exclude", reason_criterion_id="POP")
     )
     assert result.reveal is not None and result.reveal.criterion_id == "POP"
-    assert adjudications(world) == []  # held until cover, or the end of screening
-    finish(world)
-    (title,) = adjudications(world)
-    assert title.startswith(NO_FAILING)
+    assert adjudications(world) == []
+    assert rescreens(world) == ["ai_disagreement"]
+    now = status(world)
+    assert now.conflicts == 0 and now.metrics is not None
+    assert now.metrics.rescreens.triggered == 1
     with world.db.transaction() as tx:
-        kinds = tx.execute(
-            "select c.kinds from screening_conflict c join screening_stage s"
-            " on s.id = c.stage_id where s.project_id = %s",
-            (world.project_id,),
-        ).fetchone()
-        assert kinds == {"kinds": ["ai_disagreement"]}
         assert world.ledger.verify(tx, world.project_id).ok
+
+
+def rescreens(world: World) -> list[str]:
+    with world.db.transaction() as tx:
+        return [
+            e.payload["reason"]
+            for e in world.ledger.events(tx, world.project_id)
+            if e.type == AI_DISAGREEMENT_RESCREEN
+        ]

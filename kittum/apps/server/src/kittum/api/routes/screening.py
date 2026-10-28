@@ -54,18 +54,21 @@ class DecideRequest(Record):
     """Chosen by the client; a retry with the same ID returns the first result."""
     decision: Decision
     phase: Phase
-    expected_revision: int
+    expected_etag: str
+    """The `etag` the client last saw; a stale one is rejected with 409."""
     timing: DecisionTiming
 
 
 class UndoRequest(Record):
     command_id: Id
-    expected_revision: int
+    expected_etag: str
+    """The `etag` the client last saw; a stale one is rejected with 409."""
 
 
 class AdjudicateRequest(Record):
     command_id: Id
-    expected_revision: int
+    expected_etag: str
+    """The `etag` the client last saw; a stale one is rejected with 409."""
     adopted: str | None = None
     """A column label ("A", "B", ...) to adopt, or None with an own `decision`."""
     decision: Decision | None = None
@@ -124,7 +127,7 @@ def decide(
             assignment_id=assignment_id,
             decision=body.decision,
             phase=body.phase,
-            expected_revision=body.expected_revision,
+            expected_etag=body.expected_etag,
             timing=body.timing,
         )
 
@@ -141,7 +144,7 @@ def undo(
             project_id=project_id,
             reviewer_id=reviewer,
             assignment_id=assignment_id,
-            expected_revision=body.expected_revision,
+            expected_etag=body.expected_etag,
         )
 
 
@@ -174,7 +177,7 @@ def adjudicate(
             project_id=project_id,
             adjudicator_id=reviewer,
             conflict_id=conflict_id,
-            expected_revision=body.expected_revision,
+            expected_etag=body.expected_etag,
             adopted=body.adopted,
             decision=body.decision,
             timing=body.timing,
