@@ -36,7 +36,7 @@ from kittum.search import PubMedSource, SearchPlan, import_file, run
 
 if TYPE_CHECKING:
     from kittum.app.context import AppContext
-    from kittum.app.lifecycle import Role
+    from kittum.app.lifecycle import MemberRole
     from kittum.models import ModelRegistry
 
 DATA = Path(__file__).parent / "demo_data"
@@ -53,7 +53,7 @@ TOPIC = "TRIALS"
 SCOPE = "nrt-vs-control"
 RECORDED_MODEL = "qwen3.5-4b-ollama"  # the model the recorded answers come from
 
-PEOPLE: tuple[tuple[str, tuple[Role, ...]], ...] = (
+PEOPLE: tuple[tuple[str, tuple[MemberRole, ...]], ...] = (
     ("Sam Okafor", ("reviewer",)),
     ("Jun Park", ("reviewer",)),
     ("Rita Nunes", ("auditor",)),

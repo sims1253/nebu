@@ -19,7 +19,7 @@ export type Phase = KittumApi.Phase;
 export type CriterionStatus = KittumApi.CriterionStatus;
 export type Outcome = KittumApi.Kittum__screening__types__Outcome;
 export type RevealSetting = KittumApi.RevealSetting;
-export type Role = KittumApi.Role;
+export type Role = KittumApi.MemberRole;
 
 export const QueueItem = KittumApi.QueueItem;
 /** Never carries AI output before the reviewer's own provisional decision, or sentinel flags. */

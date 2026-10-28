@@ -7,6 +7,7 @@ table in the shared test database.) The worker runs the stage's judge jobs on th
 whose judge is a different one refuses them before any model call.
 """
 
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -16,10 +17,11 @@ from fastapi.testclient import TestClient
 from kittum.api import AppContext, create_app
 from kittum.app import Judge, job_handlers, judge_config
 from kittum.app.demo import DATA, PROTOCOL, SENTINELS, demo_judge
+from kittum.extraction import JOB_KIND as EXTRACTION_JOB
 from kittum.ledger import PostgresLedger
 from kittum.models import ModelRegistry
 from kittum.models.testing import RecordedBackend
-from kittum.runs import PostgresJobQueue, Worker
+from kittum.runs import PostgresJobQueue, PostgresReceipts, Worker
 from kittum.screening import JUDGE_JOB
 from kittum.settings import Settings
 from kittum.storage import MemoryStore
@@ -135,7 +137,14 @@ def test_a_project_from_nothing_to_an_open_stage(database: Database, tmp_path: P
             backend=other,
         ),
     )
-    assert set(job_handlers(stranger)) == {JUDGE_JOB}
+    assert set(job_handlers(stranger)) == {JUDGE_JOB}  # no model server, so no extraction
+    with_models = replace(
+        stranger,
+        backends={"qwen3.5-4b-ollama": other},
+        queue=PostgresJobQueue(),
+        receipts=PostgresReceipts(),
+    )
+    assert set(job_handlers(with_models)) == {JUDGE_JOB, EXTRACTION_JOB}
     with database.transaction() as tx:
         jobs = tx.execute(
             "select id from job where project_id = %s and kind = %s", (pid, JUDGE_JOB)

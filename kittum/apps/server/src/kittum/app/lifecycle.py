@@ -51,7 +51,7 @@ if TYPE_CHECKING:
     from kittum.screening import RevealSetting, Screening
     from kittum.storage import ArtifactStore
 
-type Role = Literal["lead", "reviewer", "auditor", "adjudicator"]
+type MemberRole = Literal["lead", "reviewer", "auditor", "adjudicator"]
 
 PROJECT_CREATED = "project.created"
 MEMBER_ADDED = "project.member_added"
@@ -66,7 +66,7 @@ class LifecycleError(KittumError):
 class Member(Record):
     actor_id: Id
     display_name: str
-    roles: tuple[Role, ...]
+    roles: tuple[MemberRole, ...]
 
 
 class ProtocolRef(Record):
@@ -151,7 +151,7 @@ def add_member(
     project_id: Id,
     *,
     display_name: str,
-    roles: tuple[Role, ...],
+    roles: tuple[MemberRole, ...],
     added_by: Id,
     ledger: Ledger,
     actor_id: Id | None = None,
@@ -171,7 +171,7 @@ def _add_roles(
     project_id: Id,
     actor_id: Id,
     display_name: str,
-    roles: tuple[Role, ...],
+    roles: tuple[MemberRole, ...],
     event_id: Id | None,
     ledger: Ledger,
     added_by: Id,
@@ -203,7 +203,7 @@ def members(tx: Tx, project_id: Id) -> list[Member]:
     return sorted(people, key=lambda m: min(order.index(r) for r in m.roles))
 
 
-def _with_role(people: list[Member], role: Role) -> list[Id]:
+def _with_role(people: list[Member], role: MemberRole) -> list[Id]:
     return [m.actor_id for m in people if role in m.roles]
 
 
@@ -557,10 +557,10 @@ __all__ = [
     "FullText",
     "LifecycleError",
     "Member",
+    "MemberRole",
     "Progress",
     "ProjectSummary",
     "ProtocolRef",
-    "Role",
     "StageProgress",
     "add_member",
     "attach_full_text",

@@ -15,9 +15,9 @@ from kittum.app import (
     FullText,
     LifecycleError,
     Member,
+    MemberRole,
     Progress,
     ProjectSummary,
-    Role,
     add_member,
     attach_full_text,
     create_project,
@@ -57,7 +57,7 @@ class CreateProjectRequest(Record):
 
 class AddMemberRequest(Record):
     display_name: str
-    roles: tuple[Role, ...]
+    roles: tuple[MemberRole, ...]
     added_by: Id
 
 
