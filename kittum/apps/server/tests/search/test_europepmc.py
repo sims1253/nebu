@@ -87,7 +87,8 @@ def test_europe_pmc_pages_with_its_cursor_until_it_has_every_record(
 
 
 def test_a_europe_pmc_search_that_returns_fewer_records_than_it_counted_is_refused() -> None:
-    """PRISMA counts what the source reported; a search that cannot fetch all of it fails."""
+    """PRISMA counts what the source reported; a search that cannot fetch all of it fails, and so
+    does one whose count changes between pages, though the pages it got add up to the first."""
     page = json.loads((DUPLICATES_DIR / _first_page(1000)).read_bytes())
     page["hitCount"] = 5
     page.pop("nextCursorMark", None)
@@ -95,6 +96,29 @@ def test_a_europe_pmc_search_that_returns_fewer_records_than_it_counted_is_refus
     source = EuropePmcSource(PassThroughGateway(transport), MemoryStore())
     with pytest.raises(SourceError, match="Europe PMC reported 5 records but returned 4"):
         source.run(PLAN)
+
+    # The recorded two pages of two, the second now counting a fifth record and a next page.
+    first = json.loads((DUPLICATES_DIR / _first_page(2)).read_bytes())
+    first["hitCount"] = 4
+    second = json.loads((DUPLICATES_DIR / _second_page()).read_bytes())
+    second["hitCount"] = 5
+    second["nextCursorMark"] = "more"
+    transport = FakeTransport(
+        sequence=[response(200, json.dumps(p).encode()) for p in (first, second)]
+    )
+    source = EuropePmcSource(PassThroughGateway(transport), MemoryStore(), page_size=2)
+    with pytest.raises(SourceError, match="Europe PMC's count changed from 4 to 5"):
+        source.run(PLAN)
+
+
+def _second_page() -> str:
+    """The recorded second page of the Europe PMC search at two records a page."""
+    manifest = json.loads((DUPLICATES_DIR / "manifest.json").read_text())
+    return next(
+        entries[0]["file"]
+        for url, entries in manifest.items()
+        if "europepmc" in url and "pageSize=2&" in url and "cursorMark=%2A" not in url
+    )
 
 
 def _first_page(page_size: int) -> str:

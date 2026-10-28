@@ -141,6 +141,12 @@ class EuropePmcSource:
                         f"{request.get('internalQuery') or request.get('queryString')}\n"
                         f"synonym={'TRUE' if request.get('synonym') else 'FALSE'}"
                     )
+                elif "hitCount" in data and int(data["hitCount"]) != reported:
+                    # The result changed while Kittum paged through it: no page set is complete.
+                    raise SourceError(
+                        f"Europe PMC's count changed from {reported} to {data['hitCount']}"
+                        " during the search. Run it again."
+                    )
             except (ValueError, KeyError, TypeError) as e:
                 raise SourceError(f"Europe PMC sent a reply Kittum cannot read: {e}") from None
             for result in results:
