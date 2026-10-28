@@ -469,6 +469,80 @@
         "title": "Arm",
         "type": "object"
       },
+      "Artifact": {
+        "additionalProperties": false,
+        "properties": {
+          "cutoff_seq": {
+            "title": "Cutoff Seq",
+            "type": "integer"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactFile"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "identity_revision_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "project_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "scope_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Id"
+          },
+          "target": {
+            "$ref": "#/components/schemas/Target"
+          }
+        },
+        "required": [
+          "target",
+          "project_id",
+          "cutoff_seq",
+          "files"
+        ],
+        "title": "Artifact",
+        "type": "object"
+      },
+      "ArtifactFile": {
+        "additionalProperties": false,
+        "properties": {
+          "media_type": {
+            "title": "Media Type",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "sha256": {
+            "$ref": "#/components/schemas/Sha256"
+          }
+        },
+        "required": [
+          "path",
+          "sha256",
+          "media_type"
+        ],
+        "title": "ArtifactFile",
+        "type": "object"
+      },
       "Assertion": {
         "additionalProperties": false,
         "description": "An accepted value as reports use it: the latest acceptance per semantic key.",
@@ -2915,6 +2989,69 @@
         ],
         "type": "string"
       },
+      "RenderRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "cutoff_seq": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cutoff Seq"
+          },
+          "identity_revision_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scope_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Id"
+          }
+        },
+        "required": [
+          "actor_id"
+        ],
+        "title": "RenderRequest",
+        "type": "object"
+      },
+      "RenderedArtifact": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact": {
+            "$ref": "#/components/schemas/Artifact"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sha256",
+          "artifact"
+        ],
+        "title": "RenderedArtifact",
+        "type": "object"
+      },
       "ReportInfo": {
         "additionalProperties": false,
         "description": "What the review screen shows about the report; the corpus owns the real record.",
@@ -3525,6 +3662,66 @@
         ],
         "title": "ScreeningMode",
         "type": "string"
+      },
+      "SealRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "cutoff_seq": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cutoff Seq"
+          },
+          "withhold_sources": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Withhold Sources",
+            "type": "object"
+          }
+        },
+        "required": [
+          "actor_id"
+        ],
+        "title": "SealRequest",
+        "type": "object"
+      },
+      "SealedBundle": {
+        "additionalProperties": false,
+        "properties": {
+          "cutoff_seq": {
+            "title": "Cutoff Seq",
+            "type": "integer"
+          },
+          "key_id": {
+            "title": "Key Id",
+            "type": "string"
+          },
+          "manifest_hash": {
+            "title": "Manifest Hash",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "cutoff_seq",
+          "manifest_hash",
+          "key_id"
+        ],
+        "title": "SealedBundle",
+        "type": "object"
       },
       "SearchExecution": {
         "additionalProperties": false,
@@ -4302,6 +4499,37 @@
           "created_at"
         ],
         "title": "StoredProtocol",
+        "type": "object"
+      },
+      "Target": {
+        "type": "string"
+      },
+      "TargetInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "core",
+              "profile"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "renderable": {
+            "title": "Renderable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "renderable"
+        ],
+        "title": "TargetInfo",
         "type": "object"
       },
       "Text": {
@@ -5915,6 +6143,231 @@
         "summary": "Publish Protocol Version",
         "tags": [
           "protocol"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/reports/artifacts/{sha256}": {
+      "get": {
+        "description": "A rendered file, or an artifact's index, by hash. For the methods lead only.",
+        "operationId": "downloadReportArtifact",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "sha256",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "Sha256",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Download",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/reports/bundle": {
+      "post": {
+        "description": "Seal the handover bundle with every report, at the cutoff or the ledger head.",
+        "operationId": "sealReportBundle",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SealRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SealedBundle"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Seal",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/reports/targets": {
+      "get": {
+        "description": "The core targets, and the targets of the profile the published protocol names.",
+        "operationId": "listReportTargets",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TargetInfo"
+                  },
+                  "title": "Response Listreporttargets",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Targets",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/reports/targets/{target}/render": {
+      "post": {
+        "description": "Render a target from the ledger, store its files by hash, and record the render.",
+        "operationId": "renderReportTarget",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "target",
+            "required": true,
+            "schema": {
+              "title": "Target",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RenderedArtifact"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Render Target",
+        "tags": [
+          "reports"
         ]
       }
     },

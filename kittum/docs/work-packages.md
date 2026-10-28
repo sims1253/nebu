@@ -25,7 +25,7 @@ The two-week spike in [DESIGN.md](../DESIGN.md#two-week-spike) picks from these 
 | 11 | `extraction` | Types done; open |
 | 12 | `appraisal` | Types done; open |
 | 13 | `stats` | Done: intervals, stopping, capture-recapture, conformal threshold, agreement |
-| 14 | `report` | Types done; open |
+| 14 | `report` | Done: PRISMA flow, RIS, search report, AI disclosure, bundle exporters and `seal_bundle`, `gba_amnog` targets, routes; open items listed |
 | 15 | `api` | Health route done; open |
 | 16 | Workbench | Design system, title and abstract queue, full-text and extraction layouts on a typed mock; API wiring open |
 | 17 | Evaluation harness | Open |
@@ -588,6 +588,93 @@ Module `kittum.report`. Needs: most modules.
   disclosure. Profile targets register through `report.register_target`; the `gba_amnog`
   targets are listed in docs/profiles/gba-amnog.md.
 - Acceptance: golden files for a small fixture project.
+
+**Done.** Every target renders from `load_review(tx, project_id, cutoff_seq=...)`: the review
+as the ledger recorded it through a cutoff (default: the head). Screening is replayed from the
+append-only decision, undo, and adjudication rows, and conflicts and extra screens from their
+ledger events (`screening.conflict_*`, `screening.adjudicated`,
+`screening.ai_disagreement_rescreen`), so a report at an old cutoff shows the review as it stood
+then. A record sent to the auditor's blind extra screen stays unresolved until the auditor
+decides. Migration `20261029020000_report_artifacts.sql`.
+
+- `prisma`: `flow(review, topic, scope)` from one frozen identity revision (default: the latest
+  at the cutoff). Identification counts the occurrences of the topic's searches that revision
+  holds; records of searches run after it are reported apart (`records_outside_identity`). Each
+  topic's flow is self-contained, as PRISMA reports one per question: a report several topics
+  found is identified and unique in each. So it equals `corpus.get_counts` (the whole revision)
+  only when one topic was searched; with several, the topics' identified records sum to its
+  total and the union of their unique records is its reports. Records per source and per kind (databases, registers, other),
+  duplicates, screened and awaiting screening (screened as screening counts it: every screener
+  decided, and the auditor of an extra screen), excluded, sought, not retrieved (sought but not
+  in the full-text stage), assessed and awaiting assessment,
+  exclusions per criterion ID, awaiting classification (insufficient information), included
+  reports and studies. `members` lists the reports behind every count; `checks` states every sum
+  that must hold and reports a broken one. The PRISMA automation box is always 0 (the AI never
+  removes a record); exclusions with an AI proposal, after a reveal, or after an extra screen the
+  AI's disagreement triggered are counted separately. JSON and an SVG diagram per scope.
+- `ris`: one undeduplicated file per search, the deduplicated corpus (one entry per report), and
+  per scope the included, title-and-abstract excluded, and full-text excluded lists. `AN` is the
+  provider ID, `N1` the registry IDs and decision, `C1`/`C2`/`C3` the occurrence, report, and
+  study. Fields are written on one line (RIS cannot carry line breaks); the bundle keeps the text.
+- `search_report`: every search with platform, dates, the strategy as run, limits, study filter,
+  the query translation, reported and retrieved counts, raw hashes, and who ran it; planned
+  sources without a search and source deviations.
+- `ai_disclosure`: the disclosure record (`disclosure(review)`: recipes, weights hashes and
+  licences, the identities the server reported, prompt and schema hashes, decoding, mode per
+  topic with rationale and validation pack, reveal per stage, kappa and PABAK against the model's
+  own and the verified reading, reveals, adjudicated conflicts, the audit gauge, the extra screens
+  the AI triggered with each one's reason and result (upheld, adjudicated, pending),
+  `judge.VERIFIER_LIMITS`) and one RAISE-aligned Markdown rendering.
+- `render(tx, target, project_id, scope_id, store=...)` stores the files by hash and returns an
+  `Artifact`; `record_render` writes `report_artifact` and a `report.rendered` event.
+- `seal_bundle(tx, project_id, store, out_dir, signer=..., actor_id=..., rights=...)` renders
+  every core target into `reports/<target>/` and the protocol's profile targets into
+  `reports/dossier/<name>/`, at the bundle's cutoff, and seals with every registered exporter.
+  `kittum.report` registers exporters for the protocol, search, corpus, judge, screening, and
+  report tables (`report/exporters.py`), each filtered to rows whose event is at or before the
+  cutoff; mutable columns are left out or recomputed. A `RightsProfile` withholds raw files of
+  named sources or hashes; a referenced artifact missing from the store is listed by hash with
+  that reason.
+- `gba_amnog` targets in `kittum.profiles.gba_amnog.reports`, registered by `load_profiles`:
+  `anhang_4a`, `anhang_4b`, `anhang_4c`, `anhang_4d`, `justification_4235`, `anlage_ii_1`
+  (Markdown and CSV, RIS for the tree).
+- Routes in `api/routes/report.py`: `GET .../reports/targets`, `POST .../reports/targets/{target}/render`,
+  `GET .../reports/artifacts/{sha256}` (only files rendered for the project), `POST .../reports/bundle`.
+  Rendering, downloading, and sealing are for the methods lead only (`report.require_lead`): a
+  human who screens, audits, or adjudicates no stage of the project, the rule `Screening.status`
+  uses for the lead's view. Everyone else gets 403.
+- Changes outside the module: `BundleWriter.file` in `ledger/bundle.py` (exporters add files the
+  manifest lists); `judge.VERIFIER_LIMITS`; `ALLOWED` lets `report` import `judge` and
+  `profiles` import `report`.
+- Tests (`tests/report/`, `tests/profiles/test_gba_amnog_reports.py`) build the nicotine
+  replacement review and the capivasertib dossier through search, corpus, judge, and screening
+  against Postgres, and check the PRISMA sums by hand and from data, earlier cutoffs, the RIS
+  round trip, the PRISMA-S fields, the disclosure, the sealed bundle through `kittum verify`, the
+  trace from report numbers to decisions, rescreen events, and people in the bundle's SQLite, the
+  routes, and each copied metric against `Screening.status`.
+
+Left open:
+
+- The PRISMA target has no update-search delta and no methods text yet (DESIGN.md "Reports").
+- The Anlage II.1 file names are provisional (`ANLAGE_II_1`, and `GAPS.md` in the output); the
+  profile doc does not record them. The tree has no PDFs until WP-10. `gba_amnog.modul4` (the
+  Modul 4 text and tables, Anhang 4-E and 4-F) and `gba_amnog.jca` wait for extraction and
+  appraisal.
+- Anhang 4-A shows the strategy line by line, with the hit count only on the last line: searches
+  do not record per-line counts.
+- `kittum verify` does not yet re-run the count reconciliation; the `checks` in each flow do it at
+  render time. `registry/` (lockfiles, SBOM, parser recipes) is not in the bundle; model recipes
+  and prompt hashes are, in `judge_config`.
+- The exporters live in `report` and read the other modules' tables directly; an owner may move
+  its exporter into its own package. Enrichment rows are not exported.
+- A proposal's status is not replayed to the cutoff (it is left out of the bundle); the
+  confirmations are ledger events.
+- Screened counts, open and resolved conflicts, agreement, reveals, the audit gauge, and the
+  rescreen gauge are recomputed from the replayed rows with `screening.metrics`'s definitions, so
+  they stay exact at old cutoffs. `test_a_metric_the_report_computes_equals_what_screening_reports`
+  compares each with `Screening.status` on both reviews, so a change there fails here by name.
+- The report routes take the actor in the body or the `X-Kittum-Reviewer` header until WP-15 adds
+  authentication; the lead check is only as good as that stand-in.
 
 ## WP-15 API
 

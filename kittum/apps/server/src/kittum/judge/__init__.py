@@ -12,6 +12,7 @@ then recorded as `unclear` for every criterion.
 with its raw outputs and a `judge.verdict_recorded` event, and skips records whose cache key
 (stage version, input, protocol, rendered prompt, weights, decoding, schema) is already recorded.
 `build_request` renders the exact request, for replay and for recorded tests.
+`VERIFIER_LIMITS` lists what the filter cannot catch, for the AI disclosure.
 
 `judge_metrics`, `pair_metrics`, and `fleiss_kappa` measure judges on gold data: recall,
 specificity, work saved, the double-fault rate, the OR rule, and run-to-run agreement.
@@ -47,6 +48,7 @@ from kittum.judge.types import (
     ScreeningItem,
     Verdict,
 )
+from kittum.judge.verify import LIMITS as VERIFIER_LIMITS
 
 if TYPE_CHECKING:
     from kittum.models import LlmBackend
@@ -67,6 +69,7 @@ def judge(
 __all__ = [
     "PROMPT_VERSION",
     "VERDICT_RECORDED",
+    "VERIFIER_LIMITS",
     "CriterionStatus",
     "CriterionVerdict",
     "FailedCheck",
