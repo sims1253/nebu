@@ -13,24 +13,26 @@ A source can answer yes to one and no to another.
 | Role | Counts toward PRISMA identification | Load spreading allowed |
 | --- | --- | --- |
 | Primary search | Yes, one `SearchExecution` per database per topic | No. A strategy runs on its own database only. |
-| Other methods (citation chasing, G-BA website, company study list) | Yes, in the "other methods" column | No |
+| Other methods (citation chasing, agency website lookups, the sponsor's study list) | Yes, in the "other methods" column | No |
 | Enrichment (abstracts, DOIs, OA locations, retractions, entities) | No | Yes |
 | Full-text acquisition | No | Yes, as a waterfall |
 
-## Required by Modul 4
+## Minimum sources
 
-The Modul 4 template (Anlage II.6, 18.11.2025) sets the minimum:
+The review's method guidance, or its [profile](../DESIGN.md#profiles), sets the minimum list of
+sources in its `SourcePlan`. A common baseline for reviews of drug interventions is:
 
 - Bibliographic databases: MEDLINE, including in-process citations, and Cochrane CENTRAL. Further
-  databases such as Embase are optional, and in practice expected.
+  databases such as Embase are often expected.
 - Registries: ClinicalTrials.gov, EU-CTR, CTIS, and the EMA Clinical Data portal. For EMA Clinical
-  Data, a lookup of studies already identified is enough, with no strategy documentation.
-- The G-BA website, searched by active substance and by zVT, with the *Vorgangsnummern*
-  (procedure numbers) documented.
+  Data, a lookup of studies already identified is usually enough.
 
-IQWiG's methods (v8.0, §9.1.1 C) exclude routine searches of preprint servers. Preprints found
-another way (citation chasing, Europe PMC, the company's study list) still go through normal
-screening and quality assessment.
+Some method guidance excludes routine searches of preprint servers, and a profile can enforce that.
+Preprints found another way (citation chasing, Europe PMC, the sponsor's study list) still go
+through normal screening and quality assessment.
+
+A profile can add sources, such as a lookup on an agency's own website. The G-BA profile's minimum
+is in [its doc](profiles/gba-amnog.md#search-and-sources).
 
 ## Free sources
 
@@ -52,12 +54,11 @@ screening and quality assessment.
 
 | Source | Why it matters | Kittum adapter |
 | --- | --- | --- |
-| Cochrane CENTRAL (Wiley) | Modul 4 minimum | `FileImport` of the Cochrane Library export and strategy text. Wiley's TDM token is for non-commercial use. |
-| EU-CTR | Modul 4 minimum; an archive since 2025 | `FileImport` plus a captured copy of the search page |
-| CTIS | Modul 4 minimum | `FileImport` plus a captured copy. No documented public API was found. Kittum does not scrape it without an EMA terms review. |
-| EMA Clinical Data portal | Required for results of identified studies | A per-study lookup with free registration |
-| G-BA website | Required | A semi-manual lookup by active substance and zVT that captures the documents |
-| WHO ICTRP | Required by IQWiG only for non-drug assessments | `FileImport` of the portal export |
+| Cochrane CENTRAL (Wiley) | Common minimum | `FileImport` of the Cochrane Library export and strategy text. Wiley's TDM token is for non-commercial use. |
+| EU-CTR | Common minimum; an archive since 2025 | `FileImport` plus a captured copy of the search page |
+| CTIS | Common minimum | `FileImport` plus a captured copy. No documented public API was found. Kittum does not scrape it without an EMA terms review. |
+| EMA Clinical Data portal | Results of identified studies | A per-study lookup with free registration |
+| WHO ICTRP | Some method guidance requires it, often only for non-drug interventions | `FileImport` of the portal export |
 | Epistemonikos | Cross-check against existing reviews | `FileImport` of a RIS export |
 
 ## Commercial sources
