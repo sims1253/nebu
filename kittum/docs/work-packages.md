@@ -290,11 +290,11 @@ Modules `kittum.judge` and `kittum.models`. Needs: `protocol`, `core`.
   record with no hint of random allocation) support `not_met`. Any negated quote that excludes
   is read with its whole sentence: nothing but closing punctuation follows its last negated
   term, the sentence names no time, frequency, or age and coordinates or compares no other
-  population, and nothing earlier in its paragraph, nor the sentence before, says who was
-  excluded. A bare survey, questionnaire, interview, or assessment is a measurement, not a
-  design. `Verdict.excludes`
-  is a proposal for humans and adjudication, never a final exclusion. `judge_many` stores
-  verdicts (migration `20261028120000_judge_verdicts.sql`), artifacts, and
+  population, and no earlier sentence says who was excluded, across blank lines and list
+  items, unless a sentence stating who was enrolled or a section label comes between. A bare
+  survey, questionnaire, interview, or assessment is a measurement, not a design.
+  `Verdict.excludes` is a proposal for humans and adjudication, never a final exclusion.
+  `judge_many` stores verdicts (migration `20261028120000_judge_verdicts.sql`), artifacts, and
   `judge.verdict_recorded` events, and skips records already judged under the same cache key.
 - `judge.judge_metrics`, `pair_metrics` (double-fault rate, OR rule, Cohen's kappa), and
   `fleiss_kappa` for run-to-run agreement.

@@ -549,6 +549,19 @@ RANDOMIZED = Criterion(
             "clinics.\n\nWe enrolled adults who did not smoke tobacco.",
             "adults who did not smoke tobacco",
         ),
+        # Sentences that state who was enrolled, and section labels, end an exclusion list.
+        (
+            SMOKERS,
+            "Patients were excluded if they had cancer. Adults with colitis were recruited in 12 "
+            "clinics. We enrolled adults who did not smoke tobacco.",
+            "adults who did not smoke tobacco",
+        ),
+        (
+            SMOKERS,
+            "Exclusion criteria were predefined. Uncontrolled infection.\n\nMETHODS: We enrolled "
+            "adults who did not smoke tobacco.",
+            "adults who did not smoke tobacco",
+        ),
     ],
     ids=[
         "negated-requirement-en",
@@ -559,6 +572,8 @@ RANDOMIZED = Criterion(
         "cross-sectional-survey",
         "plain-negated-requirement",
         "exclusion-in-an-earlier-paragraph",
+        "enrolment-ends-the-exclusion-list",
+        "section-label-ends-the-exclusion-list",
     ],
 )
 def test_evidence_against_the_criterions_own_requirement_excludes(
@@ -627,9 +642,30 @@ def test_evidence_against_the_criterions_own_requirement_excludes(
         ),
         (
             SMOKERS,
-            "Patients were excluded if they had cancer. Adults with colitis were recruited in 12 "
-            "clinics. We enrolled adults who did not smoke tobacco.",
+            "Patients were excluded if they had cancer. Most had colitis. We enrolled adults who "
+            "did not smoke tobacco.",
             "adults who did not smoke tobacco",
+            "negation",
+        ),
+        # Sol round 5: the list runs on across blank lines, bullets, and numbered items.
+        (
+            _criterion("include", "Previously treated with chemotherapy"),
+            "Exclusion criteria were predefined. Uncontrolled infection.\n\nNo prior chemotherapy.",
+            "No prior chemotherapy",
+            "negation",
+        ),
+        (
+            _criterion("include", "Previously treated with chemotherapy"),
+            "Exclusion criteria:\n\n- Uncontrolled infection\n\n- Pregnancy\n\n- No prior "
+            "chemotherapy",
+            "No prior chemotherapy",
+            "negation",
+        ),
+        (
+            _criterion("include", "Previously treated with chemotherapy"),
+            "Exclusion criteria were predefined.\n\n1. Uncontrolled infection.\n\n2. No prior "
+            "chemotherapy.",
+            "No prior chemotherapy",
             "negation",
         ),
         (
@@ -878,6 +914,9 @@ def test_evidence_against_the_criterions_own_requirement_excludes(
         "S13-exclusion-list-two-sentences-back",
         "S13-exclusion-list-three-items",
         "S13-exclusion-earlier-in-the-paragraph",
+        "S14-across-a-blank-line",
+        "S14-bulleted",
+        "S14-numbered",
         "exclusion-heading-above-a-blank-line",
         "S12-survey-and-drawing-lots",
         "S12-survey-and-aleatoria",
