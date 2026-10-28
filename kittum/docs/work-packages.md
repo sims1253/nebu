@@ -358,10 +358,14 @@ Done:
   = artifact hash) and `anchor`, `anchor_mapping`, and `page_render`. `derive(tx, document, parser,
   artifacts=...)` is idempotent per recipe. `ingest` refuses truncated PDFs.
 - `make_anchor(layer, span)`: quote with 32 characters of context, one box per printed line (partial
-  words interpolated), and cell refs. `resolve(anchor, layer)` gives `exact`, `candidate` (unique
-  match elsewhere, or a fuzzy respelling whose numbers are unchanged), `ambiguous` (with every
-  match as an alternative), or `unresolved`; repeated values resolve by region. `remap` records the
-  mapping once per anchor, layer, and method version.
+  words cut along their reading direction, so sideways words too), and cell refs.
+  `resolve(anchor, layer)` gives `exact` (same place, unchanged context), `candidate` (unique match
+  elsewhere, changed context, or a fuzzy respelling whose numbers are unchanged), `ambiguous` (with
+  every match as an alternative), or `unresolved`; repeated values resolve by region. Matches must
+  start and end on token boundaries, so "12" never matches inside "123" or "12.5". `resolve` and
+  `remap` raise `DifferentDocument` for a layer of another document: a revised PDF is a different
+  document and needs a document-revision mapping, which never carries acceptance across. `remap`
+  records the mapping once per anchor, layer, and method version (now `resolve.v2`).
 - Viewer routes in `api/routes/documents.py`: upload, document with pages and triage, page PNG at a
   scale (unrotated, cached in the artifact store), word boxes per page, create and get anchors.
 - `acquire` walks a list of `FullTextLocation`s through the gateway, keeps the first readable PDF,

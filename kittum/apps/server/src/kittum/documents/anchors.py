@@ -11,36 +11,53 @@ from statistics import median
 from rapidfuzz import fuzz
 
 from kittum.core import Span, find_quote, new_id, sha256_hex
+from kittum.documents.layout import rotate, unrotate
 from kittum.documents.model import (
     Anchor,
     Box,
     CellRef,
     Layer,
+    Page,
     PageAgreement,
     Resolution,
     TextQuote,
     Word,
 )
 
-RESOLVE_VERSION = "kittum.documents.resolve.v1"
+RESOLVE_VERSION = "kittum.documents.resolve.v2"
 CONTEXT_CHARS = 32
 _SAME_PLACE = 0.5  # share of the old boxes' area the new boxes must cover
 _FUZZY_MIN = 90.0
 _FUZZY_MIN_LENGTH = 20
+_CONTEXT_PROBE = 16  # non-space characters of context compared on each side
+_CONTEXT_MIN = 80.0
+
+
+class DifferentDocument(ValueError):
+    """An anchor was resolved against a layer of another document."""
 
 
 def _word_starts(layer: Layer) -> list[int]:
     return [w.start for w in layer.words]
 
 
-def _part_box(word: Word, start: int, end: int) -> Box:
-    """The box of characters [start, end) of a word, assuming even character widths."""
+def _part_box(word: Word, start: int, end: int, page: Page | None) -> Box:
+    """The box of characters [start, end) of a word, assuming even character widths.
+
+    The word is cut along its reading direction: in the page's reading frame, then turned back
+    to the unrotated frame, so a sideways word is cut along its height.
+    """
     length = max(word.end - word.start, 1)
     a = (max(start, word.start) - word.start) / length
     b = (min(end, word.end) - word.start) / length
-    width = word.box.x1 - word.box.x0
-    return word.box.model_copy(
-        update={"x0": round(word.box.x0 + a * width, 2), "x1": round(word.box.x0 + b * width, 2)}
+    frame, width, height = (page.frame, page.width, page.height) if page else (0, 0.0, 0.0)
+    box = word.box
+    x0, y0, x1, y1 = rotate((box.x0, box.y0, box.x1, box.y1), frame, width, height)
+    x0, x1 = x0 + a * (x1 - x0), x0 + b * (x1 - x0)
+    turned = (height, width) if frame % 180 else (width, height)
+    x0, y0, x1, y1 = unrotate((x0, y0, x1, y1), frame, *turned)
+    return box.model_copy(
+        update={"x0": round(x0, 2), "y0": round(y0, 2), "x1": round(x1, 2), "y1": round(y1, 2)}
     )
 
 
@@ -49,6 +66,7 @@ def boxes_for(layer: Layer, start: int, end: int) -> tuple[Box, ...]:
     starts = _word_starts(layer)
     i = max(bisect_right(starts, start) - 1, 0)
     line_starts = [ln.start for ln in layer.lines]
+    pages = {p.number: p for p in layer.pages}
     merged: dict[int, Box] = {}
     order: list[int] = []
     while i < len(layer.words) and layer.words[i].start < end:
@@ -56,7 +74,7 @@ def boxes_for(layer: Layer, start: int, end: int) -> tuple[Box, ...]:
         i += 1
         if word.end <= start:
             continue
-        box = _part_box(word, start, end)
+        box = _part_box(word, start, end, pages.get(word.box.page))
         line = bisect_right(line_starts, word.start) - 1
         prev = merged.get(line)
         if prev is None:
@@ -140,6 +158,36 @@ def _context_score(anchor: Anchor, candidate: Anchor) -> float:
     return (prefix + suffix) / 2
 
 
+def _tight(text: str) -> str:
+    return "".join(text.split())
+
+
+def _context_agrees(anchor: Anchor, candidate: Anchor) -> bool:
+    """Whether the text right before and after the quote is still the same. Whitespace is
+    ignored, because engines separate words, lines, and cells differently."""
+    n = _CONTEXT_PROBE
+    prefix = fuzz.ratio(_tight(anchor.quote.prefix)[-n:], _tight(candidate.quote.prefix)[-n:])
+    suffix = fuzz.ratio(_tight(anchor.quote.suffix)[:n], _tight(candidate.quote.suffix)[:n])
+    return prefix >= _CONTEXT_MIN and suffix >= _CONTEXT_MIN
+
+
+def _whole_tokens(text: str, span: Span) -> bool:
+    """Whether a match starts and ends on token boundaries: "12" is not in "123", "x12",
+    "12.5", or "3.12", and "Age" is not in "Ageing"."""
+
+    def at(i: int) -> str:
+        return text[i] if 0 <= i < len(text) else ""
+
+    s, e = span.start, span.end
+    if at(s).isalnum() and at(s - 1).isalnum():
+        return False
+    if at(e - 1).isalnum() and at(e).isalnum():
+        return False
+    if at(s).isdigit() and at(s - 1) in ".," and at(s - 2).isdigit():
+        return False
+    return not (at(e - 1).isdigit() and at(e) in ".," and at(e + 1).isdigit())
+
+
 def _numbers(text: str) -> list[str]:
     return re.findall(r"\d+", text)
 
@@ -178,13 +226,22 @@ def _fuzzy(anchor: Anchor, layer: Layer) -> Anchor | None:
 
 
 def resolve(anchor: Anchor, layer: Layer) -> Resolution:
-    """Map an anchor onto `layer`.
+    """Map an anchor onto another layer of the same document.
 
-    - `exact`: the quote occurs once at the same place, or several times but only once there.
-    - `candidate`: the quote occurs once elsewhere, or approximately at the old place (`fuzzy`).
+    A match must start and end on token boundaries, so a changed number never matches part of
+    the new one.
+
+    - `exact`: the quote occurs once at the same place, or several times but only once there,
+      and the text around it is unchanged.
+    - `candidate`: the quote occurs once elsewhere, at the same place with changed context, or
+      approximately at the old place (`fuzzy`).
     - `ambiguous`: several matches and none singled out by place; `alternatives` lists them,
       best context first.
     - `unresolved`: no match.
+
+    Raises `DifferentDocument` if the layer belongs to another document. A revised PDF is a
+    different document; mapping onto it needs a document-revision mapping, which never carries
+    acceptance across, so `resolve` refuses rather than returning a status that could.
     """
 
     def result(status, found: Anchor | None, method: str, alternatives=()) -> Resolution:
@@ -196,12 +253,21 @@ def resolve(anchor: Anchor, layer: Layer) -> Resolution:
             alternatives=tuple(alternatives),
         )
 
+    if layer.document_id != anchor.document_id:
+        raise DifferentDocument(
+            f"anchor {anchor.id} is on document {anchor.document_id}, "
+            f"layer {layer.id} on document {layer.document_id}"
+        )
     if layer.id == anchor.layer_id:
         if layer.text[anchor.start : anchor.end] == anchor.quote.exact:
             return result("exact", anchor, "same_layer")
         return result("unresolved", None, "same_layer")
-    spans = find_quote(anchor.quote.exact, layer.text)
+    spans = [s for s in find_quote(anchor.quote.exact, layer.text) if _whole_tokens(layer.text, s)]
     found = [make_anchor(layer, s) for s in spans]
+
+    def placed(match: Anchor) -> str:
+        return "exact" if _context_agrees(anchor, match) else "candidate"
+
     if not found:
         guess = _fuzzy(anchor, layer)
         if guess is not None:
@@ -210,11 +276,11 @@ def resolve(anchor: Anchor, layer: Layer) -> Resolution:
     if len(found) == 1:
         only = found[0]
         return result(
-            "exact" if same_place(anchor.boxes, only.boxes) else "candidate", only, "quote"
+            placed(only) if same_place(anchor.boxes, only.boxes) else "candidate", only, "quote"
         )
     here = [f for f in found if same_place(anchor.boxes, f.boxes)]
     if len(here) == 1:
-        return result("exact", here[0], "quote_in_region")
+        return result(placed(here[0]), here[0], "quote_in_region")
     ranked = sorted(found, key=lambda f: -_context_score(anchor, f))
     return result("ambiguous", None, "quote", ranked)
 

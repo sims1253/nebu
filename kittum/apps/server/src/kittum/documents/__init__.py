@@ -22,6 +22,7 @@ Owner: WP-10.
 from kittum.documents.acquisition import ACQUIRED, NOT_ACQUIRED, acquire, acquisitions
 from kittum.documents.anchors import (
     RESOLVE_VERSION,
+    DifferentDocument,
     compare_layers,
     make_anchor,
     page_words,
@@ -82,6 +83,7 @@ __all__ = [
     "Anchor",
     "Box",
     "CellRef",
+    "DifferentDocument",
     "DoclingParser",
     "DoclingUnavailable",
     "Document",

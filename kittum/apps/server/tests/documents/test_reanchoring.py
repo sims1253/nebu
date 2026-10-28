@@ -3,9 +3,10 @@
 import pymupdf
 import pytest
 
-from kittum.core import find_quote
+from kittum.core import Span, find_quote
 from kittum.documents import (
     RESOLVE_VERSION,
+    DifferentDocument,
     compare_layers,
     derive,
     get_anchor,
@@ -15,8 +16,9 @@ from kittum.documents import (
     resolve,
     save_anchor,
 )
+from kittum.documents.testing import TextParser
 from kittum.storage import MemoryStore
-from tests.documents.conftest import LESOTHO, squash, text_under
+from tests.documents.conftest import LESOTHO, VITAMIN_C, squash, text_under
 from tests.documents.test_parsing import COLUMN_BREAK_QUOTE
 
 QUOTES = [
@@ -39,6 +41,15 @@ def _anchors(pg, layer, quotes):
         for span in find_quote(quote, layer.text):
             out.append(save_anchor(pg, make_anchor(layer, span)))
     return out
+
+
+def _sideways_pdf() -> bytes:
+    """Page 7 drawn sideways on a landscape page, with no /Rotate."""
+    sideways = pymupdf.open()
+    source = pymupdf.open(LESOTHO)
+    landscape = sideways.new_page(width=source[6].rect.height, height=source[6].rect.width)
+    landscape.show_pdf_page(landscape.rect, source, 6, rotate=90)
+    return sideways.tobytes()
 
 
 def test_anchors_survive_a_reparse_with_pdfium(pg, pymupdf_parser, pdfium_parser):
@@ -137,11 +148,7 @@ def test_turned_pages_read_in_order_with_boxes_in_the_unrotated_frame(
 
     # A landscape page with the article drawn sideways and no /Rotate: the reader turns their
     # head, and so does the reading order. Columns and table rows still read in order.
-    sideways = pymupdf.open()
-    source = pymupdf.open(LESOTHO)
-    landscape = sideways.new_page(width=source[6].rect.height, height=source[6].rect.width)
-    landscape.show_pdf_page(landscape.rect, source, 6, rotate=90)
-    turned = sideways.tobytes()
+    turned = _sideways_pdf()
     for layer in _layers(pg, pymupdf_parser, pdfium_parser, pdf=turned):
         assert layer.pages[0].rotation == 0
         (span,) = find_quote(COLUMN_BREAK_QUOTE, layer.text)
@@ -182,3 +189,64 @@ def test_an_anchor_resolves_onto_its_own_layer(pg, pymupdf_parser, quote):
         "same_layer",
         anchor,
     )
+
+
+def _text_layers(pg, old: str, new: str):
+    """Two layers of one document whose text differs, laid out identically."""
+    artifacts = MemoryStore()
+    document = ingest(pg, artifacts, LESOTHO.read_bytes())
+    return [
+        derive(pg, document, TextParser([text], name=name), artifacts=artifacts)
+        for name, text in (("old", old), ("new", new))
+    ]
+
+
+@pytest.mark.parametrize(
+    ("new_text", "status"),
+    [
+        ("Baseline: N = 123 patients were randomized.", "unresolved"),  # 12 became 123
+        ("Baseline: N = 12.5 patients were randomized.", "unresolved"),  # 12 became 12.5
+        ("Baseline: N = 412 patients were randomized.", "unresolved"),  # 12 became 412
+        ("Baseline: N = 12 vials were randomized.", "candidate"),  # same number, new context
+        ("Baseline: N = 12 patients were randomized.", "exact"),
+    ],
+)
+def test_a_changed_number_or_context_is_never_exact(pg, new_text, status):
+    old, new = _text_layers(pg, "Baseline: N = 12 patients were randomized.", new_text)
+    (span,) = find_quote("12", old.text)
+    resolution = resolve(save_anchor(pg, make_anchor(old, span)), new)
+    assert resolution.status == status
+    if resolution.anchor is not None:
+        assert new.text[resolution.anchor.start : resolution.anchor.end] == "12"
+
+
+def test_resolve_refuses_a_layer_of_another_document(pg):
+    artifacts = MemoryStore()
+    text = ["Baseline: N = 12 patients were randomized."]
+    # Same quote, same geometry, different PDF bytes: a revision is a different document.
+    first, revised = (
+        derive(pg, ingest(pg, artifacts, path.read_bytes()), TextParser(text), artifacts=artifacts)
+        for path in (LESOTHO, VITAMIN_C)
+    )
+    (span,) = find_quote("12 patients", first.text)
+    anchor = save_anchor(pg, make_anchor(first, span))
+    with pytest.raises(DifferentDocument):
+        resolve(anchor, revised)
+    with pytest.raises(DifferentDocument):
+        remap(pg, anchor, revised)
+    assert pg.execute("select count(*) as n from anchor_mapping").fetchone() == {"n": 0}
+
+
+def test_part_of_a_sideways_word_is_cut_along_its_reading_direction(
+    pg, pymupdf_parser, pdfium_parser
+):
+    turned = _sideways_pdf()
+    for layer in _layers(pg, pymupdf_parser, pdfium_parser, pdf=turned):
+        assert layer.pages[0].frame == 90
+        (span,) = find_quote("61.4 (11.7)", layer.text)
+        word = next(w for w in layer.words if w.start == span.start)
+        assert layer.text[word.start : word.end] == "61.4"
+        (box,) = make_anchor(layer, Span(span.start, span.start + 2)).boxes  # "61"
+        assert (box.x0, box.x1) == (word.box.x0, word.box.x1)  # the full line height
+        assert abs((box.y1 - box.y0) - (word.box.y1 - word.box.y0) / 2) < 0.1  # half the length
+        assert text_under(turned, box) == "61", layer.recipe.engine

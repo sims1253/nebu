@@ -63,6 +63,7 @@ class Page(Record):
     width: float  # unrotated
     height: float
     rotation: int = 0  # degrees clockwise the viewer turns the page for display
+    frame: int = 0  # degrees clockwise the unrotated page turns so most text reads left to right
     label: str | None = None  # printed page label, when the PDF has one
     start: int  # this page's slice of the layer text
     end: int

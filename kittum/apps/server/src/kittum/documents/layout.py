@@ -26,7 +26,7 @@ from kittum.documents.model import (
     Word,
 )
 
-ASSEMBLY_VERSION = "kittum.documents.layout.v1"
+ASSEMBLY_VERSION = "kittum.documents.layout.v2"
 
 type Rect = tuple[float, float, float, float]
 
@@ -490,6 +490,7 @@ def assemble(pages: list[PageInput]) -> RawLayer:
                 width=round(page.height if page.frame % 180 else page.width, 2),
                 height=round(page.width if page.frame % 180 else page.height, 2),
                 rotation=page.rotation % 360,
+                frame=page.frame % 360,
                 label=page.label or None,
                 start=page_start,
                 end=w.pos,
