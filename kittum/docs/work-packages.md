@@ -58,8 +58,10 @@ Module `kittum.runs`. Needs: `ledger`.
 
 Module `kittum.protocol`. Needs: `core`.
 
-- The full schema from DESIGN.md "Protocol" (Anwendungsgebiet, Teilpopulation, zVT, endpoints,
-  effect modifiers, source plan, reference set, audit and stopping plans, freshness policy).
+- The generic schema from DESIGN.md "Protocol" (review questions and scopes, PICO, comparators,
+  outcomes, effect modifiers, source plan, reference set, audit and stopping plans, freshness
+  policy), with a profile registry for extensions. The `gba_amnog` dossier fields live in
+  `kittum.profiles.gba_amnog`.
 - `compile(source)` from JSON or YAML with clear validation errors; a content hash per version.
 - `diff(a, b)` for criteria, scopes, and modes.
 - Criterion rendering: the human question and the model prompt fragment.

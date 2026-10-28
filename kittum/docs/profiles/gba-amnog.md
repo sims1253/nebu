@@ -159,7 +159,7 @@ Exclusion reasons are protocol criterion IDs, so Anhang 4-C and 4-D reasons come
 of free text. Sections can reference the EU dossier, but Modul 4 tables must still be filled, so the
 Modul 4 and JCA targets render from one evidence base.
 
-In the handover bundle, `dossier/` holds the Anlage II.1 tree and the annexes beside the core PRISMA
+In the handover bundle, `reports/dossier/` holds the Anlage II.1 tree and the annexes beside the core PRISMA
 reports and AI disclosure. The bundle's acceptance test reads: pick any cell in an exported Modul 4
 table and trace it to the accepted value, its PDF regions, and the human approval.
 
