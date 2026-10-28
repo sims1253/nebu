@@ -88,6 +88,7 @@ from kittum.extraction.store import (
     list_runs,
     request_run,
     review,
+    run_of_field,
 )
 from kittum.extraction.validators import validate
 
@@ -153,5 +154,6 @@ __all__ = [
     "review",
     "run_agent",
     "run_handler",
+    "run_of_field",
     "validate",
 ]

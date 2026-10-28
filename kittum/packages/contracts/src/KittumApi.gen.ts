@@ -452,6 +452,8 @@ export type SplitCorpusOccurrences200 = IdentityRevision
 export const SplitCorpusOccurrences200 = IdentityRevision
 export type SplitCorpusOccurrences422 = HTTPValidationError
 export const SplitCorpusOccurrences422 = HTTPValidationError
+export type ListExtractionAssertionsParams = { readonly "X-Kittum-Reviewer": Id }
+export const ListExtractionAssertionsParams = Schema.Struct({ "X-Kittum-Reviewer": Schema.suspend((): Schema.Codec<Id> => Id).annotate({ "description": "The caller's actor ID. A stand-in until the API has authentication." }) })
 export type ListExtractionAssertions200 = ReadonlyArray<Assertion>
 export const ListExtractionAssertions200 = Schema.Array(Assertion).annotate({ "title": "Response Listextractionassertions" })
 export type ListExtractionAssertions422 = HTTPValidationError
@@ -472,6 +474,8 @@ export type ListExtractionModels200 = ReadonlyArray<string>
 export const ListExtractionModels200 = Schema.Array(Schema.String).annotate({ "title": "Response Listextractionmodels" })
 export type ListExtractionModels422 = HTTPValidationError
 export const ListExtractionModels422 = HTTPValidationError
+export type ListExtractionRunsParams = { readonly "X-Kittum-Reviewer": Id }
+export const ListExtractionRunsParams = Schema.Struct({ "X-Kittum-Reviewer": Schema.suspend((): Schema.Codec<Id> => Id).annotate({ "description": "The caller's actor ID. A stand-in until the API has authentication." }) })
 export type ListExtractionRuns200 = ReadonlyArray<RunListing>
 export const ListExtractionRuns200 = Schema.Array(RunListing).annotate({ "title": "Response Listextractionruns" })
 export type ListExtractionRuns422 = HTTPValidationError
@@ -482,10 +486,14 @@ export type RequestExtractionRun202 = ExtractionRun
 export const RequestExtractionRun202 = ExtractionRun
 export type RequestExtractionRun422 = HTTPValidationError
 export const RequestExtractionRun422 = HTTPValidationError
+export type GetExtractionRunParams = { readonly "X-Kittum-Reviewer": Id }
+export const GetExtractionRunParams = Schema.Struct({ "X-Kittum-Reviewer": Schema.suspend((): Schema.Codec<Id> => Id).annotate({ "description": "The caller's actor ID. A stand-in until the API has authentication." }) })
 export type GetExtractionRun200 = ExtractionRun
 export const GetExtractionRun200 = ExtractionRun
 export type GetExtractionRun422 = HTTPValidationError
 export const GetExtractionRun422 = HTTPValidationError
+export type ListExtractionFieldsParams = { readonly "X-Kittum-Reviewer": Id }
+export const ListExtractionFieldsParams = Schema.Struct({ "X-Kittum-Reviewer": Schema.suspend((): Schema.Codec<Id> => Id).annotate({ "description": "The caller's actor ID. A stand-in until the API has authentication." }) })
 export type ListExtractionFields200 = ReadonlyArray<ReviewField>
 export const ListExtractionFields200 = Schema.Array(ReviewField).annotate({ "title": "Response Listextractionfields" })
 export type ListExtractionFields422 = HTTPValidationError
@@ -496,6 +504,8 @@ export type GroupAcceptExtractionFields200 = ReadonlyArray<Acceptance>
 export const GroupAcceptExtractionFields200 = Schema.Array(Acceptance).annotate({ "title": "Response Groupacceptextractionfields" })
 export type GroupAcceptExtractionFields422 = HTTPValidationError
 export const GroupAcceptExtractionFields422 = HTTPValidationError
+export type GetExtractionReviewParams = { readonly "X-Kittum-Reviewer": Id }
+export const GetExtractionReviewParams = Schema.Struct({ "X-Kittum-Reviewer": Schema.suspend((): Schema.Codec<Id> => Id).annotate({ "description": "The caller's actor ID. A stand-in until the API has authentication." }) })
 export type GetExtractionReview200 = ExtractionReview
 export const GetExtractionReview200 = ExtractionReview
 export type GetExtractionReview422 = HTTPValidationError
@@ -972,7 +982,8 @@ export const make = (
   ),
     "listExtractionAssertions": (projectId, options: Parameters<KittumApi["listExtractionAssertions"]>[1]) => __makePathRequest(HttpClientRequest.get, [projectId], () => "/api/projects/" + __encodePathParam(projectId) + "/extraction/assertions").pipe(
     Effect.flatMap((request) => request.pipe(
-      withResponse(options?.config)(HttpClientResponse.matchStatus({
+      HttpClientRequest.setHeaders({ "X-Kittum-Reviewer": options.params["X-Kittum-Reviewer"] ?? undefined }),
+      withResponse(options.config)(HttpClientResponse.matchStatus({
       "2xx": decodeSuccess(ListExtractionAssertions200),
       "422": decodeError("ListExtractionAssertions422", ListExtractionAssertions422),
       orElse: unexpectedStatus
@@ -1010,7 +1021,8 @@ export const make = (
   ),
     "listExtractionRuns": (projectId, options: Parameters<KittumApi["listExtractionRuns"]>[1]) => __makePathRequest(HttpClientRequest.get, [projectId], () => "/api/projects/" + __encodePathParam(projectId) + "/extraction/runs").pipe(
     Effect.flatMap((request) => request.pipe(
-      withResponse(options?.config)(HttpClientResponse.matchStatus({
+      HttpClientRequest.setHeaders({ "X-Kittum-Reviewer": options.params["X-Kittum-Reviewer"] ?? undefined }),
+      withResponse(options.config)(HttpClientResponse.matchStatus({
       "2xx": decodeSuccess(ListExtractionRuns200),
       "422": decodeError("ListExtractionRuns422", ListExtractionRuns422),
       orElse: unexpectedStatus
@@ -1029,7 +1041,8 @@ export const make = (
   ),
     "getExtractionRun": (projectId, runId, options: Parameters<KittumApi["getExtractionRun"]>[2]) => __makePathRequest(HttpClientRequest.get, [projectId, runId], () => "/api/projects/" + __encodePathParam(projectId) + "/extraction/runs/" + __encodePathParam(runId) + "").pipe(
     Effect.flatMap((request) => request.pipe(
-      withResponse(options?.config)(HttpClientResponse.matchStatus({
+      HttpClientRequest.setHeaders({ "X-Kittum-Reviewer": options.params["X-Kittum-Reviewer"] ?? undefined }),
+      withResponse(options.config)(HttpClientResponse.matchStatus({
       "2xx": decodeSuccess(GetExtractionRun200),
       "422": decodeError("GetExtractionRun422", GetExtractionRun422),
       orElse: unexpectedStatus
@@ -1038,7 +1051,8 @@ export const make = (
   ),
     "listExtractionFields": (projectId, runId, options: Parameters<KittumApi["listExtractionFields"]>[2]) => __makePathRequest(HttpClientRequest.get, [projectId, runId], () => "/api/projects/" + __encodePathParam(projectId) + "/extraction/runs/" + __encodePathParam(runId) + "/fields").pipe(
     Effect.flatMap((request) => request.pipe(
-      withResponse(options?.config)(HttpClientResponse.matchStatus({
+      HttpClientRequest.setHeaders({ "X-Kittum-Reviewer": options.params["X-Kittum-Reviewer"] ?? undefined }),
+      withResponse(options.config)(HttpClientResponse.matchStatus({
       "2xx": decodeSuccess(ListExtractionFields200),
       "422": decodeError("ListExtractionFields422", ListExtractionFields422),
       orElse: unexpectedStatus
@@ -1057,7 +1071,8 @@ export const make = (
   ),
     "getExtractionReview": (projectId, runId, options: Parameters<KittumApi["getExtractionReview"]>[2]) => __makePathRequest(HttpClientRequest.get, [projectId, runId], () => "/api/projects/" + __encodePathParam(projectId) + "/extraction/runs/" + __encodePathParam(runId) + "/review").pipe(
     Effect.flatMap((request) => request.pipe(
-      withResponse(options?.config)(HttpClientResponse.matchStatus({
+      HttpClientRequest.setHeaders({ "X-Kittum-Reviewer": options.params["X-Kittum-Reviewer"] ?? undefined }),
+      withResponse(options.config)(HttpClientResponse.matchStatus({
       "2xx": decodeSuccess(GetExtractionReview200),
       "422": decodeError("GetExtractionReview422", GetExtractionReview422),
       orElse: unexpectedStatus
@@ -1542,11 +1557,11 @@ readonly "splitCorpusOccurrences": {
     <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly payload: typeof SplitCorpusOccurrencesRequestJson.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<SplitCorpusOccurrences200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"SplitCorpusOccurrences422", SplitCorpusOccurrences422>>;
   }
   /**
-* The project's accepted values, the latest acceptance per semantic key.
+* The project's accepted values the viewer may see, the latest per semantic key.
 */
 readonly "listExtractionAssertions": {
-    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly config: Config }): Effect.Effect<WithOptionalResponse<ListExtractionAssertions200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ListExtractionAssertions422", ListExtractionAssertions422>>;
-    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<ListExtractionAssertions200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ListExtractionAssertions422", ListExtractionAssertions422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly params: typeof ListExtractionAssertionsParams.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<ListExtractionAssertions200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ListExtractionAssertions422", ListExtractionAssertions422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly params: typeof ListExtractionAssertionsParams.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<ListExtractionAssertions200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ListExtractionAssertions422", ListExtractionAssertions422>>;
   }
   /**
 * Accept one path's value as it stands. 409 with the reason if it cannot be accepted.
@@ -1570,14 +1585,16 @@ readonly "listExtractionModels": {
     <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<ListExtractionModels200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ListExtractionModels422", ListExtractionModels422>>;
   }
   /**
-* The project's runs, newest first, with their report and review counts.
+* The project's runs the viewer may see, newest first, with their report and review counts.
 */
 readonly "listExtractionRuns": {
-    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly config: Config }): Effect.Effect<WithOptionalResponse<ListExtractionRuns200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ListExtractionRuns422", ListExtractionRuns422>>;
-    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<ListExtractionRuns200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ListExtractionRuns422", ListExtractionRuns422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly params: typeof ListExtractionRunsParams.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<ListExtractionRuns200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ListExtractionRuns422", ListExtractionRuns422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly params: typeof ListExtractionRunsParams.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<ListExtractionRuns200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ListExtractionRuns422", ListExtractionRuns422>>;
   }
   /**
-* Queue both paths over a layer. Retrying with the same `command_id` returns the same run.
+* Queue both paths over a layer of an included report's full text, for the methods lead
+* (403 otherwise; 409 unless the report is included at full text and the layer is its full
+* text's). Retrying with the same `command_id` returns the same run.
 */
 readonly "requestExtractionRun": {
     <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly payload: typeof RequestExtractionRunRequestJson.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<RequestExtractionRun202, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"RequestExtractionRun422", RequestExtractionRun422>>;
@@ -1587,15 +1604,15 @@ readonly "requestExtractionRun": {
 * Get Run Route
 */
 readonly "getExtractionRun": {
-    <Config extends OperationConfig | undefined = undefined>(projectId: string, runId: string, options: { readonly config: Config }): Effect.Effect<WithOptionalResponse<GetExtractionRun200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetExtractionRun422", GetExtractionRun422>>;
-    <Config extends OperationConfig | undefined = undefined>(projectId: string, runId: string, options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<GetExtractionRun200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetExtractionRun422", GetExtractionRun422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, runId: string, options: { readonly params: typeof GetExtractionRunParams.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<GetExtractionRun200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetExtractionRun422", GetExtractionRun422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, runId: string, options: { readonly params: typeof GetExtractionRunParams.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<GetExtractionRun200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetExtractionRun422", GetExtractionRun422>>;
   }
   /**
 * One entry per semantic key, in schema order, with both paths' proposals.
 */
 readonly "listExtractionFields": {
-    <Config extends OperationConfig | undefined = undefined>(projectId: string, runId: string, options: { readonly config: Config }): Effect.Effect<WithOptionalResponse<ListExtractionFields200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ListExtractionFields422", ListExtractionFields422>>;
-    <Config extends OperationConfig | undefined = undefined>(projectId: string, runId: string, options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<ListExtractionFields200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ListExtractionFields422", ListExtractionFields422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, runId: string, options: { readonly params: typeof ListExtractionFieldsParams.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<ListExtractionFields200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ListExtractionFields422", ListExtractionFields422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, runId: string, options: { readonly params: typeof ListExtractionFieldsParams.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<ListExtractionFields200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"ListExtractionFields422", ListExtractionFields422>>;
   }
   /**
 * Accept agreeing, validated standard fields together; 409 if any field may not be.
@@ -1608,8 +1625,8 @@ readonly "groupAcceptExtractionFields": {
 * The extraction screen: the report, its layer, every anchor, and the fields.
 */
 readonly "getExtractionReview": {
-    <Config extends OperationConfig | undefined = undefined>(projectId: string, runId: string, options: { readonly config: Config }): Effect.Effect<WithOptionalResponse<GetExtractionReview200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetExtractionReview422", GetExtractionReview422>>;
-    <Config extends OperationConfig | undefined = undefined>(projectId: string, runId: string, options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<GetExtractionReview200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetExtractionReview422", GetExtractionReview422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, runId: string, options: { readonly params: typeof GetExtractionReviewParams.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<GetExtractionReview200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetExtractionReview422", GetExtractionReview422>>;
+    <Config extends OperationConfig | undefined = undefined>(projectId: string, runId: string, options: { readonly params: typeof GetExtractionReviewParams.Encoded; readonly config?: Config | undefined }): Effect.Effect<WithOptionalResponse<GetExtractionReview200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetExtractionReview422", GetExtractionReview422>>;
   }
   /**
 * Read and check a schema for `requestExtractionRun`; 422 with the problem.

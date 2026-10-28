@@ -16,9 +16,10 @@ from kittum.api import AppContext, create_app
 from kittum.app import job_handlers
 from kittum.core import new_id
 from kittum.documents import PyMuPDFParser, derive, ingest
-from kittum.extraction import JOB_KIND
+from kittum.extraction import JOB_KIND, RunRequest, request_run
 from kittum.ledger import PostgresLedger
-from kittum.runs import PostgresJobQueue, PostgresReceipts, Worker
+from kittum.people import record_roles
+from kittum.runs import Commands, PostgresJobQueue, PostgresReceipts, Worker
 from kittum.settings import Settings
 from kittum.storage import MemoryStore
 from tests.documents.conftest import LESOTHO, new_project, savepoint_db
@@ -71,11 +72,14 @@ def test_extraction_runs_without_a_model_server(pg: Tx) -> None:
             "agent": agent,
             "report": {"study_label": "Lesotho", "title": "The trial", "licence": "CC BY 4.0"},
         }
-        response = client.post(base, json=body)
-        assert response.status_code == 202, response.text
-        return response.json()["id"]
+        # Through the service: the route also needs the report included at full text.
+        request = RunRequest.model_validate(body | {"project_id": str(project)})
+        return str(request_run(pg, commands, request, clock=ctx.clock).id)
 
-    with TestClient(create_app(ctx)) as client:
+    commands = Commands(ctx.require_ledger(), queue, PostgresReceipts(), ctx.clock)
+    record_roles(pg, project, requester["id"], "Lead", ("lead",), event_id=new_id())
+    lead = {"X-Kittum-Reviewer": str(requester["id"])}
+    with TestClient(create_app(ctx), headers=lead) as client:
         janus_only = request(None)
         assert worker.run_once() is True
         done = client.get(f"{base}/{janus_only}").json()

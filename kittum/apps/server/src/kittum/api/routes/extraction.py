@@ -1,6 +1,11 @@
 """Extraction routes for the workbench: read a schema, run a layer, list runs, review their
 fields, accept values.
 
+The methods lead requests runs, on reports included at full text only. Every read names its
+caller in `X-Kittum-Reviewer` (a stand-in until the API has authentication) and shows a run only
+to someone who may see it (`kittum.app.visible_reports`): a run exists only for an included
+report, so a screener who has not decided the report yet must not learn of it.
+
 A run is a job: `POST .../runs` answers 202 with the queued run, and a worker running
 `kittum.extraction.run_handler` fills it. Accepting needs the time the source was on screen;
 an edit needs the value's span as code-point offsets into the layer text, and its quote.
@@ -13,6 +18,14 @@ from fastapi import APIRouter, HTTPException
 from pydantic import Field
 
 from kittum.api import AppContext, Context  # noqa: TC001  FastAPI resolves them at runtime
+from kittum.api.routes.projects import Viewer  # noqa: TC001  FastAPI resolves it at runtime
+from kittum.app import (
+    LifecycleError,
+    NotLead,
+    check_extractable,
+    require_lead,
+    visible_reports,
+)
 from kittum.core import Id, NotFoundError, Record
 from kittum.extraction import (
     Acceptance,
@@ -39,11 +52,14 @@ from kittum.extraction import (
     load_schema,
     request_run,
     review,
+    run_of_field,
 )
 from kittum.runs import CommandIdReused, CommandRejected, Commands
 
 if TYPE_CHECKING:
     from collections.abc import Generator
+
+    from kittum.db import Tx
 
 router = APIRouter(prefix="/api/projects/{project_id}/extraction", tags=["extraction"])
 
@@ -96,8 +112,18 @@ def _errors() -> Generator[None]:
         yield
     except NotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
-    except (CommandRejected, CommandIdReused) as e:
+    except NotLead as e:
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except (CommandRejected, CommandIdReused, LifecycleError) as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
+
+
+def _visible_run(tx: Tx, project_id: Id, run_id: Id, viewer: Id) -> ExtractionRun:
+    """The run, or not found for anyone who may not see it: its existence is the news."""
+    run = get_run(tx, project_id, run_id)
+    if run.report_id not in visible_reports(tx, project_id, viewer, [run.report_id]):
+        raise NotFoundError(f"extraction run {run_id}")
+    return run
 
 
 def _commands(ctx: AppContext) -> Commands:
@@ -124,39 +150,50 @@ def list_models_route(project_id: Id, ctx: Context) -> list[str]:  # noqa: ARG00
 
 
 @router.get("/runs", operation_id="listExtractionRuns")
-def list_runs_route(project_id: Id, ctx: Context) -> list[RunListing]:
-    """The project's runs, newest first, with their report and review counts."""
+def list_runs_route(project_id: Id, viewer: Viewer, ctx: Context) -> list[RunListing]:
+    """The project's runs the viewer may see, newest first, with their report and review counts."""
     with ctx.db.transaction() as tx:
-        return list_runs(tx, project_id)
+        runs = list_runs(tx, project_id)
+        shown = visible_reports(tx, project_id, viewer, [r.run.report_id for r in runs])
+        return [r for r in runs if r.run.report_id in shown]
 
 
 @router.post("/runs", operation_id="requestExtractionRun", status_code=202)
 def request_run_route(project_id: Id, body: RunBody, ctx: Context) -> ExtractionRun:
-    """Queue both paths over a layer. Retrying with the same `command_id` returns the same run."""
+    """Queue both paths over a layer of an included report's full text, for the methods lead
+    (403 otherwise; 409 unless the report is included at full text and the layer is its full
+    text's). Retrying with the same `command_id` returns the same run."""
     commands = _commands(ctx)
     request = RunRequest(project_id=project_id, **body.model_dump())
     with _errors(), ctx.db.transaction() as tx:
+        require_lead(tx, project_id, body.actor_id)
+        check_extractable(
+            tx, project_id, body.report_id, body.layer_id, ctx.screening(), ctx.artifacts
+        )
         return request_run(tx, commands, request, clock=ctx.clock)
 
 
 @router.get("/runs/{run_id}", operation_id="getExtractionRun")
-def get_run_route(project_id: Id, run_id: Id, ctx: Context) -> ExtractionRun:
+def get_run_route(project_id: Id, run_id: Id, viewer: Viewer, ctx: Context) -> ExtractionRun:
     with _errors(), ctx.db.transaction() as tx:
-        return get_run(tx, project_id, run_id)
+        return _visible_run(tx, project_id, run_id, viewer)
 
 
 @router.get("/runs/{run_id}/fields", operation_id="listExtractionFields")
-def list_fields_route(project_id: Id, run_id: Id, ctx: Context) -> list[ReviewField]:
+def list_fields_route(
+    project_id: Id, run_id: Id, viewer: Viewer, ctx: Context
+) -> list[ReviewField]:
     """One entry per semantic key, in schema order, with both paths' proposals."""
     with _errors(), ctx.db.transaction() as tx:
-        get_run(tx, project_id, run_id)
+        _visible_run(tx, project_id, run_id, viewer)
         return list_fields(tx, project_id, run_id)
 
 
 @router.get("/runs/{run_id}/review", operation_id="getExtractionReview")
-def get_review_route(project_id: Id, run_id: Id, ctx: Context) -> ExtractionReview:
+def get_review_route(project_id: Id, run_id: Id, viewer: Viewer, ctx: Context) -> ExtractionReview:
     """The extraction screen: the report, its layer, every anchor, and the fields."""
     with _errors(), ctx.db.transaction() as tx:
+        _visible_run(tx, project_id, run_id, viewer)
         return review(tx, project_id, run_id, artifacts=ctx.artifacts)
 
 
@@ -166,6 +203,8 @@ def accept_route(project_id: Id, field_id: Id, body: AcceptBody, ctx: Context) -
     commands = _commands(ctx)
     request = AcceptRequest(project_id=project_id, field_id=field_id, **body.model_dump())
     with _errors(), ctx.db.transaction() as tx:
+        run = run_of_field(tx, project_id, field_id)
+        _visible_run(tx, project_id, run.id, body.reviewer_id)
         return accept(tx, commands, request, artifacts=ctx.artifacts, clock=ctx.clock)
 
 
@@ -183,6 +222,8 @@ def edit_route(project_id: Id, field_id: Id, body: EditBody, ctx: Context) -> Ac
         edit=Edit(value=body.value, start=body.start, end=body.end, quote=body.quote),
     )
     with _errors(), ctx.db.transaction() as tx:
+        run = run_of_field(tx, project_id, field_id)
+        _visible_run(tx, project_id, run.id, body.reviewer_id)
         return accept(tx, commands, request, artifacts=ctx.artifacts, clock=ctx.clock)
 
 
@@ -194,11 +235,14 @@ def group_accept_route(
     commands = _commands(ctx)
     request = GroupAcceptRequest(project_id=project_id, run_id=run_id, **body.model_dump())
     with _errors(), ctx.db.transaction() as tx:
+        _visible_run(tx, project_id, run_id, body.reviewer_id)
         return group_accept(tx, commands, request, clock=ctx.clock)
 
 
 @router.get("/assertions", operation_id="listExtractionAssertions")
-def assertions_route(project_id: Id, ctx: Context) -> list[Assertion]:
-    """The project's accepted values, the latest acceptance per semantic key."""
+def assertions_route(project_id: Id, viewer: Viewer, ctx: Context) -> list[Assertion]:
+    """The project's accepted values the viewer may see, the latest per semantic key."""
     with ctx.db.transaction() as tx:
-        return assertions(tx, project_id)
+        found = assertions(tx, project_id)
+        shown = visible_reports(tx, project_id, viewer, list({a.key.report_id for a in found}))
+        return [a for a in found if a.key.report_id in shown]

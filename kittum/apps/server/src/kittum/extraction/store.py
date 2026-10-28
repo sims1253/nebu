@@ -363,6 +363,16 @@ def list_runs(tx: Tx, project_id: Id) -> list[RunListing]:
     ]
 
 
+def run_of_field(tx: Tx, project_id: Id, field_id: Id) -> ExtractionRun:
+    row = tx.execute(
+        "select run_id from extraction_field where id = %s and project_id = %s",
+        (field_id, project_id),
+    ).fetchone()
+    if row is None:
+        raise NotFoundError(f"extraction field {field_id}")
+    return get_run(tx, project_id, row["run_id"])
+
+
 def get_run_by_command(tx: Tx, command_id: Id) -> ExtractionRun:
     row = tx.execute(f"{_RUN_SELECT} where r.command_id = %s", (command_id,)).fetchone()
     if row is None:

@@ -41,6 +41,7 @@ from kittum.app.lifecycle import (
     add_member,
     attach_full_text,
     attach_sentinel_full_text,
+    check_extractable,
     corpus_records,
     create_project,
     example_protocols,
@@ -62,6 +63,7 @@ from kittum.app.lifecycle import (
     require_lead,
     require_project_lead,
     retrieval,
+    visible_reports,
 )
 
 __all__ = [
@@ -92,6 +94,7 @@ __all__ = [
     "attach_sentinel_full_text",
     "build_gateway",
     "build_judge",
+    "check_extractable",
     "corpus_records",
     "create_project",
     "ensure_actor",
@@ -120,4 +123,5 @@ __all__ = [
     "retrieval",
     "run_judge_jobs",
     "seed_demo",
+    "visible_reports",
 ]

@@ -11,6 +11,7 @@ from kittum.core import FixedClock, Id, new_id
 from kittum.documents import Document, Layer, PyMuPDFParser, derive, ingest
 from kittum.extraction import JOB_KIND, run_handler
 from kittum.ledger import PostgresLedger
+from kittum.people import record_roles
 from kittum.runs import Commands, PostgresJobQueue, PostgresReceipts, Worker
 from kittum.settings import Settings
 from kittum.storage import MemoryStore
@@ -97,6 +98,13 @@ def env(pg: Tx) -> Env:
         queue=queue,
         receipts=receipts,
     )
+    project_id = new_project(pg)
+    requester, reviewer = actor(pg, "methods-lead"), actor(pg, "reviewer")
+    # The requester leads the project and the reviewer reviews in it; neither screens, so both
+    # may see every run. The client asks as the reviewer.
+    record_roles(pg, project_id, requester, "Lead", ("lead",), event_id=new_id())
+    record_roles(pg, project_id, reviewer, "Reviewer", ("reviewer",), event_id=new_id())
+    client = TestClient(create_app(context), headers={"X-Kittum-Reviewer": str(reviewer)})
     return Env(
         tx=pg,
         db=db,
@@ -105,10 +113,10 @@ def env(pg: Tx) -> Env:
         ledger=ledger,
         queue=queue,
         commands=Commands(ledger, queue, receipts, clock),
-        client=TestClient(create_app(context)),
-        project_id=new_project(pg),
-        requester=actor(pg, "methods-lead"),
-        reviewer=actor(pg, "reviewer"),
+        client=client,
+        project_id=project_id,
+        requester=requester,
+        reviewer=reviewer,
         stored=stored,
         backends={RECIPE_ID: recorded("vitamin_c")},
     )

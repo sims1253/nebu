@@ -5,7 +5,14 @@ import sqlite3
 from uuid import UUID
 
 from kittum.core import new_id
-from kittum.extraction import PROPOSALS_RECORDED, RUN_REQUESTED, VALUE_ACCEPTED
+from kittum.extraction import (
+    PROPOSALS_RECORDED,
+    RUN_REQUESTED,
+    VALUE_ACCEPTED,
+    ReportInfo,
+    RunRequest,
+    request_run,
+)
 from kittum.ledger import SigningKey, seal, verify_bundle
 from kittum.models.testing import RecordedBackend
 from tests.extraction.support import AGENT, FIXTURES, recorded, recording_path, schema
@@ -15,17 +22,20 @@ REPORT = UUID("019a3c10-0000-7000-8000-000000000002")
 
 
 def _run(env, name, command_id=None):
-    body = {
-        "command_id": str(command_id or new_id()),
-        "actor_id": str(env.requester),
-        "layer_id": str(env.stored[name].layer.id),
-        "study_id": str(STUDY),
-        "report_id": str(REPORT),
-        "extraction_schema": schema(name).model_dump(mode="json"),
-        "agent": AGENT.model_dump(mode="json"),
-        "report": {"study_label": name, "title": f"The {name} trial", "licence": "CC BY 4.0"},
-    }
-    return env.client.post(f"/api/projects/{env.project_id}/extraction/runs", json=body)
+    """A run requested through the service: the route also needs the report included at full
+    text, which tests/app/test_extraction_access.py covers."""
+    request = RunRequest(
+        command_id=command_id or new_id(),
+        project_id=env.project_id,
+        actor_id=env.requester,
+        layer_id=env.stored[name].layer.id,
+        study_id=STUDY,
+        report_id=REPORT,
+        extraction_schema=schema(name),
+        agent=AGENT,
+        report=ReportInfo(study_label=name, title=f"The {name} trial", licence="CC BY 4.0"),
+    )
+    return request_run(env.tx, env.commands, request, clock=env.clock).model_dump(mode="json")
 
 
 def _fields(env, run_id):
@@ -56,13 +66,9 @@ def test_a_run_reconciles_both_paths_and_humans_accept_each_value(env, tmp_path)
     base = f"/api/projects/{env.project_id}/extraction"
     command_id = new_id()
     with env.client:
-        requested = _run(env, "lesotho", command_id)
-        assert requested.status_code == 202
-        run = requested.json()
+        run = _run(env, "lesotho", command_id)
         assert run["status"] == "queued"
-        assert (
-            _run(env, "lesotho", command_id).json()["id"] == run["id"]
-        )  # a retry, not a second run
+        assert _run(env, "lesotho", command_id)["id"] == run["id"]  # a retry, not a second run
         assert [e["run_id"] for e in env.events(RUN_REQUESTED)] == [run["id"]]
 
         # The job runs through the worker, against the completions qwen3.5:4b gave on Ollama.
@@ -249,7 +255,7 @@ def test_only_agreeing_validated_standard_fields_are_accepted_as_a_group(env):
     answers[final] = json.dumps(answer)
     base = f"/api/projects/{env.project_id}/extraction"
     with env.client:
-        run = _run(env, "vitamin_c").json()
+        run = _run(env, "vitamin_c")
         assert env.worker(RecordedBackend(answers, model_identity="qwen3.5:4b")).run_once()
         fields = _fields(env, run["id"])
         female = [fields[("female_sex", arm, "events")] for arm in ("vitamin_c", "control")]
@@ -383,7 +389,18 @@ def test_the_workbench_reads_a_schema_requests_a_janus_only_run_and_lists_it(env
             "extraction_schema": parsed.json(),
             "report": {"study_label": "NCT05596773", "title": "CHW-led care in Lesotho"},
         }
-        run = env.client.post(f"{base}/runs", json=body).json()
+        # Through the route only the lead asks, and only for a report included at full text,
+        # which this project has none of (tests/app/test_extraction_access.py has one).
+        as_reviewer = env.client.post(f"{base}/runs", json=body | {"actor_id": str(env.reviewer)})
+        assert as_reviewer.status_code == 403
+        refused = env.client.post(f"{base}/runs", json=body)
+        assert refused.status_code == 409 and "has no full text" in refused.json()["detail"]
+        run = request_run(
+            env.tx,
+            env.commands,
+            RunRequest.model_validate(body | {"project_id": str(env.project_id)}),
+            clock=env.clock,
+        ).model_dump(mode="json")
         (listed,) = env.client.get(f"{base}/runs").json()
         assert (listed["run"]["id"], listed["run"]["status"], listed["fields"]) == (
             run["id"],

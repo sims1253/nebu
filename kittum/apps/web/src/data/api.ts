@@ -489,7 +489,8 @@ export const makeApiWorkbench = (): Workbench => ({
   sealBundle: ({ projectId, as }) =>
     call((api) => api.sealReportBundle(projectId, { payload: { actor_id: as } })),
 
-  extractionRuns: (projectId) => call((api) => api.listExtractionRuns(projectId, undefined)),
+  extractionRuns: ({ projectId, as }) =>
+    call((api) => api.listExtractionRuns(projectId, { params: reviewer(as) })),
 
   extractionModels: (projectId) => call((api) => api.listExtractionModels(projectId, undefined)),
 
@@ -512,8 +513,8 @@ export const makeApiWorkbench = (): Workbench => ({
       }),
     ),
 
-  extraction: ({ projectId, runId }) =>
-    call((api) => api.getExtractionReview(projectId, runId, undefined)),
+  extraction: ({ projectId, as, runId }) =>
+    call((api) => api.getExtractionReview(projectId, runId, { params: reviewer(as) })),
 
   accept: ({ projectId, as, fieldId, path, edit, sourceViewedMs, override }) =>
     call((api): Effect.Effect<KittumApi.Acceptance, unknown> =>
@@ -553,7 +554,8 @@ export const makeApiWorkbench = (): Workbench => ({
       }),
     ),
 
-  assertions: (projectId) => call((api) => api.listExtractionAssertions(projectId, undefined)),
+  assertions: ({ projectId, as }) =>
+    call((api) => api.listExtractionAssertions(projectId, { params: reviewer(as) })),
 });
 
 /** The server's health, for the start page. */

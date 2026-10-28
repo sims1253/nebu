@@ -6962,7 +6962,7 @@
     },
     "/api/projects/{project_id}/extraction/assertions": {
       "get": {
-        "description": "The project's accepted values, the latest acceptance per semantic key.",
+        "description": "The project's accepted values the viewer may see, the latest per semantic key.",
         "operationId": "listExtractionAssertions",
         "parameters": [
           {
@@ -6973,6 +6973,16 @@
               "format": "uuid",
               "title": "Project Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
             }
           }
         ],
@@ -7186,7 +7196,7 @@
     },
     "/api/projects/{project_id}/extraction/runs": {
       "get": {
-        "description": "The project's runs, newest first, with their report and review counts.",
+        "description": "The project's runs the viewer may see, newest first, with their report and review counts.",
         "operationId": "listExtractionRuns",
         "parameters": [
           {
@@ -7197,6 +7207,16 @@
               "format": "uuid",
               "title": "Project Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
             }
           }
         ],
@@ -7232,7 +7252,7 @@
         ]
       },
       "post": {
-        "description": "Queue both paths over a layer. Retrying with the same `command_id` returns the same run.",
+        "description": "Queue both paths over a layer of an included report's full text, for the methods lead\n(403 otherwise; 409 unless the report is included at full text and the layer is its full\ntext's). Retrying with the same `command_id` returns the same run.",
         "operationId": "requestExtractionRun",
         "parameters": [
           {
@@ -7307,6 +7327,16 @@
               "title": "Run Id",
               "type": "string"
             }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
           }
         ],
         "responses": {
@@ -7360,6 +7390,16 @@
               "format": "uuid",
               "title": "Run Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
             }
           }
         ],
@@ -7486,6 +7526,16 @@
               "format": "uuid",
               "title": "Run Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
             }
           }
         ],

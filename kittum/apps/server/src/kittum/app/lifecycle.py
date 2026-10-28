@@ -49,6 +49,7 @@ from kittum.screening import (
     StageSpec,
     sees_lead_data,
     topic_for,
+    undecided_items,
 )
 from kittum.search import list_executions
 
@@ -636,6 +637,48 @@ def open_screening(
     return info
 
 
+# Extraction
+
+
+def visible_reports(tx: Tx, project_id: Id, viewer_id: Id, report_ids: list[Id]) -> set[Id]:
+    """The reports whose extraction (runs, proposals, accepted values) the viewer may see: all of
+    them for a lead who screens nothing; for any other member of the project, those they have no
+    undecided screening assignment for. A run exists only for a report included at full text, so
+    seeing it before deciding would tell a screener how the others decided, and that it is no
+    sentinel."""
+    if sees_lead_data(tx, project_id, viewer_id):
+        return set(report_ids)
+    if not any(m.actor_id == viewer_id for m in members(tx, project_id)):
+        return set()
+    undecided = undecided_items(tx, project_id, viewer_id, [str(r) for r in report_ids])
+    return {r for r in report_ids if str(r) not in undecided}
+
+
+def check_extractable(
+    tx: Tx,
+    project_id: Id,
+    report_id: Id,
+    layer_id: Id,
+    screening: Screening,
+    artifacts: ArtifactStore,
+) -> None:
+    """Refuse an extraction run unless the report is included at full text in some scope and the
+    layer is one of its full text's document. Raises `LifecycleError`."""
+    ref = str(report_id)
+    found = full_text(tx, project_id, ref)
+    if found is None:
+        raise LifecycleError(f"report {report_id} has no full text")
+    if get_layer(tx, layer_id, artifacts=artifacts).document_id != found.document_id:
+        raise LifecycleError(f"layer {layer_id} is not a layer of the report's full text")
+    stages = [s for s in screening.stages(tx, project_id) if s.stage == "full_text"]
+    if not any(
+        screening.outcomes(tx, project_id, s.scope_id, "full_text", topic_id=s.topic_id).get(ref)
+        == "include"
+        for s in stages
+    ):
+        raise LifecycleError(f"report {report_id} is not included at full text")
+
+
 # Progress
 
 
@@ -708,6 +751,7 @@ __all__ = [
     "add_member",
     "attach_full_text",
     "attach_sentinel_full_text",
+    "check_extractable",
     "corpus_records",
     "create_project",
     "example_protocols",
@@ -729,4 +773,5 @@ __all__ = [
     "require_lead",
     "require_project_lead",
     "retrieval",
+    "visible_reports",
 ]

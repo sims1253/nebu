@@ -489,7 +489,7 @@ export const makeMockWorkbench = (
     reportFile: unavailable,
     sealBundle: unavailable,
 
-    extractionRuns: (projectId) =>
+    extractionRuns: ({ projectId }) =>
       call("other", "extractionRuns", projectId, () =>
         hasData(projectId)
           ? [

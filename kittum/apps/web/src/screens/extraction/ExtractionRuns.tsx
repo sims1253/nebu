@@ -31,7 +31,7 @@ const when = (iso: string) =>
 export function ExtractionRunsScreen() {
   const { workbench } = useRouteContext({ from: "/p/$projectId" });
   const navigate = useNavigate();
-  const { project, has, seesLeadData, labels } = useProject();
+  const { project, me, has, seesLeadData, labels } = useProject();
   const [runs, setRuns] = useState<ReadonlyArray<RunListing> | null>(null);
   const [assertions, setAssertions] = useState<ReadonlyArray<Assertion>>([]);
   const [error, setError] = useState<string | null>(null);
@@ -43,8 +43,8 @@ export function ExtractionRunsScreen() {
   const load = useCallback(
     () =>
       Promise.all([
-        run(workbench.extractionRuns(project.id)),
-        run(workbench.assertions(project.id)),
+        run(workbench.extractionRuns({ projectId: project.id, as: me.actor_id })),
+        run(workbench.assertions({ projectId: project.id, as: me.actor_id })),
       ]).then(
         ([found, values]) => {
           setRuns(found);
@@ -52,7 +52,7 @@ export function ExtractionRunsScreen() {
         },
         (e: unknown) => setError(failure(e, "The runs could not load.")),
       ),
-    [workbench, project.id],
+    [workbench, project.id, me.actor_id],
   );
   useEffect(() => {
     void load();
@@ -138,7 +138,7 @@ export function ExtractionRunsScreen() {
         ) : runs.length === 0 ? (
           <p className="mt-4 max-w-[64ch] text-md text-ink-2">
             {canRequest
-              ? `No runs yet. Request one on a ${labels.report.toLowerCase()} whose full text is on Retrieval, with an extraction schema: the arms, comparisons, endpoints, and quantities to take from it.`
+              ? `No runs yet. Request one on a ${labels.report.toLowerCase()} included at full text, with an extraction schema: the arms, comparisons, endpoints, and quantities to take from it.`
               : `No runs yet. The methods lead requests them on included ${plural(labels.report).toLowerCase()}; they show here once they are ready to review.`}
           </p>
         ) : (
@@ -266,7 +266,12 @@ function RequestRun({
     run(workbench.fullTexts({ projectId: project.id, as: me.actor_id })).then(
       (found) => {
         if (!live) return;
-        const ready = found.filter((r) => r.full_text);
+        // Only a report included at full text in some scope, with its PDF, as the server asks.
+        const ready = found.filter(
+          (r) =>
+            r.full_text &&
+            Object.values(r.outcomes).some((stages) => stages["full_text"] === "include"),
+        );
         setReports(ready);
         setItemRef((ref) => ref || (ready[0]?.item_ref ?? ""));
       },
@@ -352,8 +357,8 @@ function RequestRun({
         label={labels.report}
         hint={
           reports && reports.length === 0
-            ? "No report has a full text yet: upload one on Retrieval."
-            : "Reports with a full text. Extraction is for those included at full text."
+            ? "No report is included at full text yet. Extraction starts once one is."
+            : "Reports included at full text, with their PDF."
         }
       >
         <Select value={itemRef} onChange={(e) => setItemRef(e.currentTarget.value)}>

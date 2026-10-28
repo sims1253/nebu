@@ -805,8 +805,6 @@ Open:
   for good (they need requeueing by hand).
 - The full-text waterfall's automatic sources (WP-10) should attach through `attach_full_text`;
   only uploads and the demo do now. Full-text sentinels need a PDF each.
-- The extraction screen is not wired to WP-11's routes yet: `Workbench.extraction` and `accept`
-  in `apps/web/src/data/api.ts` return "not served yet".
 - Writes (confirm, merge, split, render, seal) name their actor in the request body; only
   reports check that it is a lead.
 - `kittum serve` runs one uvicorn process; production needs a process manager and TLS in front.
@@ -881,23 +879,30 @@ Done (branch `kittum/wp-16-workbench-design`, then `kittum/wp-15-integration`):
   review, runs the same steps through `kittum project`, and checks that both reviews open the same
   stage (mode, reveal, protocol hash, judge, the people in each role) and fill the screeners'
   queues with the same records and sentinel; the first reviewer then picks themselves and screens.
-- Extraction on the server: the lead requests a run (`n`) on a report with a full text, with an
+- Extraction on the server (branch `kittum/workbench-control`): the lead requests a run (`n`) on
+  a report included at full text (the
+  server refuses any other, and a layer of another document), with an
   extraction schema the server reads and the Janus path only or the LLM path on a configured
   model; the list follows the worker until the run is ready. The review shows the server's fields
   grouped by their labels: `Enter` accepts once the source was on screen, `1`/`2` pick a path,
   `e` turns a selection on the page into an edit (the first number in it, to confirm in a field,
   then `Enter`), `o` accepts despite a failed check, `a` accepts the agreeing standard fields
-  together. The accepted values, the latest per semantic key, are listed under the runs.
-  `apps/web/e2e/extraction.spec.ts` uploads the Lesotho trial on Retrieval, requests a Janus-only
-  run, accepts Table 1's 52, and edits the 12-month HbA1c from a mouse selection on page 5; the
-  assertion's anchor is that span.
+  together. The accepted values, the latest
+  per semantic key, are listed under the runs. A run, its fields, and its accepted values reach
+  only a lead who screens nothing or a member with no undecided screening assignment for the
+  report (`kittum.app.visible_reports`); anyone else gets no run and a 404.
+  `apps/web/e2e/extraction.spec.ts` screens the Lesotho trial to full-text inclusion in the
+  browser (nothing can be extracted before), requests a Janus-only run, shows the auditor whose
+  audit screen is open nothing of it, accepts Table 1's 52, and edits the 12-month HbA1c from a
+  mouse selection on page 5; the assertion's anchor is that span. `tests/app/test_extraction_access.py`
+  checks every extraction read and acceptance against Postgres.
 - Browser unit tests in Vitest browser mode on the mock, and screenshots in `apps/web/screenshots/`.
 
 Left:
 
 - The other report targets on the Reports screen, and the Risk of bias (WP-12 has no server
-  implementation) and AI-exclusion audit screens; extraction runs are visible to every member of
-  the project, so the lead requests them once full-text screening of the report is done; the full-text judge's per-criterion reading in adjudication; grounding exceptions.
+  implementation) and AI-exclusion audit screens; the full-text judge's per-criterion reading in
+  adjudication; grounding exceptions.
 - Adjudication shows a full-text column's evidence as counts, not the quotes on the page.
 - Update searches: a second corpus ingest needs the corpus diff, so Search and Studies refuse it.
 - Removing a person or a role, and renaming a review, are not built in the server either.

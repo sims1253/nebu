@@ -240,7 +240,9 @@ export interface Workbench {
   // Extraction. The lead requests runs on reports with a full text (`fullTexts` names them); a
   // worker fills each run; a reviewer accepts each value after viewing its source.
 
-  readonly extractionRuns: (projectId: string) => Call<ReadonlyArray<RunListing>>;
+  // A run exists only for a report included at full text, so the server shows a run only to a
+  // lead who screens nothing or to someone who has decided every screen of its report.
+  readonly extractionRuns: (caller: Caller) => Call<ReadonlyArray<RunListing>>;
   /** The model recipes the LLM path can use here; empty means the Janus path only. */
   readonly extractionModels: (projectId: string) => Call<ReadonlyArray<string>>;
   /** An extraction schema file (YAML or JSON) as the server reads it. */
@@ -258,10 +260,7 @@ export interface Workbench {
       readonly report: ReportInfo;
     },
   ) => Call<ExtractionRun>;
-  readonly extraction: (request: {
-    readonly projectId: string;
-    readonly runId: string;
-  }) => Call<ExtractionReview>;
+  readonly extraction: (request: Caller & { readonly runId: string }) => Call<ExtractionReview>;
   readonly accept: (
     request: Caller & {
       readonly fieldId: string;
@@ -283,7 +282,7 @@ export interface Workbench {
     },
   ) => Call<ReadonlyArray<Acceptance>>;
   /** The accepted values of the project, the latest per semantic key: what reports use. */
-  readonly assertions: (projectId: string) => Call<ReadonlyArray<Assertion>>;
+  readonly assertions: (caller: Caller) => Call<ReadonlyArray<Assertion>>;
 }
 
 export const run = <A>(call: Call<A>): Promise<A> => Effect.runPromise(call);
