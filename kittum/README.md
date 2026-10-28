@@ -74,8 +74,20 @@ lead: Setup walks through the steps in order. Add the people with their roles, w
 from an example in `examples/protocols/` or your own file and publish it, import each database's
 export (RIS, CENTRAL, Embase, PubMed XML, registry CSV) or run PubMed and ClinicalTrials.gov live,
 build the corpus, open title and abstract screening with its sentinels
-(`examples/sentinels/nicotine-replacement.yaml` for the example protocol), and upload the full
-texts on Retrieval. `uv run kittum project --help` lists the same steps for the command line.
+(`examples/sentinels/nicotine-replacement.yaml` for the example protocol), and fetch or upload the
+full texts on Retrieval. `uv run kittum project --help` lists the same steps for the command line.
+
+Building the corpus queues its enrichment, which `kittum worker` runs through the source gateway:
+OpenAlex, Europe PMC, Crossref, Unpaywall, and PubTator 3 fill missing identifiers and abstracts,
+list open-access locations, flag retractions and corrections, and tag drugs and diseases. A source
+that fails is recorded and the others still answer. **Studies** shows the run per source and, with
+`o` on a record, where each of its fields came from; `r` enriches again. Once records are included
+at title and abstract, `o` on **Retrieval** has the worker walk the open-access waterfall for each
+report without a full text (Europe PMC, Unpaywall, OpenAlex, then the publisher's openly licensed
+PDF listed in Crossref), lists every attempt under its report, and stores each PDF it gets with its
+licence; upload the rest by hand with `u`. Set `KITTUM_CONTACT_EMAIL` first: Crossref's polite
+pool and Unpaywall need it, and without it enrichment skips Unpaywall. `KITTUM_OPENALEX_API_KEY`
+and `KITTUM_NCBI_API_KEY` are optional and raise those sources' limits (see `.env.example`).
 
 To judge with a hosted OpenAI-compatible API instead, add it as a recipe of your own in a file
 under `.kittum/` (git ignores it), point `KITTUM_RECIPES_FILE` at it, and name the environment
@@ -110,8 +122,10 @@ uv run kittum demo seed --live
 
 For development, `pnpm dev:web` serves the workbench with hot reload on port 5180 against
 `kittum serve`, and `VITE_KITTUM_WORKBENCH=mock pnpm dev:web` shows recorded example data without
-a server. `pnpm --dir apps/web e2e` runs the end-to-end journey against a migrated database in
-`KITTUM_DATABASE_URL`.
+a server. `pnpm --dir apps/web e2e` runs the end-to-end journeys against a migrated database in
+`KITTUM_DATABASE_URL`, with the source gateway answering from the recorded responses in
+`apps/server/tests/enrich/fixtures/stack` (`KITTUM_GATEWAY_RECORDINGS`), so nothing touches the
+network. `uv run python -m tests.app.record_stack` in `apps/server` records them again.
 
 ## Documents
 

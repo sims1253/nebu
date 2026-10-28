@@ -17,7 +17,7 @@ The two-week spike in [DESIGN.md](../DESIGN.md#two-week-spike) picks from these 
 | 03 | `protocol`, `profiles` | Done: schema, profiles, compile, diff, rendering, persistence, routes |
 | 04 | `gateway` | Done: httpx transport, policies, shared buckets, budgets, cache, attempts; AppContext wiring open |
 | 05 | `search` | Done |
-| 06 | `enrich` | Clients, stored enrichment, and full-text waterfall done; local tagging open |
+| 06 | `enrich` | Clients, stored enrichment, full-text waterfall, and jobs in the app done; local tagging open |
 | 07 | `corpus` | Dedupe, link proposals, immutable identity revisions, PRISMA counts done |
 | 08 | `judge` and `models` | Done; ledger store and job wiring wait for WP-01 and WP-02 |
 | 09 | `screening` | Done: M1 to M3, blinding, reveal, sentinels, audits, adjudication, judge jobs, metrics, routes; open items listed |
@@ -229,6 +229,11 @@ Module `kittum.enrich`. Needs: `gateway`, `search`, `models`.
   URLs, each with its licence.
 - Done: recorded real responses in `tests/enrich/fixtures/`, including a retracted paper whose
   Crossref notice DOI is flagged.
+- Done: Crossref's openly licensed publisher PDF links (`link` with a Creative Commons `license`
+  for its content version, or for text and data mining) are full-text locations, last in the
+  waterfall. PubTator's source name is the gateway policy's (`pubtator`); as `pubtator3` every
+  call through the real gateway failed as an unknown source. `SOURCES` and `sources_asked` say
+  which sources `enrich` asks about a record, for progress per source.
 - Open: local entity tagging with the OpenMed GLiNER models, for text that must stay local.
 
 ## WP-07 Corpus
@@ -794,6 +799,37 @@ Modules `kittum.api`, `kittum.app`, and `kittum.people`. Needs: the modules it e
   texts need a lead who screens nothing, as the catalogue reads do
   (`tests/app/test_setup_routes.py` refuses a reviewer's own ID on each).
 
+Enrichment and open-access retrieval (branch `kittum/enrichment-ui`):
+
+- `kittum.app.enrichment`: building the corpus (route and `kittum project ingest`) queues an
+  `enrich.revision` job; `kittum project enrich` and `POST .../enrichment/runs` queue another (an
+  unfinished run comes back instead). The job enriches the revision's source occurrences in import
+  order, 50 per transaction, each chunk with its `record_enrichment` rows, an
+  `enrichment_run_record` row per record (sources asked, answering, and failed with the reason),
+  and an `enrichment.records_enriched` event naming every field's source; a retried job skips
+  done records. `enrichment.requested` and `enrichment.finished` frame the run.
+- `kittum.app.open_access`: `POST .../retrieval/open-access` (or `kittum project
+  fetch-open-access`) fixes the reports included at title and abstract without a full text and
+  queues a `retrieval.open_access` job. Per report, in its own transaction, it ranks the PDF
+  locations enrichment found (`full_text_candidates`), lets `documents.acquire` walk them (a
+  source that gives no response is an `unavailable` attempt now, and every attempt carries its
+  licence), and attaches a PDF it gets with `attach_acquired_full_text` (parsed layer, licence,
+  the acquisition in the event). A report without a location gets
+  `retrieval.no_open_access_location`; one uploaded by hand meanwhile is left alone.
+- Routes (`api/routes/enrichment.py`), all 403 to anyone but a lead who screens nothing: the
+  latest enrichment run with counts per source, flags per record, one record's enrichment (field
+  sources, identifiers, notices, OA locations, entity tags, failures), the latest open-access run
+  with each report's attempts, and a report's attempts over all runs. Migration
+  `20261030010000_app_enrichment_retrieval.sql`.
+- `HttpxTransport` speaks HTTP/2: link.springer.com answers HTTP/1.1 clients with a bot challenge.
+  `KITTUM_GATEWAY_RECORDINGS` serves the gateway from `kittum.gateway.RecordedTransport`; the
+  end-to-end stack points it at `tests/enrich/fixtures/stack`, recorded by
+  `tests/app/record_stack.py` (no key; the CC BY PDFs are the repository's own fixtures).
+- Tests: `tests/app/test_enrichment.py` drives both jobs through the worker on recorded responses
+  with PubTator answering 503, then again with it back (the cache answers the rest);
+  `apps/web/e2e/enrichment.spec.ts` covers the screens, and `setup.spec.ts` checks the enrichment
+  of the corpus it builds.
+
 Open:
 
 - Authentication. `X-Kittum-Reviewer` (screening, progress) and the `actor_id` fields in request
@@ -803,8 +839,8 @@ Open:
 - One judge per deployment: a worker runs one judge config, and opening a stage uses it. A
   stage with another config needs a worker started with it; a mismatched worker fails the jobs
   for good (they need requeueing by hand).
-- The full-text waterfall's automatic sources (WP-10) should attach through `attach_full_text`;
-  only uploads and the demo do now. Full-text sentinels need a PDF each.
+- Full-text sentinels need a PDF each. The open-access waterfall skips Europe PMC's full-text
+  XML: a document is a PDF, and there is no layer from JATS yet.
 - Writes (confirm, merge, split, render, seal) name their actor in the request body; only
   reports check that it is a lead.
 - `kittum serve` runs one uvicorn process; production needs a process manager and TLS in front.
