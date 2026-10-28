@@ -825,6 +825,71 @@
         "title": "AssignmentFullText",
         "type": "object"
       },
+      "AttemptView": {
+        "additionalProperties": false,
+        "description": "One step of the waterfall for one report.",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "host": {
+            "title": "Host",
+            "type": "string"
+          },
+          "licence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Licence"
+          },
+          "outcome": {
+            "title": "Outcome",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "url",
+          "host",
+          "status",
+          "outcome",
+          "licence"
+        ],
+        "title": "AttemptView",
+        "type": "object"
+      },
       "AuditGauge": {
         "additionalProperties": false,
         "properties": {
@@ -2029,6 +2094,128 @@
         "title": "Endpoint",
         "type": "object"
       },
+      "EnrichmentRun": {
+        "additionalProperties": false,
+        "properties": {
+          "done": {
+            "title": "Done",
+            "type": "integer"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "identity_revision_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "records": {
+            "title": "Records",
+            "type": "integer"
+          },
+          "requested_at": {
+            "format": "date-time",
+            "title": "Requested At",
+            "type": "string"
+          },
+          "requested_by": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "retracted": {
+            "title": "Retracted",
+            "type": "integer"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SourceProgress"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/components/schemas/kittum__app__enrichment__RunStatus"
+          },
+          "trigger": {
+            "$ref": "#/components/schemas/Trigger"
+          }
+        },
+        "required": [
+          "id",
+          "identity_revision_id",
+          "trigger",
+          "status",
+          "requested_by",
+          "requested_at",
+          "finished_at",
+          "records",
+          "done",
+          "retracted",
+          "sources"
+        ],
+        "title": "EnrichmentRun",
+        "type": "object"
+      },
+      "EntityTag": {
+        "additionalProperties": false,
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "normalized_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Normalized Id"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          },
+          "tagger": {
+            "title": "Tagger",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "label",
+          "tagger"
+        ],
+        "title": "EntityTag",
+        "type": "object"
+      },
       "EventPage": {
         "additionalProperties": false,
         "properties": {
@@ -2193,7 +2380,7 @@
             "$ref": "#/components/schemas/Sha256"
           },
           "status": {
-            "$ref": "#/components/schemas/RunStatus"
+            "$ref": "#/components/schemas/kittum__extraction__store__RunStatus"
           },
           "study_id": {
             "$ref": "#/components/schemas/Id"
@@ -2362,6 +2549,26 @@
           "arm"
         ],
         "title": "FieldLabels",
+        "type": "object"
+      },
+      "FieldSource": {
+        "additionalProperties": false,
+        "description": "Which source supplied one field, so a reviewer can see where a value came from.",
+        "properties": {
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "source"
+        ],
+        "title": "FieldSource",
         "type": "object"
       },
       "FieldSpec": {
@@ -3109,6 +3316,68 @@
         "title": "ModeChange",
         "type": "object"
       },
+      "OaLocation": {
+        "additionalProperties": false,
+        "properties": {
+          "format": {
+            "anyOf": [
+              {
+                "enum": [
+                  "pdf",
+                  "xml",
+                  "landing"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Format"
+          },
+          "licence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Licence"
+          },
+          "source": {
+            "default": "",
+            "title": "Source",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "enum": [
+                  "published",
+                  "accepted",
+                  "submitted"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "OaLocation",
+        "type": "object"
+      },
       "Occurrence": {
         "additionalProperties": false,
         "properties": {
@@ -3134,6 +3403,72 @@
           "provider_record_id"
         ],
         "title": "Occurrence",
+        "type": "object"
+      },
+      "OpenAccessRun": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "reports": {
+            "items": {
+              "$ref": "#/components/schemas/ReportRetrieval"
+            },
+            "title": "Reports",
+            "type": "array"
+          },
+          "requested_at": {
+            "format": "date-time",
+            "title": "Requested At",
+            "type": "string"
+          },
+          "requested_by": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "done",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "requested_by",
+          "requested_at",
+          "finished_at",
+          "reports"
+        ],
+        "title": "OpenAccessRun",
         "type": "object"
       },
       "OpenStageRequest": {
@@ -4455,6 +4790,149 @@
         "title": "ReasonCount",
         "type": "object"
       },
+      "RecordEnrichmentView": {
+        "additionalProperties": false,
+        "description": "One source occurrence as enrichment completed it. `entities` index into\n`title + \" \" + abstract`, the text the tags were anchored in.",
+        "properties": {
+          "abstract": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abstract"
+          },
+          "clinical_trial_numbers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Clinical Trial Numbers",
+            "type": "array"
+          },
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "enriched_at": {
+            "format": "date-time",
+            "title": "Enriched At",
+            "type": "string"
+          },
+          "entities": {
+            "items": {
+              "$ref": "#/components/schemas/EntityTag"
+            },
+            "title": "Entities",
+            "type": "array"
+          },
+          "failures": {
+            "items": {
+              "$ref": "#/components/schemas/SourceFailureView"
+            },
+            "title": "Failures",
+            "type": "array"
+          },
+          "field_sources": {
+            "items": {
+              "$ref": "#/components/schemas/FieldSource"
+            },
+            "title": "Field Sources",
+            "type": "array"
+          },
+          "oa_locations": {
+            "items": {
+              "$ref": "#/components/schemas/OaLocation"
+            },
+            "title": "Oa Locations",
+            "type": "array"
+          },
+          "occurrence_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "pmcid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pmcid"
+          },
+          "pmid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pmid"
+          },
+          "retracted": {
+            "title": "Retracted",
+            "type": "boolean"
+          },
+          "retraction_notice_doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retraction Notice Doi"
+          },
+          "search_source": {
+            "title": "Search Source",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updates": {
+            "items": {
+              "$ref": "#/components/schemas/WorkUpdate"
+            },
+            "title": "Updates",
+            "type": "array"
+          }
+        },
+        "required": [
+          "occurrence_id",
+          "search_source",
+          "title",
+          "abstract",
+          "doi",
+          "pmid",
+          "pmcid",
+          "retracted",
+          "retraction_notice_doi",
+          "updates",
+          "clinical_trial_numbers",
+          "oa_locations",
+          "entities",
+          "field_sources",
+          "failures",
+          "enriched_at"
+        ],
+        "title": "RecordEnrichmentView",
+        "type": "object"
+      },
       "RecordFacts": {
         "additionalProperties": false,
         "description": "Bibliographic facts shown above the abstract.",
@@ -4521,6 +4999,46 @@
           }
         },
         "title": "RecordFacts",
+        "type": "object"
+      },
+      "RecordFlag": {
+        "additionalProperties": false,
+        "description": "What the corpus list shows beside a record.",
+        "properties": {
+          "occurrence_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "open_access": {
+            "title": "Open Access",
+            "type": "boolean"
+          },
+          "retracted": {
+            "title": "Retracted",
+            "type": "boolean"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "updates": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Updates",
+            "type": "array"
+          }
+        },
+        "required": [
+          "occurrence_id",
+          "retracted",
+          "updates",
+          "sources",
+          "open_access"
+        ],
+        "title": "RecordFlag",
         "type": "object"
       },
       "RecordTrace": {
@@ -4735,6 +5253,95 @@
           }
         },
         "title": "ReportInfo",
+        "type": "object"
+      },
+      "ReportOutcome": {
+        "enum": [
+          "acquired",
+          "not_acquired",
+          "no_location",
+          "had_full_text"
+        ],
+        "type": "string"
+      },
+      "ReportRetrieval": {
+        "additionalProperties": false,
+        "properties": {
+          "attempts": {
+            "items": {
+              "$ref": "#/components/schemas/AttemptView"
+            },
+            "title": "Attempts",
+            "type": "array"
+          },
+          "document_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "licence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Licence"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReportOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "page_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Count"
+          },
+          "report_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "report_id",
+          "title",
+          "outcome",
+          "attempts"
+        ],
+        "title": "ReportRetrieval",
         "type": "object"
       },
       "ReportSummary": {
@@ -5429,9 +6036,6 @@
         "title": "RunSearchRequest",
         "type": "object"
       },
-      "RunStatus": {
-        "type": "string"
-      },
       "SchemaText": {
         "additionalProperties": false,
         "properties": {
@@ -6040,6 +6644,25 @@
         "title": "SourceCount",
         "type": "object"
       },
+      "SourceFailureView": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "reason"
+        ],
+        "title": "SourceFailureView",
+        "type": "object"
+      },
       "SourceKind": {
         "enum": [
           "bibliographic",
@@ -6083,6 +6706,47 @@
           "sources"
         ],
         "title": "SourcePlan",
+        "type": "object"
+      },
+      "SourceProgress": {
+        "additionalProperties": false,
+        "description": "One source's part in a run: records it was asked about, records it filled a field of, and\nrecords it failed for without answering, with the last reason it gave.",
+        "properties": {
+          "answered": {
+            "title": "Answered",
+            "type": "integer"
+          },
+          "asked": {
+            "title": "Asked",
+            "type": "integer"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "asked",
+          "answered",
+          "failed"
+        ],
+        "title": "SourceProgress",
         "type": "object"
       },
       "SourceRecord": {
@@ -6487,6 +7151,19 @@
           "outcomes"
         ],
         "title": "StageProgress",
+        "type": "object"
+      },
+      "StartRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_id": {
+            "$ref": "#/components/schemas/Id"
+          }
+        },
+        "required": [
+          "actor_id"
+        ],
+        "title": "StartRequest",
         "type": "object"
       },
       "StopStatus": {
@@ -6940,6 +7617,13 @@
         "title": "TracedOccurrence",
         "type": "object"
       },
+      "Trigger": {
+        "enum": [
+          "corpus_built",
+          "requested"
+        ],
+        "type": "string"
+      },
       "UndoRequest": {
         "additionalProperties": false,
         "properties": {
@@ -7208,6 +7892,44 @@
         "title": "WordBox",
         "type": "object"
       },
+      "WorkUpdate": {
+        "additionalProperties": false,
+        "description": "A retraction, correction, or erratum that Crossref links to a work.",
+        "properties": {
+          "direction": {
+            "enum": [
+              "updates",
+              "updated_by"
+            ],
+            "title": "Direction",
+            "type": "string"
+          },
+          "doi": {
+            "title": "Doi",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "doi",
+          "kind",
+          "direction"
+        ],
+        "title": "WorkUpdate",
+        "type": "object"
+      },
+      "kittum__app__enrichment__RunStatus": {
+        "enum": [
+          "queued",
+          "running",
+          "done",
+          "failed"
+        ],
+        "type": "string"
+      },
       "kittum__corpus__models__ProposalStatus": {
         "enum": [
           "pending",
@@ -7224,6 +7946,9 @@
           "invalid",
           "error"
         ],
+        "type": "string"
+      },
+      "kittum__extraction__store__RunStatus": {
         "type": "string"
       },
       "kittum__protocol__model__Outcome": {
@@ -8316,7 +9041,7 @@
     },
     "/api/projects/{project_id}/corpus/ingest": {
       "post": {
-        "description": "Deduplicate every search of the project into the first identity revision.",
+        "description": "Deduplicate every search of the project into the first identity revision, and queue its\nenrichment from the open sources when a worker can run it.",
         "operationId": "ingestCorpus",
         "parameters": [
           {
@@ -8668,6 +9393,236 @@
         "summary": "Split Route",
         "tags": [
           "corpus"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/enrichment/records": {
+      "get": {
+        "description": "For every enriched record: retraction and other notices, the sources that answered, and\nwhether an open-access file is known.",
+        "operationId": "listRecordEnrichmentFlags",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RecordFlag"
+                  },
+                  "title": "Response Listrecordenrichmentflags",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Flags",
+        "tags": [
+          "enrichment"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/enrichment/records/{occurrence_id}": {
+      "get": {
+        "description": "One record as enrichment completed it: where each field came from, its identifiers,\nretraction and correction notices, open-access locations, and entity tags.",
+        "operationId": "getRecordEnrichment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "occurrence_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Occurrence Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordEnrichmentView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Record",
+        "tags": [
+          "enrichment"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/enrichment/runs": {
+      "post": {
+        "description": "Enrich every record of the newest identity revision from the open sources. A run that is\nstill going is returned instead of a second one.",
+        "operationId": "startEnrichment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrichmentRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Enrichment",
+        "tags": [
+          "enrichment"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/enrichment/runs/latest": {
+      "get": {
+        "description": "The newest run with its progress per source; 404 before the first.",
+        "operationId": "getLatestEnrichmentRun",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrichmentRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Latest Enrichment",
+        "tags": [
+          "enrichment"
         ]
       }
     },
@@ -10312,6 +11267,182 @@
         "summary": "Render Target",
         "tags": [
           "reports"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/retrieval/open-access": {
+      "post": {
+        "description": "Walk the open-access waterfall for every report sought for retrieval without a full text.",
+        "operationId": "startOpenAccessRetrieval",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenAccessRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Open Access",
+        "tags": [
+          "enrichment"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/retrieval/open-access/latest": {
+      "get": {
+        "description": "The newest open-access run, each report with its attempts; 404 before the first.",
+        "operationId": "getLatestOpenAccessRetrieval",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenAccessRun"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Latest Open Access",
+        "tags": [
+          "enrichment"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/retrieval/reports/{report_id}/attempts": {
+      "get": {
+        "description": "Every waterfall attempt for one report, over all runs, oldest first.",
+        "operationId": "listReportAcquisitionAttempts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "report_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Report Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AttemptView"
+                  },
+                  "title": "Response Listreportacquisitionattempts",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Attempts",
+        "tags": [
+          "enrichment"
         ]
       }
     },

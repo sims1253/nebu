@@ -56,6 +56,7 @@ from kittum.search import list_executions
 if TYPE_CHECKING:
     from kittum.app.context import AppContext
     from kittum.db import Tx
+    from kittum.documents import Acquisition, Document
     from kittum.ledger import Ledger
     from kittum.protocol import Stage
     from kittum.screening import RevealSetting, Screening
@@ -386,13 +387,66 @@ def attach_full_text(
     """Store a PDF, parse its base layer, and make it the record's full text.
 
     This is the human upload of the full-text waterfall (DESIGN.md, "Full text"); the automatic
-    sources (WP-10's open resolvers) will attach through the same function. With `sentinel`
-    (its title and expected outcome) the PDF joins the project's full-text sentinels instead,
-    under an item reference of its own; use `attach_sentinel_full_text`.
+    sources attach through `attach_acquired_full_text`. With `sentinel` (its title and expected
+    outcome) the PDF joins the project's full-text sentinels instead, under an item reference of
+    its own; use `attach_sentinel_full_text`.
     """
     if full_text(tx, project_id, item_ref) is not None:
         raise LifecycleError(f"record {item_ref} already has a full text")
     document = ingest_pdf(tx, artifacts, pdf)
+    return _attach(
+        tx,
+        project_id,
+        item_ref,
+        document,
+        actor_id=actor_id,
+        artifacts=artifacts,
+        ledger=ledger,
+        licence=licence,
+        sentinel=sentinel,
+    )
+
+
+def attach_acquired_full_text(
+    tx: Tx,
+    project_id: Id,
+    item_ref: str,
+    acquisition: Acquisition,
+    *,
+    actor_id: Id,
+    artifacts: ArtifactStore,
+    ledger: Ledger,
+) -> FullText:
+    """Make a PDF the waterfall fetched (`kittum.documents.acquire`) the record's full text, with
+    the licence its source stated and a reference to the acquisition."""
+    if full_text(tx, project_id, item_ref) is not None:
+        raise LifecycleError(f"record {item_ref} already has a full text")
+    return _attach(
+        tx,
+        project_id,
+        item_ref,
+        acquisition.document,
+        actor_id=actor_id,
+        artifacts=artifacts,
+        ledger=ledger,
+        licence=acquisition.licence,
+        acquisition=acquisition,
+    )
+
+
+def _attach(
+    tx: Tx,
+    project_id: Id,
+    item_ref: str,
+    document: Document,
+    *,
+    actor_id: Id,
+    artifacts: ArtifactStore,
+    ledger: Ledger,
+    licence: str | None,
+    sentinel: tuple[str, Literal["include", "exclude"]] | None = None,
+    acquisition: Acquisition | None = None,
+) -> FullText:
     layer = derive(tx, document, PyMuPDFParser(), artifacts=artifacts)
     payload = {
         "item_ref": item_ref,
@@ -402,6 +456,12 @@ def attach_full_text(
         "licence": licence,
         "sentinel_outcome": sentinel[1] if sentinel else None,
     }
+    if acquisition is not None:
+        payload |= {
+            "acquisition_id": str(acquisition.id),
+            "source": acquisition.source,
+            "url": acquisition.url,
+        }
     event = ledger.append(tx, _event(project_id, FULL_TEXT_ATTACHED, actor_id, payload))
     tx.execute(
         "insert into full_text (project_id, item_ref, document_id, layer_id, licence,"
@@ -749,6 +809,7 @@ __all__ = [
     "RetrievalItem",
     "StageProgress",
     "add_member",
+    "attach_acquired_full_text",
     "attach_full_text",
     "attach_sentinel_full_text",
     "check_extractable",
