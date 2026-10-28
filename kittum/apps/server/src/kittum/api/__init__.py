@@ -67,7 +67,8 @@ def create_app(context: AppContext | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         owned = context is None
-        app.state.context = context or AppContext.from_settings(Settings.from_env())
+        if not hasattr(app.state, "context"):
+            app.state.context = context or AppContext.from_settings(Settings.from_env())
         try:
             yield
         finally:
