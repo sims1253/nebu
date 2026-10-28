@@ -56,7 +56,10 @@ export default async function stack() {
   );
   (env as Record<string, string>)["KITTUM_CHECKPOINT_KEY"] = key;
   const name = `End-to-end ${new Date().toISOString()}`;
-  const seeded = execFileSync("uv", ["run", "kittum", "demo", "seed", "--json", "--name", name], {
+  // The worker judges, as slowly as a small model, while the reviewers already screen: records
+  // enter their queues as the AI reads them, some behind the place they have reached.
+  const seed = ["run", "kittum", "demo", "seed", "--json", "--no-wait", "--name", name];
+  const seeded = execFileSync("uv", seed, {
     cwd: SERVER,
     env,
     encoding: "utf8",
@@ -71,7 +74,7 @@ export default async function stack() {
     }),
     spawn("uv", ["run", "kittum", "worker", "--name", "e2e"], {
       cwd: SERVER,
-      env,
+      env: { ...env, KITTUM_DEMO_JUDGE_DELAY: "0.3" },
       stdio: "inherit",
     }),
   ];

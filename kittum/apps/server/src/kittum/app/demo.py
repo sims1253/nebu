@@ -11,7 +11,9 @@ for each demo record (`scripts/record_demo_answers.py`), keyed by record title.
 """
 
 import json
+import os
 import re
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -97,13 +99,16 @@ class DemoBackend:
 
     model_identity = f"recorded:{RECORDED_MODEL}"
 
-    def __init__(self, answers: dict[str, str] | None = None) -> None:
+    def __init__(self, answers: dict[str, str] | None = None, *, delay: float = 0.0) -> None:
+        self._delay = delay
         if answers is None:
             path = DATA / "judge_answers.json"
             answers = json.loads(path.read_text()) if path.exists() else {}
         self._answers = answers
 
     def complete(self, request: CompletionRequest) -> Completion:
+        if self._delay:
+            time.sleep(self._delay)  # a model that takes its time, for the end-to-end test
         user = request.messages[-1].content
         found = _TITLE.search(user)
         title = found.group(1).strip() if found else ""
@@ -130,7 +135,9 @@ def demo_judge(registry: ModelRegistry) -> Judge:
     return Judge(
         config=judge_config(RECORDED_MODEL, label="demo-recorded"),
         recipe=recipe,
-        backend=DemoBackend(),
+        # KITTUM_DEMO_JUDGE_DELAY (seconds per call) makes the replay as slow as a model, so the
+        # end-to-end test screens while the AI is still reading.
+        backend=DemoBackend(delay=float(os.environ.get("KITTUM_DEMO_JUDGE_DELAY") or 0)),
     )
 
 

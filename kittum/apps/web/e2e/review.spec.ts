@@ -194,20 +194,28 @@ const screenQueue = async (
   const title = page.getByTestId("record-title");
   const banner = page.getByTestId("ai-reveal");
   const finished = page.getByRole("heading", { name: "Queue finished" });
+  // The record on screen now, or null between records and while the AI is still reading: never
+  // wait for a title that may not come back.
+  const titleNow = async () =>
+    (await title.count()) > 0
+      ? await title.textContent({ timeout: 1_000 }).catch(() => null)
+      : null;
+  // The AI reads while the reviewer screens, so the next record can take as long as a batch.
+  const patiently = { timeout: 60_000 };
   const seen: string[] = [];
   for (;;) {
-    await expect(title.or(finished)).toBeVisible();
+    await expect(title.or(finished)).toBeVisible(patiently);
     if (await finished.isVisible()) return seen;
-    const text = (await title.textContent()) ?? "";
+    const text = (await titleNow()) ?? "";
     await options.before?.(text);
     const slip = options.slip && text.startsWith(options.slip.prefix) ? options.slip : null;
     if (slip) {
       for (const key of slip.keys) await page.keyboard.press(key);
       await expect
-        .poll(async () => (await banner.isVisible()) || (await title.textContent()) !== text)
+        .poll(async () => (await banner.isVisible()) || (await titleNow()) !== text, patiently)
         .toBe(true);
-      if ((await title.textContent()) === text) await page.keyboard.press("Space");
-      await expect(title).not.toHaveText(text);
+      if ((await titleNow()) === text) await page.keyboard.press("Space");
+      await expect.poll(titleNow, patiently).not.toBe(text);
       await page.keyboard.press("Backspace");
       await expect(title).toHaveText(text);
       await expect(page.getByTestId("decision-note")).toContainText(slip.note);
@@ -216,16 +224,15 @@ const screenQueue = async (
     await expect
       .poll(
         async () =>
-          (await banner.isVisible()) ||
-          (await finished.isVisible()) ||
-          (await title.textContent()) !== text,
+          (await banner.isVisible()) || (await finished.isVisible()) || (await titleNow()) !== text,
+        patiently,
       )
       .toBe(true);
-    if ((await banner.isVisible()) && (await title.textContent()) === text) {
+    if ((await banner.isVisible()) && (await titleNow()) === text) {
       await options.onReveal?.(text);
       await page.keyboard.press("Space"); // keep my decision
       await expect
-        .poll(async () => (await finished.isVisible()) || (await title.textContent()) !== text)
+        .poll(async () => (await finished.isVisible()) || (await titleNow()) !== text, patiently)
         .toBe(true);
     }
     seen.push(text);
@@ -420,6 +427,12 @@ test("a review from search to full text, blind, audited, adjudicated, and verifi
     await page.goto(`/p/${project_id}/studies?as=${people["Morgan Lee"]}`);
     const proposal = page.getByTestId("proposal").first();
     await expect(proposal).toContainText("NCT05596773");
+    // The two records of the duplicate the seed confirmed are one study already: merging them
+    // as a study is refused, not recorded as a merge.
+    for (const key of ["j", "x", "j", "x", "m"]) await page.keyboard.press(key);
+    await expect(page.getByTestId("studies-notice")).toContainText("one study already");
+    await page.keyboard.press("k");
+    await page.keyboard.press("k");
     await page.keyboard.press("Enter");
     await expect(page.getByTestId("studies-notice")).toContainText(/onfirmed/);
 
