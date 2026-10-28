@@ -71,6 +71,15 @@ in `changes` per field you changed, naming the field.
 
 {_SHAPE}"""
 
+# Sent with a Europe PMC strategy only, so the requests for PubMed and ClinicalTrials.gov, and
+# their recorded answers, stay as they were.
+EUROPEPMC_SYNTAX = """\
+The strategy is written for Europe PMC's search. Its syntax: FIELD:term or FIELD:"a phrase", with
+fields such as TITLE, ABSTRACT, TITLE_ABS, KW, MESH, AUTH, JOURNAL, PUB_TYPE, SRC (MED, PMC, PPR),
+LANG, and FIRST_PDATE:[2024-01-01 TO 2024-12-31]; words and fields joined with AND, OR and NOT and
+grouped in parentheses; * truncates a word. Kittum runs it with synonyms off, so write every
+synonym and spelling out. Europe PMC finds nothing for a field it does not know."""
+
 REPAIR = """\
 Kittum could not use your answer. Fix every problem below and answer with the whole corrected
 JSON object again.
@@ -89,7 +98,9 @@ def draft_request(description: str, language: str) -> str:
     )
 
 
-def improve_request(kind: str, path: str, part: Any, protocol: dict[str, Any]) -> str:
+def improve_request(
+    kind: str, path: str, part: Any, protocol: dict[str, Any], syntax: str | None = None
+) -> str:
     what = {
         "strategy": "the search strategy",
         "criterion": "the eligibility criterion",
@@ -98,7 +109,8 @@ def improve_request(kind: str, path: str, part: Any, protocol: dict[str, Any]) -
     shown = part if isinstance(part, str) else json.dumps(part, ensure_ascii=False, indent=1)
     return (
         f"Improve {what} at `{path}`:\n\n{shown}\n\n"
-        f"The whole protocol, for context:\n\n{json.dumps(protocol, ensure_ascii=False)}"
+        + (f"{syntax}\n\n" if syntax else "")
+        + f"The whole protocol, for context:\n\n{json.dumps(protocol, ensure_ascii=False)}"
     )
 
 

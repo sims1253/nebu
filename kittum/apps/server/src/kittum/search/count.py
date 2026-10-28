@@ -23,7 +23,9 @@ from kittum.gateway import (
     SourceBudgetExhausted,
     SourceUnavailable,
 )
+from kittum.protocol import strategy_problems, strategy_warnings
 from kittum.search.ctgov import CTGOV_BASE
+from kittum.search.europepmc import EUROPEPMC_SEARCH
 from kittum.search.models import SourceError
 from kittum.search.pubmed import EUTILS_BASE
 
@@ -31,7 +33,8 @@ if TYPE_CHECKING:
     from kittum.gateway import Gateway
     from kittum.storage import ArtifactStore
 
-type QueryDialect = Literal["pubmed", "ctgov"]  # as `kittum.protocol.strategy_dialect` names them
+# as `kittum.protocol.strategy_dialect` names them
+type QueryDialect = Literal["pubmed", "europepmc", "ctgov"]
 
 
 class QueryCount(Record):
@@ -42,7 +45,8 @@ class QueryCount(Record):
     """What PubMed made of the query, with its automatic term mapping."""
     warnings: tuple[str, ...] = ()
     """Words and quoted phrases PubMed did not find (usually a typo), words it ignored, fields it
-    does not know, and its other notes, in the order it gave them."""
+    does not know, and its other notes, in the order it gave them. For Europe PMC, which says
+    nothing about a query, the syntax problems and unknown fields the protocol compiler finds."""
     raw_hash: Sha256
     counted_at: datetime
 
@@ -57,10 +61,11 @@ def count_hits(
     ncbi_api_key: str | None = None,
     clock: Clock | None = None,
 ) -> QueryCount:
-    """How many records `strategy` finds now: PubMed's ESearch count or ClinicalTrials.gov's
-    `totalCount`. Asks the source every time, past the response cache. Raises `SourceError` when
-    the source refuses the query, and the gateway's `SourceUnavailable` when no answer came, a
-    connection that failed or timed out included."""
+    """How many records `strategy` finds now: PubMed's ESearch count, Europe PMC's `hitCount`
+    (synonyms off, as a search runs), or ClinicalTrials.gov's `totalCount`. Asks the source every
+    time, past the response cache. Raises `SourceError` when the source refuses the query, and the
+    gateway's `SourceUnavailable` when no answer came, a connection that failed or timed out
+    included."""
     clock = clock or SystemClock()
     if not strategy.strip():
         raise SourceError("an empty query finds nothing to count")
@@ -72,6 +77,16 @@ def count_hits(
             params["api_key"] = ncbi_api_key
         url = f"{EUTILS_BASE}/esearch.fcgi?{urlencode(params, quote_via=quote)}"
         source = "pubmed"
+    elif dialect == "europepmc":
+        params = {
+            "query": strategy,
+            "format": "json",
+            "resultType": "idlist",
+            "synonym": "FALSE",
+            "pageSize": "1",
+        }
+        url = f"{EUROPEPMC_SEARCH}?{urlencode(params, quote_via=quote)}"
+        source = "europepmc"
     else:
         params = {"query.term": strategy, "pageSize": "1", "countTotal": "true"}
         url = f"{CTGOV_BASE}?{urlencode(params, quote_via=quote)}"
@@ -88,6 +103,10 @@ def count_hits(
         )
     if dialect == "pubmed":
         count, translation, warnings = _esearch_count(response.body)
+    elif dialect == "europepmc":
+        # Europe PMC counts a query with unbalanced syntax or an unknown field without a word.
+        count, translation = _europepmc_count(response.body), None
+        warnings = (*strategy_problems(strategy), *strategy_warnings(strategy, "europepmc"))
     else:
         count, translation, warnings = _ctgov_count(response.body), None, ()
     return QueryCount(
@@ -122,6 +141,13 @@ def _esearch_count(body: bytes) -> tuple[int, str | None, tuple[str, ...]]:
         for e in (*root.findall("ErrorList/*"), *root.findall("WarningList/*"))
     ]
     return int(count), root.findtext("QueryTranslation"), tuple(w for w in warnings if w)
+
+
+def _europepmc_count(body: bytes) -> int:
+    try:
+        return int(json.loads(body)["hitCount"])
+    except (ValueError, KeyError, TypeError) as e:
+        raise SourceError(f"Europe PMC sent no count. {e}") from None
 
 
 def _ctgov_count(body: bytes) -> int:

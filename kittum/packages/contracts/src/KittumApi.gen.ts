@@ -39,10 +39,10 @@ export type Stage = "title_abstract" | "full_text"
 export const Stage = Schema.Literals(["title_abstract", "full_text"]).annotate({ "identifier": "Stage" })
 export type CreateProjectRequest = { readonly "lead_name": string, readonly "name": string }
 export const CreateProjectRequest = Schema.Struct({ "lead_name": Schema.String.annotate({ "title": "Lead Name" }), "name": Schema.String.annotate({ "title": "Name" }) }).annotate({ "title": "CreateProjectRequest", "identifier": "CreateProjectRequest" })
-export type CountRequest = { readonly "dialect": "pubmed" | "ctgov", readonly "strategy": string }
-export const CountRequest = Schema.Struct({ "dialect": Schema.Literals(["pubmed", "ctgov"]).annotate({ "title": "Dialect" }), "strategy": Schema.String.annotate({ "title": "Strategy" }).check(Schema.isMinLength(1).annotate({ "expected": "a value with a length of at least 1" })) }).annotate({ "title": "CountRequest", "identifier": "CountRequest" })
-export type QueryDialect = "pubmed" | "ctgov"
-export const QueryDialect = Schema.Literals(["pubmed", "ctgov"]).annotate({ "identifier": "QueryDialect" })
+export type CountRequest = { readonly "dialect": "pubmed" | "europepmc" | "ctgov", readonly "strategy": string }
+export const CountRequest = Schema.Struct({ "dialect": Schema.Literals(["pubmed", "europepmc", "ctgov"]).annotate({ "title": "Dialect" }), "strategy": Schema.String.annotate({ "title": "Strategy" }).check(Schema.isMinLength(1).annotate({ "expected": "a value with a length of at least 1" })) }).annotate({ "title": "CountRequest", "identifier": "CountRequest" })
+export type QueryDialect = "pubmed" | "europepmc" | "ctgov"
+export const QueryDialect = Schema.Literals(["pubmed", "europepmc", "ctgov"]).annotate({ "identifier": "QueryDialect" })
 export type DraftRequest = { readonly "description": string, readonly "language"?: string }
 export const DraftRequest = Schema.Struct({ "description": Schema.String.annotate({ "title": "Description" }).check(Schema.isMinLength(1).annotate({ "expected": "a value with a length of at least 1" })), "language": Schema.optionalKey(Schema.String.annotate({ "title": "Language", "default": "en" })) }).annotate({ "title": "DraftRequest", "identifier": "DraftRequest" })
 export type ProtocolIssue = { readonly "message": string, readonly "path": string }
@@ -2158,8 +2158,8 @@ readonly "getProject": {
     <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly config?: Config | undefined } | undefined): Effect.Effect<WithOptionalResponse<GetProject200, Config | undefined>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"GetProject422", GetProject422>>;
   }
   /**
-* How many records a PubMed or ClinicalTrials.gov strategy finds today. Informational: it
-* runs no search and records none.
+* How many records a PubMed, Europe PMC, or ClinicalTrials.gov strategy finds today.
+* Informational: it runs no search and records none.
 */
 readonly "countStrategyHits": {
     <Config extends OperationConfig | undefined = undefined>(projectId: string, options: { readonly params: typeof CountStrategyHitsParams.Encoded; readonly payload: typeof CountStrategyHitsRequestJson.Encoded; readonly config: Config }): Effect.Effect<WithOptionalResponse<CountStrategyHits200, Config>, HttpClientError.HttpClientError | SchemaError | KittumApiError<"CountStrategyHits422", CountStrategyHits422>>;

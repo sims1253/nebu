@@ -28,6 +28,7 @@ from kittum.protocol import (
     ProtocolIssue,
     ReviewProtocol,
     ReviewQuestion,
+    Source,
     compile,
     path_of,
     strategy_dialect,
@@ -208,12 +209,13 @@ def normal(document: dict[str, Any]) -> dict[str, Any]:
     return ReviewProtocol.model_validate(document).model_dump(mode="json")
 
 
-_DIALECT_NAMES = {"pubmed": "PubMed", "ctgov": "ClinicalTrials.gov"}
+_DIALECT_NAMES = {"pubmed": "PubMed", "europepmc": "Europe PMC", "ctgov": "ClinicalTrials.gov"}
 
 
 def _missing_strategies(document: dict[str, Any]) -> list[ProtocolIssue]:
-    """A draft's PubMed and ClinicalTrials.gov sources without a strategy. The prompt asks for
-    both; a hand-written protocol may leave any strategy out."""
+    """A draft's sources Kittum can count (PubMed, Europe PMC, ClinicalTrials.gov) without a
+    strategy. The prompt asks for PubMed's and ClinicalTrials.gov's; a hand-written protocol may
+    leave any strategy out."""
     protocol = ReviewProtocol.model_validate(document)
     return [
         _issue(
@@ -224,6 +226,13 @@ def _missing_strategies(document: dict[str, Any]) -> list[ProtocolIssue]:
         for si, source in enumerate(topic.source_plan.sources)
         if (dialect := strategy_dialect(source)) and not (source.strategy or "").strip()
     ]
+
+
+def _dialect(document: dict[str, Any], part: str) -> str | None:
+    """The syntax of the source strategy at `part`, when it is one Kittum knows."""
+    if not part.endswith(".strategy"):
+        return None
+    return strategy_dialect(Source.model_validate(get(document, part.removesuffix(".strategy"))))
 
 
 def draft(backend: LlmBackend, recipe_id: str, description: str, language: str = "en") -> Answer:
@@ -282,7 +291,13 @@ def improve(
         recipe_id,
         purpose="improve",
         instructions=prompts.IMPROVE_INSTRUCTIONS,
-        request=prompts.improve_request(kind, part, current, document),
+        request=prompts.improve_request(
+            kind,
+            part,
+            current,
+            document,
+            syntax=prompts.EUROPEPMC_SYNTAX if _dialect(document, part) == "europepmc" else None,
+        ),
         answer_model=ANSWER_MODELS[kind],
         check=check,
         max_tokens=IMPROVE_TOKENS,

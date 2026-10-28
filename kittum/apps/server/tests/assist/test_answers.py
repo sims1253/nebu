@@ -5,7 +5,7 @@ from typing import Any
 
 from kittum import assist
 from kittum.app import recorded_backend
-from kittum.core import sha256_hex
+from kittum.core import new_id, sha256_hex
 from kittum.models import Completion, CompletionRequest, request_key
 from kittum.storage import MemoryStore
 from tests.assist.support import DESCRIPTION
@@ -75,3 +75,52 @@ def test_a_draft_without_its_registry_strategy_goes_back_to_the_model() -> None:
         registry["strategy"]
         == json.loads(answer)["search_topics"][0]["source_plan"]["sources"][1]["strategy"]
     )
+
+
+def test_a_europe_pmc_strategy_is_improved_in_europe_pmcs_syntax() -> None:
+    """The request for a Europe PMC strategy tells the model Europe PMC's syntax; the request for
+    the PubMed strategy stays as it was recorded, so GLM's answers to it still replay."""
+    store = MemoryStore()
+    recipe_id, recorded = recorded_backend(store)
+    document = assist.draft(recorded, recipe_id, DESCRIPTION).document
+    assert document is not None
+    sources = document["search_topics"][0]["source_plan"]["sources"]
+    sources.append(
+        {
+            "id": "europepmc",
+            "kind": "bibliographic",
+            "name": "Europe PMC",
+            "platform": "Europe PMC",
+            "strategy": 'TITLE_ABS:"nicotine replacement" AND TITLE_ABS:"smoking cessation"',
+        }
+    )
+    topic = document["search_topics"][0]["id"]
+    part = f"search_topics[{topic}].source_plan.sources[europepmc].strategy"
+    answer = {
+        "changes": [
+            {
+                "find": 'TITLE_ABS:"nicotine replacement"',
+                "replace": '(TITLE_ABS:"nicotine replacement" OR TITLE_ABS:NRT)',
+                "rationale": "Adds the abbreviation.",
+            }
+        ]
+    }
+    # The PubMed strategy has no such passage: the model is asked again, up to its repairs.
+    model = Scripted(*[json.dumps(answer)] * (2 + assist.REPAIRS))
+
+    improved = assist.improve(model, recipe_id, new_id(), document, part)
+    assist.improve(
+        model,
+        recipe_id,
+        new_id(),
+        document,
+        f"search_topics[{topic}].source_plan.sources[medline].strategy",
+    )
+
+    asked = [r.messages[-1].content for r in model.requests]
+    assert "written for Europe PMC's search" in asked[0]
+    assert "written for Europe PMC's search" not in asked[1]
+    assert improved.suggestion is not None
+    assert [c.after for c in improved.suggestion.changes] == [
+        '(TITLE_ABS:"nicotine replacement" OR TITLE_ABS:NRT)'
+    ]

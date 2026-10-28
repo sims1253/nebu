@@ -124,9 +124,30 @@ def record_duplicates() -> None:
         print(f"{source.name}: {execution.reported_count} reported, {execution.retrieved_count}")
 
 
+# A Europe PMC strategy with an unclosed parenthesis and a field Europe PMC does not know: it
+# counts it anyway.
+DUPLICATES_EUROPEPMC_BROKEN = f"({DUPLICATES_EUROPEPMC} AND JOURNAL_TITLE:Addiction"
+
+
+def record_europepmc_counts() -> None:
+    """The protocol assistant's counts of the Europe PMC strategy, as written and broken."""
+    from kittum.gateway import HttpxTransport, RecordingTransport
+    from kittum.gateway.testing import PassThroughGateway
+    from kittum.search import count_hits
+    from kittum.storage import MemoryStore
+
+    transport = RecordingTransport(HttpxTransport(), DUPLICATES_DIR)
+    for strategy in (DUPLICATES_EUROPEPMC, DUPLICATES_EUROPEPMC_BROKEN):
+        counted = count_hits(PassThroughGateway(transport), MemoryStore(), "europepmc", strategy)
+        print(f"europepmc count: {counted.count}")
+
+
 if __name__ == "__main__":
     if sys.argv[1:] == ["duplicates"]:
         record_duplicates()
+        sys.exit()
+    if sys.argv[1:] == ["europepmc-counts"]:
+        record_europepmc_counts()
         sys.exit()
     record_pubmed()
     record_pubmed_databank_only()

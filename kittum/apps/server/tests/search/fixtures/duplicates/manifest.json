@@ -20,6 +20,13 @@
       "status": 200
     }
   ],
+  "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=%28TITLE_ABS%3A%22nicotine+replacement%22+AND+TITLE_ABS%3A%22smoking+cessation%22+AND+PUB_TYPE%3A%22Randomized+Controlled+Trial%22+AND+FIRST_PDATE%3A%5B2024-01-01+TO+2024-03-31%5D+AND+JOURNAL_TITLE%3AAddiction&format=json&resultType=idlist&synonym=FALSE&pageSize=1": [
+    {
+      "content_type": "application/json",
+      "file": "498fed0d77015b101e41bbc5edf8cd8a7715e68c2efd29d49e1c2feb028e36c2.json",
+      "status": 200
+    }
+  ],
   "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=TITLE_ABS%3A%22nicotine+replacement%22+AND+TITLE_ABS%3A%22smoking+cessation%22+AND+PUB_TYPE%3A%22Randomized+Controlled+Trial%22+AND+FIRST_PDATE%3A%5B2024-01-01+TO+2024-03-31%5D&format=json&resultType=core&synonym=FALSE&pageSize=1000&cursorMark=%2A": [
     {
       "content_type": "application/json",
@@ -38,6 +45,13 @@
     {
       "content_type": "application/json",
       "file": "031329cf858e9ecf054b274d58c4e40caec7a7da2058bb3d37b719ce56249ae2.json",
+      "status": 200
+    }
+  ],
+  "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=TITLE_ABS%3A%22nicotine+replacement%22+AND+TITLE_ABS%3A%22smoking+cessation%22+AND+PUB_TYPE%3A%22Randomized+Controlled+Trial%22+AND+FIRST_PDATE%3A%5B2024-01-01+TO+2024-03-31%5D&format=json&resultType=idlist&synonym=FALSE&pageSize=1": [
+    {
+      "content_type": "application/json",
+      "file": "9b376e5ba41f3d608cfbfe6a53caf01f831abdc4e678f73e9ae35898f34371b0.json",
       "status": 200
     }
   ]

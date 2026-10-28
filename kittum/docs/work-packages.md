@@ -211,8 +211,10 @@ Left:
   times out before 15). A job would free it.
 - The form edits one search topic's sources and criteria as it finds them; adding a search topic,
   outcome definitions, reference sets, and profile extensions are edited as YAML.
-- Strategies for platforms other than PubMed and ClinicalTrials.gov are not syntax-checked or
-  counted.
+- Strategies for platforms other than PubMed, Europe PMC, and ClinicalTrials.gov are not
+  syntax-checked or counted. The draft prompt asks for PubMed and ClinicalTrials.gov only, so
+  GLM's recorded drafts still replay; a Europe PMC strategy gets Europe PMC's syntax in its
+  improve request.
 
 ## WP-04 Gateway
 

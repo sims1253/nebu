@@ -2,12 +2,23 @@ import json
 from typing import TYPE_CHECKING
 
 import pytest
-from tests.search.record_fixtures import DUPLICATES_DIR, DUPLICATES_EUROPEPMC
+from tests.search.record_fixtures import (
+    DUPLICATES_DIR,
+    DUPLICATES_EUROPEPMC,
+    DUPLICATES_EUROPEPMC_BROKEN,
+)
 
 from kittum.gateway import RecordedTransport
 from kittum.gateway.testing import FakeTransport, PassThroughGateway, response
 from kittum.ledger.testing import InMemoryLedger
-from kittum.search import EuropePmcSource, SearchPlan, SourceError, get_execution, run
+from kittum.search import (
+    EuropePmcSource,
+    SearchPlan,
+    SourceError,
+    count_hits,
+    get_execution,
+    run,
+)
 from kittum.storage import MemoryStore
 
 if TYPE_CHECKING:
@@ -93,4 +104,25 @@ def _first_page(page_size: int) -> str:
         entries[0]["file"]
         for url, entries in manifest.items()
         if "europepmc" in url and f"pageSize={page_size}&cursorMark=%2A" in url
+    )
+
+
+def test_a_europe_pmc_count_is_the_searchs_count_and_says_what_europe_pmc_does_not() -> None:
+    """The protocol assistant counts a Europe PMC strategy as a search runs it, synonyms off.
+    Europe PMC counts a broken query without a word, so the count carries the syntax problems
+    and unknown fields the protocol compiler finds."""
+    gateway = PassThroughGateway(RecordedTransport(DUPLICATES_DIR))
+    artifacts = MemoryStore()
+
+    counted = count_hits(gateway, artifacts, "europepmc", DUPLICATES_EUROPEPMC)
+    assert (counted.count, counted.warnings, counted.query_translation) == (4, (), None)
+    assert artifacts.exists(counted.raw_hash)
+
+    broken = count_hits(gateway, artifacts, "europepmc", DUPLICATES_EUROPEPMC_BROKEN)
+    assert (broken.count, broken.warnings) == (
+        0,
+        (
+            "1 opening parenthesis is not closed",
+            "Europe PMC has no field JOURNAL_TITLE. It finds no records for a search in it.",
+        ),
     )

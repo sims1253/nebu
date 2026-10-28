@@ -1957,6 +1957,7 @@
           "dialect": {
             "enum": [
               "pubmed",
+              "europepmc",
               "ctgov"
             ],
             "title": "Dialect",
@@ -5680,6 +5681,7 @@
       "QueryDialect": {
         "enum": [
           "pubmed",
+          "europepmc",
           "ctgov"
         ],
         "type": "string"
@@ -9746,7 +9748,7 @@
     },
     "/api/projects/{project_id}/assist/count": {
       "post": {
-        "description": "How many records a PubMed or ClinicalTrials.gov strategy finds today. Informational: it\nruns no search and records none.",
+        "description": "How many records a PubMed, Europe PMC, or ClinicalTrials.gov strategy finds today.\nInformational: it runs no search and records none.",
         "operationId": "countStrategyHits",
         "parameters": [
           {

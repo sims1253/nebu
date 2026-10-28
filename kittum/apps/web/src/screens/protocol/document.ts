@@ -139,6 +139,9 @@ export const dialectOf = (s: Source): QueryDialect | null => {
   const platform = (s.platform ?? "").toLowerCase();
   if (platform === "pubmed" || s.id.toLowerCase() === "pubmed") return "pubmed";
   const names = [s.id, platform, s.name].map((n) => n.toLowerCase());
+  if (names.some((n) => ["europepmc", "europe_pmc", "europe pmc"].includes(n))) {
+    return "europepmc";
+  }
   return names.some((n) => ["clinicaltrials_gov", "ctgov", "clinicaltrials.gov"].includes(n))
     ? "ctgov"
     : null;
@@ -146,6 +149,7 @@ export const dialectOf = (s: Source): QueryDialect | null => {
 
 export const SOURCE_NAME: Record<QueryDialect, string> = {
   pubmed: "PubMed",
+  europepmc: "Europe PMC",
   ctgov: "ClinicalTrials.gov",
 };
 
