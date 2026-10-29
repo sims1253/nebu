@@ -57,6 +57,7 @@ from kittum.documents import (
     fetch_location,
     get_acquisition,
     record_location,
+    source_name,
 )
 from kittum.enrich import (
     LOOKUP_SOURCES,
@@ -92,19 +93,6 @@ SOURCE_ASKED = "retrieval.source_asked"
 NO_LOCATION = "retrieval.no_open_access_location"
 OPEN_ACCESS_FINISHED = "retrieval.open_access_finished"
 RETRY_REQUESTED = "retrieval.retry_requested"
-
-SOURCE_NAMES = {
-    "europepmc": "Europe PMC",
-    "pmc": "PubMed Central",
-    "unpaywall": "Unpaywall",
-    "openalex": "OpenAlex",
-    "crossref": "Crossref",
-    "biorxiv": "medRxiv or bioRxiv",
-    "arxiv": "arXiv",
-    "semanticscholar": "Semantic Scholar",
-    "core": "CORE",
-    "pubtator": "PubTator 3",
-}
 
 type ReportOutcome = Literal["acquired", "not_acquired", "no_location", "had_full_text"]
 type RunTrigger = Literal["requested", "retry"]
@@ -1095,10 +1083,6 @@ _PROBLEM = {
     500: "it had an internal error",
     429: "it was asked too often",
 }
-
-
-def source_name(source: str) -> str:
-    return SOURCE_NAMES.get(source, source)
 
 
 def attempt_line(attempt: AttemptView) -> str:

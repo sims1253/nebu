@@ -23,12 +23,14 @@ from kittum.documents.acquisition import (
     ACQUIRED,
     ATTEMPTED,
     NOT_ACQUIRED,
+    SOURCE_NAMES,
     FetchedLocation,
     acquire,
     acquisitions,
     fetch_location,
     get_acquisition,
     record_location,
+    source_name,
 )
 from kittum.documents.anchors import (
     RESOLVE_VERSION,
@@ -97,6 +99,7 @@ __all__ = [
     "NOT_ACQUIRED",
     "RENDERER",
     "RESOLVE_VERSION",
+    "SOURCE_NAMES",
     "TITLE_THRESHOLD",
     "Acquisition",
     "AcquisitionAttempt",
@@ -156,5 +159,6 @@ __all__ = [
     "render_page",
     "resolve",
     "save_anchor",
+    "source_name",
     "triage",
 ]

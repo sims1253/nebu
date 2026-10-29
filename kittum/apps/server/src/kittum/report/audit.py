@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 from uuid import UUID
 
 from kittum.core import Id, NotFoundError, Record, Sha256, content_hash, sha256_hex
+from kittum.documents import source_name
 from kittum.ledger import PostgresLedger, event_hash, payload_hash
 from kittum.report.model_calls import (
     ModelCall,
@@ -29,6 +30,7 @@ from kittum.report.model_calls import (
 from kittum.report.prisma import PrismaFlow, flows
 from kittum.report.renderers import disclosure
 from kittum.report.review import ReportRequestError, head_seq, load_review
+from kittum.search import SOURCE_NAMES as SEARCH_NAMES
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -376,7 +378,7 @@ def _describe(
         where = p.get("platform") or p.get("source")
         summary = f"{who} searched {where} and retrieved {p.get('retrieved_count')} records"
         facts += [
-            ("Source", p.get("source")),
+            ("Source", SEARCH_NAMES.get(p.get("source") or "", p.get("source"))),
             ("Query", p.get("strategy")),
             ("Started", p.get("started_at")),
             ("Finished", p.get("ended_at")),
@@ -566,7 +568,7 @@ def _describe(
         facts.append(("Criterion", names.criterion(p.get("reason_criterion_id"))))
     elif t == "project.full_text_attached" and p.get("acquisition_id"):
         kind = "full_text"
-        summary = f"Kittum attached the full text it fetched from {p.get('source')}"
+        summary = f"Kittum attached the full text it fetched from {source_name(p.get('source'))}"
         facts += [
             ("Licence", p.get("licence") or "Not stated"),
             ("URL", p.get("url")),
@@ -583,7 +585,7 @@ def _describe(
         artifacts.append(names.artifact(p.get("artifact_hash"), "Full text PDF"))
     elif t == "document.acquired":
         kind = "full_text"
-        summary = f"Kittum fetched the full text from {p.get('source')}"
+        summary = f"Kittum fetched the full text from {source_name(p.get('source'))}"
         facts += [("Licence", p.get("licence") or "Not stated"), ("URL", p.get("url"))]
         artifacts.append(names.artifact(p.get("artifact_hash"), "Full text PDF"))
     elif t == "document.acquisition_failed":
@@ -593,10 +595,15 @@ def _describe(
         kind = "full_text"
         attempt = p.get("attempt") or {}
         outcome = str(attempt.get("outcome") or "").replace("_", " ")
-        summary = f"Kittum could not get the full text from {attempt.get('source')} ({outcome})"
+        summary = (
+            f"Kittum could not get the full text from {source_name(attempt.get('source'))}"
+            f" ({outcome})"
+        )
         facts += [
             ("URL", attempt.get("url")),
             ("HTTP status", attempt.get("status")),
+            ("What the source said", attempt.get("message")),
+            ("Check against the record", attempt.get("check")),
             ("Licence", attempt.get("licence")),
             ("Error", attempt.get("error")),
         ]
@@ -609,6 +616,111 @@ def _describe(
     elif t == "retrieval.no_open_access_location":
         kind = "full_text"
         summary = "Kittum found no open-access copy of the full text"
+    elif t == "retrieval.source_asked":
+        kind = "full_text"
+        attempt = p.get("attempt") or {}
+        name = source_name(attempt.get("source"))
+        answers = {
+            "found": f"it named {attempt.get('found')} file{'' if attempt.get('found') == 1 else 's'}",
+            "known": "it named a file an earlier source named",
+            "none": "it has no open copy",
+            "unavailable": "it did not answer",
+            "other_work": "it answered for another work",
+        }
+        summary = (
+            f"Kittum asked {name} for the full text, and"
+            f" {answers.get(attempt.get('outcome'), str(attempt.get('outcome')))}"
+        )
+        facts += [
+            ("Asked", attempt.get("url")),
+            ("HTTP status", attempt.get("status")),
+            ("What the source said", attempt.get("message")),
+            ("Error", attempt.get("error")),
+            (
+                "Files named",
+                ", ".join(loc.get("url", "") for loc in p.get("locations", [])) or None,
+            ),
+        ]
+    elif t == "retrieval.open_access_finished":
+        kind = "full_text"
+        outcomes = p.get("outcomes") or {}
+        tried = sum(outcomes.values())
+        summary = (
+            f"Kittum finished looking for open-access full texts and fetched"
+            f" {outcomes.get('acquired', 0)} of {tried} report{'' if tried == 1 else 's'}"
+        )
+        labels = {
+            "acquired": "Fetched",
+            "not_acquired": "No source gave a usable PDF",
+            "no_location": "No source has an open copy",
+            "had_full_text": "Uploaded by hand meanwhile",
+        }
+        facts += [(labels.get(k, k), n) for k, n in outcomes.items()]
+        facts += [
+            (f"Skipped {source_name(s.get('source'))}", s.get("reason"))
+            for s in p.get("skipped", [])
+        ]
+    elif t == "retrieval.retry_requested":
+        kind = "full_text"
+        sources = [source_name(s.get("source")) for s in p.get("sources", [])]
+        records, reports = len(p.get("occurrence_ids", [])), len(p.get("report_ids", []))
+        summary = (
+            f"{who} asked Kittum to ask {' and '.join(sources) or 'the failed sources'}"
+            f" again, for {records} record{'' if records == 1 else 's'} and"
+            f" {reports} report{'' if reports == 1 else 's'}"
+        )
+        facts += [
+            (
+                source_name(s.get("source")),
+                f"failed for {s.get('records', 0)} records and {s.get('reports', 0)} reports"
+                + (f", HTTP {s['status']}" if s.get("status") else "")
+                + (f'. It said: "{s["message"]}"' if s.get("message") else ""),
+            )
+            for s in p.get("sources", [])
+        ]
+    elif t == "retrieval.upload_matched":
+        kind = "full_text"
+        how = "its file name" if p.get("matched_by") == "file_name" else "its first pages"
+        summary = (
+            f"{who} uploaded {p.get('file_name')}, and Kittum matched it to the report by {how}"
+        )
+        facts.append(("Document", p.get("document_id")))
+    elif t == "retrieval.upload_held":
+        kind = "full_text"
+        summary = f"{who} uploaded {p.get('file_name')}, and Kittum held it for the lead to assign"
+        facts += [
+            ("Why", p.get("reason")),
+            ("Reports it could be", len(p.get("candidates", []))),
+            ("Document", p.get("document_id")),
+        ]
+    elif t == "retrieval.upload_assigned":
+        kind = "full_text"
+        summary = f"{who} assigned {p.get('file_name')} to the report"
+    elif t == "retrieval.upload_discarded":
+        kind = "full_text"
+        summary = f"{who} discarded {p.get('file_name')}"
+    elif t == "enrichment.requested":
+        records = p.get("records")
+        again = " again, where a source had failed," if p.get("trigger") == "retry" else ""
+        summary = f"{who} asked Kittum to enrich {records} records{again} from the open sources"
+    elif t == "enrichment.records_enriched":
+        enriched = p.get("records", [])
+        summary = f"Kittum enriched {len(enriched)} records from the open sources"
+        failed = sorted(
+            {source_name(f.get("source")) for r in enriched for f in r.get("failed", [])}
+        )
+        facts += [
+            ("Retracted", sum(1 for r in enriched if r.get("retracted")) or None),
+            ("Sources that failed", ", ".join(failed) or None),
+        ]
+    elif t == "enrichment.finished":
+        summary = f"Kittum finished enriching {p.get('records')} records"
+        facts += [("Retracted", p.get("retracted") or None)]
+        facts += [
+            (source_name(s.get("source")), f"failed for {s['failed']} records")
+            for s in p.get("sources", [])
+            if s.get("failed")
+        ]
     elif t == "extraction.run_requested":
         kind = "extraction"
         path = (

@@ -48,6 +48,8 @@ pytestmark = pytest.mark.postgres
 LESOTHO_DOI = "10.1186/s12916-026-04943-4"
 RETRACTED_DOI = "10.1016/s0140-6736(20)31180-6"
 RETRACTION_NOTICE = "10.1016/s0140-6736(20)31324-6"
+NAMES = {"europepmc": "Europe PMC", "pmc": "PubMed Central", "openalex": "OpenAlex"}
+NAMES |= {"unpaywall": "Unpaywall", "crossref": "Crossref"}
 
 
 class Stack:
@@ -431,9 +433,8 @@ def test_a_lead_enriches_the_corpus_and_fetches_open_access_full_texts(
     # not, and the attach; and none of another report's attempts.
     def trail(report: str) -> list[tuple[str, str]]:
         found = ok(client.get(f"/api/projects/{pid}/audit/records/{report}/trace", headers=as_lead))
-        # A lookup's summary is the audit screen's to word; its type is what matters here.
         return [
-            (e["type"], "" if e["type"] == "retrieval.source_asked" else e["summary"])
+            (e["type"], e["summary"])
             for e in found["events"]
             if e["type"].startswith(("retrieval.", "document.", "project.full_text"))
         ]
@@ -445,13 +446,16 @@ def test_a_lead_enriches_the_corpus_and_fetches_open_access_full_texts(
         ),
         (
             "document.acquisition_attempted",
-            "Kittum could not get the full text from europepmc (http error)",
+            "Kittum could not get the full text from Europe PMC (http error)",
         ),
-        ("retrieval.source_asked", ""),
-        ("document.acquired", "Kittum fetched the full text from pmc"),
+        (
+            "retrieval.source_asked",
+            "Kittum asked PubMed Central for the full text, and it named 1 file",
+        ),
+        ("document.acquired", "Kittum fetched the full text from PubMed Central"),
         (
             "project.full_text_attached",
-            "Kittum attached the full text it fetched from pmc",
+            "Kittum attached the full text it fetched from PubMed Central",
         ),
     ]
     assert trail(lancet["report_id"]) == [
@@ -461,11 +465,14 @@ def test_a_lead_enriches_the_corpus_and_fetches_open_access_full_texts(
         ),
         *[
             (
-                ("retrieval.source_asked", "")
+                (
+                    "retrieval.source_asked",
+                    f"Kittum asked {NAMES[a['source']]} for the full text, and it has no open copy",
+                )
                 if a["kind"] == "lookup"
                 else (
                     "document.acquisition_attempted",
-                    f"Kittum could not get the full text from {a['source']}"
+                    f"Kittum could not get the full text from {NAMES[a['source']]}"
                     f" ({a['outcome'].replace('_', ' ')})",
                 )
             )

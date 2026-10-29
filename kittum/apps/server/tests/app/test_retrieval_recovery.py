@@ -195,6 +195,12 @@ class Review:
             status,
         )
 
+    def trail(self, report: str) -> list[str]:
+        """What the audit trail of a report says, event by event; every event in a sentence."""
+        events = self.get(f"audit/records/{report}/trace")["events"]
+        assert all(e["summary"] != e["type"] for e in events), [e["type"] for e in events]
+        return [e["summary"] for e in events]
+
     def work(self) -> int:
         ran = 0
         while self.worker.run_once():
@@ -310,6 +316,24 @@ def test_a_lead_retries_the_sources_that_were_down_without_a_new_run(
     assert review.get("retrieval/retry") == {"occurrences": 0, "reports": 0, "sources": []}
     review.post("retrieval/retry", 409)
 
+    said = review.trail(lancet)
+    assert (
+        "Morgan Lee asked Kittum to ask Europe PMC and PubMed Central again, for 3 records and"
+        " 1 report" in said
+    )
+    assert "Kittum asked PubMed Central for the full text, and it did not answer" in said
+    # Every enrichment and retrieval event of the project reads as a sentence too.
+    page = review.client.get(
+        f"/api/projects/{review.pid}/audit/events",
+        params={"type": ["enrichment.", "retrieval."], "limit": 500},
+        headers={"X-Kittum-Reviewer": review.lead},
+    ).json()
+    described = {e["type"]: e["summary"] for e in page["events"]}
+    assert all(summary != kind for kind, summary in described.items()), described
+    assert described["retrieval.open_access_finished"] == (
+        "Kittum finished looking for open-access full texts and fetched 0 of 1 report"
+    )
+    assert described["enrichment.finished"] == "Kittum finished enriching 3 records"
     requested = review.events(lambda t: t == "retrieval.retry_requested")
     assert [s["source"] for s in requested[0].payload["sources"]] == ["europepmc", "pmc"]
     (enrichment,) = [
@@ -427,6 +451,15 @@ def test_a_lead_uploads_a_folder_of_pdfs_and_exports_what_is_still_missing(
         ("retrieval.upload_assigned", None),
     ]
     assert len(review.events(lambda t: t == "project.full_text_attached")) == 3
+    assert review.trail(review.reports["registry"])[-3:] == [
+        "Morgan Lee uploaded registry-entry.pdf, and Kittum held it for the lead to assign",
+        "Morgan Lee assigned registry-entry.pdf to the report",
+        "Morgan Lee uploaded the full text",
+    ]
+    assert (
+        "Morgan Lee uploaded scan-0042.pdf, and Kittum matched it to the report by its first pages"
+        in review.trail(review.reports[LESOTHO_DOI])
+    )
 
     # Open access for the one left: the Lancet trial, which no source gives.
     review.post("retrieval/open-access")

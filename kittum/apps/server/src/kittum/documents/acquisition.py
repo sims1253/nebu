@@ -40,6 +40,26 @@ if TYPE_CHECKING:
     from kittum.gateway import HttpResponse
     from kittum.storage import ArtifactStore
 
+SOURCE_NAMES = {
+    "europepmc": "Europe PMC",
+    "pmc": "PubMed Central",
+    "unpaywall": "Unpaywall",
+    "openalex": "OpenAlex",
+    "crossref": "Crossref",
+    "biorxiv": "medRxiv or bioRxiv",
+    "arxiv": "arXiv",
+    "semanticscholar": "Semantic Scholar",
+    "core": "CORE",
+    "pubtator": "PubTator 3",
+}
+"""The names people know the enrichment and full-text sources by, keyed by their source ID."""
+
+
+def source_name(source: str | None) -> str:
+    """A source's name as people know it ("Europe PMC"); an unknown ID as it is."""
+    return SOURCE_NAMES.get(source or "", source or "an unknown source")
+
+
 ACQUIRED = "document.acquired"
 NOT_ACQUIRED = "document.acquisition_failed"
 ATTEMPTED = "document.acquisition_attempted"
