@@ -271,10 +271,28 @@ describe("extraction review", () => {
       // is slow to say so.
       const highlight = document.querySelector<HTMLElement>("[data-testid=source-highlight]")!;
       const scroller = scrollParent(highlight);
+      // The pages above give the viewer the height to scroll the source below its bottom edge.
+      // Until their images load, the scroll stops short.
+      await expect
+        .poll(
+          () =>
+            [...document.querySelectorAll<HTMLImageElement>("[data-page] img")].every(
+              (i) => i.complete,
+            ),
+          settle,
+        )
+        .toBe(true);
       setHidden(true);
       hold();
-      scroller.scrollTop -=
-        scroller.getBoundingClientRect().bottom - highlight.getBoundingClientRect().top + 40;
+      // Scroll until the source sits below the bottom edge; a scroll that stops short fails here.
+      await expect
+        .poll(() => {
+          const below =
+            highlight.getBoundingClientRect().top - scroller.getBoundingClientRect().bottom;
+          if (below <= 40) scroller.scrollTop -= 40 - below;
+          return below > 0;
+        }, settle)
+        .toBe(true);
       await pause(300);
       setHidden(false);
       await pause(VIEW_MS + 200);
