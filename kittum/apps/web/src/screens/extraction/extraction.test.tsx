@@ -17,6 +17,9 @@ const notice = () => page.getByTestId("extraction-notice");
 const selected = () =>
   document.querySelector("[data-testid=field-row][aria-selected=true]")?.textContent ?? "";
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const frames = async (n: number) => {
+  for (let i = 0; i < n; i++) await new Promise((resolve) => requestAnimationFrame(resolve));
+};
 // Room for the page images and the scroll under a full `pnpm check` (see the multi-line test).
 const settle = { timeout: 15_000 };
 
@@ -59,9 +62,6 @@ const showGroupRows = async () => {
     .toBe(true);
   return rows;
 };
-/** Waits until the page has been told again, since `counts`, that each row is in view. */
-const reportedAgain = (rows: HTMLElement[], counts: number[]) =>
-  expect.poll(() => rows.every((r, i) => (inViewOf.get(r) ?? 0) > counts[i]!), settle).toBe(true);
 // Long enough that a slow machine's pauses after the return cannot add up to it.
 const HIDDEN_MS = 2500;
 // These tests wait on the page several times; the default 15 s budget would cut them short.
@@ -169,15 +169,24 @@ describe("extraction review", () => {
       release();
       await pause(HIDDEN_MS);
       // Back, the fresh reports wait: nothing has been on screen since the return.
-      const counts = rows.map((r) => inViewOf.get(r) ?? 0);
       hold();
       setHidden(false);
       await press("a");
       await expect.element(notice(), settle).toMatchTextContent("has been on screen long enough");
       expect(app.workbench.groupAccepts).toHaveLength(0);
-      // Their time runs once the page has said they are in view again.
+      // Their time runs once the page has said they are in view again. A browser need not send a
+      // fresh report for rows that never left the screen, so scroll them off and back on.
       release();
-      await reportedAgain(rows, counts);
+      const list = document.querySelector<HTMLElement>("[data-testid=fields]")!;
+      list.scrollTop = 0;
+      await expect
+        .poll(
+          () => rows[0]!.getBoundingClientRect().top > list.getBoundingClientRect().bottom,
+          settle,
+        )
+        .toBe(true);
+      await frames(2); // the browser has seen the rows leave before they come back
+      await showGroupRows();
       await pause(VIEW_MS + 100);
       await press("a");
       await expect.element(page.getByText("3 of 21 accepted"), settle).toBeVisible();
