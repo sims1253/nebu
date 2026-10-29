@@ -587,6 +587,14 @@ function Row({
           <span className="text-ink-3">No PDF</span>
         )}
       </p>
+      {item.wrong_document ? (
+        <p className="col-span-3 mt-1.5 text-xs text-unclear" data-testid="wrong-document">
+          {`${item.wrong_document.reviewer} said the earlier PDF was the wrong document.`}
+          {item.wrong_document.note ? (
+            <span className="text-ink-2">{` Their note: "${item.wrong_document.note}"`}</span>
+          ) : null}
+        </p>
+      ) : null}
       {retrieval ? <Attempts retrieval={retrieval} /> : null}
     </article>
   );

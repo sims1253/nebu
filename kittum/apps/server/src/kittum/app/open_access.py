@@ -47,7 +47,13 @@ from kittum.app.enrichment import (
     lock_project_runs,
     queue_enrichment,
 )
-from kittum.app.lifecycle import LifecycleError, attach_acquired_full_text, full_text
+from kittum.app.lifecycle import (
+    LifecycleError,
+    WrongDocumentNote,
+    attach_acquired_full_text,
+    full_text,
+    wrong_documents,
+)
 from kittum.core import Clock, Id, NotFoundError, Record, canonical_doi, new_id
 from kittum.corpus import latest_revision, reports
 from kittum.documents import (
@@ -1043,6 +1049,8 @@ class MissingReport(Record):
     file_name: str
     """What to name its PDF so that a bulk upload matches it by name."""
     attempts: tuple[AttemptView, ...]
+    wrong_document: WrongDocumentNote | None = None
+    """A reviewer's "wrong document" on the PDF it had before."""
 
 
 def suggested_file_name(doi: str | None, pmid: str | None, report_id: Id) -> str:
@@ -1057,6 +1065,7 @@ def missing_full_texts(tx: Tx, project_id: Id, screening: Screening) -> list[Mis
     """Every report sought for retrieval that has no usable full text, in corpus order, with every
     attempt any run made for it."""
     facts = report_facts(tx, project_id)
+    wrong = wrong_documents(tx, project_id)
     out = []
     for report_id in without_full_text(tx, project_id, screening):
         found = facts[report_id]
@@ -1071,6 +1080,7 @@ def missing_full_texts(tx: Tx, project_id: Id, screening: Screening) -> list[Mis
                 year=found.record.year,
                 file_name=suggested_file_name(found.doi, found.pmid, report_id),
                 attempts=tuple(report_attempts(tx, project_id, report_id)),
+                wrong_document=wrong.get(str(report_id)),
             )
         )
     return out
@@ -1124,6 +1134,16 @@ def attempt_line(attempt: AttemptView) -> str:
     return f"{name} did not answer{detail}.{said}"
 
 
+def _why(missing: MissingReport) -> list[str]:
+    """Each attempt in plain words, after a reviewer's "wrong document" on the earlier PDF."""
+    lines = [attempt_line(a) for a in missing.attempts]
+    if missing.wrong_document is not None:
+        said = missing.wrong_document
+        note = f' Their note: "{said.note}"' if said.note else ""
+        lines.insert(0, f"{said.reviewer} said the earlier PDF was the wrong document.{note}")
+    return lines
+
+
 def _tried(attempts: tuple[AttemptView, ...]) -> list[str]:
     return list(dict.fromkeys(source_name(a.source) for a in attempts))
 
@@ -1154,7 +1174,7 @@ def missing_csv(missing: list[MissingReport]) -> bytes:
                 m.journal or "",
                 m.year or "",
                 "; ".join(_tried(m.attempts)) or "None yet",
-                " ".join(attempt_line(a) for a in m.attempts) or "No source was asked yet.",
+                " ".join(_why(m)) or "No source was asked yet.",
                 m.file_name,
             ]
         )
@@ -1168,7 +1188,7 @@ def missing_ris(tx: Tx, project_id: Id, missing: list[MissingReport]) -> bytes:
         notes = [
             "Kittum has no usable full text for this report.",
             f"Sources tried: {'; '.join(_tried(m.attempts)) or 'none yet'}.",
-            *(attempt_line(a) for a in m.attempts),
+            *_why(m),
             f"Name the PDF {m.file_name}",
         ]
         entry = ris_entry(facts[m.report_id].record, report_id=m.report_id, notes=notes)

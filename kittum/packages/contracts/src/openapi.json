@@ -4145,6 +4145,16 @@
             "title": "Title",
             "type": "string"
           },
+          "wrong_document": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WrongDocumentNote"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "year": {
             "anyOf": [
               {
@@ -6797,7 +6807,7 @@
       },
       "RetrievalItem": {
         "additionalProperties": false,
-        "description": "A report of the corpus and its full text, for the methods lead's upload queue. `outcomes`\nholds the report's current outcome per screened scope and stage (`include`, `exclude`,\n`conflict`, or None while it is being screened).",
+        "description": "A report of the corpus and its full text, for the methods lead's upload queue. `outcomes`\nholds the report's current outcome per screened scope and stage (`include`, `exclude`,\n`conflict`, or None while it is being screened). `wrong_document` is the latest reviewer's\n\"wrong document\" on a PDF the report had, while it has no full text again.",
         "properties": {
           "doi": {
             "anyOf": [
@@ -6868,6 +6878,16 @@
           "title": {
             "title": "Title",
             "type": "string"
+          },
+          "wrong_document": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WrongDocumentNote"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "year": {
             "anyOf": [
@@ -9750,6 +9770,39 @@
           "recorded_at"
         ],
         "title": "WrongDocument",
+        "type": "object"
+      },
+      "WrongDocumentNote": {
+        "additionalProperties": false,
+        "description": "A reviewer's \"wrong document\" on the PDF a report had before (`mark_wrong_document`).",
+        "properties": {
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "reviewer": {
+            "title": "Reviewer",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reviewer",
+          "note",
+          "recorded_at"
+        ],
+        "title": "WrongDocumentNote",
         "type": "object"
       },
       "WrongDocumentRequest": {

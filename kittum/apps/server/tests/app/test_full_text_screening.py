@@ -264,6 +264,18 @@ def test_one_reason_per_decision_and_a_wrong_document_is_missing_not_excluded(pg
     reports = ok(client.get(f"/api/projects/{pid}/full-texts", headers=as_("Morgan")))
     assert next(r for r in reports if r["item_ref"] == cohort["item_ref"])["full_text"] is None
     assert next(r for r in reports if r["item_ref"] == trial["item_ref"])["full_text"] is not None
+    # It says who called the earlier PDF the wrong document, and why, there and in the export.
+    said = next(r for r in reports if r["item_ref"] == cohort["item_ref"])["wrong_document"]
+    assert (said["reviewer"], said["note"]) == ("Sam", NOTE)
+    missing = ok(client.get(f"/api/projects/{pid}/retrieval/missing", headers=as_("Morgan")))
+    (gone,) = [m for m in missing if m["report_id"] == cohort["item_ref"]]
+    assert gone["wrong_document"]["note"] == NOTE
+    exported = client.get(
+        f"/api/projects/{pid}/retrieval/missing/export",
+        params={"format": "csv"},
+        headers=as_("Morgan"),
+    ).text
+    assert f'Sam said the earlier PDF was the wrong document. Their note: ""{NOTE}""' in exported
 
     # Jun excludes the trial on the one criterion it fails, with evidence for that criterion only.
     jun_trial = next(i for i in queue_of("Jun", "full_text") if i["title"].startswith(TRIAL))
