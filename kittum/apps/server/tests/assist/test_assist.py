@@ -944,6 +944,7 @@ def test_a_reasoning_model_streams_its_draft_and_the_audit_shows_the_stream_it_s
         assert completion["finish_reason"] == "stop"
         assert completion["model_identity"] == "glm-5.3-flash"
         assert completion["reasoning_tokens"] == 24000
+        assert completion["usage"] == {"prompt_tokens": 2100, "completion_tokens": 9300}
 
     # The ledger names the reasoning budget; the Audit screen's model calls open to the exact
     # bytes sent and received, the response as the event stream it was.
@@ -1013,7 +1014,11 @@ def test_a_draft_the_token_budget_cuts_off_fails_once_and_says_to_raise_reasonin
             reasoning=THOUGHTS,
             content=[cut[:40], cut[40:]],
             finish_reason="length",
-            usage={"prompt_tokens": 2100, "completion_tokens": 12000},
+            usage={
+                "prompt_tokens": 2100,
+                "completion_tokens": 12000,
+                "completion_tokens_details": {"reasoning_tokens": 7623},
+            },
         )
 
     with StreamingServer(answer) as server:
@@ -1031,8 +1036,10 @@ def test_a_draft_the_token_budget_cuts_off_fails_once_and_says_to_raise_reasonin
             FilesystemStore(settings.artifact_dir),
         )
     message = (
-        "glm-5.3-flash ran out of tokens before it finished (12,000)."
-        " Raise reasoning_tokens in its recipe."
+        "glm-5.3-flash ran out of tokens before it finished."
+        " It used 12,000 tokens, 7,623 of them for reasoning."
+        " If the reasoning used most of them, raise reasoning_tokens in its recipe."
+        " Otherwise ask again."
     )
     assert outcome["revision"] is None
     assert outcome["issues"] == [{"path": "", "message": message}]

@@ -81,17 +81,29 @@ class Completion(Record):
     serving: str | None = None
     endpoint: str | None = None  # "replay of <endpoint>" when replayed (kittum.models.replay)
     reasoning_tokens: int = 0  # the recipe's, added to the request's max_tokens when it was sent
+    usage: dict[str, Any] | None = None  # the token counts the server reported, as it sent them
 
 
 def cut_off(request: CompletionRequest, completion: Completion) -> str | None:
     """Why an answer is unusable when the token budget ended it (`finish_reason` "length"), or
-    None. Asking again with the same budget would only cut it off again."""
+    None. With the server's usage it says how many tokens went to reasoning: a model that thought
+    through its budget needs more room, one whose answer ran away needs asking again."""
     if completion.finish_reason != "length":
         return None
-    budget = request.max_tokens + completion.reasoning_tokens
+    usage = completion.usage or {}
+    used = usage.get("completion_tokens")
+    details = usage.get("completion_tokens_details")
+    reasoning = details.get("reasoning_tokens") if isinstance(details, dict) else None
+    if isinstance(used, int) and isinstance(reasoning, int):
+        spent = f"It used {used:,} tokens, {reasoning:,} of them for reasoning."
+    elif isinstance(used, int):
+        spent = f"It used {used:,} tokens."
+    else:
+        spent = f"Its limit was {request.max_tokens + completion.reasoning_tokens:,} tokens."
     return (
-        f"{request.model_id} ran out of tokens before it finished ({budget:,})."
-        " Raise reasoning_tokens in its recipe."
+        f"{request.model_id} ran out of tokens before it finished. {spent}"
+        " If the reasoning used most of them, raise reasoning_tokens in its recipe."
+        " Otherwise ask again."
     )
 
 

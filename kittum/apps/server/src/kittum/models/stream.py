@@ -4,7 +4,8 @@ With `"stream": true`, vLLM, Ollama, and hosted OpenAI-compatible APIs send the 
 one `data:` line each. A chunk is a JSON object whose `choices[0].delta` adds to the answer
 (`content`) or to the thinking (`reasoning_content`, or `reasoning` in vLLM 0.11 and Ollama). The
 last chunk with a choice carries `finish_reason`. With `stream_options.include_usage`, one more
-chunk without choices carries `usage`. `data: [DONE]` ends the stream.
+chunk without choices carries `usage`. `data: [DONE]` ends the stream. A server reports a failure
+midway as an `event: error`, or as a chunk with a top-level `error` object.
 
 `assemble` adds the chunks up to the body a non-streamed call returns, so whatever reads a stored
 response reads both forms the same way.
@@ -26,18 +27,21 @@ def is_event_stream(data: bytes) -> bool:
     return data.lstrip().startswith(_FIELDS)
 
 
-def _events(text: str) -> Iterator[str]:
-    """The data of each event: its `data:` lines joined, comments and other fields left out."""
-    lines: list[str] = []
+def _events(text: str) -> Iterator[tuple[str, str]]:
+    """The type and the data of each event: its `event:` field ("message" without one) and its
+    `data:` lines joined. Comments and other fields are left out."""
+    kind, lines = "message", []
     for line in _LINES.split(text):
         if not line:
             if lines:
-                yield "\n".join(lines)
-            lines = []
+                yield kind, "\n".join(lines)
+            kind, lines = "message", []
+        elif line.startswith("event:"):
+            kind = line.removeprefix("event:").strip()
         elif line.startswith("data:"):
             lines.append(line.removeprefix("data:").removeprefix(" "))
     if lines:
-        yield "\n".join(lines)
+        yield kind, "\n".join(lines)
 
 
 def assemble(data: bytes) -> dict[str, Any]:
@@ -50,7 +54,9 @@ def assemble(data: bytes) -> dict[str, Any]:
     usage: dict[str, Any] | None = None
     done = False
     choices = 0
-    for event in _events(data.decode()):
+    for kind, event in _events(data.decode()):
+        if kind == "error":
+            raise ValueError(f"the server reported an error: {event[:300]}")
         if event.strip() == "[DONE]":
             done = True
             break

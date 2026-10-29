@@ -448,8 +448,10 @@ def test_an_answer_the_token_budget_cut_off_stops_the_agent_and_says_why(env):
         fields = _fields(env, run["id"])
     assert len(backend.requests) == 1
     message = (
-        f"{AGENT.model_id} ran out of tokens before it finished ({AGENT.max_tokens:,})."
-        " Raise reasoning_tokens in its recipe."
+        f"{AGENT.model_id} ran out of tokens before it finished."
+        f" Its limit was {AGENT.max_tokens:,} tokens."
+        " If the reasoning used most of them, raise reasoning_tokens in its recipe."
+        " Otherwise ask again."
     )
     llm = [_proposal(f, "llm") for f in fields.values()]
     assert {(p["status"], p["message"]) for p in llm} == {("error", message)}

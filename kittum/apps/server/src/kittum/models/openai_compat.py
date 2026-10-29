@@ -140,20 +140,27 @@ class OpenAICompatibleBackend:
         headers = self._headers()
         raw_request = canonical_json(self.body(request))
         raw_request_hash = self._store.put(raw_request)
+        # A provider that echoes the key in an error body gets it redacted before anything keeps it.
+        # The redaction runs on all the bytes joined, so a key split across two network chunks is
+        # caught. A key split across two content deltas is not: a model never writes it.
+        key = headers.get("authorization", "").removeprefix("Bearer ").encode()
+        received = bytearray()
         try:
-            status, received = self._post(raw_request, headers)
+            status = self._post(raw_request, headers, received)
         except httpx2.TransportError as e:
             why = (
                 f"sent nothing for {self.timeout:g} s"
                 if isinstance(e, httpx2.ReadTimeout)
                 else f"is unreachable: {type(e).__name__}"
             )
+            # What arrived before the stream broke, such as minutes of reasoning, stays on record.
+            partial = bytes(received).replace(key, b"[redacted]") if key else bytes(received)
             raise BackendError(
-                f"{self.recipe.id}: the model server {why}", raw_request_hash=raw_request_hash
+                f"{self.recipe.id}: the model server {why}",
+                raw_request_hash=raw_request_hash,
+                raw_response_hash=self._store.put(partial) if partial else None,
             ) from e
-        # A provider that echoes the key in an error body gets it redacted before anything keeps it.
-        key = headers.get("authorization", "").removeprefix("Bearer ").encode()
-        content = received.replace(key, b"[redacted]") if key else received
+        content = bytes(received).replace(key, b"[redacted]") if key else bytes(received)
         raw_response_hash = self._store.put(content)
         if status >= 400:
             text = content.decode(errors="replace")[:500]
@@ -186,6 +193,7 @@ class OpenAICompatibleBackend:
             serving=self.recipe.serving,
             endpoint=self.endpoint,
             reasoning_tokens=self.recipe.reasoning_tokens,
+            usage=data["usage"] if isinstance(data.get("usage"), dict) else None,
         )
 
     def _headers(self) -> dict[str, str]:
@@ -206,8 +214,9 @@ class OpenAICompatibleBackend:
             headers["authorization"] = f"Bearer {key}"
         return headers
 
-    def _post(self, raw_request: bytes, headers: dict[str, str]) -> tuple[int, bytes]:
-        """The status and the response bytes, read chunk by chunk as the server sends them."""
+    def _post(self, raw_request: bytes, headers: dict[str, str], received: bytearray) -> int:
+        """The status. The response bytes go into `received` chunk by chunk as the server sends
+        them, so a stream that breaks leaves what came before. Each attempt starts it afresh."""
         for attempt in stamina.retry_context(
             on=httpx2.TransportError,
             attempts=self._attempts,
@@ -215,13 +224,14 @@ class OpenAICompatibleBackend:
             wait_initial=self._wait_initial,
             wait_jitter=self._wait_initial,
         ):
-            with (
-                attempt,
-                self._client.stream(
+            with attempt:
+                received.clear()
+                with self._client.stream(
                     "POST", self._url, content=raw_request, headers=headers
-                ) as response,
-            ):
-                return response.status_code, b"".join(response.iter_bytes())
+                ) as response:
+                    for chunk in response.iter_bytes():
+                        received += chunk
+                    return response.status_code
         raise AssertionError("unreachable")
 
 

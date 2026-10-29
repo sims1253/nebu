@@ -183,8 +183,10 @@ def test_an_answer_the_token_budget_cut_off_is_not_asked_for_again(pg: Tx) -> No
     verdicts = _run(pg, CutOff(backend), InMemoryLedger(), MemoryStore(), ids, config)
     assert len(backend.requests) == 4  # one attempt per record, not two
     message = (
-        f"{CONFIG.model_id} ran out of tokens before it finished ({CONFIG.max_tokens:,})."
-        " Raise reasoning_tokens in its recipe."
+        f"{CONFIG.model_id} ran out of tokens before it finished."
+        f" Its limit was {CONFIG.max_tokens:,} tokens."
+        " If the reasoning used most of them, raise reasoning_tokens in its recipe."
+        " Otherwise ask again."
     )
     assert all(v.flags == ("invalid_output",) for v in verdicts)
     assert {c.rationale for v in verdicts for c in v.criteria} == {message}

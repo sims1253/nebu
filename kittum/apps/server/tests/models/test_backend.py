@@ -353,7 +353,9 @@ def test_a_backend_refuses_requests_for_another_recipe(registry: ModelRegistry) 
     ("body", "why"),
     [
         (b'{"object": "chat.completion", "choices": []}', "list index out of range"),
-        # A stream that stops before the answer does, and one that reports an error midway.
+        # A stream that stops before the answer does, and ones that report an error midway: in a
+        # data payload (OpenAI) or as an error event after an answer delta, the stream ending
+        # as if nothing happened.
         (
             b"".join(chunks(model="gemma", reasoning=["Adults?"], content=['{"C_', "POP"])[:2]),
             "the stream ended before the answer did",
@@ -361,6 +363,12 @@ def test_a_backend_refuses_requests_for_another_recipe(registry: ModelRegistry) 
         (
             chunks(model="gemma", reasoning=["Adults?"], content=["{"])[0]
             + event({"error": {"message": "overloaded", "code": "1305"}}),
+            "the server reported an error",
+        ),
+        (
+            b"".join(chunks(model="gemma", reasoning=["Adults?"], content=['{"C_', "POP"])[:2])
+            + b'event: error\ndata: {"message": "overloaded", "code": 500}\n\n'
+            + event("[DONE]"),
             "the server reported an error",
         ),
     ],
@@ -383,7 +391,8 @@ def test_a_slow_steady_stream_outlasts_the_read_timeout_and_a_silent_one_does_no
 ) -> None:
     """The read timeout counts the silence between chunks, not the whole answer. A model that
     thinks for three times the timeout, sending as it goes, answers; one that stops sending for
-    longer than the timeout fails, its request and nothing else on record."""
+    longer than the timeout fails, its request and what it sent before it went silent on
+    record."""
     recipe = registry.get("qwen3.8-27b-bf16")
     answer = json.dumps(ANSWER)
     steady = chunks(
@@ -407,7 +416,7 @@ def test_a_slow_steady_stream_outlasts_the_read_timeout_and_a_silent_one_does_no
         backend = OpenAICompatibleBackend(recipe, server.url, store, timeout=0.5, attempts=1)
         with pytest.raises(BackendError, match=r"model server sent nothing for 0\.5 s") as error:
             backend.complete(_request(recipe.id))
-    assert error.value.raw_response_hash is None
+    assert store.get(error.value.raw_response_hash or "") == steady[0]
     assert store.get(error.value.raw_request_hash or "") == server.seen[0]
 
 

@@ -119,8 +119,10 @@ on high reasoning does, and it can think through 7,600 of the draft's 12,000 tok
 model, set `reasoning_tokens` to the room it needs to think, for example 24000. Kittum adds it to
 the `max_tokens` of every call, and the answer budgets stay the same. The ledger and the AI
 disclosure record it. When the budget still cuts an answer off, Kittum does not ask again with the
-same budget. The attempt fails with "<recipe> ran out of tokens before it finished (<tokens>).
-Raise reasoning_tokens in its recipe."
+same budget. The attempt fails and says how many tokens the model used, and how many of them went
+to reasoning when the server reports it. If the reasoning used most of them, raise
+`reasoning_tokens`. If the answer took most of them, ask again. GLM sometimes repeats search
+terms until the budget ends.
 
 ```sh
 export EXAMPLE_PROVIDER_API_KEY=...   # in your shell, not in .env
