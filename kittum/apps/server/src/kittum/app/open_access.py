@@ -259,22 +259,41 @@ def _terminal_attempts(
     tx: Tx, project_id: Id, report_ids: list[Id]
 ) -> dict[Id, list[dict[str, Any]]]:
     """Each report's attempts that asking again cannot change, over every earlier run: a lookup
-    whose source answered for another work, and a PDF that was another document."""
+    whose source answered for another work, a PDF that was another document, and a PDF a reviewer
+    detached as the wrong document after it was attached."""
     rows = tx.execute(
         "select rr.report_id, rr.attempts, rr.carried from retrieval_run_report rr"
         " join retrieval_run r on r.id = rr.run_id"
         " where r.project_id = %s and rr.report_id = any(%s) order by r.requested_at, r.id",
         (project_id, report_ids),
     ).fetchall()
+    detached = {h for hashes in detached_hashes(tx, project_id).values() for h in hashes}
     out: dict[Id, list[dict[str, Any]]] = {}
     for row in rows:
         for attempt in [*row["carried"], *row["attempts"]]:
-            terminal = (attempt.get("kind") == "lookup" and attempt["outcome"] == "other_work") or (
-                attempt.get("kind", "fetch") == "fetch" and attempt["outcome"] == "wrong_document"
+            fetch = attempt.get("kind", "fetch") == "fetch"
+            terminal = (
+                (attempt.get("kind") == "lookup" and attempt["outcome"] == "other_work")
+                or (fetch and attempt["outcome"] == "wrong_document")
+                # A PDF a reviewer detached as the wrong document since: the same bytes again.
+                or (fetch and attempt.get("body_hash") in detached)
             )
             if terminal and attempt not in out.setdefault(row["report_id"], []):
                 out[row["report_id"]].append(attempt)
     return {r: a for r, a in out.items() if a}
+
+
+def detached_hashes(tx: Tx, project_id: Id) -> dict[str, tuple[str, ...]]:
+    """The artifact hashes of the PDFs reviewers detached as the wrong document, per record."""
+    rows = tx.execute(
+        "select f.item_ref, d.artifact_hash from full_text_detachment f"
+        " join document d on d.id = f.document_id where f.project_id = %s order by f.recorded_at",
+        (project_id,),
+    ).fetchall()
+    out: dict[str, tuple[str, ...]] = {}
+    for row in rows:
+        out[row["item_ref"]] = (*out.get(row["item_ref"], ()), row["artifact_hash"])
+    return out
 
 
 def request_open_access(
@@ -582,6 +601,7 @@ class _Report:
         self.project_id, self.actor = run["project_id"], run["requested_by"]
         self.ref = str(report_id)
         self.facts: ReportFacts | None = None
+        self.refused: tuple[str, ...] = ()
 
     def _row(self, tx: Tx) -> dict[str, Any]:
         self.queue.fence(tx, self.job)
@@ -609,6 +629,7 @@ class _Report:
             if row["outcome"] is not None:
                 return
             self.facts = report_facts(tx, self.project_id).get(self.report_id)
+            self.refused = detached_hashes(tx, self.project_id).get(self.ref, ())
             if row["locations"] is None:
                 if full_text(tx, self.project_id, self.ref) is not None:
                     self._finish(tx, "had_full_text")  # uploaded by hand since the request
@@ -709,7 +730,11 @@ class _Report:
                 project_id=self.project_id,
                 actor_id=self.actor,
                 report_id=self.ref,
-                expected=self.facts.expected if self.facts else None,
+                expected=(
+                    self.facts.expected.model_copy(update={"refused": self.refused})
+                    if self.facts
+                    else None
+                ),
             )
             tx.execute(
                 "update retrieval_run_report set attempts = attempts || %s, acquisition_id = %s"

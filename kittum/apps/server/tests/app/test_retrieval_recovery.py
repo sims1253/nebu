@@ -22,6 +22,7 @@ import io
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
 import pymupdf
 import pytest
@@ -30,13 +31,13 @@ import yaml
 from fastapi.testclient import TestClient
 
 from kittum.api import AppContext, create_app
-from kittum.app import job_handlers
+from kittum.app import FULL_TEXT_DETACHED, job_handlers
 from kittum.app.demo import DATA, PDFS, PROTOCOL
-from kittum.core import FixedClock
+from kittum.core import FixedClock, new_id
 from kittum.corpus import latest_revision, reports
 from kittum.gateway import HttpRequest, RecordedTransport, SourceGateway
 from kittum.gateway.testing import response
-from kittum.ledger import PostgresLedger
+from kittum.ledger import EventDraft, PostgresLedger
 from kittum.runs import PostgresJobQueue, PostgresReceipts, Worker
 from kittum.settings import Settings
 from kittum.storage import MemoryStore
@@ -507,3 +508,70 @@ def test_a_lead_uploads_a_folder_of_pdfs_and_exports_what_is_still_missing(
             ).status_code
             == 403
         ), path
+
+
+def _detach(review: Review, item_ref: str, note: str) -> None:
+    """A reviewer's "wrong document" on a report's full text, as `mark_wrong_document` records it:
+    the full text is deleted, the detachment and its ledger event recorded."""
+    found = review.pg.execute(
+        "delete from full_text where project_id = %s and item_ref = %s returning document_id",
+        (review.pid, item_ref),
+    ).fetchone()
+    assert found is not None
+    event = review.ledger.append(
+        review.pg,
+        EventDraft(
+            project_id=UUID(review.pid),
+            type=FULL_TEXT_DETACHED,
+            schema_version=1,
+            actor_id=UUID(review.sam),
+            payload={"item_ref": item_ref, "document_id": str(found["document_id"]), "note": note},
+        ),
+    )
+    review.pg.execute(
+        "insert into full_text_detachment (id, project_id, item_ref, document_id, reason, note,"
+        " actor_id, command_id, event_id, recorded_at)"
+        " values (%s, %s, %s, %s, 'wrong_document', %s, %s, %s, %s, %s)",
+        (
+            new_id(),
+            review.pid,
+            item_ref,
+            found["document_id"],
+            note,
+            review.sam,
+            new_id(),
+            event.event_id,
+            event.recorded_at,
+        ),
+    )
+
+
+def test_fetching_again_never_brings_back_a_pdf_a_reviewer_called_the_wrong_document(
+    pg: Tx, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    review = Review(pg, Sources(), monkeypatch)
+    assert review.work() == 1  # the enrichment
+    review.post("retrieval/open-access")
+    assert review.work() == 1
+    lesotho = review.reports[LESOTHO_DOI]
+    first = {r["report_id"]: r for r in review.get("retrieval/open-access/latest")["reports"]}
+    assert first[lesotho]["outcome"] == "acquired"
+
+    # A reviewer says the PDF is not the trial's report, although it shows the trial's DOI.
+    _detach(review, lesotho, "This is the protocol paper, not the trial's results.")
+    review.post("retrieval/open-access")
+    assert review.work() == 1
+    again = {r["report_id"]: r for r in review.get("retrieval/open-access/latest")["reports"]}
+    assert again[lesotho]["outcome"] == "not_acquired"
+    # The same bytes are refused from PubMed Central and from the publisher's link alike.
+    refused = [a for a in again[lesotho]["attempts"] if a["outcome"] == "wrong_document"]
+    assert {a["source"] for a in refused} >= {"pmc", "crossref"}
+    assert all(
+        a["check"] == "A reviewer marked this PDF as the wrong document for this record."
+        for a in refused
+    )
+    texts = {t["item_ref"]: t for t in review.get("full-texts")}
+    assert texts[lesotho]["full_text"] is None
+    assert texts[lesotho]["wrong_document"]["note"] == (
+        "This is the protocol paper, not the trial's results."
+    )

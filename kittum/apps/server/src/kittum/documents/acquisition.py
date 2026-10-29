@@ -7,8 +7,9 @@ response at all (out of budget, unreachable) is an attempt too, and the waterfal
 as a job: it does network I/O.
 
 With an `ExpectedReport`, a PDF must also be the record's report (`check_report`: its DOI or title
-on the first pages). One that is not, such as a supplement a source named instead of the article,
-is a `wrong_document` attempt: it is not stored as a document, and the waterfall moves on.
+on the first pages) and not one a reviewer already called the wrong document (`refused`, by its
+bytes, whatever URL served it). One that fails, such as a supplement a source named instead of the
+article, is a `wrong_document` attempt: it is not stored as a document, and the waterfall moves on.
 
 A job that must keep each attempt even if a later one fails takes the steps one at a time:
 `fetch_location` does the network work outside any transaction, and `record_location` records its
@@ -128,6 +129,9 @@ def _attempt(
         return attempt("http_error"), None
     if response.body.lstrip()[:5] != b"%PDF-":
         return attempt("not_pdf"), None
+    if expected is not None and response.body_hash in expected.refused:
+        check = "A reviewer marked this PDF as the wrong document for this record."
+        return attempt("wrong_document"), None
     if expected is not None:
         found = check_report(response.body, doi=expected.doi, title=expected.title)
         check = found.reason

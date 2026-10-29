@@ -173,6 +173,8 @@ class ExpectedReport(Record):
 
     doi: str | None = None
     title: str | None = None
+    refused: tuple[str, ...] = ()
+    """Artifact hashes of PDFs a reviewer said are not this record's report: refused from any URL."""
 
 
 class AcquisitionAttempt(Record):
