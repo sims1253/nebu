@@ -68,7 +68,7 @@ class AssistModel(Record):
 
 
 class CountRequest(Record):
-    dialect: Literal["pubmed", "ctgov"]
+    dialect: Literal["pubmed", "europepmc", "ctgov"]
     strategy: str = Field(min_length=1)
 
 
@@ -199,7 +199,7 @@ def publish(
 
 @router.post("/count", operation_id="countStrategyHits")
 def count(project_id: Id, body: CountRequest, viewer: Viewer, ctx: Context) -> QueryCount:
-    """How many records a PubMed or ClinicalTrials.gov strategy finds today. Informational: it
-    runs no search and records none."""
+    """How many records a PubMed, Europe PMC, or ClinicalTrials.gov strategy finds today.
+    Informational: it runs no search and records none."""
     with _errors():
         return count_query(ctx, project_id, viewer, body.dialect, body.strategy)

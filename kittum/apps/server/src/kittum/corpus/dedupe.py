@@ -1,10 +1,14 @@
 """Deduplication and proposal generation rules for corpus (WP-07).
 
 Rules:
-1. Record deduplication (same_record and same_report) uses report identifiers (DOI, PMID)
+1. Record deduplication (same_record and same_report) uses report identifiers (DOI, PMID, PMCID)
    and normalized title plus year plus first author (via rapidfuzz).
    Trial identifiers (NCT, EudraCT, CTIS numbers) must NEVER merge records or reports.
 2. Trial identifiers drive only `same_study` proposals.
+
+A proposal's evidence is what the lead reads beside it: "Same PMID 38354139", "Same NCT ID
+NCT03589989", "Titles 96% alike, same year 2024". A same_record proposal is `exact` when only
+report identifiers joined its records.
 """
 
 import re
@@ -32,11 +36,33 @@ def normalize_pmid(pmid: str | None) -> str | None:
     return p or None
 
 
+def normalize_pmcid(pmcid: str | None) -> str | None:
+    if not pmcid:
+        return None
+    digits = re.sub(r"[^\d]", "", pmcid.strip())
+    return f"PMC{digits}" if digits else None
+
+
+_IDENTIFIER_EVIDENCE = ("Same DOI ", "Same PMID ", "Same PMCID ")
+_NCT = re.compile(r"NCT\d{8}")
+
+
 def normalize_registry_id(reg: str) -> str:
     return reg.strip().upper()
 
 
+def registry_evidence(reg_id: str) -> str:
+    """What a shared registry ID says about two records, for the lead."""
+    return f"Same NCT ID {reg_id}" if _NCT.fullmatch(reg_id) else f"Same registry ID {reg_id}"
+
+
 def extract_first_author_family(authors: tuple[str, ...]) -> str | None:
+    family = first_author_family(authors)
+    return family.lower() if family else None
+
+
+def first_author_family(authors: tuple[str, ...]) -> str | None:
+    """The first author's family name as the record spells it (McDonald, vanDellen)."""
     if not authors:
         return None
     first = authors[0].strip()
@@ -52,7 +78,7 @@ def extract_first_author_family(authors: tuple[str, ...]) -> str | None:
             family = parts[-1]
         else:
             family = parts[0]
-    clean = re.sub(r"[^\w]", "", family).lower()
+    clean = re.sub(r"[^\w]", "", family)
     return clean or None
 
 
@@ -172,24 +198,45 @@ def distinguishing_tokens_conflict(title_a: str, title_b: str) -> bool:
     )
 
 
+# Publication types (PubMed's and Europe PMC's) of a record that is a notice about another record.
+_NOTICE_TYPES = ("erratum", "correction", "retraction of publication", "expression of concern")
+
+
+def _version(rec: SourceRecord) -> str:
+    """Whether a record is a notice, a preprint, or the article itself."""
+    types = [t.casefold() for t in rec.publication_types]
+    if any(n in t for t in types for n in _NOTICE_TYPES):
+        return "notice"
+    if "preprint" in types or rec.provider_record_id.upper().startswith("PPR:"):
+        return "preprint"
+    return "article"
+
+
 def check_same_record(rec_a: SourceRecord, rec_b: SourceRecord) -> tuple[bool, str | None]:
     """Check if two records represent the same bibliographic record across databases.
 
     Trial identifiers must NEVER merge records or reports.
     """
-    doi_a = canonical_doi(rec_a.doi)
-    doi_b = canonical_doi(rec_b.doi)
-    if doi_a and doi_b:
-        if doi_a == doi_b:
-            return True, f"exact DOI {doi_a}"
-        return False, None
-
-    pmid_a = normalize_pmid(rec_a.pmid)
-    pmid_b = normalize_pmid(rec_b.pmid)
-    if pmid_a and pmid_b:
-        if pmid_a == pmid_b:
-            return True, f"exact PMID {pmid_a}"
-        return False, None
+    # The first identifier both records have decides; two different values mean two reports.
+    for label, a, b in (
+        ("DOI", canonical_doi(rec_a.doi), canonical_doi(rec_b.doi)),
+        ("PMID", normalize_pmid(rec_a.pmid), normalize_pmid(rec_b.pmid)),
+        ("PMCID", normalize_pmcid(rec_a.pmcid), normalize_pmcid(rec_b.pmcid)),
+    ):
+        if a and b:
+            if a != b:
+                return False, None
+            # A preprint and its journal version, or a notice and the article it is about, may
+            # share an identifier: the lead decides, so the evidence is no exact duplicate.
+            versions = {_version(rec_a), _version(rec_b)}
+            if "notice" in versions and len(versions) > 1:
+                return (
+                    True,
+                    f"A correction or retraction notice and another record share {label} {a}",
+                )
+            if versions == {"preprint", "article"}:
+                return True, f"A preprint and a journal version share {label} {a}"
+            return True, f"Same {label} {a}"
 
     if distinguishing_tokens_conflict(rec_a.title, rec_b.title):
         return False, None
@@ -214,30 +261,35 @@ def check_same_record(rec_a: SourceRecord, rec_b: SourceRecord) -> tuple[bool, s
         )
         has_author_match = auth_a is not None and auth_b is not None and auth_a == auth_b
         if has_year_match or has_author_match or score >= 98.0:
-            evidence_parts = [f"normalized title similarity {score / 100:.2f}"]
+            evidence_parts = [f"Titles {score:.0f}% alike"]
             if has_year_match and rec_a.year is not None:
-                evidence_parts.append(f"year {rec_a.year}")
+                evidence_parts.append(f"same year {rec_a.year}")
             if has_author_match and auth_a is not None:
-                evidence_parts.append(f"first author {auth_a}")
+                name = first_author_family(rec_a.authors) or auth_a
+                evidence_parts.append(f"same first author {name[:1].upper()}{name[1:]}")
             return True, ", ".join(evidence_parts)
 
     return False, None
 
 
 class _DisjointSet:
-    """Groups of occurrences that never hold two different DOIs or two different PMIDs."""
+    """Groups of occurrences that never hold two different DOIs, PMIDs, or PMCIDs."""
 
     def __init__(self) -> None:
         self.parent: dict[Id, Id] = {}
-        self.dois: dict[Id, set[str]] = defaultdict(set)
-        self.pmids: dict[Id, set[str]] = defaultdict(set)
+        self.ids: dict[Id, dict[str, set[str]]] = defaultdict(
+            lambda: {"doi": set(), "pmid": set(), "pmcid": set()}
+        )
 
     def add(self, rec: SourceRecord) -> None:
         root = self.find(rec.occurrence_id)
-        if doi := canonical_doi(rec.doi):
-            self.dois[root].add(doi)
-        if pmid := normalize_pmid(rec.pmid):
-            self.pmids[root].add(pmid)
+        for kind, value in (
+            ("doi", canonical_doi(rec.doi)),
+            ("pmid", normalize_pmid(rec.pmid)),
+            ("pmcid", normalize_pmcid(rec.pmcid)),
+        ):
+            if value:
+                self.ids[root][kind].add(value)
 
     def find(self, item: Id) -> Id:
         if item not in self.parent:
@@ -253,13 +305,13 @@ class _DisjointSet:
         root_b = self.find(b)
         if root_a == root_b:
             return True
-        dois = self.dois[root_a] | self.dois[root_b]
-        pmids = self.pmids[root_a] | self.pmids[root_b]
-        if len(dois) > 1 or len(pmids) > 1:
+        joined = {
+            kind: self.ids[root_a][kind] | self.ids[root_b][kind] for kind in self.ids[root_a]
+        }
+        if any(len(values) > 1 for values in joined.values()):
             return False
         self.parent[root_b] = root_a
-        self.dois[root_a] = dois
-        self.pmids[root_a] = pmids
+        self.ids[root_a] = joined
         return True
 
 
@@ -300,6 +352,7 @@ def generate_link_proposals(records: list[SourceRecord]) -> list[LinkProposal]:
                     occurrence_ids=tuple(sorted(group)),
                     relation="same_record",
                     evidence=deduped_ev,
+                    exact=all(e.startswith(_IDENTIFIER_EVIDENCE) for e in deduped_ev),
                 )
             )
 
@@ -318,16 +371,21 @@ def generate_link_proposals(records: list[SourceRecord]) -> list[LinkProposal]:
                 seen_regs.add(norm_pr)
                 registry_to_records[norm_pr].append(rec.occurrence_id)
 
+    # One proposal per set of records, with every registry ID they share; none for copies of
+    # one record, which the same_record proposal joins already.
+    shared: dict[tuple[Id, ...], list[str]] = defaultdict(list)
     for reg_id, occ_ids in sorted(registry_to_records.items()):
-        unique_occ_ids = sorted(set(occ_ids))
-        if len(unique_occ_ids) >= 2:
-            proposals.append(
-                LinkProposal(
-                    id=new_id(),
-                    occurrence_ids=tuple(unique_occ_ids),
-                    relation="same_study",
-                    evidence=(f"shared registry ID {reg_id}",),
-                )
+        unique_occ_ids = tuple(sorted(set(occ_ids)))
+        if len({dset.find(oid) for oid in unique_occ_ids}) >= 2:
+            shared[unique_occ_ids].append(registry_evidence(reg_id))
+    for occ_ids, evidence in shared.items():
+        proposals.append(
+            LinkProposal(
+                id=new_id(),
+                occurrence_ids=occ_ids,
+                relation="same_study",
+                evidence=tuple(evidence),
             )
+        )
 
     return proposals

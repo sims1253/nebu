@@ -27,6 +27,7 @@ const FORMATS: ReadonlyArray<readonly [string, string]> = [
 
 const LIVE: ReadonlyArray<readonly [string, string]> = [
   ["pubmed", "PubMed"],
+  ["europepmc", "Europe PMC"],
   ["ctgov", "ClinicalTrials.gov"],
 ];
 
@@ -270,7 +271,9 @@ export function RunSearch({
         hint={
           source === "pubmed"
             ? 'In PubMed\'s syntax, for example "nicotine patch"[tiab] AND randomized controlled trial[pt].'
-            : "In ClinicalTrials.gov's syntax."
+            : source === "europepmc"
+              ? 'In Europe PMC\'s syntax, for example TITLE_ABS:"nicotine patch" AND SRC:MED. Kittum turns its synonyms off.'
+              : "In ClinicalTrials.gov's syntax."
         }
       >
         <TextArea

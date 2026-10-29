@@ -20,6 +20,7 @@ import { useProject } from "../project.tsx";
 const SOURCES: Record<string, string> = {
   pubmed: "PubMed",
   central: "CENTRAL",
+  europepmc: "Europe PMC",
   ctgov: "ClinicalTrials.gov",
   citation_search: "Citation search",
 };

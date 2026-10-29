@@ -51,12 +51,12 @@ def save_execution(tx: Tx, project_id: Id, execution: SearchExecution) -> None:
             insert into source_occurrence (
                 occurrence_id, execution_id, project_id, source,
                 provider_record_id, ordinal, title, abstract,
-                authors, year, journal, doi, pmid,
+                authors, year, journal, doi, pmid, pmcid,
                 registry_ids, publication_types, raw_hash
             ) values (
                 %s, %s, %s, %s,
                 %s, %s, %s, %s,
-                %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s,
                 %s, %s, %s
             )
             """,
@@ -74,6 +74,7 @@ def save_execution(tx: Tx, project_id: Id, execution: SearchExecution) -> None:
                 record.journal,
                 record.doi,
                 record.pmid,
+                record.pmcid,
                 json.dumps(list(record.registry_ids)),
                 json.dumps(list(record.publication_types)),
                 record.raw_hash,
@@ -94,6 +95,7 @@ def _row_to_record(row: dict[str, Any]) -> SourceRecord:
         journal=row.get("journal"),
         doi=row.get("doi"),
         pmid=row.get("pmid"),
+        pmcid=row.get("pmcid"),
         registry_ids=tuple(row["registry_ids"]),
         publication_types=tuple(row["publication_types"]),
         raw_hash=row["raw_hash"],

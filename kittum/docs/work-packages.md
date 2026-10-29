@@ -211,8 +211,10 @@ Left:
   times out before 15). A job would free it.
 - The form edits one search topic's sources and criteria as it finds them; adding a search topic,
   outcome definitions, reference sets, and profile extensions are edited as YAML.
-- Strategies for platforms other than PubMed and ClinicalTrials.gov are not syntax-checked or
-  counted.
+- Strategies for platforms other than PubMed, Europe PMC, and ClinicalTrials.gov are not
+  syntax-checked or counted. The draft prompt asks for PubMed and ClinicalTrials.gov only, so
+  GLM's recorded drafts still replay; a Europe PMC strategy gets Europe PMC's syntax in its
+  improve request.
 
 ## WP-04 Gateway
 
@@ -256,6 +258,11 @@ Module `kittum.search`. Needs: `gateway`, `protocol`, `ledger`.
 - PubMed E-utilities: ESearch with history, date windows under the 10,000 cap, EFetch, query
   translation capture, structured abstracts with labels kept, registry IDs from `DataBankList` and abstract.
 - ClinicalTrials.gov API v2 with Essie syntax, pagination across multiple pages, mapping to NCT ID, status, and phase.
+- Europe PMC REST search with `synonym=FALSE` and `cursorMark` paging; records keep their PMID,
+  PMCID, and DOI, and NCT IDs from title and abstract. The query translation records the query
+  Europe PMC ran and its synonym setting. Fewer records than `hitCount` fails the run.
+  `live_source` starts PubMed, Europe PMC, or ClinicalTrials.gov by name for the API and the CLI.
+- PubMed records keep their PMCID too (`source_occurrence.pmcid`).
 - File imports: RIS (Generic, Cochrane Library CENTRAL, Embase) and CSV (CTIS, EU-CTR).
 - Search execution and source occurrence persistence in Postgres with audit ledger event (`search.executed`).
 - HTTP API routes (`/api/projects/{project_id}/search/*`) registered and contract generated.
@@ -314,6 +321,17 @@ Module `kittum.corpus`. Needs: `search`, `enrich`, `ledger`.
 - HTTP routes in `src/kittum/api/routes/corpus.py`: list proposals, confirm, merge, split, get counts, all scoped to the project (404 for another project's revision, 400 for invalid merges and splits).
 - `FakeCorpus` in `src/kittum/corpus/testing.py` for downstream modules.
 - End-to-end tests against Postgres verifying PRISMA counts, revision immutability, history preservation on split, and separate reports for same-NCT publications.
+- Report identifiers include the PMCID. A `same_record` proposal joined by identifiers alone is
+  `exact`; `confirm_exact` (`POST corpus/confirm-exact`, key `a` on Studies) confirms them all, one
+  revision each. Evidence reads as the lead sees it ("Same DOI ...", "Same NCT ID ...").
+- `propose_study_links` adds study-link proposals from registry IDs found after ingest; a finished
+  enrichment run passes Crossref's `clinical-trial-number`s (`corpus.proposed`).
+- The corpus view names each record's search (`search_ids`, `searches`) and why linked records are
+  together (`links`: the confirmed proposal's evidence or the lead's reason for a merge by hand,
+  for the records still together). `tests/corpus/test_duplicates.py` and
+  `e2e/duplicates.spec.ts` run PubMed, Europe PMC, and ClinicalTrials.gov on recorded responses.
+- Left: enrichment fills a missing DOI or PMID, but deduplication runs once at ingest and does not
+  see it; ClinicalTrials.gov's `referencesModule` PMIDs are not used for study links.
 
 ## WP-08 Judge and models
 

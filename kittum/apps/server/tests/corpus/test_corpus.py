@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 import psycopg
 import pytest
+from tests.enrich.support import config, replay_gateway, source_records
 
 from kittum.core import Id, NotFoundError, new_id
 from kittum.corpus import (
@@ -12,18 +13,23 @@ from kittum.corpus import (
     Relation,
     SplitLevel,
     confirm,
+    confirm_exact,
     get_counts,
     ingest,
     list_proposals,
     merge,
+    propose_study_links,
     split,
 )
 from kittum.corpus.dedupe import (
     check_same_record,
     generate_link_proposals,
 )
+from kittum.enrich import lookup
 from kittum.ledger.testing import InMemoryLedger
-from kittum.search import SearchExecution, SearchPlan, SourceRecord
+from kittum.search import SearchExecution, SearchPlan, SourceRecord, run
+from kittum.search.testing import FakeSource
+from kittum.storage import MemoryStore
 
 if TYPE_CHECKING:
     from kittum.db import Tx
@@ -43,6 +49,7 @@ def make_record(
     journal: str | None = "N Engl J Med",
     doi: str | None = None,
     pmid: str | None = None,
+    pmcid: str | None = None,
     registry_ids: tuple[str, ...] = (),
     publication_types: tuple[str, ...] = (),
 ) -> SourceRecord:
@@ -58,6 +65,7 @@ def make_record(
         journal=journal,
         doi=doi,
         pmid=pmid,
+        pmcid=pmcid,
         registry_ids=registry_ids,
         publication_types=publication_types,
         raw_hash=DUMMY_HASH,
@@ -112,7 +120,7 @@ def test_dedupe_same_record_exact_doi() -> None:
     )
     is_match, ev = check_same_record(rec1, rec2)
     assert is_match
-    assert ev == "exact DOI 10.1056/nejmoa1606774"
+    assert ev == "Same DOI 10.1056/nejmoa1606774"
     # Every dress of the same DOI is the same record (kittum.core.canonical_doi).
     for dressed in (
         "http://dx.doi.org/10.1056/NEJMOA1606774",
@@ -120,7 +128,7 @@ def test_dedupe_same_record_exact_doi() -> None:
         "  doi:10.1056/NEJMoa1606774 ",
     ):
         is_match, ev = check_same_record(rec1, make_record(doi=dressed, title="Pembrolizumab"))
-        assert (is_match, ev) == (True, "exact DOI 10.1056/nejmoa1606774"), dressed
+        assert (is_match, ev) == (True, "Same DOI 10.1056/nejmoa1606774"), dressed
 
 
 def test_dedupe_same_record_exact_pmid() -> None:
@@ -128,7 +136,27 @@ def test_dedupe_same_record_exact_pmid() -> None:
     rec2 = make_record(pmid="27718847", title="Trial Publication Other Database")
     is_match, ev = check_same_record(rec1, rec2)
     assert is_match
-    assert ev == "exact PMID 27718847"
+    assert ev == "Same PMID 27718847"
+
+
+def test_a_pmcid_joins_records_without_a_shared_doi_or_pmid_and_keeps_others_apart() -> None:
+    """A PubMed record without a DOI and Europe PMC's PubMed Central copy without a PMID are one
+    record by their PMCID, an exact duplicate. Two PMCIDs are two records, however alike the
+    titles."""
+    title = "Partner-Involved Financial Incentives for Smoking Cessation in Dual-Smoker Couples"
+    pubmed = make_record(source="pubmed", pmid="37742229", pmcid="PMC10803114", title=title)
+    pmc_copy = make_record(source="europepmc", pmcid="pmc10803114", title=title)
+    other = make_record(source="europepmc", pmcid="PMC99999999", title=title)
+    assert check_same_record(pubmed, pmc_copy) == (True, "Same PMCID PMC10803114")
+    assert check_same_record(pmc_copy, other) == (False, None)
+
+    (proposal,) = generate_link_proposals([pubmed, pmc_copy, other])
+    assert set(proposal.occurrence_ids) == {pubmed.occurrence_id, pmc_copy.occurrence_id}
+    assert (proposal.relation, proposal.evidence, proposal.exact) == (
+        "same_record",
+        ("Same PMCID PMC10803114",),
+        True,
+    )
 
 
 def test_dedupe_same_record_fuzzy_title_and_author_and_year() -> None:
@@ -148,9 +176,19 @@ def test_dedupe_same_record_fuzzy_title_and_author_and_year() -> None:
     is_match, ev = check_same_record(rec1, rec2)
     assert is_match
     assert ev is not None
-    assert "normalized title similarity" in ev
+    assert ev.startswith("Titles ") and "% alike" in ev
     assert "year 2016" in ev
-    assert "first author reck" in ev
+    assert "same first author Reck" in ev
+    # The evidence spells the name as the record does, inner capitals and all.
+    for pubmed_name, ris_name, shown in (
+        ("McDonald J", "McDonald, John", "McDonald"),
+        ("vanDellen MR", "vanDellen, Michelle", "VanDellen"),
+    ):
+        _, ev = check_same_record(
+            rec1.model_copy(update={"authors": (pubmed_name,)}),
+            rec2.model_copy(update={"authors": (ris_name,)}),
+        )
+        assert ev is not None and ev.endswith(f"same first author {shown}"), ev
 
 
 def test_near_identical_titles_different_trials_not_merged() -> None:
@@ -199,7 +237,7 @@ def test_trial_identifiers_drive_only_same_study_proposals() -> None:
     proposals = generate_link_proposals([primary, followup])
     assert len(proposals) == 1
     assert proposals[0].relation == "same_study"
-    assert proposals[0].evidence == ("shared registry ID NCT02220894",)
+    assert proposals[0].evidence == ("Same NCT ID NCT02220894",)
     assert set(proposals[0].occurrence_ids) == {
         primary.occurrence_id,
         followup.occurrence_id,
@@ -814,3 +852,159 @@ def test_full_corpus_flow_and_prisma_counts_against_postgres(pg: Tx) -> None:
         "corpus.split",
         "corpus.split",
     ]
+
+
+@pytest.mark.postgres
+def test_crossrefs_trial_number_proposes_a_study_link_the_search_could_not(pg: Tx) -> None:
+    """The BMJ Open protocol names its ClinicalTrials.gov entry nowhere PubMed shows, so the
+    corpus proposes no link; Crossref's `clinical-trial-number`, found by enrichment, does. The
+    proposal says where the ID came from, and asking again proposes nothing new."""
+    proj_id, actor_id = create_test_project_and_actor(pg)
+    ledger = InMemoryLedger()
+    artifacts = MemoryStore()
+    registry = make_record(
+        source="ctgov",
+        provider_record_id="NCT06804304",
+        title="Music-based Telerehabilitation After Stroke",
+        authors=("University of Helsinki",),
+        year=2025,
+        registry_ids=("NCT06804304",),
+    )
+    executions = [
+        run(
+            pg,
+            proj_id,
+            SearchPlan(topic_id="T1", source=name, platform=name, strategy="stroke"),
+            FakeSource(artifacts, name, records=records),
+            ledger=ledger,
+            actor_id=actor_id,
+            artifacts=artifacts,
+        )
+        for name, records in (("pubmed", source_records()), ("ctgov", (registry,)))
+    ]
+    papers, (registry,) = executions[0].records, executions[1].records
+    corpus = ingest(pg, proj_id, executions, actor_id=actor_id, ledger=ledger)
+    assert not [p for p in corpus.proposals if p.relation == "same_study"]
+
+    gateway, _ = replay_gateway()
+    enriched = lookup(papers, gateway, config=config())
+    numbers = {r.occurrence_id: r.clinical_trial_numbers for r in enriched.records}
+    proposed = propose_study_links(
+        pg, proj_id, numbers, found_by="Crossref", actor_id=actor_id, ledger=ledger
+    )
+    bmj = next(p for p in papers if p.pmid == "42785935")
+    assert [(set(p.occurrence_ids), p.evidence) for p in proposed] == [
+        (
+            {bmj.occurrence_id, registry.occurrence_id},
+            ("Same NCT ID NCT06804304 (from Crossref)",),
+        )
+    ]
+    assert [p.id for p in list_proposals(pg, proj_id, status="pending")] == [proposed[0].id]
+    assert ledger.events(pg, proj_id)[-1].type == "corpus.proposed"
+    assert (
+        propose_study_links(
+            pg, proj_id, numbers, found_by="Crossref", actor_id=actor_id, ledger=ledger
+        )
+        == []
+    )
+
+
+@pytest.mark.postgres
+def test_a_preprint_or_a_notice_sharing_a_doi_is_left_for_the_lead_not_merged_in_bulk(
+    pg: Tx,
+) -> None:
+    """A preprint and its journal version, or an erratum and its article, can share a DOI. They
+    stay proposals the lead judges one by one; confirming every exact duplicate merges only the
+    true copy, and only it counts as a duplicate removed."""
+    proj_id, actor_id = create_test_project_and_actor(pg)
+    ledger = InMemoryLedger()
+    artifacts = MemoryStore()
+    title = "Electronic Nicotine-Delivery Systems for Smoking Cessation"
+    doi = "10.1056/NEJMoa2308815"
+    pubmed = [
+        make_record(
+            provider_record_id="38354139",
+            pmid="38354139",
+            doi=doi,
+            title=title,
+            publication_types=("Journal Article",),
+        ),
+        make_record(
+            provider_record_id="38354200",
+            pmid="38354200",
+            doi="10.1056/NEJMx240001",
+            title=f"Correction: {title}",
+            publication_types=("Published Erratum",),
+        ),
+    ]
+    europepmc = [
+        # The same article from Europe PMC: a true duplicate.
+        make_record(
+            source="europepmc",
+            provider_record_id="MED:38354139",
+            pmid="38354139",
+            doi=doi,
+            title=title,
+            publication_types=("Journal Article",),
+        ),
+        # The preprint, which Europe PMC lists with the journal version's DOI.
+        make_record(
+            source="europepmc",
+            provider_record_id="PPR:PPR612345",
+            doi=doi,
+            title=title,
+            publication_types=("preprint",),
+        ),
+        # The erratum without its PMID, filed under the article's DOI.
+        make_record(
+            source="europepmc",
+            provider_record_id="PMC:PMC11000001",
+            doi="10.1056/NEJMx240001",
+            title=f"Correction: {title}",
+            publication_types=("Published Erratum",),
+        ),
+    ]
+    executions = [
+        run(
+            pg,
+            proj_id,
+            SearchPlan(topic_id="T1", source=name, platform=name, strategy="e-cigarettes"),
+            FakeSource(artifacts, name, records=tuple(records)),
+            ledger=ledger,
+            actor_id=actor_id,
+            artifacts=artifacts,
+        )
+        for name, records in (("pubmed", pubmed), ("europepmc", europepmc))
+    ]
+    corpus = ingest(pg, proj_id, executions, actor_id=actor_id, ledger=ledger)
+    assert corpus.identity_revision_id is not None
+    erratum_article = make_record(
+        source="europepmc",
+        provider_record_id="MED:1",
+        doi=doi,
+        title=f"Erratum: {title}",
+        publication_types=("Published Erratum",),
+    )
+    assert check_same_record(pubmed[0], erratum_article) == (
+        True,
+        f"A correction or retraction notice and another record share DOI {doi.lower()}",
+    )
+
+    by_provider = {r.provider_record_id: r.occurrence_id for e in executions for r in e.records}
+    proposals = {
+        frozenset(p.occurrence_ids): p for p in corpus.proposals if p.relation == "same_record"
+    }
+    article = proposals[
+        frozenset(
+            {by_provider["38354139"], by_provider["MED:38354139"], by_provider["PPR:PPR612345"]}
+        )
+    ]
+    assert not article.exact
+    assert f"A preprint and a journal version share DOI {doi.lower()}" in article.evidence
+    erratum = proposals[frozenset({by_provider["38354200"], by_provider["PMC:PMC11000001"]})]
+    assert erratum.exact  # two copies of one erratum are a true duplicate
+
+    # Only the erratum's two copies are exact: the preprint's group waits for the lead.
+    revision = confirm_exact(pg, proj_id, corpus.identity_revision_id, actor_id, ledger=ledger)
+    assert get_counts(pg, proj_id, revision.id).duplicates_removed == 1
+    assert [p.id for p in list_proposals(pg, proj_id, status="pending")] == [article.id]

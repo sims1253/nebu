@@ -21,7 +21,7 @@ from uuid import UUID
 from psycopg.types.json import Jsonb
 
 from kittum.core import Clock, Id, NotFoundError, Record, new_id
-from kittum.corpus import latest_revision, reports
+from kittum.corpus import latest_revision, propose_study_links, reports
 from kittum.enrich import (
     SOURCES,
     Enrichment,
@@ -487,6 +487,24 @@ def enrichment_handler(
                 "update enrichment_run set finished_at = %s where id = %s",
                 (ctx.clock.now(), run_id),
             )
+            # Crossref names the trial a paper reports: a study link for the lead to confirm.
+            trial_numbers = {
+                row["occurrence_id"]: row["clinical_trial_numbers"]
+                for row in tx.execute(
+                    "select occurrence_id, clinical_trial_numbers from record_enrichment"
+                    " where project_id = %s and clinical_trial_numbers <> '[]'::jsonb",
+                    (run["project_id"],),
+                ).fetchall()
+            }
+            if trial_numbers:
+                propose_study_links(
+                    tx,
+                    run["project_id"],
+                    trial_numbers,
+                    found_by="Crossref",
+                    actor_id=run["requested_by"],
+                    ledger=ledger,
+                )
 
         return JobOutput(publish=publish)
 

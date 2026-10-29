@@ -12,8 +12,6 @@ from kittum.gateway import GatewayError
 from kittum.ledger import Ledger  # noqa: TC001
 from kittum.search import (
     TRANSPORT_ERRORS,
-    CtgovSource,
-    PubMedSource,
     SearchExecution,
     SearchPlan,
     Source,
@@ -22,6 +20,7 @@ from kittum.search import (
     get_execution,
     import_file,
     list_executions,
+    live_source,
     run,
     unreachable,
 )
@@ -60,20 +59,20 @@ def _ledger(ctx: Context) -> Ledger:
 def _get_source(plan: SearchPlan, ctx: Context) -> Source:
     if ctx.gateway is None:
         raise HTTPException(status_code=503, detail="No HTTP gateway is configured")
-    if plan.source.lower() in ("pubmed", "medline"):
-        return PubMedSource(
-            ctx.gateway,
-            ctx.artifacts,
-            contact_email=ctx.settings.contact_email,
-            ncbi_api_key=ctx.settings.ncbi_api_key,
-            clock=ctx.clock,
-        )
-    if plan.source.lower() in ("ctgov", "clinicaltrials"):
-        return CtgovSource(ctx.gateway, ctx.artifacts, clock=ctx.clock)
-    raise HTTPException(
-        status_code=400,
-        detail=f"Unsupported live search source '{plan.source}'. Use file import instead.",
+    source = live_source(
+        plan.source,
+        ctx.gateway,
+        ctx.artifacts,
+        contact_email=ctx.settings.contact_email,
+        ncbi_api_key=ctx.settings.ncbi_api_key,
+        clock=ctx.clock,
     )
+    if source is None:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Kittum cannot search {plan.source!r} live. Import its export file instead.",
+        )
+    return source
 
 
 @router.post("/run", operation_id="runSearch")

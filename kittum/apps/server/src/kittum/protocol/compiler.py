@@ -475,17 +475,20 @@ def _check_sources(topic: SearchTopic, here: tuple[str | int, ...]) -> list[Prot
     return issues
 
 
-type StrategyDialect = Literal["pubmed", "ctgov"]
+type StrategyDialect = Literal["pubmed", "europepmc", "ctgov"]
 
 
 def strategy_dialect(source: Source) -> StrategyDialect | None:
     """The live interface whose syntax a source's strategy is written in, when Kittum knows it:
-    PubMed (MEDLINE searched on PubMed) or ClinicalTrials.gov's Essie. Other platforms (Ovid,
-    Cochrane Library) have their own syntax, which Kittum does not check or run."""
+    PubMed (MEDLINE searched on PubMed), Europe PMC's search syntax, or ClinicalTrials.gov's Essie.
+    Other platforms (Ovid, Cochrane Library) have their own syntax, which Kittum does not check or
+    run."""
     platform = (source.platform or "").casefold()
     if platform == "pubmed" or source.id.casefold() == "pubmed":
         return "pubmed"
     names = {source.id.casefold(), platform, source.name.casefold()}
+    if names & {"europepmc", "europe_pmc", "europe pmc"}:
+        return "europepmc"
     if names & {"clinicaltrials_gov", "ctgov", "clinicaltrials.gov"}:
         return "ctgov"
     return None
@@ -628,7 +631,37 @@ PUBMED_FIELD_TAGS = frozenset(
         "print publication date",
     }
 )
+
+# Europe PMC's search fields, as its `fields` endpoint lists them
+# (https://www.ebi.ac.uk/europepmc/webservices/rest/fields), and MESH and SUBSET, which it accepts
+# without listing. Europe PMC finds nothing for a field it does not know, without an error.
+EUROPEPMC_FIELDS = frozenset(
+    {
+        "abbr", "abstract", "accession_id", "accession_type", "ack_fund", "aff", "all_fields",
+        "annotation_provider", "annotation_type", "appendix", "arxpr_pubs", "auth", "authorid",
+        "authorid_type", "author_roles", "auth_collective_list", "auth_con", "auth_first", "auth_last",
+        "auth_man", "auth_man_id", "back", "back_noref", "body", "book_id", "case", "chebiterm",
+        "chebiterm_id", "chebi_pubs", "chem", "chembl_pubs", "cited", "cites", "comp_int", "concl",
+        "creation_date", "data_availability", "discuss", "disease", "disease_id", "doi", "ed",
+        "embargo_date", "embl_pubs", "embl_ror_id", "epmc_auth_man", "essn", "experimental_method",
+        "experimental_method_id", "ext_id", "e_pdate", "fig", "first_idate", "first_idate_d",
+        "first_pdate", "ft_cdate", "ft_cdate_d", "ft_id", "funder_initiative", "gene_protein",
+        "goterm", "goterm_id", "grant_agency", "grant_agency_id", "grant_id", "has_abstract",
+        "has_arxpr", "has_book", "has_chebi", "has_chembl", "has_data", "has_doi", "has_embl",
+        "has_free_fulltext", "has_ft", "has_fulltext", "has_fulltextdata", "has_intact",
+        "has_interpro", "has_labslinks", "has_omim", "has_pdb", "has_pdf", "has_preprint", "has_pride",
+        "has_published_version", "has_reflist", "has_suppl", "has_tm", "has_uniprot",
+        "has_version_evaluations", "has_xrefs", "index_date", "intact_pubs", "interpro_pubs", "intro",
+        "investigator", "in_epmc", "in_pmc", "isbn", "issn", "issue", "journal", "keyword", "kw",
+        "labs_pubs", "lang", "license", "methods", "nih_auth_man", "omim_pubs", "open_access",
+        "organism", "organism_id", "org_id", "other", "parent_title", "pdb_pubs", "pmcid",
+        "pride_pubs", "publisher", "pub_type", "pub_year", "p_pdate", "qn1", "qn2", "ref", "reffed_by",
+        "resource_name", "results", "series_name", "shard", "src", "suppl", "table", "title",
+        "title_abs", "uniprot_pubs", "update_date", "volume", "mesh", "subset"
+    }
+)  # fmt: skip
 _TAG = re.compile(r"\[([^\]]*)\]")
+_FIELD = re.compile(r"(?<![\w-])([A-Za-z_][A-Za-z0-9_]*):")
 _PROXIMITY = re.compile(r"^(tiab|ti|ad|title/abstract|title|affiliation):~\d+$")
 
 
@@ -639,7 +672,8 @@ def _unquoted(strategy: str) -> list[str]:
 
 def strategy_problems(strategy: str) -> list[str]:
     """What is wrong with a strategy's syntax, as far as a check without running it can tell:
-    quotes, parentheses, and square brackets must balance. Whether the query finds what it should
+    quotes and parentheses must balance, and square brackets must open, close, and hold no
+    parenthesis, in that order, without nesting. Whether the query finds what it should
     is for a hit count and the reference set to show."""
     problems: list[str] = []
     if strategy.count('"') % 2:
@@ -655,15 +689,36 @@ def strategy_problems(strategy: str) -> list[str]:
         problems.append(
             f"{depth} opening parenthes{'is is' if depth == 1 else 'es are'} not closed"
         )
-    text = " ".join(_unquoted(strategy))
-    if text.count("[") != text.count("]"):
-        problems.append("square brackets do not balance")
-    return problems
+    # A field tag or a range opens with [ and closes with ] before the next one opens, outside
+    # quoted phrases, and holds no parenthesis.
+    bracket = False
+    found: list[str] = []
+    for char in " ".join(_unquoted(strategy)):
+        if char == "[":
+            if bracket:
+                found.append("square brackets are nested")
+            bracket = True
+        elif char == "]":
+            if not bracket:
+                found.append("a closing square bracket has no opening one")
+            bracket = False
+        elif char in "()" and bracket:
+            found.append("a parenthesis is inside square brackets")
+    if bracket:
+        found.append("a square bracket is not closed")
+    return problems + list(dict.fromkeys(found))
 
 
 def strategy_warnings(strategy: str, dialect: StrategyDialect | None) -> list[str]:
-    """What may be wrong with a strategy that compiles: a PubMed field tag PubMed does not list.
-    PubMed searches such a term anyway, with a warning, so the protocol does too."""
+    """What may be wrong with a strategy that compiles: a field PubMed or Europe PMC does not
+    list. PubMed searches such a term anyway, with a warning, and Europe PMC finds nothing for it,
+    so the protocol warns and compiles."""
+    if dialect == "europepmc":
+        return [
+            f"Europe PMC has no field {field}. It finds no records for a search in it."
+            for field in dict.fromkeys(_FIELD.findall(" ".join(_unquoted(strategy))))
+            if field.casefold() not in EUROPEPMC_FIELDS
+        ]
     if dialect != "pubmed":
         return []
     unknown = []
@@ -675,8 +730,8 @@ def strategy_warnings(strategy: str, dialect: StrategyDialect | None) -> list[st
 
 
 def protocol_warnings(protocol: ReviewProtocol) -> tuple[ProtocolIssue, ...]:
-    """What may be wrong in a protocol that compiles, each with its path: for now, field tags in
-    a PubMed strategy that PubMed does not list."""
+    """What may be wrong in a protocol that compiles, each with its path: for now, fields in a
+    PubMed or Europe PMC strategy that the platform does not list."""
     return tuple(
         ProtocolIssue(
             path=path_of("search_topics", ti, "source_plan", "sources", si, "strategy"),

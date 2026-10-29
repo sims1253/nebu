@@ -560,6 +560,8 @@ export const makeApiWorkbench = (): Workbench => ({
           return api.confirmCorpusProposal(request.projectId, {
             payload: { ...base, proposal_id: request.proposalId },
           });
+        case "confirm_exact":
+          return api.confirmExactDuplicates(request.projectId, { payload: base });
         case "merge":
           return api.mergeCorpusOccurrences(request.projectId, {
             payload: { ...base, occurrence_ids: request.occurrenceIds, relation: request.relation },

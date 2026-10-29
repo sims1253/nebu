@@ -135,7 +135,7 @@ export function SearchScreen() {
         ) : executions.length === 0 ? (
           <p className="mt-4 max-w-[62ch] text-md text-ink-2">
             {protocol
-              ? "No searches yet. Run PubMed and ClinicalTrials.gov live, and import the export file of every other database. Add one search per database and query."
+              ? "No searches yet. Run PubMed, Europe PMC, and ClinicalTrials.gov live, and import the export file of every other database. Add one search per database and query."
               : "Publish the protocol first. Each search belongs to one of its search topics."}
           </p>
         ) : (

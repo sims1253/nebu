@@ -320,6 +320,11 @@
   "https://clinicaltrials.gov/api/v2/studies?query.term=%28smoking%20cessation%20OR%20tobacco%20cessation%20OR%20smoker%29%20AND%20%28nicotine%20replacement%20OR%20nicotine%20patch%20OR%20nicotine%20gum%20OR%20nicotine%20lozenge%20OR%20nicotine%20inhaler%20OR%20nicotine%20spray%20OR%20NRT%29&pageSize=1&countTotal=true": {
     "file": "../../../assist/fixtures/counts/116868e868be84d0.json"
   },
+  "https://clinicaltrials.gov/api/v2/studies?query.term=NCT03589989+OR+NCT02564315&pageSize=100&countTotal=true": {
+    "content_type": "application/json",
+    "file": "../../../search/fixtures/duplicates/92d0929f7af918e60ae309022368e6efc1433f7522bf21e44e05e2c32a5d2191.json",
+    "status": 200
+  },
   "https://europepmc.org/articles/PMC13374172?pdf=render": {
     "content_type": "text/html",
     "file": "21860691b52a62e0.html",
@@ -329,6 +334,16 @@
     "content_type": "text/html",
     "file": "84156b8f6fa0f058.html",
     "status": 403
+  },
+  "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&query_key=1&WebEnv=MCID_6ae2704dd2a47cea8b0751db&retstart=0&retmax=10&retmode=xml&tool=kittum&email=contact%40example.invalid": {
+    "content_type": "text/xml",
+    "file": "../../../search/fixtures/duplicates/625b10594f1bbcec911eebf63fa48c9f880c90418c6cb1b78b0883bf84d57eea",
+    "status": 200
+  },
+  "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=%22nicotine+replacement%22%5Btiab%5D+AND+%22smoking+cessation%22%5Btiab%5D+AND+randomized+controlled+trial%5Bpt%5D+AND+2024%2F01%2F01%3A2024%2F03%2F31%5Bdp%5D&usehistory=y&retmode=xml&tool=kittum&email=contact%40example.invalid": {
+    "content_type": "text/xml",
+    "file": "../../../search/fixtures/duplicates/2be4c5ddce38c579083cddb2afaa4285125af0d3d1ba55b1a4760f181f90eebc",
+    "status": 200
   },
   "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=%28%22nicotine%20replacement%22%5Btiab%5D%20OR%20%22nicotine%20patch%22%5Btiab%5D%20OR%20%22nicotine%20gum%22%5Btiab%5D%29%20AND%20%22smoking%20cessation%22%5Btiab%5D%20AND%20randomized%20controlled%20trial%5Bpt%5D&retmax=0&tool=kittum&email=test%40kittum.dev": {
     "file": "../../../assist/fixtures/counts/ba5bae33f357fb24.json"
@@ -374,6 +389,11 @@
   "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID%3A42174613+OR+EXT_ID%3A42399956+OR+EXT_ID%3A32450107+OR+DOI%3A%2210.1186%2Fs12916-026-04943-4%22+OR+DOI%3A%2210.1186%2Fs12916-026-05037-x%22+OR+DOI%3A%2210.1016%2Fs0140-6736%2820%2931180-6%22&format=json&resultType=core&synonym=FALSE&pageSize=100": {
     "content_type": "application/json",
     "file": "07de7bac9d543461.json",
+    "status": 200
+  },
+  "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=TITLE_ABS%3A%22nicotine+replacement%22+AND+TITLE_ABS%3A%22smoking+cessation%22+AND+PUB_TYPE%3A%22Randomized+Controlled+Trial%22+AND+FIRST_PDATE%3A%5B2024-01-01+TO+2024-03-31%5D&format=json&resultType=core&synonym=FALSE&pageSize=1000&cursorMark=%2A": {
+    "content_type": "application/json",
+    "file": "../../../search/fixtures/duplicates/fef46a0e4b784dbcf72ada389d7dec6c6066b33f95ec27522cadf8dc4579b312.json",
     "status": 200
   },
   "https://www.ncbi.nlm.nih.gov/research/pubtator3-api/publications/export/biocjson?pmids=39462502%2C38935378%2C38898605%2C38838477%2C38752924%2C38696203%2C38683609%2C38662017%2C38482972%2C38369951%2C38354139%2C38282258%2C37977486%2C37819741%2C37742229%2C37725265%2C37474127%2C37353970%2C37141036%2C36203394%2C42174613%2C42399956": {

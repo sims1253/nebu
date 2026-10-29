@@ -1,0 +1,1 @@
+{"version":"6.9","hitCount":0,"request":{"queryString":"(TITLE_ABS:\"nicotine replacement\" AND TITLE_ABS:\"smoking cessation\" AND PUB_TYPE:\"Randomized Controlled Trial\" AND FIRST_PDATE:[2024-01-01 TO 2024-03-31] AND JOURNAL_TITLE:Addiction","resultType":"idlist","cursorMark":"*","pageSize":1,"sort":"","synonym":false},"resultList":{"result":[]}}
