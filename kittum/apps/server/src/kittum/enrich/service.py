@@ -7,7 +7,9 @@ record. An answer whose identifiers contradict the record's (another DOI, PMID, 
 failure of that source for that record, and none of it is used.
 
 `lookup` asks the sources and touches no database, so a caller can do the network work outside a
-transaction and `store` the result in one; `enrich` does both.
+transaction and `store` the result in one; `enrich` does both. A retry passes the failures each
+record's last enrichment ended with (`carried`): a source that answered for another work is not
+asked about that record again, and its failure stays on the record.
 """
 
 from dataclasses import dataclass, field
@@ -29,6 +31,8 @@ from kittum.enrich.types import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from kittum.core import Id
     from kittum.db import Tx
     from kittum.gateway import Gateway
@@ -57,14 +61,19 @@ class _State:
     field_sources: dict[tuple[str, str], FieldSource] = field(default_factory=dict)
     asked: list[str] = field(default_factory=list)
     failures: list[SourceFailure] = field(default_factory=list)
+    skip: set[str] = field(default_factory=set)
+    """Sources not to ask: they answered for another work before."""
 
     @classmethod
-    def start(cls, record: SourceRecord) -> _State:
+    def start(cls, record: SourceRecord, carried: tuple[SourceFailure, ...] = ()) -> _State:
+        kept = [f for f in carried if f.kind == "other_work"]
         state = cls(
             record=record,
             doi=canonical_doi(record.doi),
             pmid=record.pmid,
             abstract=record.abstract,
+            failures=kept,
+            skip={f.source for f in kept},
         )
         if record.doi:
             state.note("doi", record.source)
@@ -78,8 +87,18 @@ class _State:
         if source not in self.asked:
             self.asked.append(source)
 
-    def fail(self, source: str, reason: str) -> None:
-        failure = SourceFailure(source=source, reason=reason)
+    def fail(self, source: str, error: SourceUnavailable | str) -> None:
+        failure = (
+            SourceFailure(source=source, reason=error, kind="other_work")
+            if isinstance(error, str)
+            else SourceFailure(
+                source=source,
+                reason=error.reason,
+                kind=error.kind,
+                status=error.status,
+                message=error.message,
+            )
+        )
         if failure not in self.failures:
             self.failures.append(failure)
 
@@ -162,12 +181,16 @@ def lookup(
     gateway: Gateway,
     *,
     config: EnrichmentConfig | None = None,
+    carried: Mapping[Id, tuple[SourceFailure, ...]] | None = None,
 ) -> Enrichment:
-    """Ask the sources about `records`. Network only: nothing is stored."""
+    """Ask the sources about `records`. Network only: nothing is stored. `carried` holds each
+    record's failures from before, by occurrence; a source that answered for another work is
+    skipped for that record."""
     if not records:
         return Enrichment(records=())
     config = config or EnrichmentConfig()
-    states = [_State.start(record) for record in records]
+    carried = carried or {}
+    states = [_State.start(r, carried.get(r.occurrence_id, ())) for r in records]
     _from_openalex(states, gateway, config)
     _from_europepmc(states, gateway, config)
     _from_crossref(states, gateway, config)
@@ -202,11 +225,11 @@ def enrich(
 
 def _batch_failed(states: list[_State], source: str, error: SourceUnavailable) -> None:
     for state in states:
-        state.fail(source, error.reason)
+        state.fail(source, error)
 
 
 def _from_openalex(states: list[_State], gateway: Gateway, config: EnrichmentConfig) -> None:
-    asked = [state for state in states if state.doi or state.pmid]
+    asked = [s for s in states if (s.doi or s.pmid) and openalex.SOURCE not in s.skip]
     dois = [state.doi for state in asked if state.doi]
     pmids = [state.pmid for state in asked if state.pmid]
     if not asked:
@@ -241,7 +264,7 @@ def _from_openalex(states: list[_State], gateway: Gateway, config: EnrichmentCon
 
 
 def _from_europepmc(states: list[_State], gateway: Gateway, config: EnrichmentConfig) -> None:
-    asked = [state for state in states if state.doi or state.pmid]
+    asked = [s for s in states if (s.doi or s.pmid) and europepmc.SOURCE not in s.skip]
     dois = [state.doi for state in asked if state.doi]
     pmids = [state.pmid for state in asked if state.pmid]
     if not asked:
@@ -276,7 +299,7 @@ def _from_europepmc(states: list[_State], gateway: Gateway, config: EnrichmentCo
 def _from_crossref(states: list[_State], gateway: Gateway, config: EnrichmentConfig) -> None:
     works: dict[str, crossref.Work | SourceUnavailable | None] = {}
     for state in states:
-        if not state.doi:
+        if not state.doi or crossref.SOURCE in state.skip:
             continue
         state.ask(crossref.SOURCE)
         if state.doi not in works:
@@ -286,7 +309,7 @@ def _from_crossref(states: list[_State], gateway: Gateway, config: EnrichmentCon
                 works[state.doi] = error
         work = works[state.doi]
         if isinstance(work, SourceUnavailable):
-            state.fail(crossref.SOURCE, work.reason)
+            state.fail(crossref.SOURCE, work)
             continue
         if work is None:
             continue
@@ -317,7 +340,7 @@ def _from_unpaywall(states: list[_State], gateway: Gateway, config: EnrichmentCo
         return
     seen: dict[str, OaLocation | SourceUnavailable | None] = {}
     for state in states:
-        if not state.doi:
+        if not state.doi or unpaywall.SOURCE in state.skip:
             continue
         state.ask(unpaywall.SOURCE)
         if state.doi not in seen:
@@ -329,13 +352,13 @@ def _from_unpaywall(states: list[_State], gateway: Gateway, config: EnrichmentCo
                 seen[state.doi] = error
         location = seen[state.doi]
         if isinstance(location, SourceUnavailable):
-            state.fail(unpaywall.SOURCE, location.reason)
+            state.fail(unpaywall.SOURCE, location)
         elif location is not None:
             state.add_locations((location,), unpaywall.SOURCE)
 
 
 def _from_pubtator(states: list[_State], gateway: Gateway, config: EnrichmentConfig) -> None:
-    asked = [state for state in states if state.pmid]
+    asked = [s for s in states if s.pmid and pubtator.SOURCE not in s.skip]
     if not asked:
         return
     for state in asked:

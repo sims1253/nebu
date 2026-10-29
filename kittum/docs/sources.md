@@ -40,15 +40,24 @@ its minimum.
 | --- | --- | --- | --- | --- | --- |
 | PubMed E-utilities | Primary search (MEDLINE) | 3 requests per second without a key, 10 with a free key. Checked. ESearch returns at most 10,000 records per query. | Free NCBI key, plus `tool` and `email` parameters | Allowed for metadata. Abstracts keep publisher copyright for redistribution. | Returns the query translation, which goes into the PRISMA-S record. Kittum splits large searches by date window to stay under the cap and logs each window. |
 | ClinicalTrials.gov API v2 | Primary registry search | About 50 requests per minute. Unverified. | None | US public domain | Essie syntax with `AREA[]` and `RANGE[]`. Includes structured results. |
-| Europe PMC REST | Primary search (live, `cursorMark` paging); enrichment; full-text XML source | Fair use, about 10 requests per second. Unverified. | None | Metadata allowed. Full-text licence per article. | Set `synonym=FALSE` so hit counts are reproducible. Best free source of JATS full text, with sections and tables already structured. |
+| Europe PMC REST | Primary search (live, `cursorMark` paging); enrichment; full-text XML source | Fair use, about 10 requests per second. Unverified. | None | Metadata allowed. Full-text licence per article. | Set `synonym=FALSE` so hit counts are reproducible. Best free source of JATS full text, with sections and tables already structured. A PMID lookup is `EXT_ID:<pmid> AND SRC:MED`; a DOI lookup is not scoped, so preprints match, and a DOI can also match a PMC copy without a PMID or DOI, which Kittum ignores. On 28 October 2026 the search service answered every request with HTTP 503 for hours; **Retry failed sources** asks it again later. |
+| PubMed Central (PMC ID converter and PMC Article Datasets on AWS) | Full-text lookup | The ID converter takes NCBI's E-utilities rate (3 requests per second without a key). The `pmc-oa-opendata` bucket publishes no limit; Kittum uses the converter's. Checked. | `tool` and `email` parameters for the converter; the bucket is world-readable | Per-article licence (`license_code` in the article's metadata JSON, mostly Creative Commons, `TDM` for author manuscripts without one) | PMC retired its OA web service (`oa.fcgi`) in August 2026, and its terms allow automated retrieval only through the Cloud Service, OAI-PMH, E-utilities, and BioC. Kittum finds the PMCID (from Europe PMC, else the converter), lists the bucket for the article's versions, reads each version's metadata, and fetches the PDF over HTTPS. The published version comes before an author manuscript. |
 | OpenAlex | Enrichment and citation chasing | A free key is required since February 2026. The free key gets a budget of 1 USD per day. Complex Boolean queries have lower limits. Checked against the current help pages. | Free key | CC0 metadata | Use the free CC0 snapshot for bulk work. Pin the policy version and read the response headers. |
 | Crossref | DOI resolution, retraction notices, trial-number links | Public pool 5 requests per second at concurrency 1. Polite pool 10 per second at concurrency 3. Checked. | `mailto` parameter | Metadata allowed | `update-to` carries retractions and corrections. `clinical-trial-number` links papers to registry IDs. |
-| Unpaywall | OA PDF location | 100,000 calls per day. Checked. | `email` parameter | Allowed | The linked PDF's licence is a separate check. |
+| Unpaywall | OA PDF location | 100,000 calls per day. Checked. | `email` parameter | Allowed | The linked PDF's licence is a separate check. `url_for_pdf` can name the wrong file: for 10.2196/66709 it names the trial's CONSORT checklist, a supplement (issue #60). Kittum checks every PDF against its record before it becomes the full text. |
 | PubTator 3 | Entity tags for highlighting and dedupe signals | 3 requests per second. Unverified. | None | NCBI public service | Annotations never decide eligibility. |
-| Semantic Scholar | Not used in the commercial profile | 1 request per second with a key | Free key | Restricted. The default licence requires extra permission for commercial use. Checked. | Allowed only in a non-commercial research profile. |
-| CORE | Not used in the commercial profile | Tiered | Free key | Treat as restricted until checked. A council member reported that consultancy use needs a paid licence. | Optional, off by default |
+| Semantic Scholar | Full-text lookup (`openAccessPdf`), opt-in | 1 request per second with a key. Checked. | Free key (`KITTUM_SEMANTIC_SCHOLAR_API_KEY`, sent as `x-api-key`). Kittum asks Semantic Scholar only when the key is set; without it the waterfall skips the source and the retrieval run says so. | Restricted. The default API licence requires extra permission for commercial use. Checked. | Opt-in because of that licence: a deployment that sets the key confirms it may use the API. Asked by DOI, else PMID, after the preprint servers. Its `openAccessPdf` is often a landing page, and for 10.2196/66709 the same supplement Unpaywall names. |
+| CORE | Full-text lookup (repository copies) | Registered personal key: 1,000 tokens a day, 25 a minute. Academic key: 5,000 a day, 10 a minute. A simple query costs 1 token. Kittum uses 10 a minute and 900 a day. Checked. | Key required (`KITTUM_CORE_API_KEY`, sent as a bearer token). Full texts are not available without one. | Treat as restricted until checked. A council member reported that consultancy use needs a paid licence. | Asked last, by DOI, only with a key. Without one the waterfall skips it and the retrieval run says so. CORE states no licence for the copies it aggregates. Not recorded in Kittum's fixtures, because no key may reach a recording. |
 | Lens.org | Not used in the commercial profile | Trial plans are small | Token | A council member reported that the terms class consultancy reports as commercial use. | Optional, off by default |
-| medRxiv and bioRxiv | Supplementary only | About 1 request per second | None | Per-article CC licence | No Boolean search. Search through Europe PMC (`SRC:PPR`) instead. |
+| medRxiv and bioRxiv | Supplementary search; full-text lookup | No published limit. Kittum uses 1 request per second. | None | Per-article licence in the `details` answer (`cc_by`, `cc_by_nc_nd`, `cc0`, `cc_no` for no reuse licence) | No Boolean search. Search through Europe PMC (`SRC:PPR`) instead. Full text: `api.biorxiv.org/details/<server>/<doi>` for a DOI 10.1101/..., medRxiv first, then bioRxiv; the newest version's PDF is fetched. The servers sit behind Cloudflare, which often refuses automated PDF downloads with 403. |
+| arXiv | Full-text lookup | One request every three seconds, on one connection. Checked. | None | Per-paper licence in the OAI-PMH `arXiv` record | Asked for a DOI 10.48550/arXiv.<id>. The licence comes from `oaipmh.arxiv.org`, the PDF from `export.arxiv.org`, the host arXiv asks automated clients to use. |
+
+## Sources Kittum does not use
+
+| Source | Why not |
+| --- | --- |
+| ResearchGate | It has no public API, and its terms of service forbid automated downloads and scraping. Kittum never fetches from it. A PDF a reviewer gets from ResearchGate by hand goes through the upload, with its licence. |
+| Sci-Hub and similar shadow libraries | They distribute copyrighted articles without permission. |
 
 ## Sources without a free search interface
 
@@ -102,13 +111,50 @@ of budget waits.
 
 ## Full-text waterfall
 
-For each record that passes title and abstract screening, Kittum tries in order:
+For each report that passes title and abstract screening and has no usable full text, Kittum tries
+in order:
 
 1. The local content store, by SHA-256, DOI, or PMID.
 2. Europe PMC full-text XML and PDF.
-3. Unpaywall and OpenAlex OA locations.
-4. Publisher PDFs: the links a publisher deposits with Crossref where Crossref also lists a
-   Creative Commons licence for that version, then licensed publisher TDM interfaces.
-5. The human upload queue, for closed-access articles and client CSRs.
+3. PubMed Central's copy in the PMC Article Datasets.
+4. Unpaywall and OpenAlex OA locations.
+5. Publisher PDFs: the links a publisher deposits with Crossref where Crossref also lists a
+   Creative Commons licence for that version.
+6. medRxiv and bioRxiv, then arXiv, for a preprint's own DOI.
+7. Semantic Scholar's `openAccessPdf`, with a key.
+8. CORE, with a key.
+9. The human upload: one PDF at a time, or many at once.
 
-Kittum records the source, the licence, and the acquisition time for every file.
+Enrichment finds the locations of steps 2, 4, and 5 for every record. Kittum asks the sources of
+steps 3, 6, 7, and 8 about one report at a time, only when the waterfall reaches them, and records
+each question as an attempt (`retrieval.source_asked`) with the files the source named.
+
+Every PDF is checked against its record before it becomes the full text: the record's DOI on the
+first three pages, or its title on the first two (at least 95 similar, ignoring case, spacing,
+accents, punctuation, and hyphenation). A PDF that shows neither is a `wrong_document` attempt, is
+not stored as a document, and the waterfall moves on. A PDF without text on its first pages, or a
+record without a DOI or usable title, cannot be checked and is accepted.
+
+Kittum records the source, the licence, and the acquisition time for every file, and every attempt,
+failed ones included, in the ledger.
+
+### When a source is down
+
+A source that fails during enrichment or retrieval is recorded with its HTTP status and what it
+said, and the workbench shows it in plain words, for example "Europe PMC did not answer (HTTP 503,
+the service was down) for 24 records". **Retry failed sources** (Retrieval, key `r`, the methods
+lead's alone) enriches again only the records a source failed for, then fetches the reports among
+them that still have no full text, and fetches again the reports a source failed for during
+retrieval (no answer, a 5xx, or a 429). A source that answered for another work is not retried.
+Every retry and every attempt is a ledger event.
+
+### Reports open access does not give
+
+Retrieval exports the reports sought for retrieval without a usable full text as CSV or RIS: DOI,
+PMID, title, authors, journal, year, the sources tried, why each attempt failed, and a file name to
+give the PDF. Whoever gets the PDFs (a customer, a library) sends them back, and the lead uploads
+them at once. Kittum matches each PDF by the DOI or PMID in its file name, or by the same check as
+above, and holds the rest for the lead to assign or discard.
+
+Licensed publisher TDM interfaces and institutional access (EZproxy, OpenAthens) are not built. The
+proposal is issue #64.

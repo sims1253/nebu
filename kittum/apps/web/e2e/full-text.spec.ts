@@ -242,7 +242,11 @@ test("one reason per full-text decision, the AI's reading after it, and a wrong 
     expect((await ref(COHORT)).full_text).toBeNull();
     expect((await ref(TRIAL)).full_text).not.toBeNull();
     await lead.reload();
-    await expect(lead.getByTestId("retrieval-row").filter({ hasText: COHORT })).toBeVisible();
+    const missing = lead.getByTestId("retrieval-row").filter({ hasText: COHORT });
+    await expect(missing).toBeVisible();
+    await expect(missing.getByTestId("wrong-document")).toHaveText(
+      `Sam Okafor said the earlier PDF was the wrong document. Their note: "${NOTE}"`,
+    );
     await shot(lead, "06-retrieval-missing-again.png");
   });
 

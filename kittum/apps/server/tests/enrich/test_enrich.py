@@ -218,7 +218,9 @@ def test_openalex_outage_falls_back_to_europe_pmc(pg: Tx) -> None:
     result = _enrich(pg, source_records(), _DownGateway(gateway, "openalex"))
 
     assert result.failures == (
-        SourceFailure(source="openalex", reason="TimeoutError: openalex is out of budget"),
+        SourceFailure(
+            source="openalex", reason="TimeoutError: openalex is out of budget", kind="unreachable"
+        ),
     )
     by_pmid = _by_pmid(result.records)
     bnt = by_pmid["33301246"]

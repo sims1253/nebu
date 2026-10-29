@@ -169,6 +169,21 @@
     "file": "7968e064625b0b46.json",
     "status": 200
   },
+  "https://api.semanticscholar.org/graph/v1/paper/DOI:10.1016/s0140-6736%2820%2931180-6?fields=externalIds%2CopenAccessPdf": {
+    "content_type": "application/json",
+    "file": "03bd1eda514752db.json",
+    "status": 200
+  },
+  "https://api.semanticscholar.org/graph/v1/paper/DOI:10.1186/s12916-026-04943-4?fields=externalIds%2CopenAccessPdf": {
+    "content_type": "application/json",
+    "file": "c8bef501fad50b70.json",
+    "status": 200
+  },
+  "https://api.semanticscholar.org/graph/v1/paper/DOI:10.1186/s12916-026-05037-x?fields=externalIds%2CopenAccessPdf": {
+    "content_type": "application/json",
+    "file": "2c0746b0264cdf9d.json",
+    "status": 200
+  },
   "https://api.unpaywall.org/v2/10.1000%2Fdep.2018.551?email=test%40kittum.dev": {
     "content_type": "text/html",
     "file": "edf2419fe8f46dc6.html",
@@ -325,6 +340,16 @@
     "file": "../../../search/fixtures/duplicates/92d0929f7af918e60ae309022368e6efc1433f7522bf21e44e05e2c32a5d2191.json",
     "status": 200
   },
+  "https://doi.org/10.1186/s12916-026-04943-4": {
+    "content_type": "text/html",
+    "file": "25e9b8ef5f0df310.html",
+    "status": 200
+  },
+  "https://doi.org/10.1186/s12916-026-05037-x": {
+    "content_type": "text/html",
+    "file": "22e12561e0a14f2a.html",
+    "status": 200
+  },
   "https://europepmc.org/articles/PMC13374172?pdf=render": {
     "content_type": "text/html",
     "file": "21860691b52a62e0.html",
@@ -376,19 +401,74 @@
     "file": "../../../documents/fixtures/li2026-vitamin-c-kidney-biopsy-rct.pdf",
     "status": 200
   },
-  "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID%3A39462502+OR+EXT_ID%3A38935378+OR+EXT_ID%3A38898605+OR+EXT_ID%3A38838477+OR+EXT_ID%3A38752924+OR+EXT_ID%3A38696203+OR+EXT_ID%3A38683609+OR+EXT_ID%3A38662017+OR+EXT_ID%3A38482972+OR+EXT_ID%3A38369951+OR+EXT_ID%3A38354139+OR+EXT_ID%3A38282258+OR+EXT_ID%3A37977486+OR+EXT_ID%3A37819741+OR+EXT_ID%3A37742229+OR+EXT_ID%3A37725265+OR+EXT_ID%3A37474127+OR+EXT_ID%3A37353970+OR+EXT_ID%3A37141036+OR+EXT_ID%3A36203394+OR+EXT_ID%3A42174613+OR+EXT_ID%3A42399956+OR+DOI%3A%2210.1159%2F000541682%22+OR+DOI%3A%2210.1001%2Fjamanetworkopen.2024.18120%22+OR+DOI%3A%2210.1080%2F10826084.2024.2369155%22+OR+DOI%3A%2210.1016%2Fj.drugalcdep.2024.111351%22+OR+DOI%3A%2210.1097%2Fjcp.0000000000001864%22+OR+DOI%3A%2210.1001%2Fjama.2024.4183%22+OR+DOI%3A%2210.1001%2Fjamanetworkopen.2024.8727%22+OR+DOI%3A%2210.1007%2Fs10792-024-03137-2%22+OR+DOI%3A%2210.1111%2Fadd.16472%22+OR+DOI%3A%2210.1002%2Fcpt.3210%22+OR+DOI%3A%2210.1056%2Fnejmoa2308815%22+OR+DOI%3A%2210.1111%2Fadd.16428%22+OR+DOI%3A%2210.1016%2Fj.jtho.2023.11.012%22+OR+DOI%3A%2210.1093%2Fntr%2Fntad201%22+OR+DOI%3A%2210.1093%2Fntr%2Fntad183%22+OR+DOI%3A%2210.1007%2Fs00590-023-03723-7%22+OR+DOI%3A%2210.1093%2Fntr%2Fntad126%22+OR+DOI%3A%2210.1177%2F00048674231181039%22+OR+DOI%3A%2210.1037%2Fadb0000928%22+OR+DOI%3A%2210.1080%2F13548506.2022.2129081%22+OR+DOI%3A%2210.1000%2Fnrt.2019.001%22+OR+DOI%3A%2210.1000%2Fnrt.2017.014%22+OR+DOI%3A%2210.1000%2Fnrt.2021.033%22+OR+DOI%3A%2210.1000%2Fgut.2016.207%22+OR+DOI%3A%2210.1000%2Fdep.2018.551%22+OR+DOI%3A%2210.1000%2Fpop.2020.090%22+OR+DOI%3A%2210.1186%2Fs12916-026-04943-4%22+OR+DOI%3A%2210.1186%2Fs12916-026-05037-x%22&format=json&resultType=core&synonym=FALSE&pageSize=100": {
-    "content_type": "application/json",
-    "file": "274423805e893e2b.json",
+  "https://pmc-oa-opendata.s3.amazonaws.com/?list-type=2&prefix=metadata%2FPMC13374172.": {
+    "content_type": "application/xml",
+    "file": "9c57783bee725fd9",
     "status": 200
   },
-  "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID%3A42174613+OR+EXT_ID%3A42399956+OR+DOI%3A%2210.1186%2Fs12916-026-04943-4%22+OR+DOI%3A%2210.1186%2Fs12916-026-05037-x%22&format=json&resultType=core&synonym=FALSE&pageSize=100": {
-    "content_type": "application/json",
-    "file": "8f59ef7608aa6410.json",
+  "https://pmc-oa-opendata.s3.amazonaws.com/?list-type=2&prefix=metadata%2FPMC13613656.": {
+    "content_type": "application/xml",
+    "file": "b63040ccd23ff96d",
     "status": 200
   },
-  "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=EXT_ID%3A42174613+OR+EXT_ID%3A42399956+OR+EXT_ID%3A32450107+OR+DOI%3A%2210.1186%2Fs12916-026-04943-4%22+OR+DOI%3A%2210.1186%2Fs12916-026-05037-x%22+OR+DOI%3A%2210.1016%2Fs0140-6736%2820%2931180-6%22&format=json&resultType=core&synonym=FALSE&pageSize=100": {
+  "https://pmc-oa-opendata.s3.amazonaws.com/?list-type=2&prefix=metadata%2FPMC7255293.": {
+    "content_type": "application/xml",
+    "file": "e17b7045ecee7339",
+    "status": 200
+  },
+  "https://pmc-oa-opendata.s3.amazonaws.com/PMC13374172.1/PMC13374172.1.pdf": {
+    "content_type": "binary/octet-stream",
+    "file": "../../../documents/fixtures/gerber2026-lesotho-t2d-crct.pdf",
+    "status": 200
+  },
+  "https://pmc-oa-opendata.s3.amazonaws.com/PMC13613656.1/PMC13613656.1.pdf": {
+    "content_type": "binary/octet-stream",
+    "file": "../../../documents/fixtures/li2026-vitamin-c-kidney-biopsy-rct.pdf",
+    "status": 200
+  },
+  "https://pmc-oa-opendata.s3.amazonaws.com/metadata/PMC13374172.1.json": {
+    "content_type": "binary/octet-stream",
+    "file": "6ec6586e631a16cf",
+    "status": 200
+  },
+  "https://pmc-oa-opendata.s3.amazonaws.com/metadata/PMC13613656.1.json": {
+    "content_type": "binary/octet-stream",
+    "file": "4320b8e94281299a",
+    "status": 200
+  },
+  "https://pmc-oa-opendata.s3.amazonaws.com/metadata/PMC7255293.1.json": {
+    "content_type": "binary/octet-stream",
+    "file": "05bb833609c07b48",
+    "status": 200
+  },
+  "https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/?ids=32450107&idtype=pmid&format=json&tool=kittum&email=test%40kittum.dev": {
     "content_type": "application/json",
-    "file": "07de7bac9d543461.json",
+    "file": "3e6282e261b63634.json",
+    "status": 200
+  },
+  "https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/?ids=42174613&idtype=pmid&format=json&tool=kittum&email=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "4463996476877aa4.json",
+    "status": 200
+  },
+  "https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/?ids=42399956&idtype=pmid&format=json&tool=kittum&email=test%40kittum.dev": {
+    "content_type": "application/json",
+    "file": "5f8cca328b6a341c.json",
+    "status": 200
+  },
+  "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=%28EXT_ID%3A39462502+AND+SRC%3AMED%29+OR+%28EXT_ID%3A38935378+AND+SRC%3AMED%29+OR+%28EXT_ID%3A38898605+AND+SRC%3AMED%29+OR+%28EXT_ID%3A38838477+AND+SRC%3AMED%29+OR+%28EXT_ID%3A38752924+AND+SRC%3AMED%29+OR+%28EXT_ID%3A38696203+AND+SRC%3AMED%29+OR+%28EXT_ID%3A38683609+AND+SRC%3AMED%29+OR+%28EXT_ID%3A38662017+AND+SRC%3AMED%29+OR+%28EXT_ID%3A38482972+AND+SRC%3AMED%29+OR+%28EXT_ID%3A38369951+AND+SRC%3AMED%29+OR+%28EXT_ID%3A38354139+AND+SRC%3AMED%29+OR+%28EXT_ID%3A38282258+AND+SRC%3AMED%29+OR+%28EXT_ID%3A37977486+AND+SRC%3AMED%29+OR+%28EXT_ID%3A37819741+AND+SRC%3AMED%29+OR+%28EXT_ID%3A37742229+AND+SRC%3AMED%29+OR+%28EXT_ID%3A37725265+AND+SRC%3AMED%29+OR+%28EXT_ID%3A37474127+AND+SRC%3AMED%29+OR+%28EXT_ID%3A37353970+AND+SRC%3AMED%29+OR+%28EXT_ID%3A37141036+AND+SRC%3AMED%29+OR+%28EXT_ID%3A36203394+AND+SRC%3AMED%29+OR+%28EXT_ID%3A42174613+AND+SRC%3AMED%29+OR+%28EXT_ID%3A42399956+AND+SRC%3AMED%29+OR+DOI%3A%2210.1159%2F000541682%22+OR+DOI%3A%2210.1001%2Fjamanetworkopen.2024.18120%22+OR+DOI%3A%2210.1080%2F10826084.2024.2369155%22+OR+DOI%3A%2210.1016%2Fj.drugalcdep.2024.111351%22+OR+DOI%3A%2210.1097%2Fjcp.0000000000001864%22+OR+DOI%3A%2210.1001%2Fjama.2024.4183%22+OR+DOI%3A%2210.1001%2Fjamanetworkopen.2024.8727%22+OR+DOI%3A%2210.1007%2Fs10792-024-03137-2%22+OR+DOI%3A%2210.1111%2Fadd.16472%22+OR+DOI%3A%2210.1002%2Fcpt.3210%22+OR+DOI%3A%2210.1056%2Fnejmoa2308815%22+OR+DOI%3A%2210.1111%2Fadd.16428%22+OR+DOI%3A%2210.1016%2Fj.jtho.2023.11.012%22+OR+DOI%3A%2210.1093%2Fntr%2Fntad201%22+OR+DOI%3A%2210.1093%2Fntr%2Fntad183%22+OR+DOI%3A%2210.1007%2Fs00590-023-03723-7%22+OR+DOI%3A%2210.1093%2Fntr%2Fntad126%22+OR+DOI%3A%2210.1177%2F00048674231181039%22+OR+DOI%3A%2210.1037%2Fadb0000928%22+OR+DOI%3A%2210.1080%2F13548506.2022.2129081%22+OR+DOI%3A%2210.1000%2Fnrt.2019.001%22+OR+DOI%3A%2210.1000%2Fnrt.2017.014%22+OR+DOI%3A%2210.1000%2Fnrt.2021.033%22+OR+DOI%3A%2210.1000%2Fgut.2016.207%22+OR+DOI%3A%2210.1000%2Fdep.2018.551%22+OR+DOI%3A%2210.1000%2Fpop.2020.090%22+OR+DOI%3A%2210.1186%2Fs12916-026-04943-4%22+OR+DOI%3A%2210.1186%2Fs12916-026-05037-x%22&format=json&resultType=core&synonym=FALSE&pageSize=100": {
+    "content_type": "application/json",
+    "file": "1b0e34f6f09d9473.json",
+    "status": 200
+  },
+  "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=%28EXT_ID%3A42174613+AND+SRC%3AMED%29+OR+%28EXT_ID%3A42399956+AND+SRC%3AMED%29+OR+%28EXT_ID%3A32450107+AND+SRC%3AMED%29+OR+DOI%3A%2210.1186%2Fs12916-026-04943-4%22+OR+DOI%3A%2210.1186%2Fs12916-026-05037-x%22+OR+DOI%3A%2210.1016%2Fs0140-6736%2820%2931180-6%22&format=json&resultType=core&synonym=FALSE&pageSize=100": {
+    "content_type": "application/json",
+    "file": "4cb49eb703407a38.json",
+    "status": 200
+  },
+  "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=%28EXT_ID%3A42174613+AND+SRC%3AMED%29+OR+%28EXT_ID%3A42399956+AND+SRC%3AMED%29+OR+DOI%3A%2210.1186%2Fs12916-026-04943-4%22+OR+DOI%3A%2210.1186%2Fs12916-026-05037-x%22&format=json&resultType=core&synonym=FALSE&pageSize=100": {
+    "content_type": "application/json",
+    "file": "204b6b0b96b75659.json",
     "status": 200
   },
   "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=TITLE_ABS%3A%22nicotine+replacement%22+AND+TITLE_ABS%3A%22smoking+cessation%22+AND+PUB_TYPE%3A%22Randomized+Controlled+Trial%22+AND+FIRST_PDATE%3A%5B2024-01-01+TO+2024-03-31%5D&format=json&resultType=core&synonym=FALSE&pageSize=1000&cursorMark=%2A": {

@@ -47,9 +47,22 @@ class FieldSource(Record):
     source: str
 
 
+FailureKind = Literal["http_error", "unreachable", "budget", "malformed", "other_work"]
+"""Why a source failed: it answered with an error status, could not be reached, had no requests
+left today, answered with something Kittum cannot read, or answered for another work."""
+
+RETRYABLE: frozenset[FailureKind] = frozenset({"http_error", "unreachable", "budget", "malformed"})
+"""The failures that asking again can mend. An answer for another work stays one."""
+
+
 class SourceFailure(Record):
     source: str
     reason: str
+    kind: FailureKind = "http_error"
+    status: int | None = None
+    """The last HTTP status, when the source answered at all."""
+    message: str | None = None
+    """What the source said about the failure, in its own words."""
 
 
 class RecordEnrichment(Record):
@@ -93,4 +106,26 @@ class EnrichmentConfig(Record):
 
     contact_email: str | None = None
     openalex_api_key: str | None = None
+    semantic_scholar_api_key: str | None = None
+    """Semantic Scholar is asked only with a key: its licence asks for permission before
+    commercial use."""
+    core_api_key: str | None = None
+    """CORE answers only with a key; without one the waterfall skips it."""
     batch_size: int = 50
+
+
+class WorkIds(Record):
+    """What the full-text lookups know a work by."""
+
+    doi: str | None = None
+    pmid: str | None = None
+    pmcid: str | None = None
+
+
+class FullTextLookup(Record):
+    """What one full-text source said about a work: the request that asked it, and the file
+    locations it named (none when it has no open copy)."""
+
+    source: str
+    url: str
+    locations: tuple[OaLocation, ...] = ()

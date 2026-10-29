@@ -252,6 +252,8 @@ const KEYS: ReadonlyArray<{
       [["1–9", "a"], "Tick a suggested change, accept the ticked ones"],
       [["i", "n"], "Import a search file, run a live search"],
       [["u", "s"], "Upload a full text, add a full-text sentinel"],
+      [["o", "r"], "Fetch open-access PDFs, retry the sources that failed"],
+      [["b", "e"], "Upload many PDFs, export the reports without a PDF"],
     ],
   },
   {

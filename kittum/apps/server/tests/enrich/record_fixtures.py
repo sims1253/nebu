@@ -4,7 +4,9 @@ Run once, by hand, with a database available (the enrichment writes rows):
 
     KITTUM_DATABASE_URL=... uv run python -m tests.enrich.record_fixtures
 
-This is not a test. It talks to OpenAlex, Crossref, Europe PMC, Unpaywall, and PubTator 3.
+This is not a test. It talks to OpenAlex, Crossref, Europe PMC, Unpaywall, and PubTator 3. A URL
+the manifest already holds is answered from it, so a run records only what is new (`--all`
+records everything again).
 """
 
 import json
@@ -43,11 +45,19 @@ if TYPE_CHECKING:
 class RecordingTransport:
     """Sends real requests and keeps each response under the URL that produced it."""
 
-    def __init__(self, directory: Path) -> None:
+    def __init__(self, directory: Path, *, again: bool = False) -> None:
         self._directory = directory
         self._manifest: dict[str, str] = {}
+        manifest = directory / "manifest.json"
+        self._have: dict[str, str] = (
+            {} if again or not manifest.exists() else json.loads(manifest.read_text())
+        )
 
     def send(self, request: HttpRequest) -> HttpResponse:
+        if request.url in self._have:
+            body = (self._directory / self._have[request.url]).read_bytes()
+            self._manifest[request.url] = self._have[request.url]
+            return HttpResponse(status=200, headers=(), body=body, body_hash=sha256_hex(body))
         http_request = urllib.request.Request(
             request.url, method=request.method, headers=dict(request.headers)
         )
@@ -95,8 +105,10 @@ def _run(
 
 
 def main() -> None:
+    import sys
+
     url = os.environ["KITTUM_DATABASE_URL"]
-    transport = RecordingTransport(FIXTURES)
+    transport = RecordingTransport(FIXTURES, again="--all" in sys.argv)
     gateway = PassThroughGateway(transport)
     openalex_down = DownSources(gateway, "openalex")
     metadata_down = DownSources(gateway, "openalex", "europepmc")

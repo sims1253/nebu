@@ -1,0 +1,62 @@
+{
+  "https://api.biorxiv.org/details/biorxiv/10.1101/2023.12.01.569634/na/json": [
+    {
+      "content_type": "application/json",
+      "file": "cdf00680d51e8778e70c761853c249a990aab79a4279a89dc26db00b943b67ac.json",
+      "status": 200
+    }
+  ],
+  "https://api.biorxiv.org/details/medrxiv/10.1101/2020.03.19.20039131/na/json": [
+    {
+      "content_type": "application/json",
+      "file": "588c0857d01d6dde5370afaaa11838b4e12516c23993c9c9674907061ffa2241.json",
+      "status": 200
+    }
+  ],
+  "https://api.biorxiv.org/details/medrxiv/10.1101/2023.12.01.569634/na/json": [
+    {
+      "content_type": "application/json",
+      "file": "2baa0dad30fe576d570cafc518d24895c48def862d52bb00917f2534bc65568e.json",
+      "status": 200
+    }
+  ],
+  "https://oaipmh.arxiv.org/oai?verb=GetRecord&identifier=oai%3AarXiv.org%3A2101.00001&metadataPrefix=arXiv": [
+    {
+      "content_type": "text/xml",
+      "file": "9a3259159a1da3850aa7efee1ebea921a9dff0cae8f7cda74da1aac5eb405d90",
+      "status": 200
+    }
+  ],
+  "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=%28EXT_ID%3A40322715+AND+SRC%3AMED%29+OR+%28EXT_ID%3A40183092+AND+SRC%3AMED%29+OR+%28EXT_ID%3A40148133+AND+SRC%3AMED%29+OR+%28EXT_ID%3A40116747+AND+SRC%3AMED%29+OR+%28EXT_ID%3A40106803+AND+SRC%3AMED%29+OR+%28EXT_ID%3A40071276+AND+SRC%3AMED%29+OR+%28EXT_ID%3A40004917+AND+SRC%3AMED%29+OR+%28EXT_ID%3A40002306+AND+SRC%3AMED%29+OR+%28EXT_ID%3A39987579+AND+SRC%3AMED%29+OR+%28EXT_ID%3A39978139+AND+SRC%3AMED%29+OR+%28EXT_ID%3A39977412+AND+SRC%3AMED%29+OR+%28EXT_ID%3A39931130+AND+SRC%3AMED%29+OR+%28EXT_ID%3A39924464+AND+SRC%3AMED%29+OR+%28EXT_ID%3A39923892+AND+SRC%3AMED%29+OR+%28EXT_ID%3A39914192+AND+SRC%3AMED%29+OR+%28EXT_ID%3A39804633+AND+SRC%3AMED%29+OR+%28EXT_ID%3A39665734+AND+SRC%3AMED%29+OR+%28EXT_ID%3A39659160+AND+SRC%3AMED%29+OR+%28EXT_ID%3A39477130+AND+SRC%3AMED%29+OR+%28EXT_ID%3A39300203+AND+SRC%3AMED%29+OR+%28EXT_ID%3A39271186+AND+SRC%3AMED%29+OR+%28EXT_ID%3A39233579+AND+SRC%3AMED%29+OR+%28EXT_ID%3A39134144+AND+SRC%3AMED%29+OR+%28EXT_ID%3A38700502+AND+SRC%3AMED%29+OR+DOI%3A%2210.6026%2F973206300210225%22+OR+DOI%3A%2210.3389%2Ffphar.2025.1547073%22+OR+DOI%3A%2210.1177%2F0310057x251315764%22+OR+DOI%3A%2210.2196%2F66709%22+OR+DOI%3A%2210.2196%2F55379%22+OR+DOI%3A%2210.3389%2Ffpsyt.2025.1525510%22+OR+DOI%3A%2210.3390%2Fjcm14041388%22+OR+DOI%3A%2210.3390%2Fcancers17040713%22+OR+DOI%3A%2210.1111%2Fadd.16733%22+OR+DOI%3A%2210.1016%2Fj.addbeh.2025.108290%22+OR+DOI%3A%2210.1371%2Fjournal.pone.0318686%22+OR+DOI%3A%2210.18332%2Ftid%2F200550%22+OR+DOI%3A%2210.1111%2Fadd.70013%22+OR+DOI%3A%2210.1016%2Fj.cct.2025.107832%22+OR+DOI%3A%2210.1016%2Fj.drugalcdep.2025.112576%22+OR+DOI%3A%2210.1001%2Fjamainternmed.2024.7288%22+OR+DOI%3A%2210.1016%2Fj.amepre.2024.10.019%22+OR+DOI%3A%2210.1176%2Fappi.ajp.20230855%22+OR+DOI%3A%2210.1016%2Fj.amepre.2024.10.014%22+OR+DOI%3A%2210.1038%2Fs41432-024-01064-w%22+OR+DOI%3A%2210.1093%2Fntr%2Fntae219%22+OR+DOI%3A%2210.1093%2Fntr%2Fntae212%22+OR+DOI%3A%2210.1016%2Fj.chest.2024.07.160%22+OR+DOI%3A%2210.1093%2Fntr%2Fntae106%22&format=json&resultType=core&synonym=FALSE&pageSize=100": [
+    {
+      "content_type": "application/json",
+      "file": "europepmc-503.json",
+      "status": 503
+    },
+    {
+      "content_type": "application/json",
+      "file": "europepmc-503.json",
+      "status": 503
+    },
+    {
+      "content_type": "application/json",
+      "file": "europepmc-503.json",
+      "status": 503
+    },
+    {
+      "content_type": "application/json",
+      "file": "europepmc-503.json",
+      "status": 503
+    },
+    {
+      "content_type": "application/json",
+      "file": "europepmc-503.json",
+      "status": 503
+    },
+    {
+      "content_type": "application/json",
+      "file": "708de4c393c4fcc4be433c98dc18eb8b1d5611f22f79bc409c8cec51add122af.json",
+      "status": 200
+    }
+  ]
+}

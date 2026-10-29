@@ -4,8 +4,10 @@
     # `kittum worker` runs ENRICHMENT_JOB: chunks of records through `kittum.enrich.enrich`
     view = enrichment_run(tx, project_id, run.id)
 
-The corpus is enriched once it is built, and again whenever the lead asks. A run fixes the
-identity revision it reads. Its job enriches the revision's source occurrences in chunks, each in
+The corpus is enriched once it is built, and again whenever the lead asks. A retry
+(`kittum.app.open_access.request_retry`) enriches again only the records a source failed for, and
+then retrieves the reports among them that still lack a full text. A run fixes the identity
+revision it reads. Its job enriches the revision's source occurrences in chunks, each in
 a transaction of its own with the chunk's `record_enrichment` rows, a row per record, and a ledger
 event naming the source of every field; a retried job skips the records a run has done. A source
 that fails is recorded against the records it did not answer, and the run goes on with the next
@@ -27,8 +29,10 @@ from kittum.enrich import (
     Enrichment,
     EnrichmentConfig,
     EntityTag,
+    FailureKind,
     FieldSource,
     OaLocation,
+    SourceFailure,
     WorkUpdate,
     lookup,
     save_enrichment,
@@ -50,18 +54,29 @@ RECORDS_ENRICHED = "enrichment.records_enriched"
 ENRICHMENT_FINISHED = "enrichment.finished"
 
 type RunStatus = Literal["queued", "running", "done", "failed"]
-type Trigger = Literal["corpus_built", "requested"]
+type Trigger = Literal["corpus_built", "requested", "retry"]
+
+
+class SourceFailureView(Record):
+    source: str
+    reason: str
+    kind: FailureKind = "http_error"
+    status: int | None = None
+    """The last HTTP status, when the source answered at all."""
+    message: str | None = None
+    """What the source said about the failure, in its own words."""
 
 
 class SourceProgress(Record):
     """One source's part in a run: records it was asked about, records it filled a field of, and
-    records it failed for without answering, with the last reason it gave."""
+    records it failed for without answering, with the last failure."""
 
     source: str
     asked: int
     answered: int
     failed: int
     last_error: str | None = None
+    last_failure: SourceFailureView | None = None
 
 
 class EnrichmentRun(Record):
@@ -80,11 +95,6 @@ class EnrichmentRun(Record):
     sources: tuple[SourceProgress, ...]
     error: str | None = None
     """Why the job stopped, when it did."""
-
-
-class SourceFailureView(Record):
-    source: str
-    reason: str
 
 
 class RecordEnrichmentView(Record):
@@ -168,8 +178,41 @@ def request_enrichment(
     ).fetchone()
     if active is not None:
         return enrichment_run(tx, project_id, active["id"])
+    run_id = queue_enrichment(
+        tx,
+        project_id,
+        revision.id,
+        actor_id=actor_id,
+        trigger=trigger,
+        ledger=ledger,
+        queue=queue,
+        clock=clock,
+    )
+    return enrichment_run(tx, project_id, run_id)
+
+
+def queue_enrichment(
+    tx: Tx,
+    project_id: Id,
+    revision_id: Id,
+    *,
+    actor_id: Id,
+    trigger: Trigger,
+    ledger: Ledger,
+    queue: JobQueue,
+    clock: Clock,
+    occurrence_ids: list[Id] | None = None,
+    retrieve_after: list[Id] | None = None,
+) -> Id:
+    """Queue a run over the revision's records, or only `occurrence_ids`. With `retrieve_after`,
+    the run queues open-access retrieval of those reports once it is done. The caller holds the
+    project's enrichment lock and has checked no run is going."""
     run_id = new_id()
-    records = len(_occurrences(tx, project_id, revision.id))
+    records = (
+        len(occurrence_ids)
+        if occurrence_ids is not None
+        else len(_occurrences(tx, project_id, revision_id))
+    )
     event = ledger.append(
         tx,
         _event(
@@ -178,10 +221,20 @@ def request_enrichment(
             actor_id,
             {
                 "run_id": str(run_id),
-                "identity_revision_id": str(revision.id),
+                "identity_revision_id": str(revision_id),
                 "trigger": trigger,
                 "records": records,
-            },
+            }
+            | (
+                {"occurrence_ids": [str(o) for o in occurrence_ids]}
+                if occurrence_ids is not None
+                else {}
+            )
+            | (
+                {"retrieve_after": [str(r) for r in retrieve_after]}
+                if retrieve_after is not None
+                else {}
+            ),
         ),
     )
     job = queue.enqueue(
@@ -195,20 +248,23 @@ def request_enrichment(
     )
     tx.execute(
         "insert into enrichment_run (id, project_id, identity_revision_id, trigger, requested_by,"
-        " requested_at, records, job_id, event_id) values (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+        " requested_at, records, job_id, event_id, occurrence_ids, retrieve_after)"
+        " values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
         (
             run_id,
             project_id,
-            revision.id,
+            revision_id,
             trigger,
             actor_id,
             clock.now(),
             records,
             job.job_id,
             event.event_id,
+            Jsonb([str(o) for o in occurrence_ids]) if occurrence_ids is not None else None,
+            Jsonb([str(r) for r in retrieve_after]) if retrieve_after is not None else None,
         ),
     )
-    return enrichment_run(tx, project_id, run_id)
+    return run_id
 
 
 def _status(row: dict[str, Any]) -> tuple[RunStatus, str | None]:
@@ -234,13 +290,13 @@ def enrichment_run(tx: Tx, project_id: Id, run_id: Id) -> EnrichmentRun:
     asked: Counter[str] = Counter()
     answered: Counter[str] = Counter()
     failed: Counter[str] = Counter()
-    last_error: dict[str, str] = {}
+    last: dict[str, SourceFailureView] = {}
     for record in done:
         asked.update(record["asked"])
         answered.update(record["answered"])
         for failure in record["failed"]:
             failed[failure["source"]] += 1
-            last_error[failure["source"]] = failure["reason"]
+            last[failure["source"]] = SourceFailureView.model_validate(failure)
     status, error = _status(row)
     return EnrichmentRun(
         id=row["id"],
@@ -259,7 +315,8 @@ def enrichment_run(tx: Tx, project_id: Id, run_id: Id) -> EnrichmentRun:
                 asked=asked[source],
                 answered=answered[source],
                 failed=failed[source],
-                last_error=last_error.get(source),
+                last_error=last[source].reason if source in last else None,
+                last_failure=last.get(source),
             )
             for source in SOURCES
         ),
@@ -361,6 +418,8 @@ def enrichment_config(ctx: AppContext) -> EnrichmentConfig:
     return EnrichmentConfig(
         contact_email=ctx.settings.contact_email,
         openalex_api_key=ctx.settings.openalex_api_key,
+        semantic_scholar_api_key=ctx.settings.semantic_scholar_api_key,
+        core_api_key=ctx.settings.core_api_key,
         batch_size=CHUNK,
     )
 
@@ -433,6 +492,21 @@ def _store_chunk(
         )
 
 
+def _carried(tx: Tx, run: dict[str, Any]) -> dict[Id, tuple[SourceFailure, ...]]:
+    """For a retry: each record's failures from the run that enriched it last before this one."""
+    rows = tx.execute(
+        "select distinct on (e.occurrence_id) e.occurrence_id, e.failed"
+        " from enrichment_run_record e join enrichment_run r on r.id = e.run_id"
+        " where r.project_id = %s and r.id <> %s and r.requested_at <= %s"
+        " order by e.occurrence_id, r.requested_at desc, r.id desc",
+        (run["project_id"], run["id"], run["requested_at"]),
+    ).fetchall()
+    return {
+        r["occurrence_id"]: tuple(SourceFailure.model_validate(f) for f in r["failed"])
+        for r in rows
+    }
+
+
 def enrichment_handler(
     ctx: AppContext, gateway: Gateway, ledger: Ledger, queue: JobQueue
 ) -> Handler:
@@ -450,18 +524,25 @@ def enrichment_handler(
                     "select occurrence_id from enrichment_run_record where run_id = %s", (run_id,)
                 ).fetchall()
             }
+            only = (
+                {UUID(o) for o in run["occurrence_ids"]}
+                if run["occurrence_ids"] is not None
+                else None
+            )
             records = [
                 r
                 for r in _occurrences(tx, run["project_id"], run["identity_revision_id"])
-                if r.occurrence_id not in done
+                if r.occurrence_id not in done and (only is None or r.occurrence_id in only)
             ]
+            carried = _carried(tx, run) if run["trigger"] == "retry" else {}
         for start in range(0, len(records), CHUNK):
             if job_ctx.lease_lost.is_set():
                 return JobOutput()  # the heartbeat saw another worker take over; stop asking
             # The sources are asked outside any transaction; the answers are written only while
             # this worker still holds the job (`fence`), so one whose lease went to another while
             # it waited writes nothing.
-            result = lookup(tuple(records[start : start + CHUNK]), gateway, config=config)
+            chunk = tuple(records[start : start + CHUNK])
+            result = lookup(chunk, gateway, config=config, carried=carried)
             with ctx.db.transaction() as tx:
                 queue.fence(tx, job)
                 tx.execute("select id from enrichment_run where id = %s for update", (run_id,))
@@ -505,10 +586,41 @@ def enrichment_handler(
                     actor_id=run["requested_by"],
                     ledger=ledger,
                 )
+            if run["retrieve_after"] is not None:
+                _retrieve_after(tx, run, ctx, ledger, queue)
 
         return JobOutput(publish=publish)
 
     return handle
+
+
+def _retrieve_after(
+    tx: Tx, run: dict[str, Any], ctx: AppContext, ledger: Ledger, queue: JobQueue
+) -> None:
+    """Queue the retrieval a retry asked for, of the reports that still lack a full text, unless a
+    retrieval is going already."""
+    from kittum.app.lifecycle import full_text
+    from kittum.app.open_access import OPEN_ACCESS_JOB, queue_retrieval
+
+    project_id = run["project_id"]
+    lock_project_runs(tx, project_id, OPEN_ACCESS_JOB)
+    going = tx.execute(
+        "select 1 from retrieval_run r join job j on j.id = r.job_id where r.project_id = %s"
+        " and r.finished_at is null and j.status in ('queued', 'running')",
+        (project_id,),
+    ).fetchone()
+    wanted = [UUID(r) for r in run["retrieve_after"] if full_text(tx, project_id, r) is None]
+    if going is None and wanted:
+        queue_retrieval(
+            tx,
+            project_id,
+            wanted,
+            actor_id=run["requested_by"],
+            trigger="retry",
+            ledger=ledger,
+            queue=queue,
+            clock=ctx.clock,
+        )
 
 
 __all__ = [
@@ -526,6 +638,7 @@ __all__ = [
     "enrichment_run",
     "latest_enrichment_run",
     "lock_project_runs",
+    "queue_enrichment",
     "record_enrichment",
     "record_flags",
     "request_enrichment",

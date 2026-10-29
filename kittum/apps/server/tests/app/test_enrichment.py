@@ -7,9 +7,10 @@ every other source fills its fields, PubTator's failure is recorded against the 
 answer, and the run still finishes. The lead asks again once PubTator is back: the gateway's cache
 answers the other sources, and the entity tags arrive. After both reviewers include everything at
 title and abstract, the lead uploads one PDF by hand and has the worker walk the open-access
-waterfall for the rest: Europe PMC's PDF link is refused (a real Cloudflare 403), the publisher's
-CC BY PDF from Crossref's links is acquired, parsed, and attached, and the registry entry has no
-location at all. Reviewers get 403 from every route of it.
+waterfall for the rest: Europe PMC's PDF link is refused (a real Cloudflare 403), PubMed Central,
+asked next, names its CC BY copy in the PMC Article Datasets, which is acquired, parsed, and
+attached, and the registry entry has no location at all. Reviewers get 403 from every route of
+it.
 
 The gateway answers from `tests/enrich/fixtures/stack/`, recorded once by
 `tests.app.record_stack`; nothing touches the network.
@@ -47,6 +48,8 @@ pytestmark = pytest.mark.postgres
 LESOTHO_DOI = "10.1186/s12916-026-04943-4"
 RETRACTED_DOI = "10.1016/s0140-6736(20)31180-6"
 RETRACTION_NOTICE = "10.1016/s0140-6736(20)31324-6"
+NAMES = {"europepmc": "Europe PMC", "pmc": "PubMed Central", "openalex": "OpenAlex"}
+NAMES |= {"unpaywall": "Unpaywall", "crossref": "Crossref"}
 
 
 class Stack:
@@ -330,7 +333,7 @@ def test_a_lead_enriches_the_corpus_and_fetches_open_access_full_texts(
     stuck = ok(client.get(f"/api/projects/{pid}/retrieval/open-access/latest", headers=as_lead))
     (first,) = [r for r in stuck["reports"] if r["report_id"] == report_of[LESOTHO_DOI]]
     assert first["outcome"] is None
-    assert [a["outcome"] for a in first["attempts"]] == ["http_error", "acquired"]
+    assert [a["outcome"] for a in first["attempts"]] == ["http_error", "found", "acquired"]
     with db.transaction() as tx:
         kept = [
             (e.type, (e.payload.get("attempt") or e.payload)["url"])
@@ -339,7 +342,7 @@ def test_a_lead_enriches_the_corpus_and_fetches_open_access_full_texts(
         ]
     assert [k for k in kept if "PMC13374172" in k[1] or "04943-4" in k[1]] == [
         ("document.acquisition_attempted", first["attempts"][0]["url"]),
-        ("document.acquired", first["attempts"][1]["url"]),
+        ("document.acquired", first["attempts"][2]["url"]),
     ]
     monkeypatch.setattr(open_access, "attach_acquired_full_text", real_attach)
     pg.execute(
@@ -359,18 +362,23 @@ def test_a_lead_enriches_the_corpus_and_fetches_open_access_full_texts(
         for a in acquired["attempts"]
     ] == [
         ("europepmc", "europepmc.org", 403, "http_error", "cc by"),
-        ("crossref", "link.springer.com", 200, "acquired", "cc-by-4.0"),
+        ("pmc", "pmc-oa-opendata.s3.amazonaws.com", None, "found", None),
+        ("pmc", "pmc-oa-opendata.s3.amazonaws.com", 200, "acquired", "CC BY"),
     ]
-    assert (acquired["source"], acquired["licence"], acquired["page_count"]) == (
-        "crossref",
-        "cc-by-4.0",
-        13,
-    )
+    # The PDF is checked against the record before it is the report's full text.
+    assert acquired["attempts"][2]["check"] == f"The PDF shows DOI {LESOTHO_DOI}."
+    assert (acquired["source"], acquired["licence"], acquired["page_count"]) == ("pmc", "CC BY", 13)
     registry = by_report[report_of[next(k for k in report_of if "ComBaCaL" in k)]]
     assert (registry["outcome"], registry["attempts"]) == ("no_location", [])
     lancet = by_report[report_of[next(k for k in report_of if k.lower() == RETRACTED_DOI)]]
     assert lancet["outcome"] == "not_acquired"
-    assert {a["outcome"] for a in lancet["attempts"]} <= {"http_error", "not_pdf"}
+    fetched = [a for a in lancet["attempts"] if a["kind"] == "fetch"]
+    assert {a["outcome"] for a in fetched} <= {"http_error", "not_pdf"}
+    # PubMed Central holds the retracted trial without a PDF. Semantic Scholar is not asked: the
+    # stack has no key for it.
+    assert [(a["source"], a["outcome"]) for a in lancet["attempts"] if a["kind"] == "lookup"] == [
+        ("pmc", "none")
+    ]
     assert (
         ok(
             client.get(
@@ -386,23 +394,36 @@ def test_a_lead_enriches_the_corpus_and_fetches_open_access_full_texts(
         t["item_ref"]: t["full_text"]
         for t in ok(client.get(f"/api/projects/{pid}/full-texts", headers=as_lead))
     }
-    assert texts[report_of[LESOTHO_DOI]]["licence"] == "cc-by-4.0"
+    assert texts[report_of[LESOTHO_DOI]]["licence"] == "CC BY"
     assert texts[report_of[LESOTHO_DOI]]["layer_id"]
     assert texts[vitamin_c]["licence"] == "CC BY 4.0"
     with db.transaction() as tx:
         events = ledger.events(tx, pid)
     attached = [e for e in events if e.type == "project.full_text_attached"]
-    assert [e.payload.get("source") for e in attached] == [None, "crossref"]
+    assert [e.payload.get("source") for e in attached] == [None, "pmc"]
     # One event per attempt, each committed before the next was tried.
     (got,) = [e for e in events if e.type == "document.acquired"]
     assert [a["outcome"] for a in got.payload["attempts"]] == ["acquired"]
     refused = [
         e.payload["attempt"]["url"] for e in events if e.type == "document.acquisition_attempted"
     ]
-    assert sorted(refused) == sorted(
-        [a["url"] for a in acquired["attempts"][:1]] + [a["url"] for a in lancet["attempts"]]
+    assert sorted(refused) == sorted([acquired["attempts"][0]["url"]] + [a["url"] for a in fetched])
+    asked = [
+        (e.payload["report_id"], e.payload["attempt"]["source"])
+        for e in events
+        if e.type == "retrieval.source_asked"
+    ]
+    assert sorted(asked) == sorted(
+        [
+            (report_of[LESOTHO_DOI], "pmc"),
+            (lancet["report_id"], "pmc"),
+        ]
     )
-    assert [e.type for e in events if e.type.startswith("retrieval.")] == [
+    assert [
+        e.type
+        for e in events
+        if e.type.startswith("retrieval.") and e.type != "retrieval.source_asked"
+    ] == [
         "retrieval.open_access_requested",
         "retrieval.no_open_access_location",
         "retrieval.open_access_finished",
@@ -425,12 +446,16 @@ def test_a_lead_enriches_the_corpus_and_fetches_open_access_full_texts(
         ),
         (
             "document.acquisition_attempted",
-            "Kittum could not get the full text from europepmc (http error)",
+            "Kittum could not get the full text from Europe PMC (http error)",
         ),
-        ("document.acquired", "Kittum fetched the full text from crossref"),
+        (
+            "retrieval.source_asked",
+            "Kittum asked PubMed Central for the full text, and it named 1 file",
+        ),
+        ("document.acquired", "Kittum fetched the full text from PubMed Central"),
         (
             "project.full_text_attached",
-            "Kittum attached the full text it fetched from crossref",
+            "Kittum attached the full text it fetched from PubMed Central",
         ),
     ]
     assert trail(lancet["report_id"]) == [
@@ -440,9 +465,16 @@ def test_a_lead_enriches_the_corpus_and_fetches_open_access_full_texts(
         ),
         *[
             (
-                "document.acquisition_attempted",
-                f"Kittum could not get the full text from {a['source']}"
-                f" ({a['outcome'].replace('_', ' ')})",
+                (
+                    "retrieval.source_asked",
+                    f"Kittum asked {NAMES[a['source']]} for the full text, and it has no open copy",
+                )
+                if a["kind"] == "lookup"
+                else (
+                    "document.acquisition_attempted",
+                    f"Kittum could not get the full text from {NAMES[a['source']]}"
+                    f" ({a['outcome'].replace('_', ' ')})",
+                )
             )
             for a in lancet["attempts"]
         ],

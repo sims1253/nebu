@@ -1,6 +1,7 @@
 """The gateway implementation: throttling, retries, budgets, and the response cache."""
 
 import base64
+import math
 import random
 import re
 import threading
@@ -55,9 +56,12 @@ _DEFAULT_POLICIES = default_policies()
 class _Retryable(Exception):
     """A response worth another attempt. Carries the attempt number for jitter."""
 
-    def __init__(self, status: int, attempt: int, retry_after: float | None) -> None:
+    def __init__(
+        self, status: int, attempt: int, retry_after: float | None, body: bytes = b""
+    ) -> None:
         super().__init__(f"status {status}")
         self.status = status
+        self.body = body
         self.attempt = attempt
         self.retry_after = retry_after
 
@@ -106,16 +110,14 @@ def request_hash(request: HttpRequest) -> str:
 def _rates(policy: SourcePolicy) -> list[Rate]:
     """Translate a per-second rate into pyrate-limiter's window form.
 
-    Rates of one per second or more use a one-second window; slower sources use ten seconds, so
-    the integer limit never rounds up above the published rate.
+    Rates of one per second or more use a one-second window, so the integer limit never rounds up
+    above the published rate. A slower source gets one request per interval, rounded up to the
+    millisecond: arXiv's one request every three seconds must be spaced, not three in a burst
+    every ten seconds.
     """
     if policy.requests_per_second >= 1:
-        limit = max(1, int(policy.requests_per_second))
-        interval = Duration.SECOND
-    else:
-        limit = max(1, int(policy.requests_per_second * 10))
-        interval = 10 * Duration.SECOND
-    return [Rate(limit=limit, interval=interval)]
+        return [Rate(limit=max(1, int(policy.requests_per_second)), interval=Duration.SECOND)]
+    return [Rate(limit=1, interval=math.ceil(1000 / policy.requests_per_second))]
 
 
 def _table_name(source: str) -> str:
@@ -223,7 +225,7 @@ class SourceGateway:
                 self._retry_delay, self._attempt, source, policy, request, key, attempts
             )
         except _Retryable as error:
-            raise SourceUnavailable(source, error.status, attempts[0]) from error
+            raise SourceUnavailable(source, error.status, attempts[0], body=error.body) from error
         except NotRecorded as error:
             raise SourceUnavailable(source, None, attempts[0], str(error)) from error
 
@@ -269,7 +271,7 @@ class SourceGateway:
             self._observe(source, response)
             if response.status in RETRYABLE_STATUSES:
                 retry_after = _seconds(self._header(response, "retry-after"), self._clock.now())
-                raise _Retryable(response.status, number, retry_after)
+                raise _Retryable(response.status, number, retry_after, response.body)
             return response
 
     def _retry_delay(self, error: Exception) -> bool | float:

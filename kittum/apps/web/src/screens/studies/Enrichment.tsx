@@ -1,15 +1,22 @@
 // Enrichment from the open sources (DESIGN.md, "Enrichment and federation"): the run's progress
 // per source, and one record as enrichment completed it, with the source of every field. The
 // sources share one column order everywhere, so a source's row in the run lines up in the mind
-// with its column in a record's provenance. A retraction is the one loud thing on the screen.
+// with its column in a record's provenance. A retraction is the one loud thing on the screen. A
+// source that failed says so in plain words, and the lead retries it from here or Retrieval.
+import { useRouteContext } from "@tanstack/react-router";
+import { useState } from "react";
 import type { ReactNode } from "react";
 
 import type {
   EnrichmentRun,
   EntityTag,
   RecordEnrichment,
+  SourceFailure,
   SourceProgress,
 } from "../../data/schema.ts";
+import { run as call } from "../../data/workbench.ts";
+import { Button, failure } from "../../ui/Form.tsx";
+import { useProject } from "../project.tsx";
 
 const SOURCES: ReadonlyArray<readonly [string, string]> = [
   ["openalex", "OpenAlex"],
@@ -18,8 +25,46 @@ const SOURCES: ReadonlyArray<readonly [string, string]> = [
   ["unpaywall", "Unpaywall"],
   ["pubtator", "PubTator 3"],
 ];
-const SOURCE_NAMES = new Map(SOURCES);
+// The full-text sources the waterfall asks one report at a time, after enrichment.
+const SOURCE_NAMES = new Map([
+  ...SOURCES,
+  ["pmc", "PubMed Central"],
+  ["biorxiv", "medRxiv or bioRxiv"],
+  ["arxiv", "arXiv"],
+  ["semanticscholar", "Semantic Scholar"],
+  ["core", "CORE"],
+]);
 export const sourceName = (source: string) => SOURCE_NAMES.get(source) ?? source;
+
+const TROUBLE: Record<number, string> = {
+  503: "the service was down",
+  502: "a server in front of it failed",
+  504: "a server in front of it timed out",
+  500: "it had an internal error",
+  429: "it was asked too often",
+};
+
+/** A source's failure in plain words, optionally with what it failed for ("24 records"), and
+ * what the source said about it, in its own words. */
+export function failureLine(
+  source: string,
+  f: Pick<SourceFailure, "status" | "message"> & { readonly kind?: string },
+  counts = "",
+): string {
+  const name = sourceName(source);
+  const forWhat = counts ? ` for ${counts}` : "";
+  let line: string;
+  if (f.kind === "other_work") line = `${name} answered for another work${forWhat}.`;
+  else if (f.kind === "budget") line = `${name} has no requests left today${forWhat}.`;
+  else if (f.kind === "malformed") line = `${name} sent an answer Kittum cannot read${forWhat}.`;
+  else if (f.status && f.status < 500 && f.status !== 429)
+    line = `${name} refused the request (HTTP ${f.status})${forWhat}.`;
+  else if (f.status) {
+    const why = TROUBLE[f.status];
+    line = `${name} did not answer (HTTP ${f.status}${why ? `, ${why}` : ""})${forWhat}.`;
+  } else line = `Kittum could not reach ${name}${forWhat}.`;
+  return f.message ? `${line} It said: "${f.message}"` : line;
+}
 
 const FIELDS: ReadonlyArray<readonly [string, string]> = [
   ["doi", "DOI"],
@@ -66,6 +111,12 @@ const FORMATS: Record<string, string> = {
 const time = (iso: string) =>
   new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 
+const TRIGGER: Record<string, string> = {
+  corpus_built: "after the corpus was built",
+  requested: "at your request",
+  retry: "again on a retry",
+};
+
 export const runActive = (run: { readonly status: string } | null | undefined) =>
   run?.status === "queued" || run?.status === "running";
 
@@ -75,11 +126,14 @@ const runLine = (run: EnrichmentRun) => {
     case "queued":
       return `Waiting for a worker to enrich ${records}.`;
     case "running":
-      return `Enriching: ${run.done} of ${records} done.`;
+      return `Enriched ${run.done} of ${records} so far.`;
     case "failed":
-      return `The enrichment stopped after ${run.done} of ${records}: ${run.error ?? "the job failed"}. Press r to run it again.`;
+      return `Enrichment stopped after ${run.done} of ${records}. ${run.error ?? ""} Press r to run it again.`.replace(
+        ".  ",
+        ". ",
+      );
     case "done":
-      return `Enriched ${records} ${run.trigger === "corpus_built" ? "after the corpus was built" : "at your request"}, finished at ${run.finished_at ? time(run.finished_at) : "?"}.`;
+      return `Enriched ${records} ${TRIGGER[run.trigger]}, finished at ${run.finished_at ? time(run.finished_at) : "?"}.`;
   }
 };
 
@@ -102,8 +156,8 @@ export function EnrichmentPanel({
       </h2>
       {run === null ? (
         <p className="mt-3 max-w-[70ch] text-ink-2">
-          Not enriched yet. Press r to fill missing identifiers and abstracts, find open-access
-          files, check for retractions, and tag drugs and diseases.
+          Not enriched yet. Press r to ask the open sources about every record for identifiers,
+          abstracts, open-access files, retractions, and drug and disease tags.
         </p>
       ) : (
         <>
@@ -116,6 +170,7 @@ export function EnrichmentPanel({
             ) : null}
           </p>
           <SourceTable sources={run.sources} />
+          <RetryFailed sources={run.sources} active={runActive(run)} />
         </>
       )}
       {busy || error ? (
@@ -123,10 +178,59 @@ export function EnrichmentPanel({
           role={error ? "alert" : "status"}
           className={`mt-2 text-sm ${error ? "text-exclude" : "text-ink-2"}`}
         >
-          {error ?? "Asking the worker."}
+          {error ?? "Starting the enrichment."}
         </p>
       ) : null}
     </section>
+  );
+}
+
+/** The sources that failed in the run, in plain words, with the action that asks them again. */
+function RetryFailed({
+  sources,
+  active,
+}: {
+  sources: ReadonlyArray<SourceProgress>;
+  active: boolean;
+}) {
+  const { workbench } = useRouteContext({ from: "/p/$projectId" });
+  const { project, me } = useProject();
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const failed = sources.filter((s) => s.failed > 0 && s.last_failure?.kind !== "other_work");
+  if (failed.length === 0 && !note) return null;
+  const retry = async () => {
+    setBusy(true);
+    try {
+      const plan = await call(
+        workbench.retryFailedSources({ projectId: project.id, as: me.actor_id }),
+      );
+      setNote(
+        `Asking ${plan.sources.map(sourceName).join(" and ")} again. Retrieval shows the progress.`,
+      );
+    } catch (e) {
+      setNote(failure(e, "Kittum could not start the retry."));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div
+      className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1"
+      data-testid="enrichment-retry"
+    >
+      {failed.length > 0 && !note ? (
+        <Button disabled={busy || active} onClick={() => void retry()}>
+          Retry failed sources
+        </Button>
+      ) : null}
+      <span className="text-sm text-ink-2" aria-live="polite">
+        {note ??
+          failed
+            .map((s) => failureLine(s.source, s.last_failure ?? {}, `${s.failed} records`))
+            .join(" ")}
+      </span>
+    </div>
   );
 }
 
@@ -167,7 +271,7 @@ function SourceTable({ sources }: { sources: ReadonlyArray<SourceProgress> }) {
               </td>
               <td className="py-1.5 pl-5">
                 {asked === 0 ? (
-                  <span className="text-xs text-ink-3">Nothing to ask it</span>
+                  <span className="text-xs text-ink-3">No record to ask it about</span>
                 ) : (
                   <span className="flex items-center gap-3">
                     <span
@@ -183,9 +287,12 @@ function SourceTable({ sources }: { sources: ReadonlyArray<SourceProgress> }) {
                         style={{ width: `${(failed / asked) * 100}%` }}
                       />
                     </span>
-                    {s?.last_error && failed ? (
-                      <span className="truncate text-xs text-exclude" title={s.last_error}>
-                        {s.last_error}
+                    {s?.last_failure && failed ? (
+                      <span
+                        className="text-xs whitespace-nowrap text-exclude"
+                        title={failureLine(id, s.last_failure)}
+                      >
+                        {s.last_failure.status ? `HTTP ${s.last_failure.status}` : "No answer"}
                       </span>
                     ) : null}
                   </span>
@@ -371,8 +478,8 @@ export function RecordDetail({
       {record.failures.length > 0 ? (
         <ul className="mt-2 grid gap-0.5 text-xs text-exclude" data-testid="record-failures">
           {record.failures.map((f) => (
-            <li key={f.source}>
-              {sourceName(f.source)} failed for this record: {f.reason}
+            <li key={f.source} title={f.reason}>
+              {failureLine(f.source, f)}
             </li>
           ))}
         </ul>
@@ -408,7 +515,7 @@ export function RecordDetail({
 
       <h4 className="mt-6 text-sm font-semibold">Open-access locations</h4>
       {record.oa_locations.length === 0 ? (
-        <p className="mt-2 text-ink-3">No source knows an open-access copy.</p>
+        <p className="mt-2 text-ink-3">No source has an open-access copy.</p>
       ) : (
         <table aria-label="Open-access locations" className="mt-2 w-full text-xs">
           <tbody>

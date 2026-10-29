@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/" 
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://www.openarchives.org/OAI/2.0/ http://www.openarchives.org/OAI/2.0/OAI-PMH.xsd">
+    <responseDate>2026-10-28T22:24:36Z</responseDate>
+                <request verb="GetRecord" identifier="oai:arXiv.org:2101.00001" metadataPrefix="arXiv">http://oaipmh.arxiv.org/oai</request>
+
+
+    <GetRecord>
+                <record>
+                <header>
+        <identifier>oai:arXiv.org:2101.00001</identifier>
+        <datestamp>2021-01-05</datestamp>
+            <setSpec>cs:cs:LG</setSpec>
+            <setSpec>cs:cs:AI</setSpec>
+    </header>
+
+            <metadata>
+                        <arXiv xmlns="http://arxiv.org/OAI/arXiv/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://arxiv.org/OAI/arXiv/ https://oaipmh.arxiv.org/OAI/arXiv.xsd">
+        <id>2101.00001</id>
+        <created>2021-01-04</created>
+            <updated>2021-01-05</updated>
+        <authors>
+                <author>
+                    <keyname>Bouneffouf</keyname>
+                        <forenames>Djallel</forenames>
+                </author>
+        </authors>
+        <title>Etat de l&#39;art sur l&#39;application des bandits multi-bras</title>
+            <categories>cs.LG cs.AI</categories>
+            <comments>in French</comments>
+            <license>http://creativecommons.org/licenses/by/4.0/</license>
+            <abstract>The Multi-armed bandit offer the advantage to learn and exploit the already learnt knowledge at the same time. This capability allows this approach to be applied in different domains, going from clinical trials where the goal is investigating the effects of different experimental treatments while minimizing patient losses, to adaptive routing where the goal is to minimize the delays in a network. This article provides a review of the recent results on applying bandit to real-life scenario and summarize the state of the art for each of these fields. Different techniques has been proposed to solve this problem setting, like epsilon-greedy, Upper confident bound (UCB) and Thompson Sampling (TS). We are showing here how this algorithms were adapted to solve the different problems of exploration exploitation.</abstract>
+    </arXiv>
+
+            </metadata>
+        </record>
+
+    </GetRecord>
+</OAI-PMH>

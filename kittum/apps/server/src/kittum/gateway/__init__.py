@@ -25,6 +25,7 @@ from kittum.gateway.errors import (
     SourceUnavailable,
     UnknownSource,
 )
+from kittum.gateway.messages import MESSAGE_LENGTH, source_message
 from kittum.gateway.policies import MARGIN, default_policies
 from kittum.gateway.recorded import (
     CONTACT_PLACEHOLDER,
@@ -42,6 +43,7 @@ __all__ = [
     "CONTACT_PLACEHOLDER",
     "MARGIN",
     "MAX_ATTEMPTS",
+    "MESSAGE_LENGTH",
     "Gateway",
     "GatewayError",
     "HttpRequest",
@@ -60,5 +62,6 @@ __all__ = [
     "default_policies",
     "recording_key",
     "request_hash",
+    "source_message",
     "user_agent",
 ]

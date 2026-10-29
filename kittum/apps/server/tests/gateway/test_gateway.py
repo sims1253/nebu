@@ -1,3 +1,4 @@
+import itertools
 import os
 import threading
 import time
@@ -16,6 +17,7 @@ from kittum.gateway import (
     SourcePolicy,
     SourceUnavailable,
     Transport,
+    default_policies,
 )
 from kittum.gateway.testing import FakeTransport, response
 from kittum.storage import MemoryStore
@@ -551,3 +553,26 @@ def test_concurrent_requests_to_one_source_wait_their_turn(database: Database) -
     assert failures == []
     assert len(transport.sent) == 24
     assert [a["status"] for a in _attempts(database)] == [200] * 24
+
+
+def test_arxiv_requests_go_out_three_seconds_apart(database: Database) -> None:
+    clock = FixedClock(START)
+    sent: list[datetime] = []
+
+    class Timed:
+        def send(self, request: HttpRequest) -> HttpResponse:  # noqa: ARG002
+            sent.append(clock.now())
+            return response(200, b"<OAI-PMH/>")
+
+    gateway = _gateway(
+        database,
+        Timed(),
+        policies=[default_policies()["arxiv"]],
+        clock=clock,
+        sleep=RecordingSleep(clock),
+        buckets="memory",
+    )
+    for number in range(4):
+        gateway.fetch("arxiv", _request(f"https://oaipmh.arxiv.org/oai?n={number}"))
+    gaps = [(b - a).total_seconds() for a, b in itertools.pairwise(sent)]
+    assert len(gaps) == 3 and all(gap >= 3 for gap in gaps), gaps

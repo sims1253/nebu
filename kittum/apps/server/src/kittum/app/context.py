@@ -138,6 +138,8 @@ def _named_secrets(settings: Settings) -> list[tuple[str, str]]:
     named = [
         ("KITTUM_NCBI_API_KEY", settings.ncbi_api_key),
         ("KITTUM_OPENALEX_API_KEY", settings.openalex_api_key),
+        ("KITTUM_SEMANTIC_SCHOLAR_API_KEY", settings.semantic_scholar_api_key),
+        ("KITTUM_CORE_API_KEY", settings.core_api_key),
         # A DSN percent-encodes its password; the password itself is what may leak.
         ("the database password in KITTUM_DATABASE_URL", unquote(password) if password else None),
     ]

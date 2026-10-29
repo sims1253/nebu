@@ -113,10 +113,19 @@ class ExampleProtocol(Record):
     """The YAML source, as `kittum project publish-protocol` takes it."""
 
 
+class WrongDocumentNote(Record):
+    """A reviewer's "wrong document" on the PDF a report had before (`mark_wrong_document`)."""
+
+    reviewer: str
+    note: str | None
+    recorded_at: datetime
+
+
 class RetrievalItem(Record):
     """A report of the corpus and its full text, for the methods lead's upload queue. `outcomes`
     holds the report's current outcome per screened scope and stage (`include`, `exclude`,
-    `conflict`, or None while it is being screened)."""
+    `conflict`, or None while it is being screened). `wrong_document` is the latest reviewer's
+    "wrong document" on a PDF the report had, while it has no full text again."""
 
     item_ref: str
     report_id: Id
@@ -128,6 +137,7 @@ class RetrievalItem(Record):
     registry_ids: tuple[str, ...]
     outcomes: dict[str, dict[str, str | None]]
     full_text: FullText | None
+    wrong_document: WrongDocumentNote | None = None
 
 
 class StageProgress(Record):
@@ -568,6 +578,25 @@ def full_text_records(
     return out
 
 
+def wrong_documents(tx: Tx, project_id: Id) -> dict[str, WrongDocumentNote]:
+    """The latest reviewer's "wrong document" per record, with the reviewer's name and note."""
+    names = {m.actor_id: m.display_name for m in members(tx, project_id)}
+    rows = tx.execute(
+        "select distinct on (item_ref) item_ref, actor_id, note, recorded_at"
+        " from full_text_detachment where project_id = %s"
+        " order by item_ref, recorded_at desc, id desc",
+        (project_id,),
+    ).fetchall()
+    return {
+        r["item_ref"]: WrongDocumentNote(
+            reviewer=names.get(r["actor_id"], "A reviewer"),
+            note=r["note"],
+            recorded_at=r["recorded_at"],
+        )
+        for r in rows
+    }
+
+
 def retrieval(tx: Tx, project_id: Id, screening: Screening) -> list[RetrievalItem]:
     """Every report of the newest identity revision, in search order, with its outcome in each
     open stage and its full text. Full-text sentinels are not reports and are left out."""
@@ -588,6 +617,7 @@ def retrieval(tx: Tx, project_id: Id, screening: Screening) -> list[RetrievalIte
             (project_id,),
         ).fetchall()
     }
+    wrong = wrong_documents(tx, project_id)
     out = []
     for report in reports(tx, project_id, revision.id):
         ref = str(report.report_id)
@@ -606,6 +636,7 @@ def retrieval(tx: Tx, project_id: Id, screening: Screening) -> list[RetrievalIte
                 ),
                 outcomes=outcomes.get(ref, {}),
                 full_text=full_text(tx, project_id, ref) if ref in texts else None,
+                wrong_document=None if ref in texts else wrong.get(ref),
             )
         )
     return out
@@ -817,6 +848,7 @@ __all__ = [
     "ProtocolRef",
     "RetrievalItem",
     "StageProgress",
+    "WrongDocumentNote",
     "add_member",
     "attach_acquired_full_text",
     "attach_full_text",
@@ -845,4 +877,5 @@ __all__ = [
     "retrieval",
     "source_yaml",
     "visible_reports",
+    "wrong_documents",
 ]

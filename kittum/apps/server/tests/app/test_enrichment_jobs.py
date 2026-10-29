@@ -208,10 +208,16 @@ def test_a_retrieval_worker_that_lost_its_lease_keeps_off_the_acquired_report(
     ).fetchone()
     assert row is not None
     assert row["outcome"] == "acquired" and row["acquisition_id"] is not None
-    assert [a["outcome"] for a in row["attempts"]] == ["http_error", "acquired"]
+    # Europe PMC's PDF is refused; PubMed Central's copy, found by asking it, is fetched.
+    assert [(a.get("kind", "fetch"), a["source"], a["outcome"]) for a in row["attempts"]] == [
+        ("fetch", "europepmc", "http_error"),
+        ("lookup", "pmc", "found"),
+        ("fetch", "pmc", "acquired"),
+    ]
     types = [e.type for e in ledger.events(pg, project)]
     assert types.count("document.acquired") == 1
     assert types.count("document.acquisition_attempted") == 1
+    assert types.count("retrieval.source_asked") == 1
     assert types.count("project.full_text_attached") == 1
 
 

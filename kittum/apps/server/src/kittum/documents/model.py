@@ -168,14 +168,27 @@ class FullTextLocation(Record):
     terms_url: str | None = None
 
 
+class ExpectedReport(Record):
+    """The record a fetched PDF must be the report of (`kittum.documents.check_report`)."""
+
+    doi: str | None = None
+    title: str | None = None
+    refused: tuple[str, ...] = ()
+    """Artifact hashes of PDFs a reviewer said are not this record's report: refused from any URL."""
+
+
 class AcquisitionAttempt(Record):
     source: str
     url: str
     status: int | None  # None when the source gave no response
-    outcome: Literal["acquired", "http_error", "not_pdf", "unreadable_pdf", "unavailable"]
+    outcome: Literal[
+        "acquired", "http_error", "not_pdf", "unreadable_pdf", "unavailable", "wrong_document"
+    ]
     body_hash: Sha256 | None = None
     licence: str | None = None  # the location's, as its source states it
     error: str | None = None  # why an unavailable source gave no response
+    check: str | None = None  # what the check against the record found, when it ran
+    message: str | None = None  # what the source said about a failure, when it said anything
 
 
 class Acquisition(Record):

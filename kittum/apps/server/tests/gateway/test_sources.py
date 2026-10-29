@@ -11,6 +11,11 @@ PUBLISHED_PER_SECOND = {
     "crossref": 5,
     "unpaywall": 10,
     "pubtator": 3,
+    "pmc": 3,
+    "biorxiv": 1,
+    "arxiv": 1 / 3,
+    "semanticscholar": 1,
+    "core": 10 / 60,
 }
 
 
@@ -26,6 +31,7 @@ def test_default_policies_sit_ten_percent_under_published_limits() -> None:
 
     assert policies["unpaywall"].daily_budget == 90_000
     assert policies["openalex"].daily_budget == 9_000
+    assert policies["core"].daily_budget == 900
 
 
 def test_a_contact_email_unlocks_the_faster_pools() -> None:

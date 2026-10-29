@@ -10,8 +10,8 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import urlencode
 
 from kittum.core import Record
-from kittum.enrich._http import SourceUnavailable, chunks
-from kittum.gateway import HttpRequest
+from kittum.enrich._http import SourceUnavailable, chunks, unavailable
+from kittum.gateway import HttpRequest, source_message
 
 if TYPE_CHECKING:
     from kittum.gateway import Gateway
@@ -117,23 +117,28 @@ def _fetch(gateway: Gateway, pmids: str) -> list[Any]:
     try:
         response = gateway.fetch(SOURCE, request)
     except Exception as exc:
-        raise SourceUnavailable(SOURCE, f"{type(exc).__name__}: {exc}") from exc
+        raise unavailable(SOURCE, exc) from exc
     if response.status == 404:
         return []
     if response.status < 200 or response.status >= 300:
-        raise SourceUnavailable(SOURCE, f"HTTP {response.status}")
+        raise SourceUnavailable(
+            SOURCE,
+            f"HTTP {response.status}",
+            status=response.status,
+            message=source_message(response.body),
+        )
     try:
         body: Any = json.loads(response.body)
     except ValueError:
         body = _line_delimited(response.body)
         if body is None:
-            raise SourceUnavailable(SOURCE, "response is not JSON") from None
+            raise SourceUnavailable(SOURCE, "response is not JSON", kind="malformed") from None
     if isinstance(body, dict):
         documents = body.get("PubTator3") or []
         return documents if isinstance(documents, list) else []
     if isinstance(body, list):
         return body
-    raise SourceUnavailable(SOURCE, "unexpected response shape")
+    raise SourceUnavailable(SOURCE, "unexpected response shape", kind="malformed")
 
 
 def _line_delimited(payload: bytes) -> list[Any] | None:

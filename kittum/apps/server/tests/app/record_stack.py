@@ -5,13 +5,16 @@ Run once, by hand, with a database available (the projects are rolled back after
     KITTUM_DATABASE_URL=... uv run python -m tests.app.record_stack
 
 This is not a test. For each project the tests and the end-to-end journeys build, it imports the
-same searches in the same order, builds the corpus, runs the enrichment job, and walks the
-open-access waterfall for every report, all through the real HTTP transport. Every response is
-kept under the URL that asked for it, with its status and content type; a PDF that the repository
-already holds is referenced, not copied. The contact address is `support.CONTACT_EMAIL`, and no
-API key is used, so none can end up in a recording.
+same searches in the same order, builds the corpus, runs the enrichment job, and walks the whole
+open-access waterfall for every report (every lookup source that applies, every location), all
+through the real HTTP transport. Every response is kept under the URL that asked for it, with its
+status and content type; a PDF that the repository already holds is referenced, not copied. A URL
+the manifest already holds is answered from it, so a run records only what is new (`--all`
+records everything again). The contact address is `support.CONTACT_EMAIL`, and no API key is
+used, so none can end up in a recording; CORE, which needs one, is left out.
 """
 
+import contextlib
 import json
 from datetime import timedelta
 from pathlib import Path
@@ -23,11 +26,18 @@ from psycopg.rows import dict_row
 from kittum.app import AppContext, create_project, ingest_corpus, publish_protocol
 from kittum.app.demo import DATA, PDFS, PROTOCOL
 from kittum.app.enrichment import ENRICHMENT_JOB, enrichment_handler, request_enrichment
-from kittum.app.open_access import locations
+from kittum.app.open_access import locations, report_facts
 from kittum.core import SystemClock, sha256_hex
 from kittum.corpus import latest_revision, reports
-from kittum.documents import acquire
-from kittum.gateway import HttpRequest, HttpResponse, HttpxTransport
+from kittum.documents import FullTextLocation, acquire
+from kittum.enrich import (
+    LOOKUP_SOURCES,
+    EnrichmentConfig,
+    SourceUnavailable,
+    lookup_applies,
+    lookup_full_text,
+)
+from kittum.gateway import HttpRequest, HttpResponse, HttpxTransport, RecordedTransport
 from kittum.gateway.testing import PassThroughGateway
 from kittum.ledger import PostgresLedger
 from kittum.runs import JobContext, PostgresJobQueue
@@ -77,13 +87,25 @@ _EXTENSIONS = {"application/json": ".json", "application/pdf": ".pdf", "text/htm
 class RecordingTransport:
     """Sends real requests and keeps each response under the URL that produced it."""
 
-    def __init__(self, directory: Path) -> None:
+    def __init__(self, directory: Path, *, again: bool = False) -> None:
         self._directory = directory
         self._inner = HttpxTransport(contact_email=CONTACT_EMAIL)
         self._known = {sha256_hex(p.read_bytes()): p for p in PDFS.glob("*.pdf")}
+        self._recorded = (
+            None
+            if again or not (directory / "manifest.json").exists()
+            else RecordedTransport(directory, contact_email=CONTACT_EMAIL)
+        )
+        self._have = (
+            set(json.loads((directory / "manifest.json").read_text()))
+            if self._recorded is not None
+            else set()
+        )
         self.manifest: dict[str, dict[str, Any]] = {}
 
     def send(self, request: HttpRequest) -> HttpResponse:
+        if self._recorded is not None and request.url in self._have:
+            return self._recorded.send(request)
         response = self._inner.send(request)
         content_type = next(
             (v.split(";")[0].strip() for k, v in response.headers if k.lower() == "content-type"),
@@ -183,9 +205,30 @@ def _scenario(
     assert revision is not None
     if not waterfall:
         return
+    facts = report_facts(tx, project_id)
+    config = EnrichmentConfig(contact_email=CONTACT_EMAIL)
     for report in reports(tx, project_id, revision.id):
         found = locations(tx, project_id, report.report_id, on=clock.now().date())
-        if found:
+        ids = facts[report.report_id].ids
+        for source in LOOKUP_SOURCES:
+            if not lookup_applies(source, ids, config=config):
+                continue
+            try:
+                answer = lookup_full_text(gateway, source, ids, config=config)
+            except SourceUnavailable:
+                continue
+            found += [
+                FullTextLocation(source=source, url=loc.url, licence=loc.licence)
+                for loc in (answer.locations if answer else ())
+            ]
+        # Without Europe PMC (an outage) there is no PMCID, and PMC's ID converter is asked.
+        if ids.pmcid and (ids.pmid or ids.doi):
+            with contextlib.suppress(SourceUnavailable):
+                lookup_full_text(
+                    gateway, "pmc", ids.model_copy(update={"pmcid": None}), config=config
+                )
+        # Every location, not only up to the first PDF: a replay may need any of them.
+        for location in found:
             acquire(
                 tx,
                 gateway=gateway,
@@ -194,15 +237,16 @@ def _scenario(
                 clock=clock,
                 project_id=project_id,
                 actor_id=lead,
-                locations=found,
+                locations=[location],
             )
 
 
 def main() -> None:
     import os
+    import sys
 
     STACK.mkdir(exist_ok=True)
-    transport = RecordingTransport(STACK)
+    transport = RecordingTransport(STACK, again="--all" in sys.argv)
     gateway = PassThroughGateway(transport)
     url = os.environ["KITTUM_DATABASE_URL"]
     with psycopg.Connection[dict[str, Any]].connect(url, row_factory=dict_row) as connection:
