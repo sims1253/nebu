@@ -4,6 +4,7 @@ import json
 from typing import TYPE_CHECKING
 
 from kittum.ledger import register_exporter
+from kittum.models import is_event_stream
 
 if TYPE_CHECKING:
     from kittum.core import Id
@@ -86,15 +87,23 @@ class ExtractionExporter:
             # names them. One the store lacks is listed by hash with the reason.
             data = bundle.read(run["transcript_hash"]) if run["transcript_hash"] else None
             for call in json.loads(data).get("calls", []) if data else []:
-                for h in (call.get("raw_request_hash"), call.get("raw_response_hash")):
+                for h, response in (
+                    (call.get("raw_request_hash"), False),
+                    (call.get("raw_response_hash"), True),
+                ):
                     if not h:
                         continue
+                    # A streamed response is the server's event stream, not one JSON body.
+                    found = bundle.read(h) if response else None
+                    kind = (
+                        "text/event-stream"
+                        if found and is_event_stream(found)
+                        else "application/json"
+                    )
                     try:
-                        bundle.artifact(h, media_type="application/json")
+                        bundle.artifact(h, media_type=kind)
                     except ValueError:
-                        bundle.artifact(
-                            h, media_type="application/json", withheld_reason=NOT_STORED
-                        )
+                        bundle.artifact(h, media_type=kind, withheld_reason=NOT_STORED)
 
 
 EXPORTER = register_exporter(ExtractionExporter())

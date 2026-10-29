@@ -323,6 +323,7 @@ def prompt_cards(
                     "weights_licence": recipe.get("weights_licence"),
                     "serving": recipe.get("serving"),
                     "extra_body": recipe.get("extra_body") or {},
+                    "reasoning_tokens": recipe.get("reasoning_tokens") or None,
                     "endpoints": list(judge.get("endpoints", [])),
                     "reported_model_identities": list(judge.get("model_identities", [])),
                 },
@@ -350,6 +351,7 @@ def prompt_cards(
                 recipe_id=first.get("recipe_id"),
                 model={
                     "serving": first.get("serving"),
+                    "reasoning_tokens": first.get("reasoning_tokens") or None,
                     "endpoints": sorted({p["endpoint"] for p in payloads if p.get("endpoint")}),
                     "reported_model_identities": sorted(
                         {p["model_identity"] for p in payloads if p.get("model_identity")}
@@ -382,6 +384,7 @@ def prompt_cards(
                 recipe_id=agent.get("model_id"),
                 model={
                     "serving": first.get("serving"),
+                    "reasoning_tokens": first.get("reasoning_tokens") or None,
                     "endpoints": sorted(
                         {t["endpoint"] for t in transcripts if t and t.get("endpoint")}
                     ),

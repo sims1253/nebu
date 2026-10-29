@@ -1145,6 +1145,8 @@ def media_type(data: bytes) -> str:
         return "application/pdf"
     if head.startswith((b"{", b"[")):
         return "application/json"
+    if head.startswith((b"data:", b"event:", b":")):
+        return "text/event-stream; charset=utf-8"  # a model's streamed answer
     if head.startswith(b"<"):
         return "application/xml"
     try:

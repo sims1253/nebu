@@ -26,6 +26,10 @@ class ModelRecipe(Record):
     upstream_repository: str | None = None  # where the weights and their licence come from
     reasoning: bool = False  # the model may think before it answers
     extra_body: dict[str, Any] = Field(default_factory=dict)  # merged into every request body
+    # Added to every call's max_tokens in the request body, for a model that counts its thinking
+    # against max_tokens (GLM-5.3-Flash). The answer budgets, and the request keys, stay as they are.
+    reasoning_tokens: int = Field(default=0, ge=0)
+    stream: bool = True  # ask for the answer as server-sent events; off for a server that cannot
     notes: str = ""
 
     @property
@@ -76,6 +80,19 @@ class Completion(Record):
     # without credentials. None when nothing was sent, as in a replay.
     serving: str | None = None
     endpoint: str | None = None  # "replay of <endpoint>" when replayed (kittum.models.replay)
+    reasoning_tokens: int = 0  # the recipe's, added to the request's max_tokens when it was sent
+
+
+def cut_off(request: CompletionRequest, completion: Completion) -> str | None:
+    """Why an answer is unusable when the token budget ended it (`finish_reason` "length"), or
+    None. Asking again with the same budget would only cut it off again."""
+    if completion.finish_reason != "length":
+        return None
+    budget = request.max_tokens + completion.reasoning_tokens
+    return (
+        f"{request.model_id} ran out of tokens before it finished ({budget:,})."
+        " Raise reasoning_tokens in its recipe."
+    )
 
 
 class LlmBackend(Protocol):

@@ -350,7 +350,11 @@ Modules `kittum.judge` and `kittum.models`. Needs: `protocol`, `core`.
   the recipe's `extra_body` (thinking switches), raw request and response bytes in the artifact
   store, the model identity the server reports, thinking removed before the JSON (`<think>`,
   Gemma channels, harmony, code fences, or the `reasoning` field), retries on transport errors
-  only. `backends_from_endpoints` builds backends from `Settings.llm_endpoints`. A hosted API's key comes
+  only. The answer streams as server-sent events, so the read timeout applies between chunks; the
+  stored response is the event stream as received, and `models.assemble` reads it back. A
+  recipe's `reasoning_tokens` is added to every call's `max_tokens`, outside the request key; an
+  answer that ends at the budget (`finish_reason` "length") is not asked for again (`models.cut_off`).
+  `backends_from_endpoints` builds backends from `Settings.llm_endpoints`. A hosted API's key comes
   from the environment variable `KITTUM_LLM_API_KEYS` names, read for each call and never stored;
   each completion records the recipe's serving and the endpoint (without credentials). Kittum
   does not gate hosted models: where content goes is the operator's decision.

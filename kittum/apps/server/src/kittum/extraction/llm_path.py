@@ -41,7 +41,7 @@ from kittum.core import KittumError, Record, Span
 from kittum.documents import make_anchor, quote_spans
 from kittum.extraction.model import Proposal
 from kittum.extraction.numbers import printed_in, well_formed
-from kittum.models import CompletionRequest, Message
+from kittum.models import CompletionRequest, Message, cut_off
 
 if TYPE_CHECKING:
     from kittum.core import Clock
@@ -87,7 +87,7 @@ class AgentConfig(Record):
 
 
 class BudgetExhausted(KittumError):
-    """The agent ran out of model calls or time before it answered."""
+    """The agent ran out of model calls, time, or one call's tokens before it answered."""
 
 
 class Value(BaseModel):
@@ -110,6 +110,7 @@ class Transcript:
     model_identity: str | None = None
     serving: str | None = None  # where the calls went: the recipe's serving and the endpoint
     endpoint: str | None = None
+    reasoning_tokens: int = 0  # the recipe's, added to every call's max_tokens
     stopped: str | None = None
 
 
@@ -338,6 +339,7 @@ class LlmBackendModel:
         self._transcript.model_identity = completion.model_identity
         self._transcript.serving = completion.serving
         self._transcript.endpoint = completion.endpoint
+        self._transcript.reasoning_tokens = completion.reasoning_tokens
         self._transcript.calls.append(
             {
                 "request_hash": completion.request_hash,
@@ -350,6 +352,10 @@ class LlmBackendModel:
         # A call that ends past the deadline does not count, final answer included.
         if self._clock.now() >= self._deadline:
             raise BudgetExhausted(f"used the time budget of {self._config.max_seconds:g} s")
+        # Asked again with the same budget, a cut-off answer would be cut off again.
+        stopped = cut_off(request, completion)
+        if stopped:
+            raise BudgetExhausted(stopped)
         try:
             data = json.loads(completion.text)
             tool = data.pop("tool")

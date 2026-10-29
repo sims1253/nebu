@@ -8,6 +8,10 @@
 # recipes pin the registry manifest digest and the model and projector blobs it names; the
 # licence comes from `upstream_repository`. `served_name` is the model name the server answers to
 # (vLLM's --served-model-name or the Ollama tag); without it the repository is used.
+#
+# Every call streams its answer (`stream`, default true). `reasoning_tokens` (default 0) is added
+# to every call's max_tokens, for a model that counts its thinking against it; the answer budgets
+# and the request keys stay the same.
 
 recipes:
   - id: qwen3.8-27b-bf16

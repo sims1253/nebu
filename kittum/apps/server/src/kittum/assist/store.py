@@ -344,6 +344,8 @@ def record(
                 "prompt_version": model.prompt_version,
                 "prompt_hash": model.prompt_hash,
                 "attempts": [a.model_dump(mode="json") for a in model.attempts],
+                # Added to every attempt's max_tokens; named only when the recipe sets it.
+                **({"reasoning_tokens": model.reasoning_tokens} if model.reasoning_tokens else {}),
             },
         ),
     )

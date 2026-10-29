@@ -1,6 +1,8 @@
 """Ask a model for a draft or an improvement, and check every answer the way a hand-written
 protocol is checked (`kittum.protocol.compile`). An answer with problems goes back to the model
-with each problem and its path, at most `REPAIRS` times. Nothing here touches the database."""
+with each problem and its path, at most `REPAIRS` times. An answer the token budget cut off does
+not: the same budget would cut it off again, so the attempt fails and says to raise the recipe's
+`reasoning_tokens`. Nothing here touches the database."""
 
 import json
 import re
@@ -21,7 +23,7 @@ from kittum.assist.model import (
 from kittum.assist.paths import get, replace
 from kittum.assist.schema import from_strict, strict_schema
 from kittum.core import Record
-from kittum.models import BackendError, CompletionRequest, Message, request_key
+from kittum.models import BackendError, CompletionRequest, Message, cut_off, request_key
 from kittum.protocol import (
     Criterion,
     ProtocolError,
@@ -160,7 +162,8 @@ def _converse(
             )
             break
         last = completion
-        data, issues = _parse(completion.text)
+        stopped = cut_off(call, completion)
+        data, issues = (None, [_issue("", stopped)]) if stopped else _parse(completion.text)
         if not issues:
             converted, problems = from_strict(data, answer_model)
             issues = [_issue(path, message) for path, message in problems]
@@ -176,7 +179,7 @@ def _converse(
                 issues=tuple(issues),
             )
         )
-        if not issues:
+        if not issues or stopped:
             break
         result = None
         messages += [
@@ -189,6 +192,7 @@ def _converse(
         model_identity=last.model_identity if last else None,
         serving=last.serving if last else None,
         endpoint=last.endpoint if last else None,
+        reasoning_tokens=last.reasoning_tokens if last else 0,
         prompt_version=prompts.PROMPT_VERSION,
         prompt_hash=prompts.instructions_hash(instructions),
         attempts=tuple(attempts),

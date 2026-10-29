@@ -6,15 +6,18 @@ which carry no revenue caps, field-of-use limits, or no-competition clauses; `Mo
 refuses to load any other recipe. The shipped recipes live in `recipes.yaml`.
 
 `OpenAICompatibleBackend` talks to vLLM, Ollama, or a hosted API with JSON Schema-constrained
-decoding, stores the raw request and response bytes, and reports the model identity the server
-returns, the recipe's serving, and the endpoint. `backends_from_endpoints` builds one per entry in
-`Settings.llm_endpoints`. Which content goes to which server is the deployment's choice; a hosted
-API's key comes from an environment variable and is never stored. A deployment adds its own
-recipes, hosted ones included, with `ModelRegistry.load(local=...)`.
+decoding, streams the answer (`assemble` reads a stored stream back), stores the raw request and
+response bytes, and reports the model identity the server returns, the recipe's serving, and the
+endpoint. `backends_from_endpoints` builds one per entry in `Settings.llm_endpoints`. Which
+content goes to which server is the deployment's choice; a hosted API's key comes from an
+environment variable and is never stored. A deployment adds its own recipes, hosted ones
+included, with `ModelRegistry.load(local=...)`.
 
 `RecordingBackend` records a live run's completions (`KITTUM_LLM_RECORD`) and `ReplayBackend`
-answers from them (`KITTUM_LLM_REPLAY`), keyed by `request_key` and in order, never with a credential or the contact address. A replayed
-completion keeps the recorded model identity and reports its endpoint as `replay of <endpoint>`.
+answers from them (`KITTUM_LLM_REPLAY`), keyed by `request_key` and in order, never with a
+credential or the contact address. `cut_off` says why an answer the token budget ended is
+unusable. A replayed completion keeps the recorded model identity and reports its endpoint as
+`replay of <endpoint>`.
 
 Owner: WP-08. `kittum.models.testing.RecordedBackend` replays stored answers for tests.
 """
@@ -37,6 +40,7 @@ from kittum.models.replay import (
     ReplayBackend,
     replayed_endpoint,
 )
+from kittum.models.stream import assemble, is_event_stream
 from kittum.models.types import (
     ALLOWED_WEIGHTS_LICENCES,
     BackendError,
@@ -46,6 +50,7 @@ from kittum.models.types import (
     Message,
     ModelRecipe,
     RecipeBackend,
+    cut_off,
     request_key,
     weights_hash,
 )
@@ -71,7 +76,10 @@ __all__ = [
     "RecipeError",
     "RecordingBackend",
     "ReplayBackend",
+    "assemble",
     "backends_from_endpoints",
+    "cut_off",
+    "is_event_stream",
     "replayed_endpoint",
     "request_key",
     "split_reasoning",

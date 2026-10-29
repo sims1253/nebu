@@ -1,4 +1,5 @@
-"""One judge call: build the request, retry malformed answers, verify every criterion."""
+"""One judge call: build the request, retry malformed answers, verify every criterion. An answer
+the token budget cut off is not retried: the same budget would cut it off again."""
 
 import json
 from dataclasses import dataclass, field
@@ -10,7 +11,7 @@ from kittum.core import sha256_hex
 from kittum.judge.prompt import answer_model, build_request
 from kittum.judge.types import CriterionVerdict, Verdict
 from kittum.judge.verify import injection_suspected, verify
-from kittum.models import split_reasoning
+from kittum.models import cut_off, split_reasoning
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
@@ -63,13 +64,13 @@ def parse_answer(
     return {c.id: getattr(parsed, f"c{i}") for i, c in enumerate(criteria)}
 
 
-def _invalid(criteria: tuple[Criterion, ...], attempts: int) -> tuple[CriterionVerdict, ...]:
+def _invalid(criteria: tuple[Criterion, ...], rationale: str) -> tuple[CriterionVerdict, ...]:
     return tuple(
         CriterionVerdict(
             criterion_id=c.id,
             status="unclear",
             quote=None,
-            rationale=f"The model gave no valid answer in {attempts} attempts.",
+            rationale=rationale,
             quote_verified=False,
             failed_check="invalid_output",
         )
@@ -90,9 +91,14 @@ def run_judge(
     model = answer_model(chosen)
     attempts: list[Attempt] = []
     answers: dict[str, CriterionAnswer] | None = None
+    stopped: str | None = None
     for n in range(config.max_attempts):
         request = build_request(item, chosen, config, attempt=n)
         completion = backend.complete(request)
+        stopped = cut_off(request, completion)
+        if stopped:
+            attempts.append(Attempt(request, completion, stopped))
+            break
         try:
             answers = parse_answer(completion.text, chosen, model)
         except (ValueError, ValidationError) as e:
@@ -104,7 +110,9 @@ def run_judge(
     flags: list[str] = []
     if answers is None:
         flags.append("invalid_output")
-        verdicts = _invalid(chosen, len(attempts))
+        verdicts = _invalid(
+            chosen, stopped or f"The model gave no valid answer in {len(attempts)} attempts."
+        )
     else:
         injection = injection_suspected(item.source)
         if injection:
