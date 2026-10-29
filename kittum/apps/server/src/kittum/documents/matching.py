@@ -50,7 +50,11 @@ _GAP = r"(?:-?[ \t]*\n[ \t]*)?"
 """Where a DOI may wrap: a line break, with or without the hyphen the break added."""
 
 _CONTINUES = "-(/_"
-"""Marks that continue a DOI, on its line or at the start of the next."""
+"""Marks that continue a DOI at the start of the next line. On the DOI's own line, every
+character continues it except a space and the marks in `_ENDS` and `_continues`."""
+
+_ENDS = "\"'\u201d\u2019\u00bb>"
+"""Closing quotes and an angle bracket, which end a DOI quoted or linked in the text."""
 
 
 def _continues(rest: str, doi: str) -> bool:
@@ -58,20 +62,23 @@ def _continues(rest: str, doi: str) -> bool:
     if not rest:
         return False
     first = rest[0]
-    if first.isalnum() or first in _CONTINUES:
-        return True
     if first in ".,;:":
         return len(rest) > 1 and rest[1].isalnum()  # "10.1234/abc.5" goes on; "abc." ends
-    if first == ")":
+    if first in ")]":
         # It closes a bracket outside the DOI, unless the DOI left one of its own open.
-        return doi.count("(") > doi.count(")")
+        opening = "(" if first == ")" else "["
+        return doi.count(opening) > doi.count(first)
+    if first in _ENDS:
+        return False
     if first in " \t\n":
         line = rest.lstrip(" \t")
         if line.startswith("\n"):
             following = line[1:].lstrip(" \t")
             # Prose on the next line starts a new line of text; a hyphen or bracket goes on.
             return bool(following) and following[0] in _CONTINUES
-    return False
+        return False
+    # Anything else on the same line, "+" and "=" included, may be part of a DOI suffix.
+    return True
 
 
 def _shows_doi(pages: tuple[str, ...], doi: str) -> bool:
