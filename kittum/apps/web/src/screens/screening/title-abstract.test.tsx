@@ -69,6 +69,12 @@ describe("title and abstract queue", () => {
     expect(document.querySelector("mark[data-reveal-quote]")?.textContent).toBe(
       "had undergone a macroscopically complete resection",
     );
+    // Why it disagrees: the rationale in full, and the quote, which is marked in place.
+    await expect.element(banner().getByTestId("ai-rationale")).toBeVisible();
+    expect(banner().getByTestId("ai-rationale").element().textContent).not.toBe("");
+    await expect
+      .element(banner().getByTestId("ai-quote"))
+      .toMatchTextContent("Marked in the abstract.");
     await press("e");
     await press("1"); // revise
 

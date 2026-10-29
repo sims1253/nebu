@@ -189,14 +189,14 @@ export function ExtractionScreen({ review }: { review: ExtractionReview }) {
     }
     if (!sourceBoxes) {
       setNotice(
-        "This value has no source on the page. Select it on the page and press e to edit it with its span; a grounding exception is not built yet.",
+        "This value has no source on the page. Select the value on the page and press e to edit it with its span.",
       );
       return;
     }
     const failed = editing ? [] : failedChecks(shown);
     if (failed.length && !override) {
       setNotice(
-        `A check failed: ${failed.join(" ")} Confirm the value against the source and press o to accept it anyway, or edit it.`,
+        `A check failed. ${failed.join(" ")} Compare the value with the source. Press o to accept it anyway, or edit it.`,
       );
       return;
     }
@@ -240,7 +240,9 @@ export function ExtractionScreen({ review }: { review: ExtractionReview }) {
       setNotice(null);
       move(1);
     } catch (e) {
-      setNotice(e instanceof WorkbenchError ? e.message : "The value was not accepted. Try again.");
+      setNotice(
+        e instanceof WorkbenchError ? e.message : "Kittum did not accept the value. Try again.",
+      );
     } finally {
       setBusy(false);
     }
@@ -318,7 +320,7 @@ export function ExtractionScreen({ review }: { review: ExtractionReview }) {
     const seen = groupable.filter((f) => rowViewedMs(f.id) >= VIEW_MS);
     if (!seen.length) {
       setNotice(
-        "None of the agreeing standard fields has been on screen long enough. Scroll to them and look them over first.",
+        "None of the agreeing standard fields has been on screen long enough. Scroll to them and read them first.",
       );
       return;
     }
@@ -346,7 +348,7 @@ export function ExtractionScreen({ review }: { review: ExtractionReview }) {
         }`,
       );
     } catch (e) {
-      setNotice(e instanceof WorkbenchError ? e.message : "The group was not accepted.");
+      setNotice(e instanceof WorkbenchError ? e.message : "Kittum did not accept the group.");
     } finally {
       setBusy(false);
     }
@@ -391,7 +393,7 @@ export function ExtractionScreen({ review }: { review: ExtractionReview }) {
         return true;
       }
       if (!selection) {
-        setNotice("Select the value on the page first; an edit needs a source span.");
+        setNotice("Select the value on the page first. An edit needs a source span.");
         return true;
       }
       setEditing({ selection, value: firstNumber(selection.quote) });
@@ -559,10 +561,10 @@ const describe = (field: ReviewField, shown: Proposal | undefined) => {
   if (failed.length) return failed.join(" ");
   const policy =
     field.spec.policy === "critical"
-      ? "Critical: verify against the highlighted source."
+      ? "Critical. Check it against the highlighted source."
       : field.spec.policy === "standard"
-        ? "Standard: agreeing, validated values may be accepted together after viewing the list."
-        : "Descriptive: one review of the value and its span.";
+        ? "Standard. You can accept agreeing, validated values together after reading the list."
+        : "Descriptive. Check the value and its span once.";
   const why = shown?.message ? ` ${shown.message}.` : "";
   return shown && shown.status !== "extracted"
     ? `${PROPOSAL_STATUS[shown.status].label}.${why} ${policy}`

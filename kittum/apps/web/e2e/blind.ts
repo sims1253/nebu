@@ -6,6 +6,9 @@ import type { Page } from "@playwright/test";
 
 // Keys that only the AI's verdict or another person's decision carries.
 const AI_FIELDS = ["quote_verified", "downgraded_from", "failed_check", "excludes", "ai"];
+// What the person's own reveal may say of the AI's reading besides its words: whether the quote
+// was verified, and what the model answered before the check. Nothing else of the verdict.
+const REVEAL_FIELDS = new Set(["quote_verified", "downgraded_from"]);
 const DECISION_FIELDS = ["columns", "outcome", "reason_criterion_id", "evidence_anchor_ids"];
 // Keys that would tell a sentinel from any other record, anywhere; and, in screening answers, an
 // audit item (elsewhere `audit` is the protocol's audit plan, which everyone may read).
@@ -58,9 +61,18 @@ export const expectNothingLeaked = (responses: ReadonlyArray<{ url: string; body
     // Decisions and verdicts travel only in screening and progress answers; elsewhere the
     // protocol's own words (its "outcome" label, say) are not anyone's decision.
     const decisions = /\/(screening|progress)/.test(url);
+    // The person's own reveal is the AI's reading, so it carries the verdict's fields (whether
+    // the quote was verified, what the model said before the check). Only there.
+    const ownReveals = new Set<string>();
     for (const [path, object] of objects(json)) {
       const keys = decisions
-        ? [...AI_FIELDS, ...DECISION_FIELDS, ...AUDIT_FIELDS, ...SENTINEL_FIELDS, ...LEAD_FIELDS]
+        ? [
+            ...AI_FIELDS.filter((key) => !(ownReveals.has(path) && REVEAL_FIELDS.has(key))),
+            ...DECISION_FIELDS,
+            ...AUDIT_FIELDS,
+            ...SENTINEL_FIELDS,
+            ...LEAD_FIELDS,
+          ]
         : [...SENTINEL_FIELDS, ...LEAD_FIELDS];
       for (const key of keys) {
         expect(key in object, `${url} ${path} has ${key}`).toBe(false);
@@ -70,6 +82,7 @@ export const expectNothingLeaked = (responses: ReadonlyArray<{ url: string; body
       if (typeof object["reveal"] === "object" && object["reveal"] !== null) {
         const own = url.endsWith("/decide") || object["phase"] === "final";
         expect(own, `${url} ${path} reveals the AI outside the person's own decision`).toBe(true);
+        ownReveals.add(`${path}.reveal`);
       }
     }
     expect(body, `${url} names a sentinel`).not.toMatch(/"sentinel:/);

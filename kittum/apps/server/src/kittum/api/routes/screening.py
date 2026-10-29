@@ -1,4 +1,5 @@
-"""Screening routes: the reviewer's queue, decide, undo, adjudication, and status.
+"""Screening routes: the reviewer's queue, decide, undo, wrong document, adjudication, and
+status.
 
 Until the API has authentication (WP-15), the caller names themselves in the `X-Kittum-Reviewer`
 header with their actor ID. The service enforces blinding against that ID: a reviewer gets only
@@ -15,9 +16,14 @@ from fastapi import APIRouter, Header, HTTPException, Query, status
 from kittum.api import AppContext, Context  # noqa: TC001 - FastAPI resolves it at runtime
 from kittum.app import (
     AssignmentFullText,
+    ConflictFullText,
     LifecycleError,
     NotLead,
+    WrongDocument,
+    ai_quote,
+    ai_quotes,
     full_text,
+    mark_wrong_document,
     mentions,
     open_screening,
     parse_sentinels,
@@ -77,6 +83,16 @@ class UndoRequest(Record):
     command_id: Id
     expected_etag: str
     """The `etag` the client last saw; a stale one is rejected with 409."""
+
+
+class WrongDocumentRequest(Record):
+    command_id: Id
+    expected_etag: str
+    """The `etag` the client last saw; a stale one is rejected with 409."""
+    document_id: Id
+    """The PDF the reviewer saw. If the record's full text is another one by now, 409."""
+    note: str | None = None
+    """What the PDF is instead, in the reviewer's words."""
 
 
 class AdjudicateRequest(Record):
@@ -173,7 +189,8 @@ def assignment_full_text(
     project_id: Id, assignment_id: Id, reviewer: Reviewer, ctx: Context
 ) -> AssignmentFullText:
     """The full text of one of the caller's full-text assignments, with the protocol-term
-    mentions of each criterion in document order."""
+    mentions of each criterion in document order. After the caller's own provisional decision
+    revealed the AI's reading, `ai_quote` places its verified quote on the page."""
     screening = _screening(ctx)
     with _errors(), ctx.db.transaction() as tx:
         ref, _, criteria = screening.assignment_source(tx, project_id, reviewer, assignment_id)
@@ -181,13 +198,37 @@ def assignment_full_text(
         if found is None:
             raise NotFoundError("this assignment has no full text")
         layer = get_layer(tx, found.layer_id, artifacts=ctx.artifacts)
+        reveal = screening.own_reveal(tx, project_id, reviewer, assignment_id)
     return AssignmentFullText(
         document_id=found.document_id,
         layer_id=found.layer_id,
         page_count=found.page_count,
         licence=found.licence,
         mentions=mentions(layer, criteria),
+        ai_quote=ai_quote(layer, reveal),
     )
+
+
+@router.post(
+    "/assignments/{assignment_id}/wrong-document", operation_id="markScreeningWrongDocument"
+)
+def wrong_document(
+    project_id: Id, assignment_id: Id, body: WrongDocumentRequest, reviewer: Reviewer, ctx: Context
+) -> WrongDocument:
+    """The PDF of one of the caller's full-text assignments is not the record's report. The item
+    leaves screening and the record has no full text again. Not an exclusion."""
+    with _errors(), ctx.db.transaction() as tx:
+        return mark_wrong_document(
+            tx,
+            ctx,
+            project_id,
+            command_id=body.command_id,
+            reviewer_id=reviewer,
+            assignment_id=assignment_id,
+            expected_etag=body.expected_etag,
+            document_id=body.document_id,
+            note=body.note,
+        )
 
 
 @router.get("/queue", operation_id="getScreeningQueue")
@@ -262,6 +303,32 @@ def adjudications(
         return screening.adjudication_queue(
             tx, project_id, reviewer, scope_id, stage, topic_id=topic_id
         )
+
+
+@router.get(
+    "/adjudications/{conflict_id}/full-text", operation_id="getScreeningAdjudicationFullText"
+)
+def adjudication_full_text(
+    project_id: Id, conflict_id: Id, reviewer: Reviewer, ctx: Context
+) -> ConflictFullText:
+    """The full text behind a full-text conflict the caller adjudicates, with the protocol-term
+    mentions of each criterion in document order. Once the caller has adjudicated it,
+    `ai_quotes` places the AI's verified quotes on the page."""
+    screening = _screening(ctx)
+    with _errors(), ctx.db.transaction() as tx:
+        ref, _, criteria, ai = screening.conflict_source(tx, project_id, reviewer, conflict_id)
+        found = full_text(tx, project_id, ref)
+        if found is None:
+            raise NotFoundError("this conflict has no full text")
+        layer = get_layer(tx, found.layer_id, artifacts=ctx.artifacts)
+    return ConflictFullText(
+        document_id=found.document_id,
+        layer_id=found.layer_id,
+        page_count=found.page_count,
+        licence=found.licence,
+        mentions=mentions(layer, criteria),
+        ai_quotes=ai_quotes(layer, ai),
+    )
 
 
 @router.post("/adjudications/{conflict_id}/decide", operation_id="decideScreeningAdjudication")

@@ -270,6 +270,9 @@ def test_m1_blinds_reviewers_reveals_disagreement_and_adjudicates(
         "status": "not_met",
         "quote": "did not smoke tobacco",
         "rationale": f"The patients were non-smokers. {JUDGE_MARK}",
+        "quote_verified": True,
+        "quote_span": {"part": "text", "start": 66, "end": 87},
+        "downgraded_from": None,
     }
     # Until B decides finally, the item stays in B's queue with B's own reveal.
     waiting = b.item("colitis")
@@ -304,7 +307,7 @@ def test_m1_blinds_reviewers_reveals_disagreement_and_adjudicates(
     # AI except the reveals that followed B's own provisional decisions.
     for text in b.seen:
         assert str(world.people.a) not in text and note not in text
-        assert "quote_verified" not in text and "excludes" not in text
+        assert "failed_check" not in text and "excludes" not in text
     ai_texts = [json.loads(t) for t in b.seen if JUDGE_MARK in t]
     assert ai_texts
     for body in ai_texts:

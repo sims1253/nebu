@@ -1,7 +1,7 @@
 // Title and abstract with protocol terms, entities, and (after a reveal) the AI's quoted span.
 import type { ReactNode } from "react";
 
-import type { Highlight } from "../../data/schema.ts";
+import type { Highlight, QuoteSpan } from "../../data/schema.ts";
 import { codePointIndex } from "../../lib/codepoints.ts";
 
 interface Run {
@@ -74,7 +74,12 @@ export function Marked({
     if (quoted.length === 0) return;
     // One mark for the whole quote, however many terms it crosses.
     nodes.push(
-      <mark key={`q${nodes.length}`} className="evidence" data-reveal-quote="">
+      <mark
+        key={`q${nodes.length}`}
+        className="evidence"
+        data-reveal-quote=""
+        title="The AI judge's quote"
+      >
         {quoted}
       </mark>,
     );
@@ -106,13 +111,15 @@ export function Marked({
   return <>{nodes}</>;
 }
 
-/** Locates the AI's quote: in the title, the abstract, or nowhere (never guessed). */
-export const locateQuote = (title: string, text: string, quote: string | null) => {
-  if (!quote) return { title: null, text: null };
-  const inTitle = title.indexOf(quote);
-  if (inTitle >= 0) return { title: [inTitle, inTitle + quote.length] as const, text: null };
-  const inText = text.indexOf(quote);
-  return { title: null, text: inText >= 0 ? ([inText, inText + quote.length] as const) : null };
+/**
+ * The AI's verified quote as UTF-16 ranges of the title or the text, from the server's code-point
+ * span. An unverified quote has no span and is never marked.
+ */
+export const placeQuote = (title: string, text: string, span: QuoteSpan | null | undefined) => {
+  if (!span) return { title: null, text: null };
+  const at = codePointIndex(span.part === "title" ? title : text);
+  const range = [at(span.start), at(span.end)] as const;
+  return span.part === "title" ? { title: range, text: null } : { title: null, text: range };
 };
 
 const METHODS = /method|design|participants|patients and/i;

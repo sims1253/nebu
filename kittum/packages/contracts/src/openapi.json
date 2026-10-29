@@ -412,11 +412,19 @@
           "excludes": {
             "title": "Excludes",
             "type": "boolean"
+          },
+          "quote_spans": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/QuoteSpan"
+            },
+            "title": "Quote Spans",
+            "type": "object"
           }
         },
         "required": [
           "excludes",
-          "criteria"
+          "criteria",
+          "quote_spans"
         ],
         "title": "AiColumn",
         "type": "object"
@@ -943,6 +951,16 @@
         "additionalProperties": false,
         "description": "The full text behind a reviewer's full-text assignment.",
         "properties": {
+          "ai_quote": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Anchor"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "document_id": {
             "$ref": "#/components/schemas/Id"
           },
@@ -1655,6 +1673,64 @@
           "actor_id"
         ],
         "title": "ConfirmRequest",
+        "type": "object"
+      },
+      "ConflictFullText": {
+        "additionalProperties": false,
+        "description": "The full text behind a full-text conflict, for the adjudicator.",
+        "properties": {
+          "ai_quotes": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Anchor"
+            },
+            "title": "Ai Quotes",
+            "type": "object"
+          },
+          "document_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "layer_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "licence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Licence"
+          },
+          "mentions": {
+            "items": {
+              "$ref": "#/components/schemas/CriterionMentions"
+            },
+            "title": "Mentions",
+            "type": "array"
+          },
+          "page_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Count"
+          }
+        },
+        "required": [
+          "document_id",
+          "layer_id",
+          "page_count",
+          "licence",
+          "mentions",
+          "ai_quotes"
+        ],
+        "title": "ConflictFullText",
         "type": "object"
       },
       "CorpusReport": {
@@ -5641,6 +5717,35 @@
         "title": "QueueRecord",
         "type": "object"
       },
+      "QuoteSpan": {
+        "additionalProperties": false,
+        "description": "Where a verified quote of the AI is in the item: half-open code-point offsets into its\n`title` or its `text`. A full-text item's text is its layer's text, so text offsets are layer\noffsets.",
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "part": {
+            "enum": [
+              "title",
+              "text"
+            ],
+            "title": "Part",
+            "type": "string"
+          },
+          "start": {
+            "title": "Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "part",
+          "start",
+          "end"
+        ],
+        "title": "QuoteSpan",
+        "type": "object"
+      },
       "ReasonCount": {
         "additionalProperties": false,
         "properties": {
@@ -6390,9 +6495,34 @@
             "title": "Criterion Id",
             "type": "string"
           },
+          "downgraded_from": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CriterionStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "quote": {
             "title": "Quote",
             "type": "string"
+          },
+          "quote_span": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QuoteSpan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quote_verified": {
+            "default": false,
+            "title": "Quote Verified",
+            "type": "boolean"
           },
           "rationale": {
             "title": "Rationale",
@@ -8914,6 +9044,54 @@
           "direction"
         ],
         "title": "WorkUpdate",
+        "type": "object"
+      },
+      "WrongDocument": {
+        "additionalProperties": false,
+        "properties": {
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "recorded_at"
+        ],
+        "title": "WrongDocument",
+        "type": "object"
+      },
+      "WrongDocumentRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "command_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "document_id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "expected_etag": {
+            "title": "Expected Etag",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "required": [
+          "command_id",
+          "expected_etag",
+          "document_id"
+        ],
+        "title": "WrongDocumentRequest",
         "type": "object"
       },
       "kittum__app__enrichment__RunStatus": {
@@ -13354,6 +13532,70 @@
         ]
       }
     },
+    "/api/projects/{project_id}/screening/adjudications/{conflict_id}/full-text": {
+      "get": {
+        "description": "The full text behind a full-text conflict the caller adjudicates, with the protocol-term\nmentions of each criterion in document order. Once the caller has adjudicated it,\n`ai_quotes` places the AI's verified quotes on the page.",
+        "operationId": "getScreeningAdjudicationFullText",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "conflict_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Conflict Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictFullText"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Adjudication Full Text",
+        "tags": [
+          "screening"
+        ]
+      }
+    },
     "/api/projects/{project_id}/screening/assignments/{assignment_id}/decide": {
       "post": {
         "description": "A provisional decision, then a final one if the AI was revealed.",
@@ -13430,7 +13672,7 @@
     },
     "/api/projects/{project_id}/screening/assignments/{assignment_id}/full-text": {
       "get": {
-        "description": "The full text of one of the caller's full-text assignments, with the protocol-term\nmentions of each criterion in document order.",
+        "description": "The full text of one of the caller's full-text assignments, with the protocol-term\nmentions of each criterion in document order. After the caller's own provisional decision\nrevealed the AI's reading, `ai_quote` places its verified quote on the page.",
         "operationId": "getScreeningAssignmentFullText",
         "parameters": [
           {
@@ -13560,6 +13802,80 @@
           }
         },
         "summary": "Undo",
+        "tags": [
+          "screening"
+        ]
+      }
+    },
+    "/api/projects/{project_id}/screening/assignments/{assignment_id}/wrong-document": {
+      "post": {
+        "description": "The PDF of one of the caller's full-text assignments is not the record's report. The item\nleaves screening and the record has no full text again. Not an exclusion.",
+        "operationId": "markScreeningWrongDocument",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "assignment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Assignment Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The caller's actor ID. A stand-in until the API has authentication.",
+            "in": "header",
+            "name": "X-Kittum-Reviewer",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Id",
+              "description": "The caller's actor ID. A stand-in until the API has authentication."
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WrongDocumentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WrongDocument"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Wrong Document",
         "tags": [
           "screening"
         ]

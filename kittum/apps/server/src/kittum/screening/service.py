@@ -31,6 +31,8 @@ from kittum.screening.rules import (
     criteria_for,
     default_seed,
     highlights,
+    locate,
+    locate_quote,
     percent_of,
     rescreen_reason,
     reveal_for,
@@ -55,6 +57,7 @@ from kittum.screening.types import (
     StageInfo,
     StaleRevision,
     UndoResult,
+    WithdrawResult,
 )
 
 if TYPE_CHECKING:
@@ -75,6 +78,7 @@ if TYPE_CHECKING:
         RescreenReason,
         ScreeningRecord,
         StageSpec,
+        WithdrawReason,
     )
 
 STAGE_OPENED = "screening.stage_opened"
@@ -82,6 +86,7 @@ JUDGING_REQUESTED = "screening.judging_requested"
 AI_READ = "screening.ai_read"
 DECIDED = "screening.decided"
 UNDONE = "screening.undone"
+ITEM_WITHDRAWN = "screening.item_withdrawn"
 CONFLICT_OPENED = "screening.conflict_opened"
 CONFLICT_UPDATED = "screening.conflict_updated"
 CONFLICT_WITHDRAWN = "screening.conflict_withdrawn"
@@ -145,6 +150,15 @@ class _Rescreen:
 
 
 @dataclass(frozen=True)
+class _Withdrawal:
+    """A record taken out of every full-text stage that holds it, with each stage's
+    assignments."""
+
+    item_ref: str
+    stages: tuple[tuple[Id, tuple[Id, ...]], ...]
+
+
+@dataclass(frozen=True)
 class _DecideChanges:
     stage_id: Id
     decision_id: Id
@@ -180,6 +194,7 @@ class Screening:
         judge_batch_size: int = 25,
     ) -> None:
         self._clock = clock or SystemClock()
+        self._receipts = receipts
         self._commands = Commands(ledger, queue, receipts, self._clock)
         self._batch = judge_batch_size
         self._protocols: dict[Id, ReviewProtocol] = {}
@@ -187,6 +202,11 @@ class Screening:
     @classmethod
     def postgres(cls, ledger: Ledger, clock: Clock | None = None) -> Screening:
         return cls(ledger, PostgresJobQueue(clock), PostgresReceipts(), clock)
+
+    def lock_project(self, tx: Tx, project_id: Id) -> None:
+        """Hold off the project's screening commands until `tx` commits: the lock every command
+        takes, for an entry point that reads before it runs one and writes after it."""
+        self._receipts.lock_project(tx, project_id)
 
     # Stages
 
@@ -675,6 +695,7 @@ class Screening:
             return {
                 "a": a,
                 "stage": row,
+                "item": store.item(tx, a["stage_id"], a["item_ref"]),
                 "criteria": self._criteria(tx, row),
                 "reading": store.reading(tx, a["stage_id"], a["item_ref"]),
                 "peers": store.item_assignments(tx, a["stage_id"], a["item_ref"]),
@@ -684,29 +705,32 @@ class Screening:
         def decide(_: Command, st: dict[str, Any]) -> RunDecision[_DecideChanges]:
             a, row = st["a"], st["stage"]
             if a["etag"] != expected_etag:
-                raise StaleRevision(
-                    f"assignment {assignment_id} changed since it was loaded; reload the queue"
-                )
+                raise StaleRevision("This item changed since you loaded it. Reload the queue.")
+            _refuse_withdrawn(a)
             validate(decision, row["stage"], st["criteria"])
             reading: Reading | None = st["reading"]
             if reading is None:
-                raise InvalidDecision("the AI has not read this item yet")
+                raise InvalidDecision("The AI judge has not read this item yet.")
             decision_id = new_id()
             if phase == "provisional":
                 if a["state"] != "pending":
                     raise InvalidDecision(
-                        "this item awaits a final decision"
+                        "This item waits for your final decision."
                         if a["state"] == "awaiting_final"
-                        else "this item is decided; undo it first"
+                        else "You decided this item already. Undo the decision first."
                     )
                 reveal = None if a["revealed"] else reveal_for(row["reveal"], decision, reading)
+                if reveal is not None:
+                    reveal = locate(reveal, st["item"]["title"], st["item"]["text"])
                 provisional_id = decision_id
                 final_id = None if reveal else decision_id
                 new_state = "awaiting_final" if reveal else "decided"
                 provisional = decision
             else:
                 if a["state"] != "awaiting_final":
-                    raise InvalidDecision("a final decision follows a provisional one and a reveal")
+                    raise InvalidDecision(
+                        "A final decision comes only after a provisional one and the AI's reading."
+                    )
                 reveal = None
                 provisional_id, final_id, new_state = (
                     a["provisional_decision_id"],
@@ -971,13 +995,12 @@ class Screening:
         def decide(_: Command, st: dict[str, Any]) -> RunDecision[dict[str, Any]]:
             a = st["a"]
             if a["etag"] != expected_etag:
-                raise StaleRevision(
-                    f"assignment {assignment_id} changed since it was loaded; reload the queue"
-                )
+                raise StaleRevision("This item changed since you loaded it. Reload the queue.")
             if a["state"] == "pending":
-                raise InvalidDecision("there is no decision to undo")
+                raise InvalidDecision("There is no decision to undo.")
+            _refuse_withdrawn(a)
             if any(c["state"] == "resolved" for c in st["conflicts"]):
-                raise InvalidDecision("this item was adjudicated; its decisions stand")
+                raise InvalidDecision("This item was adjudicated. Its decisions stand.")
             undone = [
                 str(x)
                 for x in dict.fromkeys((a["provisional_decision_id"], a["final_decision_id"]))
@@ -1051,6 +1074,151 @@ class Screening:
             raise NotAssigned(f"command {command_id} undid nothing of this reviewer")
         return UndoResult(etag=row["etag"], recorded_at=row["recorded_at"])
 
+    def withdraw_item(
+        self,
+        tx: Tx,
+        *,
+        command_id: Id,
+        project_id: Id,
+        reviewer_id: Id,
+        assignment_id: Id,
+        expected_etag: str,
+        reason: WithdrawReason,
+    ) -> WithdrawResult:
+        """Take a record out of full-text screening: the full text shown on one of the reviewer's
+        own assignments is not the record's report.
+
+        The full text belongs to the record, not to a scope, so the record leaves every
+        full-text stage of the project that holds it, each with its own
+        `screening.item_withdrawn` event. It leaves every queue, and no count, outcome, agreement
+        figure, or audit stratum includes it. This is not an exclusion. The caller detaches the
+        document from the record in the same transaction, so the record is back to having no
+        full text.
+
+        Only from an assignment the reviewer has never decided, not even provisionally and not
+        if they undid it since (a reveal must not be escaped this way), and only while nobody has
+        ever decided the record in any of those stages: a decision someone made stands.
+        """
+        command = Command(
+            command_id=command_id,
+            project_id=project_id,
+            type="screening.withdraw_item",
+            actor_id=reviewer_id,
+            payload={
+                "assignment_id": str(assignment_id),
+                "expected_etag": expected_etag,
+                "reason": reason,
+            },
+        )
+
+        def load(tx: Tx, _: Command) -> dict[str, Any]:
+            a = self._own_assignment(tx, project_id, reviewer_id, assignment_id, lock=True)
+            stages = tx.execute(
+                "select i.stage_id from screening_item i"
+                " join screening_stage s on s.id = i.stage_id"
+                " where s.project_id = %s and s.stage = 'full_text' and i.item_ref = %s"
+                " and i.withdrawn_event_id is null order by s.opened_at, s.id",
+                (project_id, a["item_ref"]),
+            ).fetchall()
+            found = {
+                r["stage_id"]: (
+                    store.item_assignments(tx, r["stage_id"], a["item_ref"]),
+                    store.conflicts(tx, r["stage_id"], a["item_ref"]),
+                )
+                for r in stages
+            }
+            ids = [p["id"] for peers, _ in found.values() for p in peers]
+            # Decisions are append-only and an undo keeps them: this is the history, not the
+            # current state, which an undo resets.
+            decided = tx.execute(
+                "select distinct assignment_id from screening_decision"
+                " where assignment_id = any(%s)",
+                (ids,),
+            ).fetchall()
+            return {
+                "a": a,
+                "stage": store.stage_row(tx, project_id, a["stage_id"]),
+                "stages": found,
+                "ever_decided": {r["assignment_id"] for r in decided},
+            }
+
+        def decide(_: Command, st: dict[str, Any]) -> RunDecision[_Withdrawal]:
+            a, row = st["a"], st["stage"]
+            if a["etag"] != expected_etag:
+                raise StaleRevision("This item changed since you loaded it. Reload the queue.")
+            if row["stage"] != "full_text":
+                raise InvalidDecision("Only a full text can be the wrong document.")
+            _refuse_withdrawn(a)
+
+            def touched(p: dict[str, Any]) -> bool:
+                """Decided at some point, or shown the AI's reading, even if undone since."""
+                return p["state"] != "pending" or p["revealed"] or p["id"] in st["ever_decided"]
+
+            if touched(a):
+                raise InvalidDecision(
+                    "You decided this report already, so it stays in screening. Keep or change"
+                    " your decision."
+                )
+            for peers, conflicts in st["stages"].values():
+                if any(touched(p) for p in peers) or any(
+                    c["state"] != "withdrawn" for c in conflicts
+                ):
+                    raise InvalidDecision(
+                        "Someone already decided this report, so it stays in screening. Tell the"
+                        " methods lead that the PDF is wrong."
+                    )
+            events = tuple(
+                _event(
+                    project_id,
+                    ITEM_WITHDRAWN,
+                    reviewer_id,
+                    {
+                        "stage_id": str(stage_id),
+                        "item_ref": a["item_ref"],
+                        "assignment_id": str(assignment_id),
+                        "reason": reason,
+                    },
+                )
+                for stage_id in st["stages"]
+            )
+            stages = tuple(
+                (sid, tuple(p["id"] for p in peers)) for sid, (peers, _) in st["stages"].items()
+            )
+            return RunDecision(events=events, changes=_Withdrawal(a["item_ref"], stages))
+
+        def apply(tx: Tx, result: RunDecision[_Withdrawal], events: tuple[AuditEvent, ...]):
+            w = result.changes
+            assert w is not None
+            for (stage_id, assignments), event in zip(w.stages, events, strict=True):
+                tx.execute(
+                    "update screening_item set withdrawn_reason = %s, withdrawn_event_id = %s"
+                    " where stage_id = %s and item_ref = %s",
+                    (reason, event.event_id, stage_id, w.item_ref),
+                )
+                # New tokens: a client still holding the item can no longer decide it.
+                for assignment in assignments:
+                    tx.execute(
+                        "update screening_assignment set etag = %s, revision = revision + 1"
+                        " where id = %s",
+                        (_etag(), assignment),
+                    )
+
+        receipt = self._commands.execute(tx, command, decide, load=load, apply=apply)
+        return WithdrawResult(recorded_at=receipt.accepted_at)
+
+    def own_reveal(
+        self, tx: Tx, project_id: Id, reviewer_id: Id, assignment_id: Id
+    ) -> Reveal | None:
+        """The AI reading shown to the reviewer after their own provisional decision on the
+        assignment, or None if none was shown. Never anything the reviewer has not seen."""
+        a = self._own_assignment(tx, project_id, reviewer_id, assignment_id)
+        if not a["revealed"] or a["provisional_decision_id"] is None:
+            return None
+        row = tx.execute(
+            "select reveal from screening_decision where id = %s", (a["provisional_decision_id"],)
+        ).fetchone()
+        return Reveal.model_validate(row["reveal"]) if row and row["reveal"] else None
+
     # Adjudication
 
     def adjudication_queue(
@@ -1110,7 +1278,7 @@ class Screening:
         The result opens the AI column. The adjudicator must be a human who did not screen the
         record."""
         if (adopted is None) == (decision is None):
-            raise InvalidDecision("adopt a column or give an own decision, not both")
+            raise InvalidDecision("Adopt one column, or give your own decision.")
         command = Command(
             command_id=command_id,
             project_id=project_id,
@@ -1147,7 +1315,7 @@ class Screening:
             if c["state"] != "open":
                 raise InvalidDecision(f"conflict {conflict_id} is {c['state']}")
             if c["etag"] != expected_etag:
-                raise StaleRevision(f"conflict {conflict_id} changed since it was loaded")
+                raise StaleRevision("This conflict changed since you loaded it. Reload the queue.")
             if not st["human"]:
                 raise InvalidDecision("an adjudicator must be a human actor")
             if any(p["reviewer_id"] == adjudicator_id for p in st["peers"]):
@@ -1228,14 +1396,37 @@ class Screening:
         ).fetchone()
         if row is None or row["adjudicator_id"] != adjudicator_id:
             raise NotAssigned(f"command {command_id} recorded no adjudication of this adjudicator")
-        reading = store.reading(tx, row["stage_id"], row["item_ref"])
-        assert reading is not None
         return AdjudicationResult(
             outcome=row["outcome"],
             reason_criterion_id=row["reason_criterion_id"],
             recorded_at=row["recorded_at"],
-            ai=AiColumn(excludes=reading.excludes, criteria=reading.criteria),
+            ai=_ai_column(tx, row["stage_id"], row["item_ref"]),
         )
+
+    def conflict_source(
+        self, tx: Tx, project_id: Id, adjudicator_id: Id, conflict_id: Id
+    ) -> tuple[str, StageInfo, tuple[Criterion, ...], AiColumn | None]:
+        """The record behind a conflict the adjudicator may adjudicate, its stage, and the stage's
+        criteria, for an entry point that shows the record's source (the full text). The AI
+        column comes only once this adjudicator has adjudicated the conflict. Never send the
+        reference to the adjudicator: a sentinel's reference names it as one."""
+        c = tx.execute("select * from screening_conflict where id = %s", (conflict_id,)).fetchone()
+        if c is None:
+            raise NotAssigned(f"conflict {conflict_id} not found")
+        row = store.stage_row(tx, project_id, c["stage_id"])
+        peers = store.item_assignments(tx, c["stage_id"], c["item_ref"])
+        if adjudicator_id not in row["adjudicators"] or any(
+            p["reviewer_id"] == adjudicator_id for p in peers
+        ):
+            raise NotAssigned(f"conflict {conflict_id} not found")
+        adjudicated = tx.execute(
+            "select 1 from screening_adjudication where conflict_id = %s and adjudicator_id = %s",
+            (conflict_id, adjudicator_id),
+        ).fetchone()
+        if c["state"] != "open" and adjudicated is None:
+            raise NotAssigned(f"conflict {conflict_id} not found")
+        ai = _ai_column(tx, c["stage_id"], c["item_ref"]) if adjudicated else None
+        return c["item_ref"], store.stage_info(row), self._criteria(tx, row), ai
 
     # Status
 
@@ -1321,6 +1512,25 @@ class Screening:
             conflicts=conflicts,
             metrics=metrics,
         )
+
+
+def _ai_column(tx: Tx, stage_id: Id, item_ref: str) -> AiColumn:
+    """The AI's reading of an item, with each verified quote placed in it."""
+    reading = store.reading(tx, stage_id, item_ref)
+    assert reading is not None
+    item = store.item(tx, stage_id, item_ref)
+    spans = {
+        c.criterion_id: span
+        for c in reading.criteria
+        if c.quote_verified
+        and (span := locate_quote(c.quote, item["title"], item["text"])) is not None
+    }
+    return AiColumn(excludes=reading.excludes, criteria=reading.criteria, quote_spans=spans)
+
+
+def _refuse_withdrawn(a: dict[str, Any]) -> None:
+    if a["withdrawn_event_id"] is not None:
+        raise InvalidDecision("This report was taken out of screening as the wrong document.")
 
 
 def _adjudicable(tx: Tx, row: dict[str, Any], adjudicator_id: Id) -> list[dict[str, Any]]:

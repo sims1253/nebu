@@ -243,7 +243,41 @@ export interface Workbench {
     readonly start: number;
   }) => Call<Anchor>;
 
+  /**
+   * The AI's verified quote on the page, once the reviewer's own provisional decision revealed
+   * its reading; null before that, and when the quote is not in the text.
+   */
+  readonly aiQuote: (request: Caller & { readonly assignmentId: string }) => Call<Anchor | null>;
+  /**
+   * The PDF of a full-text assignment is not the record's report. The report leaves screening
+   * and the record has no full text again. Not an exclusion.
+   */
+  readonly wrongDocument: (
+    request: Caller & {
+      readonly assignmentId: string;
+      readonly expectedEtag: string;
+      readonly documentId: string;
+      readonly note: string | null;
+    },
+  ) => Call<{ readonly recorded_at: string }>;
+
   readonly adjudications: (request: StageRef) => Call<ReadonlyArray<AdjudicationItem>>;
+  /**
+   * The full text behind a full-text conflict: its layer and the protocol-term mentions per
+   * criterion, and the AI's verified quotes on the page by criterion, which stay empty until the
+   * caller has adjudicated the conflict.
+   */
+  readonly adjudicationFullText: (
+    request: Caller & {
+      readonly conflictId: string;
+      /** The conflict's text, which for a full-text item is its layer's text. */
+      readonly text: string;
+    },
+  ) => Call<{
+    readonly layer: LayerSummary;
+    readonly mentions: ReadonlyArray<readonly [string, ReadonlyArray<Anchor>]>;
+    readonly aiQuotes: Readonly<Record<string, Anchor>>;
+  }>;
   readonly adjudicate: (
     request: Caller & {
       readonly conflictId: string;

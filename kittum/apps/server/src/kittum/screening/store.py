@@ -46,8 +46,9 @@ def undecided_items(tx: Tx, project_id: Id, actor_id: Id, item_refs: Sequence[st
     rows = tx.execute(
         "select distinct a.item_ref from screening_assignment a"
         " join screening_stage s on s.id = a.stage_id"
+        " join screening_item i on i.stage_id = a.stage_id and i.item_ref = a.item_ref"
         " where s.project_id = %s and a.reviewer_id = %s and a.state <> 'decided'"
-        " and a.item_ref = any(%s)",
+        " and i.withdrawn_event_id is null and a.item_ref = any(%s)",
         (project_id, actor_id, list(item_refs)),
     ).fetchall()
     return {r["item_ref"] for r in rows}
@@ -127,7 +128,7 @@ def reading(tx: Tx, stage_id: Id, item_ref: str) -> Reading | None:
 
 
 _ASSIGNMENT = """
-    select a.*, i.kind, i.audit, i.rescreen,
+    select a.*, i.kind, i.audit, i.rescreen, i.withdrawn_event_id,
         p.outcome as p_outcome, p.reason_criterion_id as p_reason_criterion_id,
         p.evidence_anchor_ids as p_evidence_anchor_ids, p.comment as p_comment,
         p.criteria as p_criteria,

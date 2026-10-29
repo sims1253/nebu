@@ -60,8 +60,8 @@ const fieldIndex = async (page: Page, projectId: string, runId: string, as: stri
   return { text: review.layer.text, at };
 };
 
-/** Screens a person's full texts: the trial included with every criterion met, the rest
- * excluded on the population, each on the first protocol-term mention adopted as evidence. */
+/** Screens a person's full texts: the trial included in one action, the rest excluded on the
+ * population, each on the first protocol-term mention adopted as evidence. */
 const screenFullTexts = async (page: Page) => {
   const heading = page.getByRole("complementary", { name: "Criteria" }).getByRole("heading");
   const finished = page.getByRole("heading", { name: "Full texts finished" });
@@ -71,15 +71,13 @@ const screenFullTexts = async (page: Page) => {
     await expect(heading.or(finished)).toBeVisible({ timeout: 60_000 });
     if (await finished.isVisible()) return;
     const title = (await heading.textContent()) ?? "";
-    await page.keyboard.press("]");
+    await page.keyboard.press(".");
     await page.keyboard.press("Enter");
     await expect(notice).toContainText("Adopted as evidence");
     const include = title.startsWith(TRIAL);
-    for (const key of include ? ["y", "y", "y", "y", "y"] : ["n", "?", "?", "y", "?"]) {
-      await page.keyboard.press(key);
-    }
-    await page.keyboard.press(include ? "i" : "e");
-    const done = include ? "Included" : "Excluded on Population";
+    // Include says every criterion is met; exclude names the one criterion that fails.
+    for (const key of include ? ["i"] : ["e", "1"]) await page.keyboard.press(key);
+    const done = include ? "Included" : "Excluded on 1 Population";
     await expect(reveal.or(notice.getByText(done))).toBeVisible();
     if (await reveal.isVisible()) await page.keyboard.press("Space");
     await expect(notice).toContainText(done);

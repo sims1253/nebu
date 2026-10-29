@@ -26,6 +26,7 @@ export type QueueItem = KittumApi.QueueItem;
 export const DecideResult = KittumApi.DecideResult;
 export type DecideResult = KittumApi.DecideResult;
 export type Reveal = KittumApi.Reveal;
+export type QuoteSpan = KittumApi.QuoteSpan;
 export type Highlight = KittumApi.Highlight;
 export type ScopeStatus = KittumApi.ScopeStatus;
 export type StageInfo = KittumApi.StageInfo;
@@ -286,14 +287,7 @@ export const FullTextAssignment = Schema.Struct({
   etag: Schema.String,
   phase: Schema.Literals(["provisional", "final"]),
   /** The AI's reading, when an earlier provisional decision of this reviewer revealed it. */
-  reveal: Schema.NullOr(
-    Schema.Struct({
-      criterion_id: Schema.String,
-      status: Schema.Literals(["met", "not_met", "unclear"]),
-      quote: Schema.String,
-      rationale: Schema.String,
-    }),
-  ),
+  reveal: Schema.NullOr(KittumApi.Reveal),
   report: ReportSummary,
   document: Document,
   layer: LayerSummary,

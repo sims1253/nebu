@@ -43,9 +43,13 @@ own counts, adjudicators their pending adjudications, and the methods lead the w
 conflicts, the extra screens and their outcomes, kappa and PABAK for human pairs and human-AI
 pairs, the audit gauge (sentinel accuracy and the elusion estimate), and the M3 stop test.
 
-Full-text decisions carry per-criterion readings (met, not met, unclear) with evidence anchor IDs
-from `kittum.documents`, held as opaque IDs; the outcomes are include, exclude, and insufficient
-information.
+Full-text outcomes are include, exclude, and insufficient information. An exclusion names the
+criterion the report fails, read `not_met` with evidence anchor IDs from `kittum.documents` (held
+as opaque IDs); an inclusion says every criterion is met and needs no reading of each; insufficient
+information names an `unclear` criterion. Readings of the other criteria are optional. A reviewer
+who finds that the full text shown is not the record's report withdraws the item
+(`withdraw_item`): it leaves every queue, count, and outcome without a decision, which is not an
+exclusion.
 
 Owner: WP-09.
 """
@@ -61,6 +65,7 @@ from kittum.screening.service import (
     CONFLICT_UPDATED,
     CONFLICT_WITHDRAWN,
     DECIDED,
+    ITEM_WITHDRAWN,
     JUDGE_JOB,
     JUDGING_REQUESTED,
     STAGE_OPENED,
@@ -87,6 +92,7 @@ from kittum.screening.types import (
     Phase,
     QueueItem,
     QueueRecord,
+    QuoteSpan,
     RecordFacts,
     RescreenGauge,
     RescreenReason,
@@ -102,6 +108,8 @@ from kittum.screening.types import (
     StaleRevision,
     StopStatus,
     UndoResult,
+    WithdrawReason,
+    WithdrawResult,
 )
 
 __all__ = [
@@ -112,6 +120,7 @@ __all__ = [
     "CONFLICT_UPDATED",
     "CONFLICT_WITHDRAWN",
     "DECIDED",
+    "ITEM_WITHDRAWN",
     "JUDGE_JOB",
     "JUDGING_REQUESTED",
     "STAGE_OPENED",
@@ -135,6 +144,7 @@ __all__ = [
     "Phase",
     "QueueItem",
     "QueueRecord",
+    "QuoteSpan",
     "RecordFacts",
     "RecordOutcome",
     "RescreenGauge",
@@ -152,6 +162,8 @@ __all__ = [
     "StaleRevision",
     "StopStatus",
     "UndoResult",
+    "WithdrawReason",
+    "WithdrawResult",
     "criteria_for",
     "judge_handler",
     "sees_lead_data",

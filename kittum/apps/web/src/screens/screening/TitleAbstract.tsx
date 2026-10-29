@@ -9,9 +9,10 @@ import { run } from "../../data/workbench.ts";
 import { codePointIndex } from "../../lib/codepoints.ts";
 import { Key, KeyHint } from "../../ui/Key.tsx";
 import { useKeys } from "../../ui/keys.ts";
-import { Mark, OUTCOMES, Status, VERDICTS } from "../../ui/Status.tsx";
+import { Mark, OUTCOMES, Status } from "../../ui/Status.tsx";
 import { useProject } from "../project.tsx";
-import { locateQuote, Marked, orderSections } from "./RecordText.tsx";
+import { AiReading } from "./AiReading.tsx";
+import { Marked, orderSections, placeQuote } from "./RecordText.tsx";
 import { useQueue } from "./useQueue.ts";
 import type { SessionStats } from "./useQueue.ts";
 
@@ -104,8 +105,8 @@ export function TitleAbstractQueue() {
     return (
       <Empty title="No records to screen">
         {has("reviewer") || has("auditor")
-          ? `You screen no ${labels.scope.toLowerCase()} at title and abstract yet. The methods lead opens screening once the protocol is published and the searches are in.`
-          : "Title and abstract screening is for the reviewers and the auditor. Choose another person, or another stage."}
+          ? `You have no ${labels.scope.toLowerCase()} to screen at title and abstract yet. The methods lead opens screening after publishing the protocol and running the searches.`
+          : "Title and abstract screening is for the reviewers and the auditor. Choose another person or another stage."}
       </Empty>
     );
   }
@@ -124,8 +125,8 @@ export function TitleAbstractQueue() {
           />
         ) : waiting ? (
           <p className="px-10 py-10 text-ink-2" data-testid="queue-waiting">
-            The AI judge is still reading {status?.remaining} of your records. They appear here as
-            soon as it has; it reads every record before anyone screens it.
+            The AI judge has not read {status?.remaining} of your records yet. Each record appears
+            here once the judge has read it.
           </p>
         ) : queue.finished && status !== null ? (
           // Finished only once the counts say nothing is left, not before they arrive.
@@ -157,7 +158,7 @@ export function TitleAbstractQueue() {
           <span className="text-exclude">
             <KeyHint keys={["e"]} on={armed}>
               {armed
-                ? `Exclude: now 1 to ${criteria.length}`
+                ? `Now press 1 to ${criteria.length} for the criterion`
                 : `${OUTCOMES.exclude.label} on a criterion`}
             </KeyHint>
           </span>
@@ -216,7 +217,13 @@ function RecordView({
   labels: Record<string, string>;
 }) {
   const { record } = item;
-  const quote = locateQuote(item.title, item.text, reveal?.quote ?? null);
+  const quote = placeQuote(item.title, item.text, reveal?.quote_span);
+  // Once the AI's reading is shown, bring its quote into view.
+  const marked = Boolean(reveal?.quote_span);
+  useEffect(() => {
+    if (!marked) return;
+    document.querySelector("[data-reveal-quote]")?.scrollIntoView({ block: "nearest" });
+  }, [marked]);
   const at = useMemo(() => codePointIndex(item.text), [item.text]);
   const describe = (id: string) => {
     const index = criteria.findIndex((c) => c.id === id);
@@ -360,28 +367,45 @@ function RevealBanner({
   // With `reveal: always` the judge can also agree; say which.
   const excludes = reveal.status === "not_met";
   const agrees = decision !== null && (decision.outcome === "exclude") === excludes;
+  const span = reveal.quote_span;
   return (
     <section
       aria-label="AI judge"
       data-testid="ai-reveal"
-      className="reveal-enter evidence-item flex items-baseline gap-3 border-b border-rule px-4 py-2 text-sm"
+      className="reveal-enter evidence-item max-h-[40vh] overflow-y-auto border-b border-rule px-4 pt-2 pb-2.5"
     >
-      <span className="font-semibold whitespace-nowrap">
-        {agrees ? "The AI judge agrees" : "The AI judge disagrees"}
-      </span>
-      <span className="whitespace-nowrap text-ink-2">
-        {index + 1} {criterion ? (labels[criterion.slot] ?? criterion.slot) : reveal.criterion_id}:
-      </span>
-      <Status term={VERDICTS[reveal.status]} />
-      <span className="min-w-0 flex-1 truncate text-ink-2" title={reveal.rationale}>
-        {reveal.rationale}
-      </span>
-      {settled ? null : (
-        <span className="flex flex-none items-center gap-4">
-          <KeyHint keys={[" "]}>Keep yours</KeyHint>
-          <KeyHint keys={["i", "e", "u"]}>Revise</KeyHint>
-        </span>
-      )}
+      <div className="flex items-baseline gap-4">
+        <h2 className="text-sm font-semibold">
+          {agrees ? "The AI judge agrees" : "The AI judge disagrees"}
+        </h2>
+        {settled ? null : (
+          <span className="ml-auto flex flex-none items-center gap-4 text-sm">
+            <KeyHint keys={[" "]}>Keep yours</KeyHint>
+            <KeyHint keys={["i", "e", "u"]}>Change it</KeyHint>
+          </span>
+        )}
+      </div>
+      <div className="mt-1">
+        <AiReading
+          criterion={{
+            number: criterion ? index + 1 : null,
+            label: criterion ? (labels[criterion.slot] ?? criterion.slot) : reveal.criterion_id,
+            text: criterion?.text_en ?? null,
+          }}
+          status={reveal.status}
+          downgradedFrom={reveal.downgraded_from}
+          rationale={reveal.rationale}
+          quote={reveal.quote || null}
+          verified={reveal.quote_verified ?? false}
+          markedAt={
+            span
+              ? span.part === "title"
+                ? "Marked in the title."
+                : "Marked in the abstract."
+              : null
+          }
+        />
+      </div>
     </section>
   );
 }
@@ -418,8 +442,8 @@ function Finished({ stats }: { stats: SessionStats }) {
     <div className="mx-auto max-w-[640px] px-10 py-16">
       <h1 className="text-xl font-semibold">Queue finished</h1>
       <p className="mt-2 text-md text-ink-2">
-        Every record assigned to you at title and abstract has a decision. Your session, shown only
-        to you:
+        You have decided every record assigned to you at title and abstract. Only you see these
+        figures for your session.
       </p>
       <dl className="mt-6 grid grid-cols-[auto_1fr] gap-x-8 gap-y-2 text-md">
         <dt className="text-ink-2">Records decided</dt>
@@ -428,7 +452,7 @@ function Finished({ stats }: { stats: SessionStats }) {
         <dd>{stats.medianSeconds === null ? "None" : `${Math.round(stats.medianSeconds)} s`}</dd>
         <dt className="text-ink-2">AI disagreements shown</dt>
         <dd>{stats.revealsShown}</dd>
-        <dt className="text-ink-2">Decisions you revised after one</dt>
+        <dt className="text-ink-2">Decisions you changed after one</dt>
         <dd>{stats.revealsFollowed}</dd>
       </dl>
     </div>

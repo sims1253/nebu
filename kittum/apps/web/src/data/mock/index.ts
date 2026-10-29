@@ -18,6 +18,7 @@ import type {
   Decision,
   DecisionTiming,
   QueueItem,
+  QuoteSpan,
   Reveal,
   RevealSetting,
   ScopeStatus,
@@ -149,11 +150,30 @@ const verdicts = (pmid: string, item: QueueItem): CriterionVerdict[] =>
     };
   });
 
-const toReveal = (verdict: CriterionVerdict): Reveal => ({
+/** Where a quote is in the title or the text, in code points, as the server places it. */
+const spanOf = (title: string, text: string, quote: string | null): QuoteSpan | null => {
+  if (!quote) return null;
+  for (const [part, source] of [
+    ["title", title],
+    ["text", text],
+  ] as const) {
+    const at = source.indexOf(quote);
+    if (at >= 0) {
+      const start = Array.from(source.slice(0, at)).length;
+      return { part, start, end: start + [...quote].length };
+    }
+  }
+  return null;
+};
+
+const toReveal = (verdict: CriterionVerdict, item: { title: string; text: string }): Reveal => ({
   criterion_id: verdict.criterion_id,
   quote: verdict.quote ?? "",
   rationale: verdict.rationale,
   status: verdict.status,
+  quote_verified: verdict.quote_verified,
+  quote_span: verdict.quote_verified ? spanOf(item.title, item.text, verdict.quote) : null,
+  downgraded_from: verdict.downgraded_from ?? null,
 });
 
 /**
@@ -163,14 +183,34 @@ const toReveal = (verdict: CriterionVerdict): Reveal => ({
 const disagreement = (
   decision: Decision,
   judged: ReadonlyArray<CriterionVerdict>,
+  item: { title: string; text: string },
 ): Reveal | null => {
   const exclusion = judged.find((v) => v.status === "not_met" && v.quote_verified);
   if (decision.outcome === "exclude") {
     if (exclusion) return null;
     const reading = judged.find((v) => v.criterion_id === decision.reason_criterion_id);
-    return reading ? toReveal(reading) : null;
+    return reading ? toReveal(reading, item) : null;
   }
-  return exclusion ? toReveal(exclusion) : null;
+  return exclusion ? toReveal(exclusion, item) : null;
+};
+
+/**
+ * The full-text judge, as far as the mock models it: it reads every criterion as met, on the
+ * first protocol-term mention of it. An exclusion on a criterion with a mention disagrees.
+ */
+const fullTextReveal = (decision: Decision): Reveal | null => {
+  if (decision.outcome !== "exclude") return null;
+  const mention = mentionAnchors[decision.reason_criterion_id ?? ""]?.[0];
+  if (!mention) return null;
+  return {
+    criterion_id: decision.reason_criterion_id ?? "",
+    status: "met",
+    quote: mention.quote.exact,
+    rationale: "The report describes this as part of the trial, so the criterion reads as met.",
+    quote_verified: true,
+    quote_span: { part: "text", start: mention.start, end: mention.end },
+    downgraded_from: null,
+  };
 };
 
 const layer = {
@@ -217,7 +257,7 @@ const mentionAnchors = anchorsJson.mentions as Record<string, Anchor[]>;
 
 type Item = {
   etag: string;
-  state: "pending" | "awaiting_final" | "decided";
+  state: "pending" | "awaiting_final" | "decided" | "withdrawn";
   revealed: boolean;
   reveal: Reveal | null;
   final: Decision | null;
@@ -230,8 +270,16 @@ export const makeMockWorkbench = (
   /** Every acceptance, with the reviewer's edit and its span when there was one. */
   readonly acceptances: ReadonlyArray<Parameters<Workbench["accept"]>[0]>;
   readonly groupAccepts: ReadonlyArray<Parameters<Workbench["groupAccept"]>[0]>;
+  /** Every PDF marked as the wrong document. */
+  readonly wrongDocuments: ReadonlyArray<{
+    assignmentId: string;
+    documentId: string;
+    note: string | null;
+  }>;
 } => {
   const decisions: DecisionRecord[] = [];
+  const wrongDocuments: Array<{ assignmentId: string; documentId: string; note: string | null }> =
+    [];
   const state = new Map<string, Item>();
   const accepted = new Map<string, "janus" | "llm">();
   const acceptances: Array<Parameters<Workbench["accept"]>[0]> = [];
@@ -274,6 +322,7 @@ export const makeMockWorkbench = (
     decisions,
     acceptances,
     groupAccepts,
+    wrongDocuments,
 
     projects: () => call("other", "projects", null, () => PROJECTS),
 
@@ -339,39 +388,57 @@ export const makeMockWorkbench = (
         if (current.etag !== expectedEtag) {
           return yield* fail(
             "conflict",
-            "This record changed since it was loaded. Reload the queue.",
+            "This item changed since you loaded it. Reload the queue.",
           );
         }
         if (assignmentId === FULL_TEXT_ASSIGNMENT) {
-          // The full-text judge is not modelled; the decision settles.
+          const reveal =
+            phase === "provisional" && !current.revealed && revealSetting() !== "never"
+              ? fullTextReveal(decision)
+              : null;
           const next = etag();
-          state.set(assignmentId, { ...current, etag: next, state: "decided", final: decision });
-          decisions.push({ assignmentId, decision, phase: "final", revealed: false, timing });
-          return {
-            phase: "final" as const,
-            reveal: null,
+          state.set(assignmentId, {
+            etag: next,
+            state: reveal ? "awaiting_final" : "decided",
+            revealed: current.revealed || reveal !== null,
+            reveal: reveal ?? current.reveal,
+            final: reveal ? null : decision,
+          });
+          decisions.push({
+            assignmentId,
+            decision,
+            phase: reveal ? "provisional" : "final",
+            revealed: current.revealed || reveal !== null,
+            timing,
+          });
+          return Schema.decodeUnknownSync(DecideResult)({
+            phase: reveal ? "provisional" : "final",
+            reveal,
             recorded_at: timing.decided_at,
             etag: next,
-          };
+          });
         }
         const record = RECORDS.find((r) => r.item.assignment_id === assignmentId);
         if (!record) return yield* fail("not_found", `No assignment ${assignmentId}`);
         if (phase === "provisional" && current.state !== "pending") {
-          return yield* fail("invalid", "This item is decided; undo it first.");
+          return yield* fail("invalid", "You decided this item already. Undo the decision first.");
         }
         if (phase === "final" && current.state !== "awaiting_final") {
-          return yield* fail("invalid", "A final decision follows a provisional one and a reveal.");
+          return yield* fail(
+            "invalid",
+            "A final decision comes only after a provisional one and the AI's reading.",
+          );
         }
         const setting = revealSetting();
         let reveal: Reveal | null = null;
         if (phase === "provisional" && !current.revealed && setting !== "never") {
           const judged = verdicts(record.pmid, record.item as QueueItem);
-          reveal = disagreement(decision, judged);
+          reveal = disagreement(decision, judged, record.item);
           if (!reveal && setting === "always") {
             const basis =
               judged.find((v) => v.status === "not_met" && v.quote_verified) ??
               judged.find((v) => v.status === "met" && v.quote_verified);
-            reveal = basis ? toReveal(basis) : null;
+            reveal = basis ? toReveal(basis, record.item) : null;
           }
         }
         const settled = reveal === null;
@@ -426,13 +493,14 @@ export const makeMockWorkbench = (
 
     fullText: ({ projectId }) =>
       call("other", "fullText", projectId, () =>
-        hasData(projectId) && itemOf(FULL_TEXT_ASSIGNMENT).state !== "decided"
+        hasData(projectId) && !["decided", "withdrawn"].includes(itemOf(FULL_TEXT_ASSIGNMENT).state)
           ? Schema.decodeUnknownSync(FullTextAssignment)({
               assignment_id: FULL_TEXT_ASSIGNMENT,
               scope_id: SCOPE_A,
               etag: itemOf(FULL_TEXT_ASSIGNMENT).etag,
-              phase: "provisional",
-              reveal: null,
+              phase:
+                itemOf(FULL_TEXT_ASSIGNMENT).state === "awaiting_final" ? "final" : "provisional",
+              reveal: itemOf(FULL_TEXT_ASSIGNMENT).reveal,
               report,
               document: layerJson.document,
               layer,
@@ -483,7 +551,37 @@ export const makeMockWorkbench = (
         );
       }),
 
+    aiQuote: ({ assignmentId }) =>
+      call("other", "aiQuote", { assignmentId }, () => {
+        const span = itemOf(assignmentId).reveal?.quote_span;
+        if (assignmentId !== FULL_TEXT_ASSIGNMENT || span?.part !== "text") return null;
+        const mention = Object.values(mentionAnchors)
+          .flat()
+          .find((a) => a.start === span.start && a.end === span.end);
+        return mention ? { ...mention, id: `ai-quote-${mention.id}` } : null;
+      }),
+
+    wrongDocument: ({ assignmentId, expectedEtag, documentId, note }) =>
+      Effect.gen(function* () {
+        options.log?.("wrongDocument", { assignmentId, documentId, note });
+        yield* wait("decide");
+        const current = itemOf(assignmentId);
+        if (current.etag !== expectedEtag) {
+          return yield* fail(
+            "conflict",
+            "This item changed since you loaded it. Reload the queue.",
+          );
+        }
+        if (assignmentId !== FULL_TEXT_ASSIGNMENT || documentId !== layerJson.document.id) {
+          return yield* fail("conflict", "This PDF is no longer the record's full text.");
+        }
+        state.set(assignmentId, { ...current, etag: etag(), state: "withdrawn" });
+        wrongDocuments.push({ assignmentId, documentId, note });
+        return { recorded_at: new Date().toISOString() };
+      }),
+
     adjudications: () => call("other", "adjudications", null, () => []),
+    adjudicationFullText: unavailable,
     adjudicate: unavailable,
     progress: ({ projectId, as }) =>
       call("other", "progress", { projectId, as }, () => ({

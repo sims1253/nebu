@@ -496,11 +496,34 @@ Module `kittum.screening`. Needs: `protocol`, `corpus`, `judge`, `ledger`, `runs
   prefix of the AI order, with the minimum screened share). An open conflict in the tested prefix
   counts as relevant in the p-value but withholds certification: the verdict is
   `pending_conflicts`, with their number, until they are adjudicated.
-- Full text: per-criterion readings (met, not met, unclear) with evidence anchor IDs (opaque UUIDs
-  until WP-10); include, exclude, or insufficient information. Every outcome cites at least one
-  evidence anchor, and an exclusion cites a not-met criterion with evidence.
+- Full text: include, exclude, or insufficient information, with optional per-criterion readings
+  (met, not met, unclear) and evidence anchor IDs (opaque UUIDs until WP-10). One reason decides,
+  as PRISMA 2020 asks: an exclusion cites the criterion it fails, read not met with evidence; an
+  inclusion says every criterion is met, so no reading may say otherwise, and it needs no evidence;
+  insufficient information names an unclear criterion and cites at least one anchor. (Round 3,
+  after Max's review of the demo: a verdict on every criterion is not required.)
+- Reveals say why. `Reveal` and the adjudicator's `AiColumn` carry `quote_verified`,
+  `downgraded_from`, and where the verified quote is (`QuoteSpan`: title or text, code points,
+  found by `find_quote`). An unverified quote is never placed. The full-text route returns the
+  revealed quote as an unsaved anchor (`ai_quote`) once the reviewer's own provisional decision
+  revealed it (`Screening.own_reveal`). The adjudicator of a full-text conflict reads its PDF
+  (`GET .../adjudications/{id}/full-text`, `Screening.conflict_source`) and adopts evidence of
+  their own; the AI's verified quotes come on the page (`ai_quotes`) only after they adjudicated.
+- Wrong document (round 3, refs #60). `withdraw_item` takes the record of a reviewer's own,
+  undecided full-text assignment out of every full-text stage of the project that holds it, one
+  `screening.item_withdrawn` per stage (migration `20261031010000_screening_withdrawn_items.sql`):
+  it leaves every queue, count, outcome, agreement figure, and audit stratum. It is not an
+  exclusion. It is refused once anyone has decided the record in any of those stages, even
+  provisionally, so a reveal cannot be escaped and nobody's decision is undone. A lead-only way to
+  replace a document after decisions is left open. `kittum.app.mark_wrong_document` does it with the detach of the PDF from the record
+  (`project.full_text_detached` with who, when, and the note; `full_text_detachment`), so the
+  record has no full text again and the report's PRISMA flow counts it as not retrieved as of the
+  event, under the project's command lock, so a retry waits for the first request and returns its
+  result. Left open: a record whose real full text arrives later cannot join a full-text stage that
+  is already open, the same as any late full text.
 - Routes in `api/routes/screening.py`: `GET .../screening/queue`, `POST .../assignments/{id}/decide`,
-  `POST .../assignments/{id}/undo`, `GET .../adjudications`, `POST .../adjudications/{id}/decide`,
+  `POST .../assignments/{id}/undo`, `POST .../assignments/{id}/wrong-document`,
+  `GET .../adjudications`, `POST .../adjudications/{id}/decide`,
   `GET .../status`. The caller's actor ID comes from the `X-Kittum-Reviewer` header until WP-15
   adds authentication; it is a stand-in, not a security boundary.
 - `tests/screening/test_rescreen.py` covers the extra screens in M1 and M2, upheld and disputed;

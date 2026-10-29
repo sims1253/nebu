@@ -531,6 +531,16 @@ def _describe(
     elif t == "screening.undone":
         kind = "decision"
         summary = f"{who} took back their decision"
+    elif t == "screening.item_withdrawn":
+        kind = "decision"
+        summary = (
+            f"{who} marked the PDF as the wrong document. The report left full-text"
+            " screening without a decision. This is not an exclusion."
+        )
+    elif t == "project.full_text_detached":
+        kind = "full_text"
+        summary = f"{who} detached the full text as the wrong document"
+        facts += [("Note", p.get("note") or "None"), ("Document", p.get("document_id"))]
     elif t == "screening.ai_disagreement_rescreen":
         kind = "conflict"
         reason = str(p.get("reason"))

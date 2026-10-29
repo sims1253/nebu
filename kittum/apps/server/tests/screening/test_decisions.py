@@ -129,7 +129,7 @@ def test_replay_is_a_noop_stale_revisions_fail_and_undo_redecides(world: World) 
                 Decision(outcome="exclude", reason_criterion_id="FOLLOWUP"),
                 gum.etag,
             )
-        with pytest.raises(InvalidDecision, match="follows a provisional"):
+        with pytest.raises(InvalidDecision, match="only after a provisional"):
             decide(world, tx, a, gum.assignment_id, include, gum.etag, phase="final")
 
     # Undo puts the record back in the queue under a new token; the old decision stays.
@@ -285,7 +285,9 @@ def item_any(world: World, reviewer: Id, prefix: str) -> tuple[Id, str]:
     return row["id"], row["etag"]
 
 
-def test_full_text_decisions_carry_per_criterion_readings_and_anchors(database: Database) -> None:
+def test_full_text_decisions_need_one_reason_not_a_verdict_per_criterion(
+    database: Database,
+) -> None:
     world = build_world(database)
     world.records = [world.record("Nicotine patch versus"), world.record("Nicotine gum")]
     world.open(stage="full_text")
@@ -309,47 +311,58 @@ def test_full_text_decisions_carry_per_criterion_readings_and_anchors(database: 
     with world.db.transaction() as tx:
         with pytest.raises(InvalidDecision, match="not an outcome"):
             decide(world, tx, a, patch_a.assignment_id, Decision(outcome="unclear"), patch_a.etag)
-        with pytest.raises(InvalidDecision, match="every criterion"):
+        # An exclusion cites the failing criterion, read not met, with evidence for it.
+        for reasons in (
+            (),
+            (CriterionDecision(criterion_id="FOLLOWUP", status="not_met"),),
+            (
+                CriterionDecision(
+                    criterion_id="POP", status="not_met", evidence_anchor_ids=(anchor,)
+                ),
+            ),
+        ):
+            with pytest.raises(InvalidDecision, match="mark the failing criterion not met"):
+                decide(
+                    world,
+                    tx,
+                    a,
+                    patch_a.assignment_id,
+                    Decision(outcome="exclude", reason_criterion_id="FOLLOWUP", criteria=reasons),
+                    patch_a.etag,
+                )
+        # An inclusion means every criterion is met: a reading that says otherwise is refused.
+        with pytest.raises(InvalidDecision, match="every criterion is met"):
             decide(
                 world,
                 tx,
                 a,
                 patch_a.assignment_id,
-                Decision(outcome="exclude", reason_criterion_id="FOLLOWUP"),
-                patch_a.etag,
-            )
-        no_evidence = tuple(
-            r.model_copy(update={"evidence_anchor_ids": ()}) if r.criterion_id == "FOLLOWUP" else r
-            for r in readings(FOLLOWUP="not_met")
-        )
-        with pytest.raises(InvalidDecision, match="with evidence"):
-            decide(
-                world,
-                tx,
-                a,
-                patch_a.assignment_id,
-                Decision(outcome="exclude", reason_criterion_id="FOLLOWUP", criteria=no_evidence),
-                patch_a.etag,
-            )
-        with pytest.raises(InvalidDecision, match="every criterion met"):
-            decide(
-                world,
-                tx,
-                a,
-                patch_a.assignment_id,
-                Decision(outcome="include", criteria=readings(DESIGN="unclear")),
+                Decision(
+                    outcome="include",
+                    criteria=(CriterionDecision(criterion_id="DESIGN", status="unclear"),),
+                ),
                 patch_a.etag,
             )
 
-        # A excludes for lack of follow-up, with evidence; B includes with every criterion met.
+        # A excludes for lack of follow-up, on that criterion alone. B includes in one action:
+        # no verdict on each criterion and no evidence.
         excluded = Decision(
-            outcome="exclude", reason_criterion_id="FOLLOWUP", criteria=readings(FOLLOWUP="not_met")
+            outcome="exclude",
+            reason_criterion_id="FOLLOWUP",
+            evidence_anchor_ids=(other,),
+            criteria=(
+                CriterionDecision(
+                    criterion_id="FOLLOWUP", status="not_met", evidence_anchor_ids=(other,)
+                ),
+            ),
         )
         first = decide(world, tx, a, patch_a.assignment_id, excluded, patch_a.etag)
         if first.phase == "provisional":
             decide(world, tx, a, patch_a.assignment_id, excluded, first.etag, phase="final")
-        included = Decision(outcome="include", criteria=readings())
-        decide(world, tx, b, patch_b.assignment_id, included, patch_b.etag)
+        included = Decision(outcome="include")
+        first = decide(world, tx, b, patch_b.assignment_id, included, patch_b.etag)
+        if first.phase == "provisional":
+            decide(world, tx, b, patch_b.assignment_id, included, first.etag, phase="final")
 
         # Insufficient information needs an unclear criterion; it counts as include.
         gum_a = item(world, a, "Nicotine gum", "full_text")
@@ -382,13 +395,33 @@ def test_full_text_decisions_carry_per_criterion_readings_and_anchors(database: 
         )
         assert decide(world, tx, a, gum_a.assignment_id, insufficient, gum_a.etag).phase == "final"
 
-        # The adjudicator sees each reviewer's readings and evidence anchors.
+        # The adjudicator sees each reviewer's reason and evidence, and adopts the inclusion.
         (conflict,) = world.screening.adjudication_queue(
             tx, world.project_id, world.people.adjudicator, SCOPE, "full_text"
         )
         columns = {c.outcome: c for c in conflict.columns}
         assert columns["exclude"].reason_criterion_id == "FOLLOWUP"
-        followup = next(r for r in columns["exclude"].criteria if r.criterion_id == "FOLLOWUP")
+        (followup,) = columns["exclude"].criteria
         assert followup.status == "not_met" and followup.evidence_anchor_ids == (other,)
-        assert {r.status for r in columns["include"].criteria} == {"met"}
+        assert columns["include"].criteria == ()
+        world.screening.adjudicate(
+            tx,
+            command_id=new_id(),
+            project_id=world.project_id,
+            adjudicator_id=world.people.adjudicator,
+            conflict_id=conflict.conflict_id,
+            expected_etag=conflict.etag,
+            adopted=columns["include"].label,
+        )
+        assert (
+            world.screening.outcomes(tx, world.project_id, SCOPE, "full_text")[
+                world.record("Nicotine patch").item_ref
+            ]
+            == "include"
+        )
+        # The lead's figures read the outcomes alone: kappa over the two decided records.
+        status = world.screening.status(tx, world.project_id, world.people.lead, SCOPE, "full_text")
+        assert status.metrics is not None
+        (human,) = [p for p in status.metrics.agreement if p.kind == "human_human"]
+        assert human.items == 1
         assert world.ledger.verify(tx, world.project_id).ok

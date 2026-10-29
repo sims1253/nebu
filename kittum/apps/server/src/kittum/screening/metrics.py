@@ -43,7 +43,8 @@ def _label(outcome: str | None) -> str:
 
 @dataclass
 class StageData:
-    """Every row of a stage that the lead's view reads."""
+    """Every row of a stage that the lead's view reads. Items withdrawn as the wrong document
+    are not part of the stage any more, and neither are their assignments and conflicts."""
 
     mode: ScreeningMode
     items: dict[str, dict[str, Any]]
@@ -63,7 +64,7 @@ class StageData:
             r["item_ref"]: r
             for r in tx.execute(
                 "select item_ref, kind, expected_outcome, audit, rescreen from screening_item"
-                " where stage_id = %s",
+                " where stage_id = %s and withdrawn_event_id is null",
                 (stage_id,),
             ).fetchall()
         }
@@ -77,6 +78,7 @@ class StageData:
             " where a.stage_id = %s",
             (stage_id,),
         ).fetchall()
+        assignments = [a for a in assignments if a["item_ref"] in items]
         readings = {
             r["item_ref"]: r
             for r in tx.execute(

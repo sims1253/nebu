@@ -13,8 +13,11 @@ import { codePointIndex } from "../../lib/codepoints.ts";
 export interface PageHighlight {
   readonly id: string;
   readonly boxes: ReadonlyArray<Box>;
-  /** `current` is the selected item's source; `adopted` is evidence already taken. */
-  readonly kind: "current" | "adopted" | "mention";
+  /**
+   * `current` is the selected item's source; `adopted` is evidence already taken; `ai` is the AI
+   * judge's verified quote, shown after the reviewer decided.
+   */
+  readonly kind: "current" | "adopted" | "mention" | "ai";
   readonly label: string;
 }
 
@@ -331,7 +334,13 @@ function PageView({
             key={`${highlight.id}-${i}`}
             className="evidence-box"
             data-kind={highlight.kind}
-            data-testid={highlight.kind === "current" ? "source-highlight" : undefined}
+            data-testid={
+              highlight.kind === "current"
+                ? "source-highlight"
+                : highlight.kind === "ai"
+                  ? "ai-quote-highlight"
+                  : undefined
+            }
             title={highlight.label}
             style={{
               left: box.x0 * scale - 2,
