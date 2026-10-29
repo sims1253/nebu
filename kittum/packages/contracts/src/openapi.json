@@ -6668,6 +6668,14 @@
             "title": "Attempts",
             "type": "array"
           },
+          "carried": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/AttemptView"
+            },
+            "title": "Carried",
+            "type": "array"
+          },
           "document_id": {
             "anyOf": [
               {

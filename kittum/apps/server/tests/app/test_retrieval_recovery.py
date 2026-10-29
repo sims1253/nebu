@@ -76,6 +76,7 @@ class Sources:
         self.pmc_down = False
         self.unpaywall_swapped = False
         self.lancet_serves_checklist = False
+        self.pmc_swapped = False
 
     def send(self, request: HttpRequest) -> HttpResponse:
         if self.unpaywall_swapped and request.url == UNPAYWALL.format(
@@ -83,6 +84,9 @@ class Sources:
         ):
             other = HttpRequest(url=UNPAYWALL.format("10.1186%2Fs12916-026-05037-x"))
             return self.recorded.send(other)
+        if self.pmc_swapped and request.url.endswith("metadata/PMC7255293.1.json"):
+            other = request.url.replace("PMC7255293", "PMC13374172")  # the Lesotho trial's
+            return self.recorded.send(HttpRequest(url=other))
         if self.lancet_serves_checklist and "thelancet.com" in request.url:
             return response(200, CHECKLIST)
         if self.europepmc_down and "europepmc/webservices/rest/search" in request.url:
@@ -575,3 +579,33 @@ def test_fetching_again_never_brings_back_a_pdf_a_reviewer_called_the_wrong_docu
     assert texts[lesotho]["wrong_document"]["note"] == (
         "This is the protocol paper, not the trial's results."
     )
+
+
+def test_a_retry_with_nothing_left_to_ask_keeps_the_reasons_it_had(
+    pg: Tx, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sources = Sources()
+    sources.europepmc_down = sources.pmc_swapped = sources.lancet_serves_checklist = True
+    review = Review(pg, sources, monkeypatch)
+    assert review.work() == 1  # the enrichment, with Europe PMC down
+    review.post("retrieval/open-access")
+    assert review.work() == 1
+    lancet = review.reports[LANCET_DOI]
+    first = {r["report_id"]: r for r in review.get("retrieval/open-access/latest")["reports"]}
+    # PubMed Central answers for another article, and the Lancet's link gives another document:
+    # neither can change.
+    assert [(a["source"], a["outcome"]) for a in first[lancet]["attempts"]] == [
+        ("pmc", "other_work"),
+        ("openalex", "wrong_document"),
+    ]
+    sources.europepmc_down = False
+    review.post("retrieval/retry")
+    assert review.work() == 2  # the enrichment, then the retrieval it queued
+    retried = review.get("retrieval/open-access/latest")
+    (again,) = [r for r in retried["reports"] if r["report_id"] == lancet]
+    # Every step was carried, so nothing was asked again, and the report keeps its reasons.
+    assert again["attempts"] == []
+    assert again["outcome"] == "not_acquired"
+    assert again["carried"] == first[lancet]["attempts"]
+    located = review.events(lambda t: t == "retrieval.no_open_access_location")
+    assert lancet not in [e.payload["item_ref"] for e in located]

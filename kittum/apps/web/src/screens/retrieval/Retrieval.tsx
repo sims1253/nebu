@@ -519,6 +519,16 @@ function Attempts({ retrieval }: { retrieval: ReportRetrieval }) {
           </tbody>
         </table>
       ) : null}
+      {(retrieval.carried ?? []).length > 0 ? (
+        <p className="mt-1 text-xs text-ink-3" data-testid="carried">
+          {`Not asked again, because an earlier run settled it: ${(retrieval.carried ?? [])
+            .map(
+              (a) =>
+                `${sourceName(a.source)} (${(ATTEMPT[a.outcome] ?? (() => a.outcome))(a).toLowerCase()})`,
+            )
+            .join(", ")}.`}
+        </p>
+      ) : null}
     </div>
   );
 }

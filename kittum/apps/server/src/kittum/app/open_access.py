@@ -136,6 +136,8 @@ class ReportRetrieval(Record):
     outcome: ReportOutcome | None
     """None while the report waits its turn."""
     attempts: tuple[AttemptView, ...]
+    carried: tuple[AttemptView, ...] = ()
+    """Earlier runs' attempts a retry did not repeat, because asking again cannot change them."""
     source: str | None = None
     """Where the full text came from, when one was acquired."""
     licence: str | None = None
@@ -410,6 +412,7 @@ def _report(item: dict[str, Any], facts: dict[Id, ReportFacts]) -> ReportRetriev
         title=facts[item["report_id"]].title if item["report_id"] in facts else "",
         outcome=item["outcome"],
         attempts=tuple(_attempt(a) for a in item["attempts"]),
+        carried=tuple(_attempt(a) for a in item["carried"]),
         source=item["source"],
         licence=item["licence"],
         document_id=item["document_id"],
@@ -754,11 +757,12 @@ class _Report:
             if row["outcome"] is not None:
                 return
             if row["acquisition_id"] is None:
-                # A location tried, or a source that failed, is more than "no location known".
+                # A location tried, or a source that failed, is more than "no location known",
+                # in this run or in an earlier one whose attempt a retry carries.
                 tried = any(
                     a.get("kind", "fetch") == "fetch"
                     or a["outcome"] in ("unavailable", "other_work")
-                    for a in row["attempts"]
+                    for a in [*row["carried"], *row["attempts"]]
                 )
                 if tried:
                     self._finish(tx, "not_acquired")
