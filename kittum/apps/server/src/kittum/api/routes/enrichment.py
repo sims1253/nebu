@@ -38,6 +38,7 @@ from kittum.app import (
     missing_csv,
     missing_full_texts,
     missing_ris,
+    plan_upload,
     record_enrichment,
     record_flags,
     report_attempts,
@@ -49,7 +50,7 @@ from kittum.app import (
     upload_full_text,
 )
 from kittum.core import Id, NotFoundError, Record
-from kittum.documents import NotAPdf
+from kittum.documents import NotAPdf, first_pages
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -252,8 +253,13 @@ def _upload(
     actor_id: Id,
     licence: str | None,
 ) -> UploadResult:
+    # Match first, reading only; then write in a transaction of its own, which checks that the
+    # matched report still has no full text.
+    pages = first_pages(pdf)
     with ctx.db.transaction() as tx:
         require_lead(tx, project_id, actor_id)
+        plan = plan_upload(tx, project_id, file_name, pages, screening=ctx.screening())
+    with ctx.db.transaction() as tx:
         return upload_full_text(
             tx,
             project_id,
@@ -265,6 +271,7 @@ def _upload(
             ledger=ctx.require_ledger(),
             clock=ctx.clock,
             licence=licence,
+            plan=plan,
         )
 
 

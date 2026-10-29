@@ -19,6 +19,7 @@ its first pages, or a record without a DOI or a usable title, cannot be checked;
 decides what that means.
 """
 
+import functools
 import re
 import unicodedata
 from typing import Literal
@@ -107,8 +108,10 @@ def _title_score(title: str, page: str) -> float:
     return max(fuzz.ratio(title, page[i : i + size]) for i in range(len(page) - size + 1))
 
 
+@functools.lru_cache(maxsize=32)
 def _letters(text: str) -> str:
-    """Lower-case letters and digits only, accents taken off."""
+    """Lower-case letters and digits only, accents taken off. Cached: a bulk upload checks the same
+    pages against every report without a full text, and normalizes each page once."""
     folded = unicodedata.normalize("NFKD", text).casefold()
     return "".join(re.findall(r"[a-z0-9]+", folded))
 

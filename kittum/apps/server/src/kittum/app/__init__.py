@@ -131,6 +131,7 @@ from kittum.app.uploads import (
     assign_upload,
     discard_upload,
     held_uploads,
+    plan_upload,
     upload_full_text,
 )
 
@@ -224,6 +225,7 @@ __all__ = [
     "open_screening",
     "parse_sentinels",
     "parse_source",
+    "plan_upload",
     "progress",
     "project_summary",
     "protocol_source",

@@ -15,6 +15,7 @@ assigns each by hand, or discards it. Every upload, held or attached, is a ledge
 """
 
 import re
+from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import unquote
@@ -104,6 +105,48 @@ def _candidate(report_id: Id, facts: ReportFacts) -> UploadCandidate:
     return UploadCandidate(report_id=report_id, title=facts.title, doi=facts.doi, pmid=facts.pmid)
 
 
+@dataclass(frozen=True)
+class UploadPlan:
+    """Where one PDF of a bulk upload goes, decided before anything is written."""
+
+    target: Id | None
+    matched_by: Literal["file_name", "content"] | None
+    held: tuple[Id, ...]
+    reason: str | None
+
+
+def plan_upload(
+    tx: Tx,
+    project_id: Id,
+    file_name: str,
+    pages: tuple[str, ...] | None,
+    *,
+    screening: Screening,
+) -> UploadPlan:
+    """Match a PDF's file name and first pages (`kittum.documents.first_pages`) to the reports
+    still without a full text. Reads only, so the caller can match before it writes."""
+    facts = report_facts(tx, project_id)
+    candidates = [r for r in _candidates(tx, project_id, screening) if r in facts]
+    named = [r for r in candidates if _named(file_name, facts[r])]
+    if len(named) == 1:
+        check = check_pages(pages, doi=facts[named[0]].doi, title=facts[named[0]].title)
+        if check.verdict == "mismatch":
+            return UploadPlan(None, None, tuple(named), NAME_CONTRADICTED)
+        return UploadPlan(named[0], "file_name", (), None)
+    if named:
+        return UploadPlan(None, None, tuple(named), f"Its file name fits {len(named)} reports.")
+    shown = [
+        r
+        for r in candidates
+        if check_pages(pages, doi=facts[r].doi, title=facts[r].title).verdict == "match"
+    ]
+    if len(shown) == 1:
+        return UploadPlan(shown[0], "content", (), None)
+    if shown:
+        return UploadPlan(None, None, tuple(shown), f"Its first pages fit {len(shown)} reports.")
+    return UploadPlan(None, None, (), NO_MATCH)
+
+
 def upload_full_text(
     tx: Tx,
     project_id: Id,
@@ -116,38 +159,20 @@ def upload_full_text(
     ledger: Ledger,
     clock: Clock,
     licence: str | None = None,
+    plan: UploadPlan | None = None,
 ) -> UploadResult:
     """Store one PDF of a bulk upload and attach it to the report it matches, or hold it.
-    Raises `kittum.documents.NotAPdf` for a file that is not a PDF."""
+    Raises `kittum.documents.NotAPdf` for a file that is not a PDF. With a `plan` made before the
+    transaction (`plan_upload`), the PDF goes where it says, unless its report got a full text
+    meanwhile; then it is matched again."""
     document = ingest(tx, artifacts, pdf)
+    if plan is None or (
+        plan.target is not None and full_text(tx, project_id, str(plan.target)) is not None
+    ):
+        plan = plan_upload(tx, project_id, file_name, first_pages(pdf), screening=screening)
     facts = report_facts(tx, project_id)
-    candidates = [r for r in _candidates(tx, project_id, screening) if r in facts]
-    pages = first_pages(pdf)
-    named = [r for r in candidates if _named(file_name, facts[r])]
-    matched_by: Literal["file_name", "content"] | None = None
-    held: list[Id] = []
-    reason: str | None = None
-    target: Id | None = None
-    if len(named) == 1:
-        check = check_pages(pages, doi=facts[named[0]].doi, title=facts[named[0]].title)
-        if check.verdict == "mismatch":
-            held, reason = named, NAME_CONTRADICTED
-        else:
-            target, matched_by = named[0], "file_name"
-    elif named:
-        held, reason = named, f"Its file name fits {len(named)} reports."
-    else:
-        shown = [
-            r
-            for r in candidates
-            if check_pages(pages, doi=facts[r].doi, title=facts[r].title).verdict == "match"
-        ]
-        if len(shown) == 1:
-            target, matched_by = shown[0], "content"
-        elif shown:
-            held, reason = shown, f"Its first pages fit {len(shown)} reports."
-        else:
-            reason = NO_MATCH
+    target, matched_by, reason = plan.target, plan.matched_by, plan.reason
+    held = [r for r in plan.held if r in facts]
     upload_id = new_id()
     if target is not None:
         event = ledger.append(
@@ -383,9 +408,11 @@ __all__ = [
     "UPLOAD_MATCHED",
     "HeldUpload",
     "UploadCandidate",
+    "UploadPlan",
     "UploadResult",
     "assign_upload",
     "discard_upload",
     "held_uploads",
+    "plan_upload",
     "upload_full_text",
 ]
