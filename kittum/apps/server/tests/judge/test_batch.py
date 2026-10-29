@@ -164,6 +164,40 @@ def test_a_new_seed_is_a_new_cache_key_and_a_reused_config_id_is_refused(pg: Tx)
     assert all(a["error"] for a in row["attempts"])
 
 
+class CutOff:
+    """A reasoning model that thinks through its whole budget: every answer ends at max_tokens."""
+
+    def __init__(self, inner: Backend) -> None:
+        self.inner = inner
+
+    def complete(self, request: Any) -> Any:
+        return self.inner.complete(request).model_copy(update={"finish_reason": "length"})
+
+
+def test_an_answer_the_token_budget_cut_off_is_not_asked_for_again(pg: Tx) -> None:
+    """The same budget would cut the answer off again, so the judge asks once per record and
+    the verdict says why it is unclear."""
+    ids = _seed(pg)
+    config = CONFIG.model_copy(update={"id": "qwen-ta-v1-cut", "seed": 9})
+    backend = RecordedBackend(default='{"c0": {"status": "met", "quote": "patients aged')
+    verdicts = _run(pg, CutOff(backend), InMemoryLedger(), MemoryStore(), ids, config)
+    assert len(backend.requests) == 4  # one attempt per record, not two
+    message = (
+        f"{CONFIG.model_id} ran out of tokens before it finished."
+        f" Its limit was {CONFIG.max_tokens:,} tokens."
+        " If the reasoning used most of them, raise reasoning_tokens in its recipe."
+        " Otherwise ask again."
+    )
+    assert all(v.flags == ("invalid_output",) for v in verdicts)
+    assert {c.rationale for v in verdicts for c in v.criteria} == {message}
+    row = pg.execute(
+        "select attempts from verdict where judge_config_id = %s and item_ref = %s",
+        (config.id, ADOLESCENTS.item_ref),
+    ).fetchone()
+    assert row is not None
+    assert [(a["finish_reason"], a["error"]) for a in row["attempts"]] == [("length", message)]
+
+
 def test_verdict_rows_cannot_be_changed(pg: Tx) -> None:
     ids = _seed(pg)
     _run(pg, recorded(*ITEMS), InMemoryLedger(), MemoryStore(), ids)

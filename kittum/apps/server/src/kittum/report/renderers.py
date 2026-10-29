@@ -405,6 +405,7 @@ def disclosure(review: Review) -> dict[str, Any]:
                 "serving": recipe.get("serving"),
                 "reasoning": recipe.get("reasoning"),
                 "extra_body": recipe.get("extra_body") or {},
+                "reasoning_tokens": recipe.get("reasoning_tokens") or 0,
                 "reported_model_identities": list(j.model_identities),
                 "endpoints": list(j.endpoints),
                 "verdicts": j.verdicts,
@@ -605,6 +606,7 @@ def prompt_section(card: dict[str, Any]) -> list[str]:
         ("Weights SHA-256", model.get("weights_hash") and f"`{model['weights_hash']}`"),
         ("Licence", model.get("weights_licence")),
         ("Serving", model.get("serving")),
+        ("Reasoning tokens added to every call's max_tokens", model.get("reasoning_tokens")),
         ("Endpoint", ", ".join(model.get("endpoints") or []) or None),
         (
             "Model as reported by the server",

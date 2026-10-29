@@ -41,10 +41,12 @@ from kittum.gateway import RecordedTransport, SourceGateway, default_policies
 from kittum.ledger import PostgresLedger
 from kittum.models import (
     CompletionRequest,
+    LlmRecordings,
     Message,
     ModelRecipe,
     ModelRegistry,
     OpenAICompatibleBackend,
+    assemble,
     request_key,
 )
 from kittum.protocol import PUBLISHED_EVENT, ReviewProtocol, compile
@@ -64,6 +66,7 @@ from tests.assist.support import (
     accepted_subset,
 )
 from tests.documents.conftest import savepoint_db
+from tests.models.streaming import StreamingServer, chunks
 
 if TYPE_CHECKING:
     from kittum.db import Database, Tx
@@ -829,3 +832,229 @@ def test_a_recorded_assistant_replays_with_the_recipe_it_used_not_the_judges(
         ConfigurationError, match=r"KITTUM_ASSIST_BACKEND=demo .* KITTUM_LLM_REPLAY"
     ):
         build_assistant(replace(replay, assist_backend="demo"), replays, store)
+
+
+# GLM-5.3-Flash on high reasoning, as Z.ai serves it: the thinking counts against max_tokens.
+THINKING_GLM = (
+    GLM
+    + """    reasoning: true
+    extra_body: {"thinking": {"type": "enabled"}, "reasoning_effort": "high"}
+"""
+)
+THOUGHTS = [
+    "The lead asks whether NRT helps adults stop smoking. ",
+    "Two questions: any NRT against placebo or none, ",
+    "and combination NRT against a single form.",
+]
+
+
+def _lead_drafts(
+    pg: Tx, settings: Settings, registry: ModelRegistry, artifacts: FilesystemStore
+) -> tuple[TestClient, str, dict[str, str], dict[str, Any]]:
+    """A project whose lead asks for a draft over HTTP, as the workbench does."""
+    backends = build_backends(settings, registry, artifacts)
+    ctx = AppContext(
+        settings=settings,
+        db=savepoint_db(pg),
+        artifacts=artifacts,
+        ledger=PostgresLedger(),
+        assistant=build_assistant(settings, backends, artifacts),
+    )
+    client = TestClient(create_app(ctx))
+    project = client.post("/api/projects", json={"name": "NRT", "lead_name": "Lee"}).json()
+    lead = {"X-Kittum-Reviewer": project["members"][0]["actor_id"]}
+    outcome = client.post(
+        f"/api/projects/{project['id']}/assist/draft",
+        json={"description": DESCRIPTION},
+        headers=lead,
+    ).json()
+    return client, project["id"], lead, outcome
+
+
+def _assist_payloads(pg: Tx, project_id: str) -> list[dict[str, Any]]:
+    return [
+        r["payload"]
+        for r in pg.execute(
+            "select payload from audit_event where project_id = %s and type = %s order by seq",
+            (project_id, ASSIST_EVENT),
+        ).fetchall()
+    ]
+
+
+def test_a_reasoning_model_streams_its_draft_and_the_audit_shows_the_stream_it_sent(
+    pg: Tx, tmp_path: Path
+) -> None:
+    """Every answer streams, thinking first, over a real socket. The recipe's reasoning_tokens go
+    on top of the draft's budget in the request body only, so the request keys stay as they were
+    and GLM's recorded answers still match: the draft takes its three rounds. The ledger, the
+    Audit screen's model calls, and the recording hold each stream exactly as the server sent it;
+    the disclosure names the reasoning budget; and the recording replays to the same draft."""
+    recipes = tmp_path / "recipes.yaml"
+    recipes.write_text(THINKING_GLM + "    reasoning_tokens: 24000\n")
+    answers = json.loads(ANSWERS.read_text())["answers"]
+
+    def keyed(body: dict[str, Any]) -> CompletionRequest:
+        """The request Kittum built, from the body it sent."""
+        return CompletionRequest(
+            model_id="glm-5.3-flash",
+            messages=tuple(Message(**m) for m in body["messages"]),
+            json_schema=body["response_format"]["json_schema"]["schema"],
+            temperature=body["temperature"],
+            seed=body["seed"],
+            max_tokens=body["max_tokens"] - 24000,
+        )
+
+    def answer(body: dict[str, Any]) -> list[bytes | float]:
+        text = answers[request_key(keyed(body))]
+        return chunks(
+            model="glm-5.3-flash",
+            reasoning=THOUGHTS,
+            content=[text[i : i + 400] for i in range(0, len(text), 400)],
+            usage={"prompt_tokens": 2100, "completion_tokens": 9300},
+        )
+
+    registry = ModelRegistry.load(local=recipes)
+    path = tmp_path / "models"
+    store = FilesystemStore(tmp_path / "artifacts")
+    with StreamingServer(answer) as server:
+        live = Settings(
+            database_url="unused",
+            artifact_dir=tmp_path / "artifacts",
+            recipes_file=recipes,
+            llm_endpoints=(LlmEndpoint(recipe_id="glm-5.3-flash", base_url=server.url),),
+            assist_model="glm-5.3-flash",
+            llm_record=path,
+        )
+        client, pid, lead, outcome = _lead_drafts(pg, live, registry, store)
+    assert outcome["revision"], outcome["issues"]
+    assert outcome["attempts"] == 3
+    bodies = [json.loads(b) for b in server.seen]
+    assert [(b["stream"], b["max_tokens"]) for b in bodies] == [(True, 36000)] * 3
+    assert all(b["stream_options"] == {"include_usage": True} for b in bodies)
+
+    # The recording holds each completion as the backend assembled it, and the stream as sent.
+    recordings = LlmRecordings(path)
+    for body, sent in zip(bodies, server.sent, strict=True):
+        key = request_key(keyed(body))
+        (entry,) = recordings.answers(key)
+        assert entry["raw_response"] == {"text": sent.decode()}
+        completion = entry["completion"]
+        assert completion["text"] == answers[key]
+        assert completion["reasoning"] == "".join(THOUGHTS)
+        assert completion["finish_reason"] == "stop"
+        assert completion["model_identity"] == "glm-5.3-flash"
+        assert completion["reasoning_tokens"] == 24000
+        assert completion["usage"] == {"prompt_tokens": 2100, "completion_tokens": 9300}
+
+    # The ledger names the reasoning budget; the Audit screen's model calls open to the exact
+    # bytes sent and received, the response as the event stream it was.
+    (payload,) = _assist_payloads(pg, pid)
+    assert payload["reasoning_tokens"] == 24000
+    page = client.get(
+        f"/api/projects/{pid}/audit/events", params={"type": ASSIST_EVENT}, headers=lead
+    ).json()
+    (event,) = page["events"]
+    calls = event["model_calls"]
+    assert [c["finish_reason"] for c in calls] == ["stop"] * 3
+    for call, body, sent in zip(calls, server.seen, server.sent, strict=True):
+        artifacts = f"/api/projects/{pid}/audit/artifacts"
+        request = client.get(f"{artifacts}/{call['request']['sha256']}", headers=lead)
+        assert request.content == body
+        response = client.get(f"{artifacts}/{call['response']['sha256']}", headers=lead)
+        assert call["response"]["form"] == "http_response"
+        assert response.content == sent
+        assert response.headers["content-type"].startswith("text/event-stream")
+        check = client.get(f"{artifacts}/{call['response']['sha256']}/check", headers=lead)
+        assert check.json()["matches"] is True
+        assert assemble(response.content)["choices"][0]["message"] == {
+            "role": "assistant",
+            "content": answers[request_key(keyed(json.loads(body)))],
+            "reasoning": "".join(THOUGHTS),
+        }
+
+    # The disclosure says how many tokens Kittum added for the thinking, and what it sent.
+    published = client.post(
+        f"/api/projects/{pid}/assist/revisions/{outcome['revision']['id']}/publish",
+        json={"reason": "First version"},
+        headers=lead,
+    )
+    assert published.status_code == 200, published.text
+    with savepoint_db(pg).transaction() as tx:
+        review = load_review(tx, pid, store=store)
+    text = {f.path: f.data for f in render_files(review, "ai_disclosure")}["ai_disclosure.md"]
+    assert "Reasoning tokens added to every call's max_tokens: 24000" in text.decode()
+    assert '"max_tokens": 36000' in text.decode()
+
+    # Replayed from the recording, without a server, the draft is the same.
+    replay = replace(live, llm_record=None, llm_replay=path, assist_model=None)
+    _, _, _, replayed = _lead_drafts(pg, replay, registry, FilesystemStore(tmp_path / "replayed"))
+    assert replayed["revision"]["document"] == outcome["revision"]["document"]
+    assert replayed["revision"]["model"]["endpoint"] == f"replay of {server.url}"
+    backend = build_backends(replay, registry, MemoryStore())["glm-5.3-flash"]
+    first = backend.complete(keyed(bodies[0]))
+    assert first.model_dump(mode="json") == {
+        **recordings.answers(first.request_hash)[0]["completion"],
+        "endpoint": f"replay of {server.url}",
+    }
+
+
+def test_a_draft_the_token_budget_cuts_off_fails_once_and_says_to_raise_reasoning_tokens(
+    pg: Tx, tmp_path: Path
+) -> None:
+    """GLM thinks through most of the 12,000 tokens and the JSON is cut off. Asking again with
+    the same budget would cut it off again, so the assistant asks once and says why, in the
+    outcome, the ledger, and the Audit screen's model call."""
+    recipes = tmp_path / "recipes.yaml"
+    recipes.write_text(THINKING_GLM)
+    cut = '{"title": {"en": "Nicotine replacement therapy for smoking cessation"}, "questions": ['
+
+    def answer(_: dict[str, Any]) -> list[bytes | float]:
+        return chunks(
+            model="glm-5.3-flash",
+            reasoning=THOUGHTS,
+            content=[cut[:40], cut[40:]],
+            finish_reason="length",
+            usage={
+                "prompt_tokens": 2100,
+                "completion_tokens": 12000,
+                "completion_tokens_details": {"reasoning_tokens": 7623},
+            },
+        )
+
+    with StreamingServer(answer) as server:
+        settings = Settings(
+            database_url="unused",
+            artifact_dir=tmp_path / "artifacts",
+            recipes_file=recipes,
+            llm_endpoints=(LlmEndpoint(recipe_id="glm-5.3-flash", base_url=server.url),),
+            assist_model="glm-5.3-flash",
+        )
+        client, pid, lead, outcome = _lead_drafts(
+            pg,
+            settings,
+            ModelRegistry.load(local=recipes),
+            FilesystemStore(settings.artifact_dir),
+        )
+    message = (
+        "glm-5.3-flash ran out of tokens before it finished."
+        " It used 12,000 tokens, 7,623 of them for reasoning."
+        " If the reasoning used most of them, raise reasoning_tokens in its recipe."
+        " Otherwise ask again."
+    )
+    assert outcome["revision"] is None
+    assert outcome["issues"] == [{"path": "", "message": message}]
+    assert outcome["attempts"] == 1
+    assert len(server.seen) == 1
+    assert json.loads(server.seen[0])["max_tokens"] == 12000
+
+    (payload,) = _assist_payloads(pg, pid)
+    assert payload["outcome"] == "failed"
+    (attempt,) = payload["attempts"]
+    assert attempt["finish_reason"] == "length"
+    assert attempt["issues"] == [{"path": "", "message": message}]
+    (event,) = client.get(
+        f"/api/projects/{pid}/audit/events", params={"type": ASSIST_EVENT}, headers=lead
+    ).json()["events"]
+    (call,) = event["model_calls"]
+    assert call["finish_reason"] == "length"
+    assert call["problem"] == f"the whole answer: {message}"

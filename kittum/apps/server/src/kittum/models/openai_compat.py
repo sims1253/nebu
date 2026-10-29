@@ -12,13 +12,20 @@ the same field into its `format` grammar and returns thinking in `message.reason
 `chat_template_kwargs.enable_thinking` for vLLM or `reasoning_effort` for Ollama, come from the
 recipe's `extra_body`, which is sent unchanged to every server, hosted ones included.
 
+The answer comes back streamed as server-sent events (`kittum.models.stream`), so the read timeout
+applies between chunks: a model that thinks for minutes keeps sending its thinking and never times
+out, and a server that goes silent still does. A recipe with `stream: false` gets one JSON body.
+A recipe's `reasoning_tokens` is added to every call's `max_tokens`, for a model that counts its
+thinking against it; the request key (`request_key`) leaves both out.
+
 A hosted API's key comes from the environment: the endpoint names the variable, and the backend
 reads it for each call and sends it as a bearer token. The key is never part of the request body,
 the stored bytes, the completion, or an error; an error body that echoes it is redacted.
 
 The exact request and response bytes go to the artifact store before anything else happens, so a
-failed or odd answer is still on record. Only transport errors are retried, and once the retries
-are spent they raise `BackendError` too; an HTTP error status or an unusable body raises it at
+failed or odd answer is still on record. For a streamed answer the response bytes are the whole
+event stream as received. Only transport errors are retried, and once the retries are spent they
+raise `BackendError` too; an HTTP error status, an unusable body, or a broken stream raises it at
 once. The error names the stored request and response bytes.
 """
 
@@ -32,6 +39,7 @@ import stamina
 
 from kittum.core import NotFoundError, canonical_json
 from kittum.models.reasoning import split_reasoning
+from kittum.models.stream import assemble, is_event_stream
 from kittum.models.types import (
     BackendError,
     Completion,
@@ -80,8 +88,8 @@ def public_url(url: str) -> str:
 class OpenAICompatibleBackend:
     """Serves one recipe from one server. `base_url` ends in `/v1`. `api_key_env` names the
     environment variable that holds the server's API key, if it needs one. `timeout` is how long
-    one answer may take: a model that reasons at length (GLM-5.3-Flash with high reasoning)
-    sends nothing for minutes before its whole answer arrives."""
+    the server may stay silent: before the first chunk of a streamed answer, between two chunks,
+    or before the whole answer of a recipe that does not stream."""
 
     def __init__(
         self,
@@ -111,9 +119,11 @@ class OpenAICompatibleBackend:
             "model": self.recipe.api_model,
             "messages": [m.model_dump() for m in request.messages],
             "temperature": request.temperature,
-            "max_tokens": request.max_tokens,
-            "stream": False,
+            "max_tokens": request.max_tokens + self.recipe.reasoning_tokens,
+            "stream": self.recipe.stream,
         }
+        if self.recipe.stream:
+            body["stream_options"] = {"include_usage": True}
         if request.seed is not None:
             body["seed"] = request.seed
         if request.json_schema is not None:
@@ -130,29 +140,41 @@ class OpenAICompatibleBackend:
         headers = self._headers()
         raw_request = canonical_json(self.body(request))
         raw_request_hash = self._store.put(raw_request)
-        try:
-            response = self._post(raw_request, headers)
-        except httpx2.TransportError as e:
-            raise BackendError(
-                f"{self.recipe.id}: the model server is unreachable: {type(e).__name__}",
-                raw_request_hash=raw_request_hash,
-            ) from e
         # A provider that echoes the key in an error body gets it redacted before anything keeps it.
+        # The redaction runs on all the bytes joined, so a key split across two network chunks is
+        # caught. A key split across two content deltas is not: a model never writes it.
         key = headers.get("authorization", "").removeprefix("Bearer ").encode()
-        content = response.content.replace(key, b"[redacted]") if key else response.content
+        received = bytearray()
+        try:
+            status = self._post(raw_request, headers, received)
+        except httpx2.TransportError as e:
+            why = (
+                f"sent nothing for {self.timeout:g} s"
+                if isinstance(e, httpx2.ReadTimeout)
+                else f"is unreachable: {type(e).__name__}"
+            )
+            # What arrived before the stream broke, such as minutes of reasoning, stays on record.
+            partial = bytes(received).replace(key, b"[redacted]") if key else bytes(received)
+            raise BackendError(
+                f"{self.recipe.id}: the model server {why}",
+                raw_request_hash=raw_request_hash,
+                raw_response_hash=self._store.put(partial) if partial else None,
+            ) from e
+        content = bytes(received).replace(key, b"[redacted]") if key else bytes(received)
         raw_response_hash = self._store.put(content)
-        if response.status_code >= 400:
+        if status >= 400:
             text = content.decode(errors="replace")[:500]
             raise BackendError(
-                f"{self.recipe.id}: HTTP {response.status_code}: {text}",
+                f"{self.recipe.id}: HTTP {status}: {text}",
                 raw_request_hash=raw_request_hash,
                 raw_response_hash=raw_response_hash,
             )
         try:
-            data = json.loads(content)
+            # A server may ignore `stream` and send one body; the bytes say which it did.
+            data = assemble(content) if is_event_stream(content) else json.loads(content)
             choice = data["choices"][0]
             message = choice["message"]
-        except (ValueError, KeyError, IndexError, TypeError) as e:
+        except (ValueError, KeyError, IndexError, TypeError, AttributeError) as e:
             raise BackendError(
                 f"{self.recipe.id}: not a chat completion: {e}",
                 raw_request_hash=raw_request_hash,
@@ -170,6 +192,8 @@ class OpenAICompatibleBackend:
             finish_reason=choice.get("finish_reason"),
             serving=self.recipe.serving,
             endpoint=self.endpoint,
+            reasoning_tokens=self.recipe.reasoning_tokens,
+            usage=data["usage"] if isinstance(data.get("usage"), dict) else None,
         )
 
     def _headers(self) -> dict[str, str]:
@@ -190,7 +214,9 @@ class OpenAICompatibleBackend:
             headers["authorization"] = f"Bearer {key}"
         return headers
 
-    def _post(self, raw_request: bytes, headers: dict[str, str]) -> httpx2.Response:
+    def _post(self, raw_request: bytes, headers: dict[str, str], received: bytearray) -> int:
+        """The status. The response bytes go into `received` chunk by chunk as the server sends
+        them, so a stream that breaks leaves what came before. Each attempt starts it afresh."""
         for attempt in stamina.retry_context(
             on=httpx2.TransportError,
             attempts=self._attempts,
@@ -199,7 +225,13 @@ class OpenAICompatibleBackend:
             wait_jitter=self._wait_initial,
         ):
             with attempt:
-                return self._client.post(self._url, content=raw_request, headers=headers)
+                received.clear()
+                with self._client.stream(
+                    "POST", self._url, content=raw_request, headers=headers
+                ) as response:
+                    for chunk in response.iter_bytes():
+                        received += chunk
+                    return response.status_code
         raise AssertionError("unreachable")
 
 

@@ -1,6 +1,7 @@
 """The OpenAI-compatible backend against recorded vLLM and Ollama response bodies."""
 
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,7 @@ from kittum.models import (
 )
 from kittum.settings import LlmEndpoint
 from kittum.storage import MemoryStore
+from tests.models.streaming import StreamingServer, chunks, event
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SCHEMA = {
@@ -119,7 +121,9 @@ def test_vllm_call_is_constrained_deterministic_and_stored(registry: ModelRegist
     assert body["model"] == "Qwen/Qwen3.8-27B"
     assert body["temperature"] == 0.0
     assert body["seed"] == 7
-    assert body["stream"] is False
+    # Kittum asks for a stream; this server sent one JSON body, which reads the same.
+    assert body["stream"] is True
+    assert body["stream_options"] == {"include_usage": True}
     assert body["response_format"] == {
         "type": "json_schema",
         "json_schema": {"name": "kittum_answer", "schema": SCHEMA, "strict": True},
@@ -345,15 +349,75 @@ def test_a_backend_refuses_requests_for_another_recipe(registry: ModelRegistry) 
     assert server.seen == []
 
 
-def test_a_malformed_body_is_stored_and_raised(registry: ModelRegistry) -> None:
+@pytest.mark.parametrize(
+    ("body", "why"),
+    [
+        (b'{"object": "chat.completion", "choices": []}', "list index out of range"),
+        # A stream that stops before the answer does, and ones that report an error midway: in a
+        # data payload (OpenAI) or as an error event after an answer delta, the stream ending
+        # as if nothing happened.
+        (
+            b"".join(chunks(model="gemma", reasoning=["Adults?"], content=['{"C_', "POP"])[:2]),
+            "the stream ended before the answer did",
+        ),
+        (
+            chunks(model="gemma", reasoning=["Adults?"], content=["{"])[0]
+            + event({"error": {"message": "overloaded", "code": "1305"}}),
+            "the server reported an error",
+        ),
+        (
+            b"".join(chunks(model="gemma", reasoning=["Adults?"], content=['{"C_', "POP"])[:2])
+            + b'event: error\ndata: {"message": "overloaded", "code": 500}\n\n'
+            + event("[DONE]"),
+            "the server reported an error",
+        ),
+    ],
+)
+def test_a_malformed_body_is_stored_and_raised(
+    registry: ModelRegistry, body: bytes, why: str
+) -> None:
     store = RecordingStore()
-    server = Server(b'{"object": "chat.completion", "choices": []}')
+    server = Server(body)
     backend = OpenAICompatibleBackend(
         registry.get("gemma-4-31b-it-bf16"), "http://gpu/v1", store, client=server.client()
     )
-    with pytest.raises(BackendError, match="not a chat completion"):
+    with pytest.raises(BackendError, match=f"not a chat completion: {why}") as error:
         backend.complete(_request("gemma-4-31b-it-bf16"))
-    assert b'{"object": "chat.completion", "choices": []}' in store.puts
+    assert store.get(error.value.raw_response_hash or "") == body
+
+
+def test_a_slow_steady_stream_outlasts_the_read_timeout_and_a_silent_one_does_not(
+    registry: ModelRegistry,
+) -> None:
+    """The read timeout counts the silence between chunks, not the whole answer. A model that
+    thinks for three times the timeout, sending as it goes, answers; one that stops sending for
+    longer than the timeout fails, its request and what it sent before it went silent on
+    record."""
+    recipe = registry.get("qwen3.8-27b-bf16")
+    answer = json.dumps(ANSWER)
+    steady = chunks(
+        model="Qwen/Qwen3.8-27B",
+        reasoning=[f"Step {n} of the reading. " for n in range(1, 9)],
+        content=[answer[:40], answer[40:]],
+    )
+    with StreamingServer(lambda _: [step for c in steady for step in (c, 0.15)]) as server:
+        backend = OpenAICompatibleBackend(
+            recipe, server.url, RecordingStore(), timeout=0.5, attempts=1
+        )
+        started = time.monotonic()
+        completion = backend.complete(_request(recipe.id))
+        assert time.monotonic() - started > 1.5  # three times the timeout
+    assert json.loads(completion.text) == ANSWER
+    assert completion.reasoning == "".join(f"Step {n} of the reading. " for n in range(1, 9))
+    assert completion.finish_reason == "stop"
+
+    store = RecordingStore()
+    with StreamingServer(lambda _: [steady[0], 1.0, *steady[1:]]) as server:
+        backend = OpenAICompatibleBackend(recipe, server.url, store, timeout=0.5, attempts=1)
+        with pytest.raises(BackendError, match=r"model server sent nothing for 0\.5 s") as error:
+            backend.complete(_request(recipe.id))
+    assert store.get(error.value.raw_response_hash or "") == steady[0]
+    assert store.get(error.value.raw_request_hash or "") == server.seen[0]
 
 
 def test_unknown_endpoint_recipes_fail_at_startup(registry: ModelRegistry) -> None:

@@ -109,7 +109,20 @@ recipes:
     context_tokens: 131072
     reasoning: true
     extra_body: {"thinking": {"type": "disabled"}} # sent unchanged with every request
+    reasoning_tokens: 0 # added to every call's max_tokens, for thinking that counts against it
+    stream: true # false sends one non-streamed request
 ```
+
+Kittum asks for every answer as a stream, so a model that thinks for minutes keeps sending and
+never hits the read timeout. Some models count their thinking against `max_tokens`. GLM-5.3-Flash
+on high reasoning does, and it can think through 7,600 of the draft's 12,000 tokens. For such a
+model, set `reasoning_tokens` to the room it needs to think, for example 24000. Kittum adds it to
+the `max_tokens` of every call, and the answer budgets stay the same. The ledger and the AI
+disclosure record it. When the budget still cuts an answer off, Kittum does not ask again with the
+same budget. The attempt fails and says how many tokens the model used, and how many of them went
+to reasoning when the server reports it. If the reasoning used most of them, raise
+`reasoning_tokens`. If the answer took most of them, ask again. GLM sometimes repeats search
+terms until the budget ends.
 
 ```sh
 export EXAMPLE_PROVIDER_API_KEY=...   # in your shell, not in .env

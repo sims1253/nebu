@@ -26,6 +26,10 @@ class ModelRecipe(Record):
     upstream_repository: str | None = None  # where the weights and their licence come from
     reasoning: bool = False  # the model may think before it answers
     extra_body: dict[str, Any] = Field(default_factory=dict)  # merged into every request body
+    # Added to every call's max_tokens in the request body, for a model that counts its thinking
+    # against max_tokens (GLM-5.3-Flash). The answer budgets, and the request keys, stay as they are.
+    reasoning_tokens: int = Field(default=0, ge=0)
+    stream: bool = True  # ask for the answer as server-sent events; off for a server that cannot
     notes: str = ""
 
     @property
@@ -76,6 +80,31 @@ class Completion(Record):
     # without credentials. None when nothing was sent, as in a replay.
     serving: str | None = None
     endpoint: str | None = None  # "replay of <endpoint>" when replayed (kittum.models.replay)
+    reasoning_tokens: int = 0  # the recipe's, added to the request's max_tokens when it was sent
+    usage: dict[str, Any] | None = None  # the token counts the server reported, as it sent them
+
+
+def cut_off(request: CompletionRequest, completion: Completion) -> str | None:
+    """Why an answer is unusable when the token budget ended it (`finish_reason` "length"), or
+    None. With the server's usage it says how many tokens went to reasoning: a model that thought
+    through its budget needs more room, one whose answer ran away needs asking again."""
+    if completion.finish_reason != "length":
+        return None
+    usage = completion.usage or {}
+    used = usage.get("completion_tokens")
+    details = usage.get("completion_tokens_details")
+    reasoning = details.get("reasoning_tokens") if isinstance(details, dict) else None
+    if isinstance(used, int) and isinstance(reasoning, int):
+        spent = f"It used {used:,} tokens, {reasoning:,} of them for reasoning."
+    elif isinstance(used, int):
+        spent = f"It used {used:,} tokens."
+    else:
+        spent = f"Its limit was {request.max_tokens + completion.reasoning_tokens:,} tokens."
+    return (
+        f"{request.model_id} ran out of tokens before it finished. {spent}"
+        " If the reasoning used most of them, raise reasoning_tokens in its recipe."
+        " Otherwise ask again."
+    )
 
 
 class LlmBackend(Protocol):

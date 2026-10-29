@@ -4393,6 +4393,11 @@
           "purpose": {
             "$ref": "#/components/schemas/Purpose"
           },
+          "reasoning_tokens": {
+            "default": 0,
+            "title": "Reasoning Tokens",
+            "type": "integer"
+          },
           "recipe_id": {
             "title": "Recipe Id",
             "type": "string"

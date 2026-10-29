@@ -269,16 +269,49 @@ const readRequest = (text: string) => {
   }
 };
 
-/** A chat completion response, read for display; null for a bare answer text. */
+interface ChatMessage {
+  content?: string | null;
+  reasoning?: string | null;
+  reasoning_content?: string | null;
+}
+
+interface ChatCompletion {
+  choices?: Array<{ message?: ChatMessage; delta?: ChatMessage; index?: number }>;
+  usage?: Record<string, unknown> | null;
+}
+
+/** A streamed answer (server-sent events) added up to one chat completion, as the server does in
+ *  `kittum.models.stream`: each chunk's delta adds to the answer or the reasoning. */
+const assembleStream = (text: string): ChatCompletion => {
+  let content = "";
+  let reasoning = "";
+  let usage: Record<string, unknown> | null = null;
+  for (const event of text.split(/\r\n\r\n|\n\n|\r\r/)) {
+    const data = event
+      .split(/\r\n|\r|\n/)
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => line.slice(5).replace(/^ /, ""))
+      .join("\n");
+    if (!data) continue;
+    if (data.trim() === "[DONE]") break;
+    const chunk = JSON.parse(data) as ChatCompletion;
+    usage = chunk.usage ?? usage;
+    for (const choice of chunk.choices ?? []) {
+      if ((choice.index ?? 0) !== 0) continue;
+      content += choice.delta?.content ?? "";
+      reasoning += choice.delta?.reasoning_content ?? choice.delta?.reasoning ?? "";
+    }
+  }
+  return { choices: [{ message: { content, reasoning: reasoning || null } }], usage };
+};
+
+/** A chat completion response, streamed or in one body, read for display; null for a bare
+ *  answer text. */
 const readResponse = (text: string) => {
   try {
-    const body = JSON.parse(text) as {
-      choices?: Array<{
-        message?: { content?: string; reasoning?: string; reasoning_content?: string };
-        finish_reason?: string;
-      }>;
-      usage?: Record<string, unknown>;
-    };
+    const body: ChatCompletion = /^\s*(data|event|id|retry)?:/.test(text)
+      ? assembleStream(text)
+      : (JSON.parse(text) as ChatCompletion);
     const choice = body.choices?.[0];
     if (!choice) return null;
     let answer = choice.message?.content ?? "";

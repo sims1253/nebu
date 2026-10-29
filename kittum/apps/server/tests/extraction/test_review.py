@@ -426,3 +426,32 @@ def test_the_workbench_reads_a_schema_requests_a_janus_only_run_and_lists_it(env
         assert _accept(env, intervention, "janus").json()["value"] == "52"
         (listed,) = env.client.get(f"{base}/runs").json()
         assert listed["accepted"] == 1
+
+
+class CutOff:
+    """A reasoning model that thinks through its whole budget: every answer ends at max_tokens."""
+
+    def __init__(self, inner):
+        self.inner = inner
+
+    def complete(self, request):
+        return self.inner.complete(request).model_copy(update={"finish_reason": "length"})
+
+
+def test_an_answer_the_token_budget_cut_off_stops_the_agent_and_says_why(env):
+    """The same budget would cut the answer off again, so the agent stops after the first call
+    and every LLM value says why, instead of re-asking until its calls run out."""
+    backend = RecordedBackend(default='{"tool": "search", "query": "Table', model_identity="qwen")
+    with env.client:
+        run = _run(env, "lesotho")
+        assert env.worker(CutOff(backend)).run_once()
+        fields = _fields(env, run["id"])
+    assert len(backend.requests) == 1
+    message = (
+        f"{AGENT.model_id} ran out of tokens before it finished."
+        f" Its limit was {AGENT.max_tokens:,} tokens."
+        " If the reasoning used most of them, raise reasoning_tokens in its recipe."
+        " Otherwise ask again."
+    )
+    llm = [_proposal(f, "llm") for f in fields.values()]
+    assert {(p["status"], p["message"]) for p in llm} == {("error", message)}

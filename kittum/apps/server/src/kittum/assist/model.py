@@ -43,6 +43,7 @@ class ModelUse(Record):
     prompt_version: str
     prompt_hash: Sha256
     attempts: tuple[ModelAttempt, ...]
+    reasoning_tokens: int = 0  # the recipe's, added to every attempt's max_tokens
     event_id: Id | None = None
 
 
